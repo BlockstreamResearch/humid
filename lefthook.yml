@@ -1,0 +1,12 @@
+# https://lefthook.dev/configuration/
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      run: bun run lint
+    typecheck:
+      run: bun run typecheck
+    validate-i18n:
+      run: bun run validate:i18n
+    format:
+      run: bun run format:check

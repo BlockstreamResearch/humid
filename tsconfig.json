@@ -1,0 +1,33 @@
+{
+	"compilerOptions": {
+		"incremental": true,
+		"tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json",
+
+		"target": "ESNext",
+		"lib": ["DOM", "DOM.Iterable", "ESNext"],
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"moduleDetection": "force",
+		"jsx": "react-jsx",
+		"useDefineForClassFields": true,
+
+		"noEmit": true,
+		"isolatedModules": true,
+		"allowImportingTsExtensions": true,
+		"esModuleInterop": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+
+		"paths": {
+			"@/*": ["./src/*"],
+			"@config": ["./src/config.ts"],
+			"@public": ["./public"]
+		},
+
+		"strict": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noFallthroughCasesInSwitch": true
+	},
+	"include": ["src", "package.json"]
+}

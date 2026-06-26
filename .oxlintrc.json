@@ -1,0 +1,42 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"categories": {
+		"correctness": "error",
+		"suspicious": "warn",
+		"perf": "warn"
+	},
+	"plugins": ["react", "jsx-a11y", "typescript", "unicorn", "oxc", "import"],
+	"rules": {
+		"react/react-in-jsx-scope": "off",
+		"eslint/no-console": ["warn", { "allow": ["warn", "error"] }]
+	},
+	"overrides": [
+		{
+			"files": ["src/ui/**", "src/routes/app/components/**"],
+			"rules": {
+				"jsx-a11y/prefer-tag-over-role": "warn",
+				"jsx-a11y/no-redundant-roles": "warn",
+				"jsx-a11y/no-noninteractive-element-interactions": "warn",
+				"jsx-a11y/label-has-associated-control": "warn",
+				"jsx-a11y/heading-has-content": "warn",
+				"jsx-a11y/click-events-have-key-events": "warn",
+				"jsx-a11y/anchor-has-content": "warn",
+				"jsx-a11y/anchor-is-valid": "warn",
+				"jsx-a11y/control-has-associated-label": "warn"
+			}
+		}
+	],
+	"settings": {
+		"react": {
+			"version": "19.2.7"
+		}
+	},
+	"ignorePatterns": [
+		"dist/**",
+		"build/**",
+		"node_modules/**",
+		"public/**",
+		"src/api/modules/**/types.ts",
+		"src/assets/**"
+	]
+}
