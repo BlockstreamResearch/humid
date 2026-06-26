@@ -1,10 +1,16 @@
 name: Deploy Storybook
 
+# ⚠️ TEMPORARILY DISABLED — GitHub Pages is not enabled for this repo yet
+# (Settings → Pages → Source: GitHub Actions). The automatic `push` trigger is
+# commented out so the workflow no longer runs (and no longer fails) on every
+# push to master.
+#
+# To re-enable: uncomment the `push` block below, then enable Pages.
 on:
-  push:
-    branches: [master]
-  # Manual re-deploys are allowed, but the job guard below keeps them
-  # restricted to the master branch as well.
+  # push:
+  #   branches: [master]
+  # Left as the only trigger while disabled — nothing runs automatically; the
+  # workflow can still be started manually from the Actions tab if needed.
   workflow_dispatch:
 
 # Allow the deploy job to publish to GitHub Pages via OIDC.
