@@ -5,5 +5,5 @@ import { authLayoutRoute } from "../../route";
 export const Route = createRoute({
 	getParentRoute: () => authLayoutRoute,
 	path: "create",
-	component: lazyRouteComponent(() => import("./index"), "AuthCreatePage"),
+	component: lazyRouteComponent(() => import("./index"), "AuthCreateLayout"),
 });
