@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
-import { reportAppError } from "@/core";
+import { reportAppError } from "@/core/report";
 
 type AppErrorBoundaryProps = {
 	children: ReactNode;

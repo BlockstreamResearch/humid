@@ -6,6 +6,7 @@ import {
 } from "@webext-pegasus/transport";
 import { initPegasusTransport } from "@webext-pegasus/transport/background";
 
+import { createLiquidChain } from "@/core/chains/liquid/createLiquidChain";
 import * as vault from "@/core/vault/background";
 import type { VaultCreateInput, VaultStatus, VaultUnlockInput } from "@/core/vault/types";
 import * as walletConnect from "@/core/walletconnect/background";
@@ -123,6 +124,10 @@ const init = async () => {
 			);
 		});
 	};
+
+	const liquidChain = createLiquidChain();
+
+	walletConnect.registerWalletConnectNamespaceAdapter(liquidChain.walletConnectAdapter);
 
 	await walletConnect.initializeWalletConnectBackground({
 		confirm: ({ data, message, title }) => waitForConfirmationResponse(title, message, data),

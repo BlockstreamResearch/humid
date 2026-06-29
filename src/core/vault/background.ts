@@ -1,10 +1,8 @@
 import browser from "webextension-polyfill";
 
-import {
-	createLocalRootKeyManagerState,
-	isKeyManagerState,
-	type KeyManagerState,
-} from "@/core/key-manager";
+import { isKeyManagerState } from "@/core/key-manager/state/guards";
+import { createLocalRootKeyManagerState } from "@/core/key-manager/state/local-root";
+import type { KeyManagerState } from "@/core/key-manager/types";
 
 import type { VaultCreateInput, VaultStatus, VaultUnlockInput } from "./types";
 

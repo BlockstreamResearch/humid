@@ -1,17 +1,17 @@
 import type { WalletKitTypes } from "@reown/walletkit";
 
-import { handleWalletConnectSessionRequest } from "../../capabilities";
-import { getErrorMessage } from "../errors";
-import { setLastError } from "../state";
-import type { WalletKitClient } from "../types";
-import { toJsonRpcError } from "./json-rpc-error";
+import { getErrorMessage } from "../../errors";
+import { setLastError } from "../../state";
+import type { WalletKitClient } from "../../types";
+import { resolveSessionRequest } from "./resolveSessionRequest";
+import { toJsonRpcError } from "./toJsonRpcError";
 
 export async function handleSessionRequest(
 	walletKit: WalletKitClient,
 	event: WalletKitTypes.SessionRequest,
 ): Promise<void> {
 	try {
-		const result = await handleWalletConnectSessionRequest(event);
+		const result = await resolveSessionRequest(event);
 
 		await walletKit.respondSessionRequest({
 			response: {
@@ -26,7 +26,8 @@ export async function handleSessionRequest(
 		setLastError(getErrorMessage(error));
 		await walletKit.respondSessionRequest({
 			response: {
-				error: toJsonRpcError(error),
+				// WalletConnect types narrow error.data to string, but JSON-RPC permits structured data.
+				error: toJsonRpcError(error) as { code: number; data?: string; message: string },
 				id: event.id,
 				jsonrpc: "2.0",
 			},

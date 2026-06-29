@@ -1,4 +1,4 @@
-import { getRegisteredWalletConnectNamespaces } from "../../capabilities";
+import { getRegisteredWalletConnectNamespaces } from "../../namespace-registry";
 import type { WalletConnectStatus } from "../../types";
 import { getWalletConnectProjectId } from "../project";
 import { getLastError, getRelayStatus, getWalletKitClientState } from "../state";

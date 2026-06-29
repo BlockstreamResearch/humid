@@ -12,7 +12,7 @@ import ActionsHandler from "@/common/ActionsHandler";
 import { ConfirmProvider } from "@/common/ConfirmationPopup";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
-import { initGlobalErrorReporting } from "@/core";
+import { initGlobalErrorReporting } from "@/core/report";
 
 initPegasusTransport();
 initGlobalErrorReporting();

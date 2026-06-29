@@ -3,9 +3,6 @@ import { authStore } from "@/store/auth";
 
 import type { VaultCreateInput, VaultStatus, VaultUnlockInput } from "./types";
 
-export { generateSecret, generateSeedMaterial } from "./secrets";
-export type { VaultCreateInput, VaultStatus, VaultUnlockInput } from "./types";
-
 export function createVault(input: VaultCreateInput): Promise<VaultStatus> {
 	return requestVault("vault.create", input);
 }

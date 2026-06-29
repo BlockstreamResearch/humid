@@ -1,22 +1,32 @@
 import { getSdkError } from "@walletconnect/utils";
 
+import {
+	getRegisteredWalletConnectNamespaces as readRegisteredWalletConnectNamespaces,
+	registerWalletConnectNamespaceAdapter as registerNamespaceAdapter,
+} from "../namespace-registry";
 import type {
 	WalletConnectDisconnectInput,
 	WalletConnectPairInput,
 	WalletConnectStatus,
 } from "../types";
+import type { WalletConnectNamespaceAdapter } from "../types";
 import { getWalletKitClient } from "./client";
 import { getErrorMessage } from "./errors";
 import { getWalletConnectProjectId, MISSING_PROJECT_ID_ERROR } from "./project";
 import { setBackgroundOptions, setLastError } from "./state";
-import { getWalletConnectStatus } from "./status";
+import { getWalletConnectStatus as readWalletConnectStatus } from "./status";
 import type { WalletConnectBackgroundOptions } from "./types";
 import { assertWalletConnectUri } from "./uri";
 
-export {
-	getRegisteredWalletConnectNamespaces,
-	registerWalletConnectNamespaceAdapter,
-} from "../capabilities";
+export function registerWalletConnectNamespaceAdapter(
+	adapter: WalletConnectNamespaceAdapter,
+): () => void {
+	return registerNamespaceAdapter(adapter);
+}
+
+export function getRegisteredWalletConnectNamespaces(): string[] {
+	return readRegisteredWalletConnectNamespaces();
+}
 
 export async function initializeWalletConnectBackground(
 	options: WalletConnectBackgroundOptions = {},
@@ -25,7 +35,7 @@ export async function initializeWalletConnectBackground(
 
 	if (!getWalletConnectProjectId()) {
 		setLastError(MISSING_PROJECT_ID_ERROR);
-		return getWalletConnectStatus();
+		return readWalletConnectStatus();
 	}
 
 	try {
@@ -35,7 +45,7 @@ export async function initializeWalletConnectBackground(
 		setLastError(getErrorMessage(error));
 	}
 
-	return getWalletConnectStatus();
+	return readWalletConnectStatus();
 }
 
 export async function pairWalletConnectUri(
@@ -49,7 +59,7 @@ export async function pairWalletConnectUri(
 
 	await walletKit.pair({ uri });
 
-	return getWalletConnectStatus();
+	return readWalletConnectStatus();
 }
 
 export async function disconnectWalletConnectSession(
@@ -62,7 +72,9 @@ export async function disconnectWalletConnectSession(
 		topic: input.topic,
 	});
 
-	return getWalletConnectStatus();
+	return readWalletConnectStatus();
 }
 
-export { getWalletConnectStatus };
+export function getWalletConnectStatus(): WalletConnectStatus {
+	return readWalletConnectStatus();
+}

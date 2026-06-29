@@ -6,16 +6,6 @@ import type {
 	WalletConnectStatus,
 } from "./types";
 
-export type {
-	WalletConnectAdapterContext,
-	WalletConnectDisconnectInput,
-	WalletConnectNamespaceAdapter,
-	WalletConnectPairInput,
-	WalletConnectStatus,
-	WalletConnectSupportedNamespace,
-	WalletConnectSupportedNamespaces,
-} from "./types";
-
 export function getWalletConnectStatus(): Promise<WalletConnectStatus> {
 	return requestBackground<WalletConnectStatus>("walletconnect.status");
 }

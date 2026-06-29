@@ -11,7 +11,7 @@ import { createRoot } from "react-dom/client";
 import { ConfirmProvider } from "@/common/ConfirmationPopup";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
-import { initGlobalErrorReporting } from "@/core";
+import { initGlobalErrorReporting } from "@/core/report";
 import { router } from "@/routes/router";
 import { authStore } from "@/store/auth";
 

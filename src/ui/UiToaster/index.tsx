@@ -10,7 +10,7 @@ import { type ReactNode, useCallback, useEffect } from "react";
 import { type ExternalToast, toast, Toaster as Sonner } from "sonner";
 
 import { useTheme } from "@/contexts/ThemeProvider";
-import { emitter } from "@/core";
+import { emitter } from "@/core/event-bus";
 import { cn } from "@/theme/utils.ts";
 
 import { DefaultToast } from "./components/DefaultToast";

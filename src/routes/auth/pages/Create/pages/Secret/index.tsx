@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
-import { generateSeedMaterial } from "@/core/vault";
+import { generateSeedMaterial } from "@/core/vault/secrets";
 import { UiButton } from "@/ui/UiButton/base";
 import {
 	UiField,

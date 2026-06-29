@@ -36,6 +36,7 @@
         "es-toolkit": "^1.48.1",
         "i18next": "^26.3.1",
         "idb": "^8.0.2",
+        "lwk_wasm": "0.18.0",
         "motion": "^12.40.0",
         "react": "^19.2.7",
         "react-day-picker": "^10.0.1",
@@ -1924,6 +1925,8 @@
     "lowercase-keys": ["lowercase-keys@3.0.0", "", {}, "sha512-ozCC6gdQ+glXOQsveKD0YsDy8DSQFjDTz4zyzEHNV5+JP5D62LmfDZ6o1cycFx9ouG940M5dE8C8CTewdj2YWQ=="],
 
     "lru-cache": ["lru-cache@11.5.1", "", {}, "sha512-RPimw/7aMdv2oqRrxKwvZXcPfwBrn/JZ2xYcY9Hus/6LaS3VOAKVWKWgNLCFSiOm1ESXinjsDlidVU7JlnCN2A=="],
+
+    "lwk_wasm": ["lwk_wasm@0.18.0", "", {}, "sha512-yyRBpt8gmvznOAftJbGOLdLXFqf6OLqsA59haHgOq5u2woVBu30CWcH2/acG4HcNRA2446DtzS5MBWAMgD9e8Q=="],
 
     "lz-string": ["lz-string@1.5.0", "", { "bin": { "lz-string": "bin/bin.js" } }, "sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ=="],
 

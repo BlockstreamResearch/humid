@@ -1,18 +1,18 @@
 import type { WalletKitTypes } from "@reown/walletkit";
 import { buildApprovedNamespaces, getSdkError } from "@walletconnect/utils";
 
-import { resolveWalletConnectSupportedNamespaces } from "../../capabilities";
-import { getErrorMessage } from "../errors";
-import { getBackgroundOptions, setLastError } from "../state";
-import type { WalletKitClient } from "../types";
-import { rejectSessionProposal } from "./reject-session-proposal";
+import { getErrorMessage } from "../../errors";
+import { getBackgroundOptions, setLastError } from "../../state";
+import type { WalletKitClient } from "../../types";
+import { rejectSessionProposal } from "./rejectSessionProposal";
+import { resolveSupportedNamespaces } from "./resolveSupportedNamespaces";
 
 export async function handleSessionProposal(
 	walletKit: WalletKitClient,
 	proposal: WalletKitTypes.SessionProposal,
 ): Promise<void> {
 	try {
-		const supportedNamespaces = await resolveWalletConnectSupportedNamespaces(proposal.params);
+		const supportedNamespaces = await resolveSupportedNamespaces(proposal.params);
 
 		if (Object.keys(supportedNamespaces).length === 0) {
 			await walletKit.rejectSession({
