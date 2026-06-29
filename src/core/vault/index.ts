@@ -1,9 +1,9 @@
+import { requestBackground } from "@/core/extension-rpc";
 import { authStore } from "@/store/auth";
 
-import { requestBackground } from "./background-request";
 import type { VaultCreateInput, VaultStatus, VaultUnlockInput } from "./types";
 
-export { generateSecret } from "./secrets";
+export { generateSecret, generateSeedMaterial } from "./secrets";
 export type { VaultCreateInput, VaultStatus, VaultUnlockInput } from "./types";
 
 export function createVault(input: VaultCreateInput): Promise<VaultStatus> {

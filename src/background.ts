@@ -8,6 +8,11 @@ import { initPegasusTransport } from "@webext-pegasus/transport/background";
 
 import * as vault from "@/core/vault/background";
 import type { VaultCreateInput, VaultStatus, VaultUnlockInput } from "@/core/vault/types";
+import * as walletConnect from "@/core/walletconnect/background";
+import type {
+	WalletConnectDisconnectInput,
+	WalletConnectPairInput,
+} from "@/core/walletconnect/types";
 import {
 	closeNotification,
 	ConfirmationRequest,
@@ -119,6 +124,10 @@ const init = async () => {
 		});
 	};
 
+	await walletConnect.initializeWalletConnectBackground({
+		confirm: ({ data, message, title }) => waitForConfirmationResponse(title, message, data),
+	});
+
 	const registerMessageListener = (
 		handlers: Record<
 			string,
@@ -206,13 +215,11 @@ const init = async () => {
 					data: await result,
 				});
 			} catch (error) {
-				if (sender.tabId) {
-					sendResponse({
-						method,
-						id,
-						error: error instanceof Error ? error.message : error,
-					});
-				}
+				sendResponse({
+					method,
+					id,
+					error: error instanceof Error ? error.message : error,
+				});
 			}
 		});
 	};
@@ -260,6 +267,21 @@ const init = async () => {
 			const status = await vault.resetVault();
 
 			return syncAuthStore(status);
+		},
+		"walletconnect.status": () => {
+			return walletConnect.getWalletConnectStatus();
+		},
+		"walletconnect.pair": async (message, sender) => {
+			requirePopupSender(sender);
+
+			return walletConnect.pairWalletConnectUri(message.data as WalletConnectPairInput);
+		},
+		"walletconnect.disconnect": async (message, sender) => {
+			requirePopupSender(sender);
+
+			return walletConnect.disconnectWalletConnectSession(
+				message.data as WalletConnectDisconnectInput,
+			);
 		},
 	});
 

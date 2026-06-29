@@ -39,7 +39,7 @@ const DEFAULT_FORM_VALUES: CreatePasswordFormValues = {
 
 export function AuthCreatePasswordPage() {
 	const navigate = useNavigate();
-	const { secret } = useAuthCreateContext();
+	const { seedMaterial } = useAuthCreateContext();
 	const {
 		control,
 		formState: { isValid },
@@ -57,7 +57,7 @@ export function AuthCreatePasswordPage() {
 	const confirmPassphraseValue = watch("confirmPassphrase");
 	const createVaultMutation = useMutation({
 		mutationFn: (values: CreatePasswordFormValues) =>
-			createVault({ secret, passphrase: values.passphrase }),
+			createVault({ seedMaterial, passphrase: values.passphrase }),
 		onSuccess: () => {
 			reset(DEFAULT_FORM_VALUES);
 			void navigate({ to: "/app" });
@@ -76,7 +76,7 @@ export function AuthCreatePasswordPage() {
 		createVaultMutation.mutate(values);
 	});
 
-	if (!secret) {
+	if (!seedMaterial) {
 		return <Navigate replace to="/auth/create" />;
 	}
 

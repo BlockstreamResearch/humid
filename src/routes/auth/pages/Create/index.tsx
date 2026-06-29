@@ -2,8 +2,8 @@ import { Outlet } from "@tanstack/react-router";
 import { createContext, type ReactNode, useContext, useMemo, useState } from "react";
 
 type AuthCreateContextValue = {
-	secret: string;
-	setSecret: (secret: string) => void;
+	seedMaterial: string;
+	setSeedMaterial: (seedMaterial: string) => void;
 };
 
 const AuthCreateContext = createContext<AuthCreateContextValue | null>(null);
@@ -20,13 +20,16 @@ export function useAuthCreateContext() {
 
 export function AuthCreateProvider({
 	children,
-	initialSecret = "",
+	initialSeedMaterial = "",
 }: {
 	children: ReactNode;
-	initialSecret?: string;
+	initialSeedMaterial?: string;
 }) {
-	const [secret, setSecret] = useState(initialSecret);
-	const value = useMemo<AuthCreateContextValue>(() => ({ secret, setSecret }), [secret]);
+	const [seedMaterial, setSeedMaterial] = useState(initialSeedMaterial);
+	const value = useMemo<AuthCreateContextValue>(
+		() => ({ seedMaterial, setSeedMaterial }),
+		[seedMaterial],
+	);
 
 	return <AuthCreateContext.Provider value={value}>{children}</AuthCreateContext.Provider>;
 }

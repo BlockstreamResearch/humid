@@ -1,5 +1,11 @@
 import browser from "webextension-polyfill";
 
+import {
+	createLocalRootKeyManagerState,
+	isKeyManagerState,
+	type KeyManagerState,
+} from "@/core/key-manager";
+
 import type { VaultCreateInput, VaultStatus, VaultUnlockInput } from "./types";
 
 const VAULT_STORAGE_KEY = "humid:vault:v1";
@@ -33,7 +39,7 @@ type StorageAreaWithAccessLevel = typeof browser.storage.local & {
 	}) => Promise<void>;
 };
 
-let unlockedSecret: string | null = null;
+let unlockedKeyManagerState: KeyManagerState | null = null;
 let failedUnlockAttempts = 0;
 let unlockPausedUntil = 0;
 
@@ -42,14 +48,14 @@ const textDecoder = new TextDecoder();
 
 export async function initializeVaultStorage(): Promise<VaultStatus> {
 	await restrictStorageAccess();
-	unlockedSecret = null;
+	unlockedKeyManagerState = null;
 
 	return getVaultStatus();
 }
 
 export async function createVault(input: VaultCreateInput): Promise<VaultStatus> {
 	const passphrase = requireNonEmpty(input.passphrase, "Missing passphrase");
-	const secret = requireNonEmpty(input.secret, "Missing secret");
+	const seedMaterial = requireNonEmpty(input.seedMaterial, "Missing seed material");
 	const existingRecord = await readVaultRecord();
 
 	if (existingRecord) {
@@ -57,6 +63,10 @@ export async function createVault(input: VaultCreateInput): Promise<VaultStatus>
 	}
 
 	const now = Date.now();
+	const keyManagerState = createLocalRootKeyManagerState({
+		createdAt: now,
+		seedMaterial,
+	});
 	const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
 	const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
 	const key = await deriveVaultKey(passphrase, salt, PBKDF2_ITERATIONS);
@@ -67,7 +77,7 @@ export async function createVault(input: VaultCreateInput): Promise<VaultStatus>
 			additionalData: textEncoder.encode(VAULT_ADDITIONAL_DATA),
 		},
 		key,
-		textEncoder.encode(secret),
+		serializeKeyManagerState(keyManagerState),
 	);
 
 	const record: VaultRecord = {
@@ -86,7 +96,7 @@ export async function createVault(input: VaultCreateInput): Promise<VaultStatus>
 	};
 
 	await writeVaultRecord(record);
-	unlockedSecret = secret;
+	unlockedKeyManagerState = keyManagerState;
 	resetUnlockAttempts();
 
 	return toVaultStatus(record);
@@ -118,8 +128,18 @@ export async function unlockVault(input: VaultUnlockInput): Promise<VaultStatus>
 			toArrayBuffer(base64ToBytes(record.ciphertext)),
 		);
 
-		unlockedSecret = textDecoder.decode(plaintext);
+		const decryptedPayload = textDecoder.decode(plaintext);
+		const decodedState = decodeKeyManagerState(decryptedPayload, record.createdAt);
+
+		unlockedKeyManagerState = decodedState.state;
 		resetUnlockAttempts();
+
+		if (decodedState.migrated) {
+			const migratedRecord = await encryptKeyManagerState(decodedState.state, key, record);
+			await writeVaultRecord(migratedRecord);
+
+			return toVaultStatus(migratedRecord);
+		}
 
 		return toVaultStatus(record);
 	} catch {
@@ -143,13 +163,13 @@ export async function unlockVault(input: VaultUnlockInput): Promise<VaultStatus>
 }
 
 export async function lockVault(): Promise<VaultStatus> {
-	unlockedSecret = null;
+	unlockedKeyManagerState = null;
 
 	return getVaultStatus();
 }
 
 export async function resetVault(): Promise<VaultStatus> {
-	unlockedSecret = null;
+	unlockedKeyManagerState = null;
 	resetUnlockAttempts();
 	await browser.storage.local.remove(VAULT_STORAGE_KEY);
 
@@ -169,12 +189,12 @@ export async function getVaultStatus(): Promise<VaultStatus> {
 	return toVaultStatus(record);
 }
 
-export function getUnlockedSecret(): string {
-	if (!unlockedSecret) {
+export function getUnlockedKeyManagerState(): KeyManagerState {
+	if (!unlockedKeyManagerState) {
 		throw new Error("Vault is locked");
 	}
 
-	return unlockedSecret;
+	return unlockedKeyManagerState;
 }
 
 async function restrictStorageAccess(): Promise<void> {
@@ -210,6 +230,58 @@ async function writeVaultRecord(record: VaultRecord): Promise<void> {
 	});
 }
 
+async function encryptKeyManagerState(
+	state: KeyManagerState,
+	key: CryptoKey,
+	previousRecord: VaultRecord,
+): Promise<VaultRecord> {
+	const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+	const ciphertext = await crypto.subtle.encrypt(
+		{
+			name: "AES-GCM",
+			iv: toArrayBuffer(iv),
+			additionalData: textEncoder.encode(VAULT_ADDITIONAL_DATA),
+		},
+		key,
+		serializeKeyManagerState(state),
+	);
+
+	return {
+		...previousRecord,
+		iv: bytesToBase64(iv),
+		ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
+		updatedAt: Date.now(),
+	};
+}
+
+function serializeKeyManagerState(state: KeyManagerState): ArrayBuffer {
+	return toArrayBuffer(textEncoder.encode(JSON.stringify(state)));
+}
+
+function decodeKeyManagerState(
+	plaintext: string,
+	createdAt: number,
+): { migrated: boolean; state: KeyManagerState } {
+	try {
+		const parsed = JSON.parse(plaintext) as unknown;
+
+		if (isKeyManagerState(parsed)) {
+			return { migrated: false, state: parsed };
+		}
+	} catch {
+		// Legacy vaults stored a single secret string as plaintext.
+	}
+
+	return {
+		migrated: true,
+		state: createLocalRootKeyManagerState({
+			createdAt,
+			seedMaterial: plaintext,
+			source: "legacy",
+		}),
+	};
+}
+
 async function deriveVaultKey(
 	passphrase: string,
 	salt: Uint8Array,
@@ -242,8 +314,10 @@ async function deriveVaultKey(
 
 function toVaultStatus(record: VaultRecord): VaultStatus {
 	return {
+		accountCount: unlockedKeyManagerState?.accounts.length,
 		hasVault: true,
-		isUnlocked: unlockedSecret !== null,
+		isUnlocked: unlockedKeyManagerState !== null,
+		keyringCount: unlockedKeyManagerState?.keyrings.length,
 		createdAt: record.createdAt,
 		updatedAt: record.updatedAt,
 	};

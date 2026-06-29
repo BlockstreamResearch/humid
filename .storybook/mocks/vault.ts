@@ -1,10 +1,12 @@
 // Storybook mock for "@/core/vault". Kept self-contained (no "@/core/vault/*"
 // imports) so a simple string alias can redirect the whole module without a
-// subpath conflict. `generateSecret` mirrors src/core/vault/secrets.ts.
+// subpath conflict. `generateSeedMaterial` mirrors src/core/vault/secrets.ts.
 
 export type VaultStatus = {
+	accountCount?: number;
 	hasVault: boolean;
 	isUnlocked: boolean;
+	keyringCount?: number;
 	createdAt?: number;
 	updatedAt?: number;
 };
@@ -18,10 +20,10 @@ export type VaultMockConfig = {
 	status: VaultStatus;
 };
 
-const GENERATED_SECRET_BYTES = 32;
+const GENERATED_SEED_MATERIAL_BYTES = 32;
 
-export function generateSecret(): string {
-	const bytes = crypto.getRandomValues(new Uint8Array(GENERATED_SECRET_BYTES));
+export function generateSeedMaterial(): string {
+	const bytes = crypto.getRandomValues(new Uint8Array(GENERATED_SEED_MATERIAL_BYTES));
 	let binary = "";
 
 	for (const byte of bytes) {
@@ -30,6 +32,8 @@ export function generateSecret(): string {
 
 	return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
+
+export const generateSecret = generateSeedMaterial;
 
 const DEFAULT_CONFIG: VaultMockConfig = {
 	behavior: "success",

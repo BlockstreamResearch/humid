@@ -4,7 +4,7 @@ import { expect, userEvent, within } from "storybook/test";
 import { AuthCreateProvider } from "../../index";
 import { AuthCreateSecretPage } from "./index";
 
-const SAMPLE_SECRET = "9f8c1d4e-2b7a-4c3f-8e1d-6a5b4c3d2e1f-humid-vault-key";
+const SAMPLE_SEED_MATERIAL = "9f8c1d4e-2b7a-4c3f-8e1d-6a5b4c3d2e1f-humid-root-key";
 
 const meta = {
 	title: "Pages/Auth/Create/Step 1 Secret",
@@ -22,27 +22,27 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Initial state: empty secret, "Continue" disabled. */
+/** Initial state: empty root material, "Continue" disabled. */
 export const Empty: Story = {};
 
-/** Returning to step 1 with a secret already in context — field is prefilled and valid. */
+/** Returning to step 1 with root material already in context — field is prefilled and valid. */
 export const Prefilled: Story = {
 	decorators: [
 		(Story) => (
-			<AuthCreateProvider initialSecret={SAMPLE_SECRET}>
+			<AuthCreateProvider initialSeedMaterial={SAMPLE_SEED_MATERIAL}>
 				<Story />
 			</AuthCreateProvider>
 		),
 	],
 };
 
-/** After pressing "Generate secret" — a random key is filled in locally. */
+/** After pressing "Generate root material" — random root material is filled in locally. */
 export const Generated: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
 
-		await userEvent.click(canvas.getByRole("button", { name: /generate secret/i }));
-		await expect(canvas.getByPlaceholderText("Enter secret manually")).not.toHaveValue("");
+		await userEvent.click(canvas.getByRole("button", { name: /generate root material/i }));
+		await expect(canvas.getByPlaceholderText("Enter seed material manually")).not.toHaveValue("");
 	},
 };
 
@@ -51,9 +51,9 @@ export const Invalid: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
 
-		await userEvent.type(canvas.getByPlaceholderText("Enter secret manually"), "   ");
+		await userEvent.type(canvas.getByPlaceholderText("Enter seed material manually"), "   ");
 		await expect(
-			await canvas.findByText("Enter a secret manually or generate one."),
+			await canvas.findByText("Enter seed material manually or generate it."),
 		).toBeInTheDocument();
 	},
 };

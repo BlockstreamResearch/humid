@@ -4,7 +4,7 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 import { AuthCreateProvider } from "../../index";
 import { AuthCreatePasswordPage } from "./index";
 
-const SAMPLE_SECRET = "9f8c1d4e-2b7a-4c3f-8e1d-6a5b4c3d2e1f-humid-vault-key";
+const SAMPLE_SEED_MATERIAL = "9f8c1d4e-2b7a-4c3f-8e1d-6a5b4c3d2e1f-humid-root-key";
 const CREATE_ERROR = "Could not create the vault. Please try again.";
 
 async function fillPasswords(canvasElement: HTMLElement, password: string, confirm: string) {
@@ -17,10 +17,10 @@ async function fillPasswords(canvasElement: HTMLElement, password: string, confi
 const meta = {
 	title: "Pages/Auth/Create/Step 2 Password",
 	component: AuthCreatePasswordPage,
-	// A secret must already exist in context, otherwise the page redirects back to step 1.
+	// Root material must already exist in context, otherwise the page redirects back to step 1.
 	decorators: [
 		(Story) => (
-			<AuthCreateProvider initialSecret={SAMPLE_SECRET}>
+			<AuthCreateProvider initialSeedMaterial={SAMPLE_SEED_MATERIAL}>
 				<Story />
 			</AuthCreateProvider>
 		),

@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
-import { generateSecret } from "@/core/vault";
+import { generateSeedMaterial } from "@/core/vault";
 import { UiButton } from "@/ui/UiButton/base";
 import {
 	UiField,
@@ -16,39 +16,39 @@ import { UiTextarea } from "@/ui/UiTextarea/base";
 
 import { useAuthCreateContext } from "../../index";
 
-const createSecretFormSchema = z.object({
-	secret: z.string().trim().min(1, "Enter a secret manually or generate one."),
+const createSeedMaterialFormSchema = z.object({
+	seedMaterial: z.string().trim().min(1, "Enter seed material manually or generate it."),
 });
 
-type CreateSecretFormValues = z.infer<typeof createSecretFormSchema>;
+type CreateSeedMaterialFormValues = z.infer<typeof createSeedMaterialFormSchema>;
 
 export function AuthCreateSecretPage() {
 	const navigate = useNavigate();
-	const { secret, setSecret } = useAuthCreateContext();
+	const { seedMaterial, setSeedMaterial } = useAuthCreateContext();
 	const {
 		clearErrors,
 		control,
 		formState: { isValid },
 		handleSubmit,
 		setValue,
-	} = useForm<CreateSecretFormValues>({
-		defaultValues: { secret },
+	} = useForm<CreateSeedMaterialFormValues>({
+		defaultValues: { seedMaterial },
 		mode: "onChange",
 		reValidateMode: "onChange",
-		resolver: zodResolver(createSecretFormSchema),
+		resolver: zodResolver(createSeedMaterialFormSchema),
 	});
 
-	const handleGenerateSecret = () => {
-		setValue("secret", generateSecret(), {
+	const handleGenerateSeedMaterial = () => {
+		setValue("seedMaterial", generateSeedMaterial(), {
 			shouldDirty: true,
 			shouldTouch: true,
 			shouldValidate: true,
 		});
-		clearErrors("secret");
+		clearErrors("seedMaterial");
 	};
 
 	const handleContinue = handleSubmit((values) => {
-		setSecret(values.secret);
+		setSeedMaterial(values.seedMaterial);
 		void navigate({ to: "/auth/create/password" });
 	});
 
@@ -59,34 +59,34 @@ export function AuthCreateSecretPage() {
 					<p className="text-muted-foreground text-xs font-medium tracking-normal uppercase">
 						Create · Step 1 of 2
 					</p>
-					<h1 className="cn-font-heading text-2xl leading-tight font-semibold">Secret key</h1>
+					<h1 className="cn-font-heading text-2xl leading-tight font-semibold">Root material</h1>
 					<p className="text-muted-foreground text-sm leading-6">
-						Use an existing secret or generate a new one locally.
+						Use existing seed material or generate new local root material.
 					</p>
 				</div>
 
 				<UiFieldGroup>
 					<Controller
-						name="secret"
+						name="seedMaterial"
 						control={control}
 						render={({ field, fieldState }) => {
-							const descriptionId = "create-vault-secret-description";
-							const errorId = "create-vault-secret-error";
+							const descriptionId = "create-vault-seed-material-description";
+							const errorId = "create-vault-seed-material-error";
 
 							return (
 								<UiField data-invalid={fieldState.invalid}>
-									<UiFieldLabel htmlFor="create-vault-secret">Secret</UiFieldLabel>
+									<UiFieldLabel htmlFor="create-vault-seed-material">Root material</UiFieldLabel>
 									<UiTextarea
 										{...field}
-										id="create-vault-secret"
+										id="create-vault-seed-material"
 										aria-describedby={
 											fieldState.error ? `${descriptionId} ${errorId}` : descriptionId
 										}
 										aria-invalid={fieldState.invalid}
-										placeholder="Enter secret manually"
+										placeholder="Enter seed material manually"
 									/>
 									<UiFieldDescription id={descriptionId}>
-										Use an existing secret or generate a new one locally.
+										This becomes the first encrypted local-root keyring.
 									</UiFieldDescription>
 									<UiFieldError id={errorId} errors={[fieldState.error]} />
 								</UiField>
@@ -94,8 +94,8 @@ export function AuthCreateSecretPage() {
 						}}
 					/>
 
-					<UiButton type="button" variant="outline" onClick={handleGenerateSecret}>
-						Generate secret
+					<UiButton type="button" variant="outline" onClick={handleGenerateSeedMaterial}>
+						Generate root material
 					</UiButton>
 				</UiFieldGroup>
 
