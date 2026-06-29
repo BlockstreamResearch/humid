@@ -1,10 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { useConfirm } from "@/common/ConfirmationPopup";
 import { resetVault, unlockVault } from "@/core/vault";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiField, UiFieldError, UiFieldGroup, UiFieldLabel } from "@/ui/UiField";
@@ -28,7 +29,9 @@ function getErrorMessage(error: unknown): string | null {
 
 export function LocalAuthPage() {
 	const navigate = useNavigate();
+	const confirm = useConfirm();
 	const passphraseInputRef = useRef<HTMLInputElement | null>(null);
+	const [resetNotice, setResetNotice] = useState<string | null>(null);
 	const {
 		control,
 		formState: { isValid },
@@ -66,6 +69,7 @@ export function LocalAuthPage() {
 	const canSubmit = isValid && !isMutating;
 
 	const clearFeedback = () => {
+		setResetNotice(null);
 		unlockVaultMutation.reset();
 		resetVaultMutation.reset();
 	};
@@ -77,10 +81,21 @@ export function LocalAuthPage() {
 		unlockVaultMutation.mutate(values);
 	});
 
-	const handleReset = () => {
+	const handleReset = async () => {
 		if (isMutating) return;
 
 		clearFeedback();
+
+		const confirmed = await confirm(
+			"Reset local vault?",
+			"This will remove the encrypted vault from this browser profile.",
+		);
+
+		if (!confirmed) {
+			setResetNotice("Reset cancelled. Your encrypted vault is still on this device.");
+			return;
+		}
+
 		resetVaultMutation.mutate();
 	};
 
@@ -139,13 +154,9 @@ export function LocalAuthPage() {
 					/>
 				</UiFieldGroup>
 
-				{resetVaultMutation.isSuccess && resetVaultMutation.data.hasVault && (
-					<p className="text-muted-foreground text-sm leading-5">
-						Reset cancelled. Your encrypted vault is still on this device.
-					</p>
-				)}
-
 				<UiFieldError>{resetErrorMessage}</UiFieldError>
+
+				{resetNotice && <p className="text-muted-foreground text-sm leading-5">{resetNotice}</p>}
 
 				<UiButton type="submit" size="lg" disabled={!canSubmit}>
 					{unlockVaultMutation.isPending ? "Unlocking..." : "Unlock"}

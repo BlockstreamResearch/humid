@@ -9,16 +9,16 @@ import { initPegasusTransport } from "@webext-pegasus/transport/background";
 import * as vault from "@/core/vault/background";
 import type { VaultCreateInput, VaultStatus, VaultUnlockInput } from "@/core/vault/types";
 import {
-	closePopup,
+	closeNotification,
 	ConfirmationRequest,
 	EventProtocolListeners,
 	ExtensionMessage,
 	getSelfIDService,
-	initPopupManagement,
+	initNotificationManagement,
 	ISelfIDService,
 	MsgProtocolRequestMethods,
 	MsgProtocolResponseMethods,
-	openPopup,
+	openNotification,
 	updateBadgeOnStorageChange,
 } from "@/helpers/background";
 import { sleep } from "@/helpers/promise";
@@ -81,7 +81,7 @@ const init = async () => {
 		data: T,
 		id = Math.floor(Math.random() * 1_000_000),
 	): Promise<boolean> => {
-		const windowId = await openPopup();
+		const windowId = await openNotification();
 
 		await sleep(200);
 
@@ -102,7 +102,7 @@ const init = async () => {
 		return new Promise((resolve) => {
 			const timeout = setTimeout(() => {
 				resolve(false);
-				void closePopup(windowId);
+				void closeNotification(windowId);
 			}, 30_000);
 
 			const removeResponseListener = messageBus.onMessage(
@@ -113,7 +113,7 @@ const init = async () => {
 					clearTimeout(timeout);
 					removeResponseListener();
 					resolve(Boolean(response.data));
-					void closePopup(windowId);
+					void closeNotification(windowId);
 				},
 			);
 		});
@@ -257,14 +257,6 @@ const init = async () => {
 		"vault.reset": async (_message, sender) => {
 			requirePopupSender(sender);
 
-			const confirmed = await waitForConfirmationResponse(
-				"Reset local vault?",
-				"This will remove the encrypted vault from this browser profile.",
-				null,
-			);
-
-			if (!confirmed) return vault.getVaultStatus();
-
 			const status = await vault.resetVault();
 
 			return syncAuthStore(status);
@@ -272,7 +264,7 @@ const init = async () => {
 	});
 
 	updateBadgeOnStorageChange();
-	initPopupManagement();
+	initNotificationManagement();
 };
 
 void init();

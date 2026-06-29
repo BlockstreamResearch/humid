@@ -31,6 +31,10 @@ function getWebAccessibleResourceInputs() {
 	);
 }
 
+function getAdditionalInputs() {
+	return [...getWebAccessibleResourceInputs(), "src/notification.html"];
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
 	const isDevelopment = mode === "development";
@@ -46,7 +50,7 @@ export default defineConfig(({ mode }) => {
 			react(),
 			webExtension({
 				manifest: generateManifest,
-				additionalInputs: getWebAccessibleResourceInputs(),
+				additionalInputs: getAdditionalInputs(),
 				disableAutoLaunch,
 			}),
 			tailwindcss(),

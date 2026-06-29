@@ -1,11 +1,13 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { useConfirm } from "@/common/ConfirmationPopup";
 import { lockVault, resetVault } from "@/core/vault";
 import { UiButton } from "@/ui/UiButton/base";
 
 export function AppHomePage() {
 	const navigate = useNavigate();
+	const confirm = useConfirm();
 	const [error, setError] = useState<string | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 
@@ -26,14 +28,22 @@ export function AppHomePage() {
 		setNotice(null);
 
 		try {
+			const confirmed = await confirm(
+				"Reset local vault?",
+				"This will remove the encrypted vault from this browser profile.",
+			);
+
+			if (!confirmed) {
+				setNotice("Reset cancelled. Your encrypted vault is still active.");
+				return;
+			}
+
 			const status = await resetVault();
 
 			if (!status.hasVault) {
 				void navigate({ to: "/auth/intro" });
 				return;
 			}
-
-			setNotice("Reset cancelled. Your encrypted vault is still active.");
 		} catch (requestError) {
 			setError(requestError instanceof Error ? requestError.message : String(requestError));
 		}

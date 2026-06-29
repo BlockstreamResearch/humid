@@ -15,51 +15,83 @@ export interface ExtensionMessage<T = unknown> {
 	type?: string;
 }
 
-let popupId: number | undefined;
-let isClosingPopupByUserAction = false;
+let notificationWindowId: number | undefined;
+let isClosingNotificationByUserAction = false;
 
-export async function openPopup(url = ""): Promise<number> {
-	const popup = await getPopup();
+const NOTIFICATION_CONTENT_WIDTH = 400;
+const NOTIFICATION_CONTENT_HEIGHT = 600;
+const NOTIFICATION_WINDOW_FRAME_WIDTH_OFFSET = 32;
+const NOTIFICATION_WINDOW_FRAME_HEIGHT_OFFSET = 80;
 
-	if (popup?.id !== undefined) {
-		await browser.windows.update(popup.id, { focused: true });
-		return popup.id;
+export async function openNotification(url = ""): Promise<number> {
+	const windowOptions = await getNotificationWindowOptions();
+	const notificationWindow = await getNotification();
+
+	if (notificationWindow?.id !== undefined) {
+		await browser.windows.update(notificationWindow.id, { ...windowOptions, focused: true });
+		return notificationWindow.id;
 	}
 
-	const currentWindow = await browser.windows.getCurrent();
-	const width = 375;
-	const height = 620;
-	const left = Math.round((currentWindow.left ?? 0) + (currentWindow.width ?? width) - width);
-
-	const popupWindow = await browser.windows.create({
-		url: `src/popup.html${url}`,
+	const createdWindow = await browser.windows.create({
+		url: getNotificationUrl(url),
+		focused: true,
 		type: "popup",
-		width,
-		height,
-		top: currentWindow.top,
-		left,
+		...windowOptions,
 	});
 
-	popupId = popupWindow.id;
-	return popupWindow.id ?? -1;
+	notificationWindowId = createdWindow.id;
+	return createdWindow.id ?? -1;
 }
 
-export async function getPopup(): Promise<browser.Windows.Window | null> {
+async function getNotificationWindowOptions(): Promise<browser.Windows.UpdateUpdateInfoType> {
+	const width = NOTIFICATION_CONTENT_WIDTH + NOTIFICATION_WINDOW_FRAME_WIDTH_OFFSET;
+	const height = NOTIFICATION_CONTENT_HEIGHT + NOTIFICATION_WINDOW_FRAME_HEIGHT_OFFSET;
+	const anchorWindow = await getNotificationAnchorWindow();
+	const left = Math.round((anchorWindow.left ?? 0) + (anchorWindow.width ?? width) - width);
+
+	const windowOptions: browser.Windows.UpdateUpdateInfoType = {
+		focused: true,
+		height,
+		left,
+		state: "normal",
+		width,
+	};
+
+	if (anchorWindow.top !== undefined) {
+		windowOptions.top = anchorWindow.top;
+	}
+
+	return windowOptions;
+}
+
+async function getNotificationAnchorWindow(): Promise<browser.Windows.Window> {
+	const normalWindows = await browser.windows.getAll({ windowTypes: ["normal"] });
+
+	return normalWindows.find((window) => window.focused) ?? browser.windows.getLastFocused();
+}
+
+function getNotificationUrl(url: string): string {
+	return `src/notification.html${url}`;
+}
+
+export async function getNotification(): Promise<browser.Windows.Window | null> {
 	const windows = await browser.windows.getAll();
-	return windows.find((window) => window.type === "popup" && window.id === popupId) ?? null;
+	return (
+		windows.find((window) => window.type === "popup" && window.id === notificationWindowId) ?? null
+	);
 }
 
-export function initPopupManagement(): void {
+export function initNotificationManagement(): void {
 	browser.windows.onRemoved.addListener((windowId) => {
-		if (windowId !== popupId) return;
+		if (windowId !== notificationWindowId) return;
 
-		popupId = undefined;
+		notificationWindowId = undefined;
 
-		if (!isClosingPopupByUserAction) {
-			console.warn("Popup closed unexpectedly. Clean up pending operations.");
+		if (!isClosingNotificationByUserAction) {
+			console.warn("Notification closed unexpectedly. Clean up pending operations.");
 		}
 
-		isClosingPopupByUserAction = false;
+		isClosingNotificationByUserAction = false;
 	});
 }
 
@@ -116,9 +148,9 @@ export enum EventProtocolListeners {
 	ExtensionEvent = "extension_event",
 }
 
-export async function closePopup(id: number) {
+export async function closeNotification(id: number) {
 	if (id < 0) return;
 
-	isClosingPopupByUserAction = true;
+	isClosingNotificationByUserAction = true;
 	await browser.windows.remove(id);
 }

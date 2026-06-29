@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
+import { ConfirmProvider } from "@/common/ConfirmationPopup";
+
 import { AppHomePage } from "./index";
 
 const LOCK_ERROR = "Could not lock the vault. Please try again.";
@@ -8,6 +10,13 @@ const LOCK_ERROR = "Could not lock the vault. Please try again.";
 const meta = {
 	title: "Pages/App/Home",
 	component: AppHomePage,
+	decorators: [
+		(Story) => (
+			<ConfirmProvider>
+				<Story />
+			</ConfirmProvider>
+		),
+	],
 } satisfies Meta<typeof AppHomePage>;
 
 export default meta;
@@ -35,8 +44,10 @@ export const ResetCancelled: Story = {
 	},
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
+		const documentBody = within(canvasElement.ownerDocument.body);
 
 		await userEvent.click(canvas.getByRole("button", { name: /^reset$/i }));
+		await userEvent.click(documentBody.getByRole("button", { name: /^decline$/i }));
 		await waitFor(() =>
 			expect(
 				canvas.getByText("Reset cancelled. Your encrypted vault is still active."),

@@ -1,10 +1,15 @@
+import { definePegasusMessageBus } from "@webext-pegasus/transport";
 import { useEffect } from "react";
 
+import type { PegasusMsgProtocolMap } from "@/background";
 import { useConfirm } from "@/common/ConfirmationPopup";
 import { MsgProtocolRequestMethods, MsgProtocolResponseMethods } from "@/helpers/background";
-import { messageBus } from "@/popup";
 
-export default function ActionsHandler() {
+type ActionsHandlerProps = {
+	messageBus: ReturnType<typeof definePegasusMessageBus<PegasusMsgProtocolMap>>;
+};
+
+export default function ActionsHandler({ messageBus }: ActionsHandlerProps) {
 	const confirm = useConfirm();
 
 	useEffect(() => {
@@ -24,7 +29,7 @@ export default function ActionsHandler() {
 		return () => {
 			removeRequestConfirmationListener();
 		};
-	}, [confirm]);
+	}, [confirm, messageBus]);
 
 	return null;
 }

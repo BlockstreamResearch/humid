@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
-import { definePegasusMessageBus } from "@webext-pegasus/transport";
 
 import "@/localization";
 
@@ -9,8 +8,6 @@ import { initPegasusTransport } from "@webext-pegasus/transport/popup";
 import React from "react";
 import { createRoot } from "react-dom/client";
 
-import { PegasusMsgProtocolMap } from "@/background";
-import ActionsHandler from "@/common/ActionsHandler";
 import { ConfirmProvider } from "@/common/ConfirmationPopup";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
@@ -21,7 +18,6 @@ import { authStore } from "@/store/auth";
 initPegasusTransport();
 initGlobalErrorReporting();
 
-export const messageBus = definePegasusMessageBus<PegasusMsgProtocolMap>();
 const queryClient = new QueryClient();
 const rootElement = document.getElementById("root");
 
@@ -58,10 +54,5 @@ function Popup() {
 }
 
 function PopupContent() {
-	return (
-		<>
-			<RouterProvider router={router} />
-			<ActionsHandler />
-		</>
-	);
+	return <RouterProvider router={router} />;
 }

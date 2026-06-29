@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
+import { ConfirmProvider } from "@/common/ConfirmationPopup";
+
 import { LocalAuthPage } from "./index";
 
 const UNLOCK_ERROR = "Incorrect password. Please try again.";
@@ -8,6 +10,13 @@ const UNLOCK_ERROR = "Incorrect password. Please try again.";
 const meta = {
 	title: "Pages/LocalAuth",
 	component: LocalAuthPage,
+	decorators: [
+		(Story) => (
+			<ConfirmProvider>
+				<Story />
+			</ConfirmProvider>
+		),
+	],
 } satisfies Meta<typeof LocalAuthPage>;
 
 export default meta;
@@ -58,8 +67,10 @@ export const ResetCancelled: Story = {
 	},
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
+		const documentBody = within(canvasElement.ownerDocument.body);
 
 		await userEvent.click(canvas.getByRole("button", { name: /reset local vault/i }));
+		await userEvent.click(documentBody.getByRole("button", { name: /^decline$/i }));
 		await waitFor(() =>
 			expect(
 				canvas.getByText("Reset cancelled. Your encrypted vault is still on this device."),
