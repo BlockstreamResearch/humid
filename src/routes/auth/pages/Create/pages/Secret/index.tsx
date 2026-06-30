@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
-import { generateSeedMaterial } from "@/core/vault/secrets";
+import { keyManagerSecretMaterial } from "@/core/key-manager/secret-material";
 import { UiButton } from "@/ui/UiButton/base";
 import {
 	UiField,
@@ -39,7 +39,7 @@ export function AuthCreateSecretPage() {
 	});
 
 	const handleGenerateSeedMaterial = () => {
-		setValue("seedMaterial", generateSeedMaterial(), {
+		setValue("seedMaterial", keyManagerSecretMaterial.generateSeedMaterial(), {
 			shouldDirty: true,
 			shouldTouch: true,
 			shouldValidate: true,

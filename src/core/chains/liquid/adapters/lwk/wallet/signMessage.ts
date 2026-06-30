@@ -4,6 +4,7 @@ import {
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
 
+import type { LiquidWalletAccount } from "../../../application/backends/LiquidWalletBackend";
 import {
 	LIQUID_SIGN_MESSAGE_PROTOCOLS,
 	LIQUID_SIGN_MESSAGE_SIGNATURE_ENCODINGS,
@@ -11,7 +12,6 @@ import {
 	type LiquidSignMessageReview,
 	type ParsedLiquidSignMessageParams,
 } from "../../../domain/message/types";
-import type { LiquidWalletAccount } from "../../../ports/LiquidWalletBackend";
 import { loadLwkWasm } from "../loadLwkWasm";
 import { getLwkImplementation } from "./getLwkImplementation";
 

@@ -1,6 +1,6 @@
 import type { WalletKitTypes } from "@reown/walletkit";
 
-import { getUnlockedKeyManagerState } from "@/core/vault/background";
+import { walletVaultBackground } from "@/core/secure-vault/application/wallet-vault/background";
 import { getWalletConnectNamespaceAdapter } from "@/core/walletconnect/namespace-registry";
 
 import { getBackgroundOptions } from "../../state";
@@ -9,7 +9,7 @@ import { WalletConnectRequestError } from "./WalletConnectRequestError";
 export async function resolveSessionRequest(
 	event: WalletKitTypes.SessionRequest,
 ): Promise<unknown> {
-	const keyManagerState = getUnlockedKeyManagerState();
+	const keyManagerState = walletVaultBackground.keyManager.getState();
 	const adapter = getWalletConnectNamespaceAdapter(event.params.chainId);
 
 	if (!adapter?.handleSessionRequest) {
@@ -19,5 +19,6 @@ export async function resolveSessionRequest(
 	return adapter.handleSessionRequest(event, {
 		confirm: getBackgroundOptions().confirm,
 		keyManagerState,
+		updateKeyManagerState: walletVaultBackground.keyManager.updateState,
 	});
 }

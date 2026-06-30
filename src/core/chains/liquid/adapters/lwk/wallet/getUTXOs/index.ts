@@ -3,9 +3,9 @@ import {
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
 
+import type { LiquidWalletAccount } from "../../../../application/backends/LiquidWalletBackend";
 import type { LiquidUTXO } from "../../../../domain/LiquidRpc";
 import { toLiquidAssetId } from "../../../../domain/validation";
-import type { LiquidWalletAccount } from "../../../../ports/LiquidWalletBackend";
 import type { LwkLiquidAccountImplementation } from "../../types";
 import { getLwkImplementation } from "../getLwkImplementation";
 

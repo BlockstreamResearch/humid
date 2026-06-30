@@ -2,12 +2,13 @@ import type { WalletKitTypes } from "@reown/walletkit";
 
 import type { WalletConnectNamespaceAdapter } from "@/core/walletconnect/types";
 
+import type { LiquidIdentityBackend } from "../../application/backends/LiquidIdentityBackend";
+import type { LiquidWalletBackend } from "../../application/backends/LiquidWalletBackend";
 import { createLiquidRpcRouter } from "../../application/createLiquidRpcRouter";
 import { resolveLiquidSessionNamespace } from "../../application/resolveLiquidSessionNamespace";
+import { resolveUnlockedLiquidChain } from "../../chains/resolveLiquidChain";
 import { LIQUID_NAMESPACE } from "../../domain/LiquidChain";
 import { parseLiquidChainId } from "../../domain/validation";
-import type { LiquidIdentityBackend } from "../../ports/LiquidIdentityBackend";
-import type { LiquidWalletBackend } from "../../ports/LiquidWalletBackend";
 
 export type CreateLiquidWalletConnectAdapterInput = {
 	identityBackend: LiquidIdentityBackend;
@@ -30,6 +31,7 @@ export function createLiquidWalletConnectAdapter({
 				walletBackend,
 				walletContext: {
 					keyManagerState: context.keyManagerState,
+					updateKeyManagerState: context.updateKeyManagerState,
 				},
 			});
 
@@ -39,8 +41,9 @@ export function createLiquidWalletConnectAdapter({
 
 			return namespace;
 		},
-		handleSessionRequest: (event, context) => {
+		handleSessionRequest: async (event, context) => {
 			const chainId = parseLiquidChainId(event.params.chainId);
+			const chain = await resolveUnlockedLiquidChain(chainId);
 
 			return dispatcher.dispatch(
 				{
@@ -49,7 +52,7 @@ export function createLiquidWalletConnectAdapter({
 				},
 				{
 					...context,
-					chainId,
+					chain,
 				},
 			);
 		},

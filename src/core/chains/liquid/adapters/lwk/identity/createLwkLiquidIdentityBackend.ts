@@ -9,6 +9,12 @@ import {
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
 
+import type {
+	GetLiquidIdentityPublicKeyInput,
+	GetLiquidIdentitySharedKeyInput,
+	LiquidIdentityBackend,
+	SignLiquidIdentityInput,
+} from "../../../application/backends/LiquidIdentityBackend";
 import {
 	LIQUID_IDENTITY_PURPOSES,
 	deriveSlipIdentityPath,
@@ -20,12 +26,6 @@ import {
 	type LiquidGetIdentitySharedKeyResult,
 	type LiquidSignIdentityResult,
 } from "../../../domain/identity/types";
-import type {
-	GetLiquidIdentityPublicKeyInput,
-	GetLiquidIdentitySharedKeyInput,
-	LiquidIdentityBackend,
-	SignLiquidIdentityInput,
-} from "../../../ports/LiquidIdentityBackend";
 import { createLwkMnemonicFromSeedMaterial } from "../createLwkMnemonic";
 import { getLocalRootSeedMaterial } from "../getLocalRootSeedMaterial";
 import { loadLwkWasm } from "../loadLwkWasm";

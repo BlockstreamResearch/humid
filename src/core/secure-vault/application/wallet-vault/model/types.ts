@@ -1,4 +1,4 @@
-export type VaultStatus = {
+export type WalletVaultStatus = {
 	accountCount?: number;
 	hasVault: boolean;
 	isUnlocked: boolean;
@@ -7,11 +7,11 @@ export type VaultStatus = {
 	updatedAt?: number;
 };
 
-export type VaultCreateInput = {
+export type WalletVaultCreateInput = {
 	passphrase: string;
 	seedMaterial: string;
 };
 
-export type VaultUnlockInput = {
+export type WalletVaultUnlockInput = {
 	passphrase: string;
 };

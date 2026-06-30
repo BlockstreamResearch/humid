@@ -1,4 +1,3 @@
-import { LOCAL_ROOT_KEYRING_TYPE } from "@/core/key-manager/state/constants";
 import type { KeyManagerState } from "@/core/key-manager/types";
 import {
 	WALLET_RPC_ERROR_REASONS,
@@ -6,17 +5,18 @@ import {
 } from "@/core/wallet-rpc/errors";
 
 export function getLocalRootSeedMaterial(state: KeyManagerState): string {
-	const keyring = state.keyrings.find(
-		(record) => record.type === LOCAL_ROOT_KEYRING_TYPE && record.material.kind === "seed",
+	const keySource = Object.values(state.accountModel.keySources).find(
+		(record) => record.kind === "local-root" && record.material.kind === "seed",
 	);
+	const secretMaterial = keySource ? state.secretMaterials[keySource.id] : undefined;
 
-	if (!keyring) {
+	if (!secretMaterial || secretMaterial.kind !== "seed") {
 		throw new WalletRpcResourceUnavailableError(
-			"No local-root seed keyring is available for Liquid.",
+			"No local-root seed key source is available for Liquid.",
 			undefined,
 			WALLET_RPC_ERROR_REASONS.MISSING_LOCAL_ROOT_KEYRING,
 		);
 	}
 
-	return keyring.material.value;
+	return secretMaterial.value;
 }

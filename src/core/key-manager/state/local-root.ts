@@ -1,5 +1,7 @@
+import { createAccountRegistry } from "@/core/accounts/application/account-registry";
+
 import type { CreateLocalRootKeyManagerStateInput, KeyManagerState } from "../types";
-import { KEY_MANAGER_STATE_VERSION, LOCAL_ROOT_KEYRING_TYPE } from "./constants";
+import { KEY_MANAGER_STATE_VERSION } from "./constants";
 
 export function createLocalRootKeyManagerState(
 	input: CreateLocalRootKeyManagerStateInput,
@@ -11,34 +13,28 @@ export function createLocalRootKeyManagerState(
 	}
 
 	const now = input.createdAt ?? Date.now();
-	const keyringId = input.keyringId ?? createId("keyring");
+	const accountRegistry = createAccountRegistry();
+	const { accountModel, keySourceId } = accountRegistry.createLocalRootAccountModel({
+		createdAt: now,
+		keySourceId: input.keySourceId,
+		name: input.name,
+		source: input.source,
+	});
 
 	return {
-		accounts: [],
+		accountModel,
 		createdAt: now,
-		keyrings: [
-			{
-				accounts: [],
+		secretMaterials: {
+			[keySourceId]: {
 				createdAt: now,
-				id: keyringId,
-				material: {
-					encoding: "utf8",
-					kind: "seed",
-					value: seedMaterial,
-				},
-				metadata: {
-					source: input.source ?? "generated",
-				},
-				name: input.name ?? "Local root",
-				type: LOCAL_ROOT_KEYRING_TYPE,
+				encoding: "utf8",
+				keySourceId,
+				kind: "seed",
 				updatedAt: now,
+				value: seedMaterial,
 			},
-		],
+		},
 		updatedAt: now,
 		version: KEY_MANAGER_STATE_VERSION,
 	};
-}
-
-function createId(prefix: string): string {
-	return `${prefix}:${crypto.randomUUID()}`;
 }

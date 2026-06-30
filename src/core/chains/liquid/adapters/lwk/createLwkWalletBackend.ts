@@ -1,4 +1,4 @@
-import type { LiquidWalletBackend } from "../../ports/LiquidWalletBackend";
+import type { LiquidWalletBackend } from "../../application/backends/LiquidWalletBackend";
 import { getWalletBalanceForAsset } from "./wallet/getBalance";
 import { getWalletUtxosForAsset } from "./wallet/getUTXOs";
 import { getWalletDescriptorEntries } from "./wallet/getWalletDescriptor";

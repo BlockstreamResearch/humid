@@ -3,7 +3,7 @@ import { z } from "zod";
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 
 import type { LiquidAssetId, ParsedLiquidAssetId } from "./LiquidAsset";
-import { LIQUID_CHAIN_IDS, type LiquidChainId } from "./LiquidChain";
+import type { LiquidChainId } from "./LiquidChain";
 import {
 	LIQUID_DESCRIPTOR_FORMATS,
 	LIQUID_DESCRIPTOR_TYPES,
@@ -12,8 +12,6 @@ import {
 	type LiquidGetWalletDescriptorParams,
 	type LiquidSendTransferParams,
 } from "./LiquidRpc";
-
-const liquidChainIdSchema = z.enum(LIQUID_CHAIN_IDS);
 
 const liquidAssetIdSchema = z.string().regex(/^bip122:[0-9a-f]{32}\/elip144:[0-9a-f]{64}$/u);
 
@@ -62,14 +60,13 @@ const liquidSendTransferParamsSchema = z
 	.strict();
 
 export function parseLiquidChainId(value: string): LiquidChainId {
-	const parsed = liquidChainIdSchema.safeParse(value);
+	const parsed = z.string().min(1).safeParse(value);
 
 	if (!parsed.success) {
 		throw new WalletRpcInvalidParamsError(
-			"Unsupported Liquid chain ID.",
+			"Invalid Liquid chain ID.",
 			{
 				chainId: value,
-				supportedChainIds: LIQUID_CHAIN_IDS,
 			},
 			WALLET_RPC_ERROR_REASONS.UNSUPPORTED_CHAIN,
 		);

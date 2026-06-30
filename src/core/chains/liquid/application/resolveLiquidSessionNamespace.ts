@@ -1,10 +1,11 @@
+import { resolveUnlockedLiquidChain } from "../chains/resolveLiquidChain";
 import { LIQUID_CHAIN_IDS, LIQUID_NAMESPACE, type LiquidChainId } from "../domain/LiquidChain";
 import { LIQUID_WALLETCONNECT_EVENTS, LIQUID_WALLETCONNECT_METHODS } from "../domain/LiquidRpc";
 import { parseLiquidChainId } from "../domain/validation";
 import type {
 	LiquidWalletBackend,
 	ResolveLiquidWalletAccountInput,
-} from "../ports/LiquidWalletBackend";
+} from "./backends/LiquidWalletBackend";
 
 type WalletConnectNamespaceRequest = {
 	chains?: string[];
@@ -20,7 +21,7 @@ export type LiquidSessionNamespaceProposal = {
 export type ResolveLiquidSessionNamespaceInput = {
 	proposal: LiquidSessionNamespaceProposal;
 	walletBackend: LiquidWalletBackend;
-	walletContext: Omit<ResolveLiquidWalletAccountInput, "chainId">;
+	walletContext: Omit<ResolveLiquidWalletAccountInput, "chain">;
 };
 
 export async function resolveLiquidSessionNamespace({
@@ -33,9 +34,10 @@ export async function resolveLiquidSessionNamespace({
 		await Promise.all(
 			chainIds.map(async (chainId) => {
 				try {
+					const chain = await resolveUnlockedLiquidChain(chainId);
 					const account = await walletBackend.resolveAccount({
 						...walletContext,
-						chainId,
+						chain,
 					});
 
 					return account.accountIdentifier;

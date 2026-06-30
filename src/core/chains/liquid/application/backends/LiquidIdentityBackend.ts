@@ -7,7 +7,7 @@ import type {
 	ParsedLiquidGetIdentityPublicKeyParams,
 	ParsedLiquidGetIdentitySharedKeyParams,
 	ParsedLiquidSignIdentityParams,
-} from "../domain/identity/types";
+} from "../../domain/identity/types";
 
 export type GetLiquidIdentityPublicKeyInput = ParsedLiquidGetIdentityPublicKeyParams & {
 	keyManagerState: KeyManagerState;

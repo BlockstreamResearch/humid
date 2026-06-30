@@ -1,59 +1,83 @@
-import type { KeyManagerState } from "@/core/key-manager/types";
-import {
-	WALLET_RPC_ERROR_REASONS,
-	WalletRpcInvalidParamsError,
-	WalletRpcResourceUnavailableError,
-	WalletRpcUserRejectedError,
-} from "@/core/wallet-rpc/errors";
+import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
+import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
+import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
+import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
 
+import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import type { ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
-import type { LiquidChainId } from "../../../domain/LiquidChain";
-import type { LiquidSendTransferResult, LiquidTransferReview } from "../../../domain/LiquidRpc";
+import type {
+	LiquidSendTransferParams,
+	LiquidSendTransferResult,
+	LiquidTransferReview,
+} from "../../../domain/LiquidRpc";
 import { parseLiquidAssetId, parseLiquidSendTransferParams } from "../../../domain/validation";
-import type { ConfirmationPort } from "../../../ports/ConfirmationPort";
-import type { LiquidWalletAccount, LiquidWalletBackend } from "../../../ports/LiquidWalletBackend";
+import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
 
 export type LiquidSendTransferContext = {
-	chainId: LiquidChainId;
-	confirm?: ConfirmationPort;
+	chain: LiquidChainRecord;
+	confirm?: WalletRpcConfirmationHandler;
 	keyManagerState: KeyManagerState;
+	updateKeyManagerState?: UpdateKeyManagerState;
 	walletBackend: LiquidWalletBackend;
 };
 
-export async function sendLiquidTransfer(
-	params: unknown,
-	context: LiquidSendTransferContext,
-): Promise<LiquidSendTransferResult> {
-	const parsedParams = parseLiquidSendTransferParams(params);
-	const account = await context.walletBackend.resolveAccount({
-		chainId: context.chainId,
-		keyManagerState: context.keyManagerState,
-	});
-	const requestedAsset = resolveRequestedAsset(parsedParams.assetId, account);
+type LiquidSendTransferMethodReview = {
+	account: LiquidWalletAccount;
+	requestedAsset: ParsedLiquidAssetId;
+	transfer: LiquidTransferReview;
+};
 
-	if (parsedParams.account && parsedParams.account !== account.accountIdentifier) {
-		throw new WalletRpcInvalidParamsError(
-			"Requested account does not match the connected Liquid account.",
-			{
-				connectedAccount: account.accountIdentifier,
-				requestedAccount: parsedParams.account,
-			},
-			WALLET_RPC_ERROR_REASONS.ACCOUNT_MISMATCH,
-		);
-	}
+export const sendLiquidTransfer = createWalletMethod<
+	LiquidSendTransferParams,
+	LiquidSendTransferContext,
+	LiquidSendTransferMethodReview,
+	LiquidSendTransferResult
+>({
+	confirmation: ({ review }) => ({
+		data: {
+			...review.transfer,
+			kind: "liquid.sendTransfer",
+		},
+		message: review.transfer.recipientConfidential
+			? "A dapp wants to send a Liquid transfer from this account."
+			: "A dapp wants to send a Liquid transfer to an unconfidential address.",
+		title: "Send Liquid transfer?",
+	}),
+	execute: ({ context, params, review }) =>
+		context.walletBackend.sendTransfer(review.account, params, review.requestedAsset.rawAssetId),
+	parse: parseLiquidSendTransferParams,
+	review: async ({ context, params }) => {
+		const account = await context.walletBackend.resolveAccount({
+			chain: context.chain,
+			keyManagerState: context.keyManagerState,
+			updateKeyManagerState: context.updateKeyManagerState,
+		});
+		const requestedAsset = resolveRequestedAsset(params.assetId, account);
 
-	await context.walletBackend.syncAccount(account);
+		if (params.account && params.account !== account.accountIdentifier) {
+			throw new WalletRpcInvalidParamsError(
+				"Requested account does not match the connected Liquid account.",
+				{
+					connectedAccount: account.accountIdentifier,
+					requestedAccount: params.account,
+				},
+				WALLET_RPC_ERROR_REASONS.ACCOUNT_MISMATCH,
+			);
+		}
 
-	const review = await context.walletBackend.inspectTransfer(
-		account,
-		parsedParams,
-		requestedAsset.rawAssetId,
-	);
+		await context.walletBackend.syncAccount(account);
 
-	await requireTransferConfirmation(context, review);
-
-	return context.walletBackend.sendTransfer(account, parsedParams, requestedAsset.rawAssetId);
-}
+		return {
+			account,
+			requestedAsset,
+			transfer: await context.walletBackend.inspectTransfer(
+				account,
+				params,
+				requestedAsset.rawAssetId,
+			),
+		};
+	},
+});
 
 function resolveRequestedAsset(
 	assetId: string | undefined,
@@ -68,29 +92,4 @@ function resolveRequestedAsset(
 		chainId: account.chainId,
 		rawAssetId: account.rawPolicyAssetId,
 	};
-}
-
-async function requireTransferConfirmation(
-	context: LiquidSendTransferContext,
-	review: LiquidTransferReview,
-): Promise<void> {
-	if (!context.confirm) {
-		throw new WalletRpcResourceUnavailableError(
-			"Liquid transfer requires a confirmation surface.",
-			undefined,
-			WALLET_RPC_ERROR_REASONS.CONFIRMATION_UNAVAILABLE,
-		);
-	}
-
-	const confirmed = await context.confirm({
-		data: review,
-		message: review.recipientConfidential
-			? "A dapp wants to send a Liquid transfer from this account."
-			: "A dapp wants to send a Liquid transfer to an unconfidential address.",
-		title: "Send Liquid transfer?",
-	});
-
-	if (!confirmed) {
-		throw new WalletRpcUserRejectedError();
-	}
 }

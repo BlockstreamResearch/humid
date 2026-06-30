@@ -1,6 +1,6 @@
 const GENERATED_SEED_MATERIAL_BYTES = 32;
 
-export function generateSeedMaterial(): string {
+function generateSeedMaterial(): string {
 	const bytes = crypto.getRandomValues(new Uint8Array(GENERATED_SEED_MATERIAL_BYTES));
 	let binary = "";
 
@@ -11,4 +11,7 @@ export function generateSeedMaterial(): string {
 	return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
-export const generateSecret = generateSeedMaterial;
+export const keyManagerSecretMaterial = {
+	generateSecret: generateSeedMaterial,
+	generateSeedMaterial,
+};

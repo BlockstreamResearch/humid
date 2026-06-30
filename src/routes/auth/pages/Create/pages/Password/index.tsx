@@ -4,7 +4,7 @@ import { Navigate, useNavigate } from "@tanstack/react-router";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
-import { createVault } from "@/core/vault";
+import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/client";
 import { UiButton } from "@/ui/UiButton/base";
 import {
 	UiField,
@@ -57,7 +57,7 @@ export function AuthCreatePasswordPage() {
 	const confirmPassphraseValue = watch("confirmPassphrase");
 	const createVaultMutation = useMutation({
 		mutationFn: (values: CreatePasswordFormValues) =>
-			createVault({ seedMaterial, passphrase: values.passphrase }),
+			walletVaultClient.create({ seedMaterial, passphrase: values.passphrase }),
 		onSuccess: () => {
 			reset(DEFAULT_FORM_VALUES);
 			void navigate({ to: "/app" });

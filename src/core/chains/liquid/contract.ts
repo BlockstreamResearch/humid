@@ -1,5 +1,6 @@
-import type { WalletConnectNamespaceAdapter } from "@/core/walletconnect/types";
+import type { ChainGroup } from "@/core/chains/application/ChainGroup";
+import type { LiquidWalletRpcContext } from "@/core/chains/liquid/application/createLiquidRpcRouter";
 
-export type LiquidChain = {
-	walletConnectAdapter: WalletConnectNamespaceAdapter;
-};
+import type { LiquidChainRecord } from "./chains/LiquidChainRecord";
+
+export type LiquidChainGroup = ChainGroup<LiquidWalletRpcContext, LiquidChainRecord>;

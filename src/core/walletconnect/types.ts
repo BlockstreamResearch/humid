@@ -1,6 +1,6 @@
 import type { WalletKitTypes } from "@reown/walletkit";
 
-import type { KeyManagerState } from "@/core/key-manager/types";
+import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
 
 export type WalletConnectRelayStatus = "unknown" | "connected" | "disconnected";
 
@@ -23,6 +23,7 @@ export type WalletConnectSupportedNamespaces = Record<string, WalletConnectSuppo
 export type WalletConnectAdapterContext = {
 	confirm?: WalletConnectConfirmationHandler;
 	keyManagerState: KeyManagerState;
+	updateKeyManagerState?: UpdateKeyManagerState;
 };
 
 export type WalletConnectNamespaceAdapter = {

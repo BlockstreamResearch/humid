@@ -1,11 +1,11 @@
-import type { KeyManagerState } from "@/core/key-manager/types";
+import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
 import { createWalletRpcDispatcher } from "@/core/wallet-rpc/dispatcher";
 import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
-import type { LiquidChainId } from "../domain/LiquidChain";
+import type { LiquidChainRecord } from "../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../domain/LiquidRpc";
-import type { LiquidIdentityBackend } from "../ports/LiquidIdentityBackend";
-import type { LiquidWalletBackend } from "../ports/LiquidWalletBackend";
+import type { LiquidIdentityBackend } from "./backends/LiquidIdentityBackend";
+import type { LiquidWalletBackend } from "./backends/LiquidWalletBackend";
 import { getLiquidBalance } from "./methods/getBalance";
 import { getLiquidIdentityPublicKey } from "./methods/getIdentityPublicKey";
 import { getLiquidIdentitySharedKey } from "./methods/getIdentitySharedKey";
@@ -18,8 +18,9 @@ import { signLiquidMessage } from "./methods/signMessage";
 import { signLiquidPset } from "./methods/signPset";
 
 export type LiquidWalletRpcContext = WalletRpcBaseContext & {
-	chainId: LiquidChainId;
+	chain: LiquidChainRecord;
 	keyManagerState: KeyManagerState;
+	updateKeyManagerState?: UpdateKeyManagerState;
 };
 
 export type CreateLiquidRpcRouterDependencies = {

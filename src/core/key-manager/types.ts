@@ -1,50 +1,35 @@
-export type KeyringMaterialEncoding = "utf8";
+import type { AccountModelState } from "@/core/accounts/application/account-registry/model/account-model";
+import type { KeySourceId } from "@/core/accounts/application/account-registry/model/identifiers";
+import type { SecretMaterialKind } from "@/core/accounts/application/account-registry/model/key-source";
+import type { TimestampMs } from "@/core/accounts/application/account-registry/model/time";
 
-export type KeyringMaterialKind = "seed";
+export type SecretMaterialEncoding = "utf8";
 
-export type KeyringMaterial = {
-	encoding: KeyringMaterialEncoding;
-	kind: KeyringMaterialKind;
+export type SecretMaterialRecord = {
+	createdAt: TimestampMs;
+	encoding: SecretMaterialEncoding;
+	keySourceId: KeySourceId;
+	kind: SecretMaterialKind;
+	updatedAt: TimestampMs;
 	value: string;
 };
 
-export type KeyringMetadata = Record<string, unknown>;
-
-export type KeyringRecord = {
-	accounts: string[];
-	createdAt: number;
-	id: string;
-	material: KeyringMaterial;
-	metadata?: KeyringMetadata;
-	name: string;
-	type: string;
-	updatedAt: number;
-};
-
-export type WalletAccountRecord = {
-	address: string;
-	chainId: string;
-	createdAt: number;
-	id: string;
-	keyringId: string;
-	metadata?: Record<string, unknown>;
-	name?: string;
-	namespace: string;
-	updatedAt: number;
-};
-
 export type KeyManagerState = {
-	accounts: WalletAccountRecord[];
-	createdAt: number;
-	keyrings: KeyringRecord[];
-	updatedAt: number;
-	version: 1;
+	accountModel: AccountModelState;
+	createdAt: TimestampMs;
+	secretMaterials: Record<KeySourceId, SecretMaterialRecord>;
+	updatedAt: TimestampMs;
+	version: 2;
 };
+
+export type UpdateKeyManagerState = (
+	update: (state: KeyManagerState) => KeyManagerState,
+) => Promise<KeyManagerState>;
 
 export type CreateLocalRootKeyManagerStateInput = {
-	createdAt?: number;
-	keyringId?: string;
+	createdAt?: TimestampMs;
+	keySourceId?: KeySourceId;
 	name?: string;
 	seedMaterial: string;
-	source?: "generated" | "imported" | "legacy";
+	source?: "generated" | "imported";
 };

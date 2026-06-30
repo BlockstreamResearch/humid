@@ -6,7 +6,7 @@ import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { useConfirm } from "@/common/ConfirmationPopup";
-import { resetVault, unlockVault } from "@/core/vault";
+import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/client";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiField, UiFieldError, UiFieldGroup, UiFieldLabel } from "@/ui/UiField";
 import { UiInput } from "@/ui/UiInput/base";
@@ -45,7 +45,7 @@ export function LocalAuthPage() {
 	});
 
 	const unlockVaultMutation = useMutation({
-		mutationFn: unlockVault,
+		mutationFn: walletVaultClient.unlock,
 		onError: () => {
 			passphraseInputRef.current?.focus();
 			passphraseInputRef.current?.select();
@@ -56,7 +56,7 @@ export function LocalAuthPage() {
 		},
 	});
 	const resetVaultMutation = useMutation({
-		mutationFn: resetVault,
+		mutationFn: walletVaultClient.reset,
 		onSuccess: (status) => {
 			if (!status.hasVault) {
 				void navigate({ to: "/auth/intro" });

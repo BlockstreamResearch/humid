@@ -1,7 +1,8 @@
-import type { KeyManagerState } from "@/core/key-manager/types";
+import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
 
-import type { LiquidAssetId } from "../domain/LiquidAsset";
-import type { LiquidChainId } from "../domain/LiquidChain";
+import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
+import type { LiquidAssetId } from "../../domain/LiquidAsset";
+import type { LiquidChainId } from "../../domain/LiquidChain";
 import type {
 	LiquidGetWalletDescriptorParams,
 	LiquidSendTransferParams,
@@ -9,16 +10,17 @@ import type {
 	LiquidTransferReview,
 	LiquidUTXO,
 	LiquidWalletDescriptorEntry,
-} from "../domain/LiquidRpc";
+} from "../../domain/LiquidRpc";
 import type {
 	LiquidSignMessageResult,
 	LiquidSignMessageReview,
 	ParsedLiquidSignMessageParams,
-} from "../domain/message/types";
-import type { LiquidSignPsetResult, ParsedLiquidSignPsetParams } from "../domain/pset/types";
+} from "../../domain/message/types";
+import type { LiquidSignPsetResult, ParsedLiquidSignPsetParams } from "../../domain/pset/types";
 
 export type LiquidWalletAccount = {
 	accountIdentifier: string;
+	chain: LiquidChainRecord;
 	chainId: LiquidChainId;
 	dwid: string;
 	implementation: unknown;
@@ -27,8 +29,9 @@ export type LiquidWalletAccount = {
 };
 
 export type ResolveLiquidWalletAccountInput = {
-	chainId: LiquidChainId;
+	chain: LiquidChainRecord;
 	keyManagerState: KeyManagerState;
+	updateKeyManagerState?: UpdateKeyManagerState;
 };
 
 export type LiquidWalletBackend = {

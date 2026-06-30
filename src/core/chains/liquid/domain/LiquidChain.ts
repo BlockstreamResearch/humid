@@ -5,4 +5,5 @@ export const LIQUID_TESTNET_CHAIN_ID = "bip122:a771da8e52ee6ad581ed1e9a99825e5b"
 
 export const LIQUID_CHAIN_IDS = [LIQUID_MAINNET_CHAIN_ID, LIQUID_TESTNET_CHAIN_ID] as const;
 
-export type LiquidChainId = (typeof LIQUID_CHAIN_IDS)[number];
+export type BuiltInLiquidChainId = (typeof LIQUID_CHAIN_IDS)[number];
+export type LiquidChainId = string;

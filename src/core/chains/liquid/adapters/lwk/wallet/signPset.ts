@@ -3,7 +3,10 @@ import {
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
 
-import type { LiquidWalletAccount, LiquidWalletBackend } from "../../../ports/LiquidWalletBackend";
+import type {
+	LiquidWalletAccount,
+	LiquidWalletBackend,
+} from "../../../application/backends/LiquidWalletBackend";
 import { loadLwkWasm } from "../loadLwkWasm";
 import { getLwkImplementation } from "./getLwkImplementation";
 
@@ -38,7 +41,7 @@ export async function signPset(
 
 		if (params.broadcast) {
 			signedPset = implementation.wollet.finalize(signedPset);
-			txid = (await implementation.network.defaultEsploraClient().broadcast(signedPset)).toString();
+			txid = (await implementation.blockchainClient.broadcast(signedPset)).toString();
 		}
 
 		return {

@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { useConfirm } from "@/common/ConfirmationPopup";
-import { lockVault, resetVault } from "@/core/vault";
+import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/client";
 import { UiButton } from "@/ui/UiButton/base";
 
 export function AppHomePage() {
@@ -16,7 +16,7 @@ export function AppHomePage() {
 		setNotice(null);
 
 		try {
-			await lockVault();
+			await walletVaultClient.lock();
 			void navigate({ to: "/local-auth" });
 		} catch (requestError) {
 			setError(requestError instanceof Error ? requestError.message : String(requestError));
@@ -38,7 +38,7 @@ export function AppHomePage() {
 				return;
 			}
 
-			const status = await resetVault();
+			const status = await walletVaultClient.reset();
 
 			if (!status.hasVault) {
 				void navigate({ to: "/auth/intro" });

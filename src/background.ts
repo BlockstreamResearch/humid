@@ -6,9 +6,11 @@ import {
 } from "@webext-pegasus/transport";
 import { initPegasusTransport } from "@webext-pegasus/transport/background";
 
-import { createLiquidChain } from "@/core/chains/liquid/createLiquidChain";
-import * as vault from "@/core/vault/background";
-import type { VaultCreateInput, VaultStatus, VaultUnlockInput } from "@/core/vault/types";
+import { resolveUnlockedLiquidChain } from "@/core/chains/liquid/chains/resolveLiquidChain";
+import { createLiquidChainGroup } from "@/core/chains/liquid/createLiquidChainGroup";
+import { parseLiquidChainId } from "@/core/chains/liquid/domain/validation";
+import { walletVaultBackground } from "@/core/secure-vault/application/wallet-vault/background";
+import { walletVaultRpc } from "@/core/secure-vault/application/wallet-vault/model/rpc";
 import * as walletConnect from "@/core/walletconnect/background";
 import type {
 	WalletConnectDisconnectInput,
@@ -44,6 +46,18 @@ export type PegasusEventProtocolMap = {
 	[EventProtocolListeners.ExtensionEvent]: unknown;
 };
 
+type InjectedWalletRpcMessage = ExtensionMessage & {
+	chainId?: string;
+	params?: unknown;
+};
+
+type RequestHandler = (
+	message: ExtensionMessage,
+	sender: Endpoint,
+) => Promise<unknown> | unknown | AsyncIterable<unknown>;
+
+type RequestHandlerMap = Record<string, RequestHandler>;
+
 const isAsyncIterable = (value: unknown): value is AsyncIterable<unknown> => {
 	const maybeAsyncIterable = value as Partial<AsyncIterable<unknown>> | null;
 
@@ -54,19 +68,32 @@ const isAsyncIterable = (value: unknown): value is AsyncIterable<unknown> => {
 	);
 };
 
-const requirePopupSender = (sender: Endpoint) => {
-	if (sender.context !== "popup") {
-		throw new Error("This method is only available from the extension popup");
-	}
-};
-
-const syncAuthStore = (status: VaultStatus) => {
+const syncAuthStore = (status: Awaited<ReturnType<typeof walletVaultBackground.getStatus>>) => {
 	authStore.useAuthStore.getState().setVaultStatus({
 		hasVault: status.hasVault,
 		isUnlocked: status.isUnlocked,
 	});
 
 	return status;
+};
+
+const resolveRequestHandler = (
+	sender: Endpoint,
+	method: string,
+	handlers: {
+		injected: RequestHandlerMap;
+		popup: RequestHandlerMap;
+	},
+): RequestHandler | undefined => {
+	if (sender.context === "popup") {
+		return handlers.popup[method];
+	}
+
+	if (sender.context === "window") {
+		return handlers.injected[method];
+	}
+
+	return undefined;
 };
 
 const init = async () => {
@@ -79,7 +106,7 @@ const init = async () => {
 
 	await authStore.backendReady();
 
-	syncAuthStore(await vault.initializeVaultStorage());
+	syncAuthStore(await walletVaultBackground.initializeStorage());
 
 	const waitForConfirmationResponse = async <T>(
 		title: string,
@@ -125,23 +152,47 @@ const init = async () => {
 		});
 	};
 
-	const liquidChain = createLiquidChain();
+	const liquidChainGroup = createLiquidChainGroup();
+	const createInjectedWalletRpcHandlers = () =>
+		Object.fromEntries(
+			liquidChainGroup.walletRpcDispatcher.methods.map((method) => [
+				method,
+				async (message: ExtensionMessage) => {
+					const request = message as InjectedWalletRpcMessage;
+					const chainId = parseLiquidChainId(request.chainId ?? "");
+					const chain = await resolveUnlockedLiquidChain(chainId);
 
-	walletConnect.registerWalletConnectNamespaceAdapter(liquidChain.walletConnectAdapter);
+					return liquidChainGroup.walletRpcDispatcher.dispatch(
+						{
+							method,
+							params: request.params ?? request.data,
+						},
+						{
+							chain,
+							confirm: (confirmation) =>
+								waitForConfirmationResponse(
+									confirmation.title,
+									confirmation.message,
+									confirmation.data,
+								),
+							keyManagerState: walletVaultBackground.keyManager.getState(),
+							updateKeyManagerState: walletVaultBackground.keyManager.updateState,
+						},
+					);
+				},
+			]),
+		);
+
+	walletConnect.registerWalletConnectNamespaceAdapter(liquidChainGroup.walletConnectAdapter);
 
 	await walletConnect.initializeWalletConnectBackground({
 		confirm: ({ data, message, title }) => waitForConfirmationResponse(title, message, data),
 	});
 
-	const registerMessageListener = (
-		handlers: Record<
-			string,
-			(
-				message: ExtensionMessage,
-				sender: Endpoint,
-			) => Promise<unknown> | unknown | AsyncIterable<unknown>
-		>,
-	) => {
+	const registerMessageListener = (handlers: {
+		injected: RequestHandlerMap;
+		popup: RequestHandlerMap;
+	}) => {
 		messageBus.onMessage(MsgProtocolRequestMethods.Request, async (message) => {
 			const sender = message.sender;
 			const responseDestination =
@@ -165,7 +216,7 @@ const init = async () => {
 			};
 
 			const { method, id } = message.data;
-			const handler = handlers[method];
+			const handler = resolveRequestHandler(sender, method, handlers);
 
 			if (!handler) {
 				sendResponse({
@@ -230,63 +281,58 @@ const init = async () => {
 	};
 
 	registerMessageListener({
-		ping: (message) => {
-			return {
-				message: "pong",
-				request: message.data ?? null,
-			};
-		},
-		confirm: async (message) => {
-			const data = message.data as Partial<ConfirmationRequest> | undefined;
+		injected: createInjectedWalletRpcHandlers(),
+		popup: {
+			ping: (message) => {
+				return {
+					message: "pong",
+					request: message.data ?? null,
+				};
+			},
+			confirm: async (message) => {
+				const data = message.data as Partial<ConfirmationRequest> | undefined;
 
-			return waitForConfirmationResponse(
-				data?.title ?? "Confirm action?",
-				data?.message,
-				data?.data,
-			);
-		},
-		"vault.create": async (message, sender) => {
-			requirePopupSender(sender);
+				return waitForConfirmationResponse(
+					data?.title ?? "Confirm action?",
+					data?.message,
+					data?.data,
+				);
+			},
+			[walletVaultRpc.methods.create]: async (message) => {
+				const status = await walletVaultBackground.create(
+					message.data as Parameters<typeof walletVaultBackground.create>[0],
+				);
 
-			const status = await vault.createVault(message.data as VaultCreateInput);
+				return syncAuthStore(status);
+			},
+			[walletVaultRpc.methods.unlock]: async (message) => {
+				const status = await walletVaultBackground.unlock(
+					message.data as Parameters<typeof walletVaultBackground.unlock>[0],
+				);
 
-			return syncAuthStore(status);
-		},
-		"vault.unlock": async (message, sender) => {
-			requirePopupSender(sender);
+				return syncAuthStore(status);
+			},
+			[walletVaultRpc.methods.lock]: async () => {
+				const status = await walletVaultBackground.lock();
 
-			const status = await vault.unlockVault(message.data as VaultUnlockInput);
+				return syncAuthStore(status);
+			},
+			[walletVaultRpc.methods.reset]: async () => {
+				const status = await walletVaultBackground.reset();
 
-			return syncAuthStore(status);
-		},
-		"vault.lock": async (_message, sender) => {
-			requirePopupSender(sender);
-
-			const status = await vault.lockVault();
-
-			return syncAuthStore(status);
-		},
-		"vault.reset": async (_message, sender) => {
-			requirePopupSender(sender);
-
-			const status = await vault.resetVault();
-
-			return syncAuthStore(status);
-		},
-		"walletconnect.status": () => {
-			return walletConnect.getWalletConnectStatus();
-		},
-		"walletconnect.pair": async (message, sender) => {
-			requirePopupSender(sender);
-
-			return walletConnect.pairWalletConnectUri(message.data as WalletConnectPairInput);
-		},
-		"walletconnect.disconnect": async (message, sender) => {
-			requirePopupSender(sender);
-
-			return walletConnect.disconnectWalletConnectSession(
-				message.data as WalletConnectDisconnectInput,
-			);
+				return syncAuthStore(status);
+			},
+			"walletconnect.status": () => {
+				return walletConnect.getWalletConnectStatus();
+			},
+			"walletconnect.pair": async (message) => {
+				return walletConnect.pairWalletConnectUri(message.data as WalletConnectPairInput);
+			},
+			"walletconnect.disconnect": async (message) => {
+				return walletConnect.disconnectWalletConnectSession(
+					message.data as WalletConnectDisconnectInput,
+				);
+			},
 		},
 	});
 

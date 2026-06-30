@@ -1,5 +1,5 @@
+import type { LiquidWalletAccount } from "../../../application/backends/LiquidWalletBackend";
 import { toLiquidAssetId } from "../../../domain/validation";
-import type { LiquidWalletAccount } from "../../../ports/LiquidWalletBackend";
 import { getLwkImplementation } from "./getLwkImplementation";
 
 export function getWalletBalanceForAsset(account: LiquidWalletAccount, rawAssetId: string): string {

@@ -1,33 +1,68 @@
-import type { KeyManagerState } from "@/core/key-manager/types";
+import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
+import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
-	WalletRpcUserRejectedError,
 } from "@/core/wallet-rpc/errors";
+import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
 
-import type { LiquidChainId } from "../../../domain/LiquidChain";
+import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import {
 	LIQUID_DESCRIPTOR_TYPES,
+	type LiquidGetWalletDescriptorParams,
 	type LiquidGetWalletDescriptorResult,
 } from "../../../domain/LiquidRpc";
 import {
 	getSupportedLiquidDescriptorFormats,
 	parseLiquidGetWalletDescriptorParams,
 } from "../../../domain/validation";
-import type { ConfirmationPort } from "../../../ports/ConfirmationPort";
-import type { LiquidWalletAccount, LiquidWalletBackend } from "../../../ports/LiquidWalletBackend";
+import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
 
 export type LiquidGetWalletDescriptorContext = {
-	chainId: LiquidChainId;
-	confirm?: ConfirmationPort;
+	chain: LiquidChainRecord;
+	confirm?: WalletRpcConfirmationHandler;
 	keyManagerState: KeyManagerState;
+	updateKeyManagerState?: UpdateKeyManagerState;
 	walletBackend: LiquidWalletBackend;
 };
 
-export async function getLiquidWalletDescriptor(
-	params: unknown,
-	context: LiquidGetWalletDescriptorContext,
-): Promise<LiquidGetWalletDescriptorResult> {
+type LiquidGetWalletDescriptorReview = {
+	account: LiquidWalletAccount;
+};
+
+export const getLiquidWalletDescriptor = createWalletMethod<
+	LiquidGetWalletDescriptorParams,
+	LiquidGetWalletDescriptorContext,
+	LiquidGetWalletDescriptorReview,
+	LiquidGetWalletDescriptorResult
+>({
+	confirmation: ({ params, review }) => ({
+		data: {
+			accountIdentifier: review.account.accountIdentifier,
+			chainId: review.account.chainId,
+			descriptorType: params.descriptorType,
+			kind: "liquid.getWalletDescriptor",
+		},
+		message: "A dapp wants to read the public Liquid wallet descriptor for this account.",
+		title: "Share Liquid descriptor?",
+	}),
+	execute: async ({ context, params, review }) => ({
+		accountIdentifier: review.account.accountIdentifier,
+		chainId: review.account.chainId,
+		descriptors: await context.walletBackend.getDescriptorEntries(review.account, params),
+		policyAssetId: review.account.policyAssetId,
+	}),
+	parse: parseGetWalletDescriptorParams,
+	review: async ({ context }) => ({
+		account: await context.walletBackend.resolveAccount({
+			chain: context.chain,
+			keyManagerState: context.keyManagerState,
+			updateKeyManagerState: context.updateKeyManagerState,
+		}),
+	}),
+});
+
+function parseGetWalletDescriptorParams(params: unknown): LiquidGetWalletDescriptorParams {
 	const parsedParams = parseLiquidGetWalletDescriptorParams(params);
 
 	if (parsedParams.descriptorType !== LIQUID_DESCRIPTOR_TYPES.PUBLIC_WALLET_DESCRIPTOR) {
@@ -56,45 +91,5 @@ export async function getLiquidWalletDescriptor(
 		);
 	}
 
-	const account = await context.walletBackend.resolveAccount({
-		chainId: context.chainId,
-		keyManagerState: context.keyManagerState,
-	});
-
-	await requireDescriptorDisclosureConfirmation(context, account, parsedParams.descriptorType);
-
-	return {
-		accountIdentifier: account.accountIdentifier,
-		chainId: account.chainId,
-		descriptors: await context.walletBackend.getDescriptorEntries(account, parsedParams),
-		policyAssetId: account.policyAssetId,
-	};
-}
-
-async function requireDescriptorDisclosureConfirmation(
-	context: LiquidGetWalletDescriptorContext,
-	account: LiquidWalletAccount,
-	descriptorType: string,
-): Promise<void> {
-	if (!context.confirm) {
-		throw new WalletRpcResourceUnavailableError(
-			"Wallet descriptor disclosure requires a confirmation surface.",
-			undefined,
-			WALLET_RPC_ERROR_REASONS.CONFIRMATION_UNAVAILABLE,
-		);
-	}
-
-	const confirmed = await context.confirm({
-		data: {
-			accountIdentifier: account.accountIdentifier,
-			chainId: account.chainId,
-			descriptorType,
-		},
-		message: "A dapp wants to read the public Liquid wallet descriptor for this account.",
-		title: "Share Liquid descriptor?",
-	});
-
-	if (!confirmed) {
-		throw new WalletRpcUserRejectedError();
-	}
+	return parsedParams;
 }

@@ -4,6 +4,7 @@ import {
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
 
+import type { LiquidWalletAccount } from "../../../../application/backends/LiquidWalletBackend";
 import {
 	LIQUID_DESCRIPTOR_FORMATS,
 	LIQUID_DESCRIPTOR_TYPES,
@@ -12,7 +13,6 @@ import {
 	type LiquidWalletDescriptorEntry,
 } from "../../../../domain/LiquidRpc";
 import { getSupportedLiquidDescriptorFormats } from "../../../../domain/validation";
-import type { LiquidWalletAccount } from "../../../../ports/LiquidWalletBackend";
 import { loadLwkWasm } from "../../loadLwkWasm";
 import { getLwkImplementation } from "../getLwkImplementation";
 import { addDescriptorChecksum } from "./addDescriptorChecksum";

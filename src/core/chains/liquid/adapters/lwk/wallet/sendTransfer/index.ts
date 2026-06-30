@@ -4,6 +4,7 @@ import {
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
 
+import type { LiquidWalletAccount } from "../../../../application/backends/LiquidWalletBackend";
 import { LIQUID_MAINNET_CHAIN_ID } from "../../../../domain/LiquidChain";
 import type {
 	LiquidSendTransferParams,
@@ -11,7 +12,6 @@ import type {
 	LiquidTransferReview,
 } from "../../../../domain/LiquidRpc";
 import { toLiquidAssetId } from "../../../../domain/validation";
-import type { LiquidWalletAccount } from "../../../../ports/LiquidWalletBackend";
 import { loadLwkWasm } from "../../loadLwkWasm";
 import { getLwkImplementation } from "../getLwkImplementation";
 
@@ -88,7 +88,7 @@ export async function sendTransfer(
 		const unsignedPset = builder.finish(implementation.wollet);
 		const signedPset = implementation.signer.sign(unsignedPset);
 		const finalizedPset = implementation.wollet.finalize(signedPset);
-		const txid = await implementation.network.defaultEsploraClient().broadcast(finalizedPset);
+		const txid = await implementation.blockchainClient.broadcast(finalizedPset);
 
 		return {
 			txid: txid.toString(),

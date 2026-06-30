@@ -1,23 +1,27 @@
-import type { KeyManagerState } from "@/core/key-manager/types";
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
 
+import { createLiquidAccountRegistry } from "../../../accounts/createLiquidAccountRegistry";
+import type {
+	LiquidWalletAccount,
+	ResolveLiquidWalletAccountInput,
+} from "../../../application/backends/LiquidWalletBackend";
 import { toLiquidAssetId } from "../../../domain/validation";
-import type { LiquidWalletAccount } from "../../../ports/LiquidWalletBackend";
+import { createLwkBlockchainClient } from "../createLwkBlockchainClient";
 import { createLwkMnemonicFromSeedMaterial } from "../createLwkMnemonic";
 import { createLwkNetwork } from "../createLwkNetwork";
 import { getLocalRootSeedMaterial } from "../getLocalRootSeedMaterial";
 import { loadLwkWasm } from "../loadLwkWasm";
 
-export async function createLwkLiquidAccount(input: {
-	chainId: LiquidWalletAccount["chainId"];
-	keyManagerState: KeyManagerState;
-}): Promise<LiquidWalletAccount> {
+export async function createLwkLiquidAccount(
+	input: ResolveLiquidWalletAccountInput,
+): Promise<LiquidWalletAccount> {
 	const seedMaterial = getLocalRootSeedMaterial(input.keyManagerState);
 	const lwk = await loadLwkWasm();
-	const network = createLwkNetwork(lwk, input.chainId);
+	const network = createLwkNetwork(lwk, input.chain.id);
+	const blockchainClient = createLwkBlockchainClient(lwk, input.chain, network);
 	const mnemonic = createLwkMnemonicFromSeedMaterial(lwk, seedMaterial);
 
 	try {
@@ -26,13 +30,37 @@ export async function createLwkLiquidAccount(input: {
 		const wollet = new lwk.Wollet(network, descriptor);
 		const dwid = wollet.dwid();
 		const rawPolicyAssetId = network.policyAsset().toString();
-		const policyAssetId = toLiquidAssetId(input.chainId, rawPolicyAssetId);
+		const policyAssetId = toLiquidAssetId(input.chain.id, rawPolicyAssetId);
+		const accountIdentifier = `${input.chain.id}:${dwid}` as const;
+
+		if (input.updateKeyManagerState) {
+			const accountRegistry = createLiquidAccountRegistry();
+
+			await input.updateKeyManagerState((state) => {
+				const ensured = accountRegistry.ensureDescriptorWalletAccount({
+					accountModel: state.accountModel,
+					chainId: input.chain.id,
+					context: {
+						dwid,
+						policyAssetId,
+						rawPolicyAssetId,
+					},
+				});
+
+				return {
+					...state,
+					accountModel: ensured.accountModel,
+				};
+			});
+		}
 
 		return {
-			accountIdentifier: `${input.chainId}:${dwid}`,
-			chainId: input.chainId,
+			accountIdentifier,
+			chain: input.chain,
+			chainId: input.chain.id,
 			dwid,
 			implementation: {
+				blockchainClient,
 				network,
 				signer,
 				wollet,

@@ -1,56 +1,36 @@
-import type { KeyManagerState } from "@/core/key-manager/types";
-import {
-	WALLET_RPC_ERROR_REASONS,
-	WalletRpcResourceUnavailableError,
-	WalletRpcUserRejectedError,
-} from "@/core/wallet-rpc/errors";
+import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
+import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
+import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
 
-import type { LiquidChainId } from "../../../domain/LiquidChain";
+import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import type { LiquidSignPsetResult, ParsedLiquidSignPsetParams } from "../../../domain/pset/types";
 import { parseLiquidSignPsetParams } from "../../../domain/pset/validation";
-import type { ConfirmationPort } from "../../../ports/ConfirmationPort";
-import type { LiquidWalletAccount, LiquidWalletBackend } from "../../../ports/LiquidWalletBackend";
+import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
 
 export type LiquidSignPsetContext = {
-	chainId: LiquidChainId;
-	confirm?: ConfirmationPort;
+	chain: LiquidChainRecord;
+	confirm?: WalletRpcConfirmationHandler;
 	keyManagerState: KeyManagerState;
+	updateKeyManagerState?: UpdateKeyManagerState;
 	walletBackend: LiquidWalletBackend;
 };
 
-export async function signLiquidPset(
-	params: unknown,
-	context: LiquidSignPsetContext,
-): Promise<LiquidSignPsetResult> {
-	const parsedParams = parseLiquidSignPsetParams(params);
-	const account = await context.walletBackend.resolveAccount({
-		chainId: context.chainId,
-		keyManagerState: context.keyManagerState,
-	});
+type LiquidSignPsetReview = {
+	account: LiquidWalletAccount;
+};
 
-	await requirePsetSigningConfirmation(context, account, parsedParams);
-
-	return context.walletBackend.signPset(account, parsedParams);
-}
-
-async function requirePsetSigningConfirmation(
-	context: LiquidSignPsetContext,
-	account: LiquidWalletAccount,
-	params: ParsedLiquidSignPsetParams,
-): Promise<void> {
-	if (!context.confirm) {
-		throw new WalletRpcResourceUnavailableError(
-			"PSET signing requires a confirmation surface.",
-			undefined,
-			WALLET_RPC_ERROR_REASONS.CONFIRMATION_UNAVAILABLE,
-		);
-	}
-
-	const confirmed = await context.confirm({
+export const signLiquidPset = createWalletMethod<
+	ParsedLiquidSignPsetParams,
+	LiquidSignPsetContext,
+	LiquidSignPsetReview,
+	LiquidSignPsetResult
+>({
+	confirmation: ({ params, review }) => ({
 		data: {
-			accountIdentifier: account.accountIdentifier,
+			accountIdentifier: review.account.accountIdentifier,
 			broadcast: params.broadcast,
-			chainId: account.chainId,
+			chainId: review.account.chainId,
+			kind: "liquid.signPset",
 			requestedInputs: params.signInputs.map((input) => ({
 				address: input.address,
 				index: input.index,
@@ -60,9 +40,14 @@ async function requirePsetSigningConfirmation(
 		},
 		message: "A dapp wants to sign a Liquid PSET.",
 		title: "Sign Liquid PSET?",
-	});
-
-	if (!confirmed) {
-		throw new WalletRpcUserRejectedError();
-	}
-}
+	}),
+	execute: ({ context, params, review }) => context.walletBackend.signPset(review.account, params),
+	parse: parseLiquidSignPsetParams,
+	review: async ({ context }) => ({
+		account: await context.walletBackend.resolveAccount({
+			chain: context.chain,
+			keyManagerState: context.keyManagerState,
+			updateKeyManagerState: context.updateKeyManagerState,
+		}),
+	}),
+});
