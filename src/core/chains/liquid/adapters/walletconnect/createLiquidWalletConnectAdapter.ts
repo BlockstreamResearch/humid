@@ -6,16 +6,22 @@ import { createLiquidRpcRouter } from "../../application/createLiquidRpcRouter";
 import { resolveLiquidSessionNamespace } from "../../application/resolveLiquidSessionNamespace";
 import { LIQUID_NAMESPACE } from "../../domain/LiquidChain";
 import { parseLiquidChainId } from "../../domain/validation";
+import type { LiquidIdentityBackend } from "../../ports/LiquidIdentityBackend";
 import type { LiquidWalletBackend } from "../../ports/LiquidWalletBackend";
 
 export type CreateLiquidWalletConnectAdapterInput = {
+	identityBackend: LiquidIdentityBackend;
 	walletBackend: LiquidWalletBackend;
 };
 
 export function createLiquidWalletConnectAdapter({
+	identityBackend,
 	walletBackend,
 }: CreateLiquidWalletConnectAdapterInput): WalletConnectNamespaceAdapter {
-	const dispatcher = createLiquidRpcRouter(walletBackend);
+	const dispatcher = createLiquidRpcRouter({
+		identityBackend,
+		walletBackend,
+	});
 
 	return {
 		getSupportedNamespace: async (proposal: WalletKitTypes.SessionProposal["params"], context) => {
