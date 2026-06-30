@@ -21,6 +21,7 @@ import {
 	type EnsureChainAccountInput,
 	type EnsureChainAccountResult,
 } from "./operations/ensureChainAccount";
+import { findDappSession, type FindDappSessionInput } from "./operations/findDappSession";
 import { getSelectedAccountGroup } from "./operations/getSelectedAccountGroup";
 import { getWalletByKeySource } from "./operations/getWalletByKeySource";
 import { grantDappSession, type GrantDappSessionInput } from "./operations/grantDappSession";
@@ -54,6 +55,10 @@ export class AccountRegistry {
 			...input,
 			accountTypes: this.accountTypes,
 		});
+	}
+
+	findDappSession(accountModel: AccountModelState, input: FindDappSessionInput) {
+		return findDappSession(accountModel, input);
 	}
 
 	getSelectedAccountGroup(accountModel: AccountModelState) {

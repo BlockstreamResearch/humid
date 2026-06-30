@@ -1,339 +1,127 @@
-import { registerRPCService } from "@webext-pegasus/rpc";
-import {
-	definePegasusEventBus,
-	definePegasusMessageBus,
-	Endpoint,
-} from "@webext-pegasus/transport";
-import { initPegasusTransport } from "@webext-pegasus/transport/background";
-
+import { createAccountRegistry } from "@/core/accounts/application/account-registry";
+import type { AccountModelState } from "@/core/accounts/application/account-registry/model/account-model";
+import type { Caip25Scopes } from "@/core/caip25";
 import { resolveUnlockedLiquidChain } from "@/core/chains/liquid/chains/resolveLiquidChain";
 import { createLiquidChainGroup } from "@/core/chains/liquid/createLiquidChainGroup";
 import { parseLiquidChainId } from "@/core/chains/liquid/domain/validation";
-import { walletVaultBackground } from "@/core/secure-vault/application/wallet-vault/background";
-import { walletVaultRpc } from "@/core/secure-vault/application/wallet-vault/model/rpc";
-import * as walletConnect from "@/core/walletconnect/background";
-import type {
-	WalletConnectDisconnectInput,
-	WalletConnectPairInput,
-} from "@/core/walletconnect/types";
+import { createConfirmationResponder } from "@/core/extension-background/confirmations";
 import {
-	closeNotification,
-	ConfirmationRequest,
-	EventProtocolListeners,
-	ExtensionMessage,
-	getSelfIDService,
-	initNotificationManagement,
-	ISelfIDService,
-	MsgProtocolRequestMethods,
-	MsgProtocolResponseMethods,
-	openNotification,
-	updateBadgeOnStorageChange,
-} from "@/helpers/background";
-import { sleep } from "@/helpers/promise";
+	createDappAuthorization,
+	type DappRequestDispatch,
+	type SupportedDappScope,
+} from "@/core/extension-background/dapp-authorization";
+import { createInjectedRpcHandlers } from "@/core/extension-background/injected-rpc";
+import {
+	createInternalRpcHandlers,
+	syncWalletVaultAuthStore,
+} from "@/core/extension-background/internal-rpc";
+import {
+	registerBackgroundRpc,
+	setupBackgroundTransport,
+} from "@/core/extension-background/transport";
+import { walletVaultBackground } from "@/core/secure-vault/application/wallet-vault/background";
+import * as walletConnect from "@/core/walletconnect/background";
+import { initNotificationManagement, updateBadgeOnStorageChange } from "@/helpers/background";
 import { authStore } from "@/store/auth";
 
-export type PegasusMsgProtocolMap = {
-	[MsgProtocolRequestMethods.Request]: ExtensionMessage;
-	[MsgProtocolResponseMethods.RequestResponse]: ExtensionMessage<unknown>;
-	[MsgProtocolRequestMethods.RequestConfirmation]: ExtensionMessage<ConfirmationRequest>;
-	[MsgProtocolResponseMethods.ConfirmResponse]: {
-		id: number;
-		data: boolean;
-	};
-};
+export type {
+	PegasusEventProtocolMap,
+	PegasusMsgProtocolMap,
+} from "@/core/extension-background/transport";
 
-export type PegasusEventProtocolMap = {
-	[EventProtocolListeners.ExtensionEvent]: unknown;
-};
-
-type InjectedWalletRpcMessage = ExtensionMessage & {
-	chainId?: string;
-	params?: unknown;
-};
-
-type RequestHandler = (
-	message: ExtensionMessage,
-	sender: Endpoint,
-) => Promise<unknown> | unknown | AsyncIterable<unknown>;
-
-type RequestHandlerMap = Record<string, RequestHandler>;
-
-const isAsyncIterable = (value: unknown): value is AsyncIterable<unknown> => {
-	const maybeAsyncIterable = value as Partial<AsyncIterable<unknown>> | null;
-
-	return (
-		typeof maybeAsyncIterable === "object" &&
-		maybeAsyncIterable !== null &&
-		typeof maybeAsyncIterable[Symbol.asyncIterator] === "function"
-	);
-};
-
-const syncAuthStore = (status: Awaited<ReturnType<typeof walletVaultBackground.getStatus>>) => {
-	authStore.useAuthStore.getState().setVaultStatus({
-		hasVault: status.hasVault,
-		isUnlocked: status.isUnlocked,
-	});
-
-	return status;
-};
-
-const resolveRequestHandler = (
-	sender: Endpoint,
-	method: string,
-	handlers: {
-		injected: RequestHandlerMap;
-		popup: RequestHandlerMap;
-	},
-): RequestHandler | undefined => {
-	if (sender.context === "popup") {
-		return handlers.popup[method];
+function getAccountModel(): AccountModelState | null {
+	try {
+		return walletVaultBackground.keyManager.getState().accountModel;
+	} catch {
+		return null;
 	}
+}
 
-	if (sender.context === "window") {
-		return handlers.injected[method];
-	}
+async function updateAccountModel(
+	update: (accountModel: AccountModelState) => AccountModelState,
+): Promise<AccountModelState> {
+	const state = await walletVaultBackground.keyManager.updateState((current) => ({
+		...current,
+		accountModel: update(current.accountModel),
+	}));
 
-	return undefined;
-};
+	return state.accountModel;
+}
 
 const init = async () => {
-	initPegasusTransport();
-
-	registerRPCService<ISelfIDService>("getSelfID", getSelfIDService);
-
-	definePegasusEventBus<PegasusEventProtocolMap>();
-	const messageBus = definePegasusMessageBus<PegasusMsgProtocolMap>();
+	const messageBus = setupBackgroundTransport();
 
 	await authStore.backendReady();
 
-	syncAuthStore(await walletVaultBackground.initializeStorage());
+	syncWalletVaultAuthStore(await walletVaultBackground.initializeStorage());
 
-	const waitForConfirmationResponse = async <T>(
-		title: string,
-		message: string | undefined,
-		data: T,
-		id = Math.floor(Math.random() * 1_000_000),
-	): Promise<boolean> => {
-		const windowId = await openNotification();
+	const confirmations = createConfirmationResponder(messageBus);
+	const liquidChainGroup = createLiquidChainGroup();
+	const accountRegistry = createAccountRegistry();
 
-		await sleep(200);
+	// Liquid capability glue: keep the requested CAIP-25 scopes the Liquid chain
+	// group can actually serve (valid chain ids + dispatcher methods).
+	const resolveSupportedLiquidScope = (requested: Caip25Scopes): SupportedDappScope => {
+		const supportedMethods = liquidChainGroup.walletRpcDispatcher.methods;
+		const chains = new Set<string>();
+		const methods = new Set<string>();
 
-		messageBus.sendMessage(
-			MsgProtocolRequestMethods.RequestConfirmation,
-			{
-				method: MsgProtocolRequestMethods.RequestConfirmation,
-				id,
-				data: {
-					title,
-					message,
-					data,
-				},
-			},
-			"popup",
-		);
+		for (const [scopeString, scopeObject] of Object.entries(requested)) {
+			let chainId: string;
 
-		return new Promise((resolve) => {
-			const timeout = setTimeout(() => {
-				resolve(false);
-				void closeNotification(windowId);
-			}, 30_000);
+			try {
+				chainId = parseLiquidChainId(scopeString);
+			} catch {
+				continue;
+			}
 
-			const removeResponseListener = messageBus.onMessage(
-				MsgProtocolResponseMethods.ConfirmResponse,
-				({ data: response }) => {
-					if (response.id !== id) return;
+			chains.add(chainId);
 
-					clearTimeout(timeout);
-					removeResponseListener();
-					resolve(Boolean(response.data));
-					void closeNotification(windowId);
-				},
-			);
-		});
+			for (const method of scopeObject.methods) {
+				if (supportedMethods.includes(method)) methods.add(method);
+			}
+		}
+
+		return { chains: [...chains], events: [], methods: [...methods] };
 	};
 
-	const liquidChainGroup = createLiquidChainGroup();
-	const createInjectedWalletRpcHandlers = () =>
-		Object.fromEntries(
-			liquidChainGroup.walletRpcDispatcher.methods.map((method) => [
-				method,
-				async (message: ExtensionMessage) => {
-					const request = message as InjectedWalletRpcMessage;
-					const chainId = parseLiquidChainId(request.chainId ?? "");
-					const chain = await resolveUnlockedLiquidChain(chainId);
+	const dispatchInjectedLiquidRequest: DappRequestDispatch = async ({
+		chainId,
+		method,
+		params,
+	}) => {
+		const liquidChainId = parseLiquidChainId(chainId);
+		const chain = await resolveUnlockedLiquidChain(liquidChainId);
 
-					return liquidChainGroup.walletRpcDispatcher.dispatch(
-						{
-							method,
-							params: request.params ?? request.data,
-						},
-						{
-							chain,
-							confirm: (confirmation) =>
-								waitForConfirmationResponse(
-									confirmation.title,
-									confirmation.message,
-									confirmation.data,
-								),
-							keyManagerState: walletVaultBackground.keyManager.getState(),
-							updateKeyManagerState: walletVaultBackground.keyManager.updateState,
-						},
-					);
-				},
-			]),
+		return liquidChainGroup.walletRpcDispatcher.dispatch(
+			{ method, params },
+			{
+				chain,
+				confirm: confirmations.confirm,
+				keyManagerState: walletVaultBackground.keyManager.getState(),
+				updateKeyManagerState: walletVaultBackground.keyManager.updateState,
+			},
 		);
+	};
+
+	const dappAuthorization = createDappAuthorization({
+		confirm: confirmations.confirm,
+		dispatch: dispatchInjectedLiquidRequest,
+		getAccountModel,
+		registry: accountRegistry,
+		resolveSupportedScope: resolveSupportedLiquidScope,
+		updateAccountModel,
+	});
 
 	walletConnect.registerWalletConnectNamespaceAdapter(liquidChainGroup.walletConnectAdapter);
 
 	await walletConnect.initializeWalletConnectBackground({
-		confirm: ({ data, message, title }) => waitForConfirmationResponse(title, message, data),
+		confirm: confirmations.confirm,
 	});
 
-	const registerMessageListener = (handlers: {
-		injected: RequestHandlerMap;
-		popup: RequestHandlerMap;
-	}) => {
-		messageBus.onMessage(MsgProtocolRequestMethods.Request, async (message) => {
-			const sender = message.sender;
-			const responseDestination =
-				sender.context === "popup"
-					? "popup"
-					: sender.tabId === null
-						? null
-						: {
-								context: "window" as const,
-								tabId: sender.tabId,
-							};
-
-			if (!responseDestination) return;
-
-			const sendResponse = (data: ExtensionMessage<unknown>) => {
-				messageBus.sendMessage(
-					MsgProtocolResponseMethods.RequestResponse,
-					data,
-					responseDestination,
-				);
-			};
-
-			const { method, id } = message.data;
-			const handler = resolveRequestHandler(sender, method, handlers);
-
-			if (!handler) {
-				sendResponse({
-					method,
-					id,
-					error: `No handler for method: ${method}`,
-				});
-
-				return;
-			}
-
-			try {
-				const result = handler(message.data, sender);
-
-				if (isAsyncIterable(result)) {
-					try {
-						for await (const chunk of result) {
-							sendResponse({
-								id,
-								type: "stream",
-								method,
-								data: { type: "chunk", data: chunk },
-							});
-
-							await sleep(0);
-						}
-
-						sendResponse({
-							id,
-							type: "stream",
-							method,
-							data: { type: "end" },
-						});
-					} catch (error) {
-						sendResponse({
-							id,
-							type: "stream",
-							method,
-							data: {
-								type: "error",
-								error: error instanceof Error ? error.message : error,
-							},
-						});
-					}
-
-					return;
-				}
-
-				sendResponse({
-					method,
-					id,
-					data: await result,
-				});
-			} catch (error) {
-				sendResponse({
-					method,
-					id,
-					error: error instanceof Error ? error.message : error,
-				});
-			}
-		});
-	};
-
-	registerMessageListener({
-		injected: createInjectedWalletRpcHandlers(),
-		popup: {
-			ping: (message) => {
-				return {
-					message: "pong",
-					request: message.data ?? null,
-				};
-			},
-			confirm: async (message) => {
-				const data = message.data as Partial<ConfirmationRequest> | undefined;
-
-				return waitForConfirmationResponse(
-					data?.title ?? "Confirm action?",
-					data?.message,
-					data?.data,
-				);
-			},
-			[walletVaultRpc.methods.create]: async (message) => {
-				const status = await walletVaultBackground.create(
-					message.data as Parameters<typeof walletVaultBackground.create>[0],
-				);
-
-				return syncAuthStore(status);
-			},
-			[walletVaultRpc.methods.unlock]: async (message) => {
-				const status = await walletVaultBackground.unlock(
-					message.data as Parameters<typeof walletVaultBackground.unlock>[0],
-				);
-
-				return syncAuthStore(status);
-			},
-			[walletVaultRpc.methods.lock]: async () => {
-				const status = await walletVaultBackground.lock();
-
-				return syncAuthStore(status);
-			},
-			[walletVaultRpc.methods.reset]: async () => {
-				const status = await walletVaultBackground.reset();
-
-				return syncAuthStore(status);
-			},
-			"walletconnect.status": () => {
-				return walletConnect.getWalletConnectStatus();
-			},
-			"walletconnect.pair": async (message) => {
-				return walletConnect.pairWalletConnectUri(message.data as WalletConnectPairInput);
-			},
-			"walletconnect.disconnect": async (message) => {
-				return walletConnect.disconnectWalletConnectSession(
-					message.data as WalletConnectDisconnectInput,
-				);
-			},
-		},
+	registerBackgroundRpc(messageBus, {
+		injected: createInjectedRpcHandlers({ authorization: dappAuthorization }),
+		popup: createInternalRpcHandlers({ confirmations }),
 	});
 
 	updateBadgeOnStorageChange();
