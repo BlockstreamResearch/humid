@@ -14,7 +14,16 @@ import { configureVaultMock, resetVaultMock, type VaultMockConfig } from "./mock
 
 // Routes referenced by the pages. Registering them as stubs lets <Link> build
 // hrefs and <Navigate> resolve without crashing in isolation.
-const KNOWN_PATHS = ["/app", "/auth/intro", "/auth/create", "/auth/create/password", "/local-auth"];
+const KNOWN_PATHS = [
+	"/app",
+	"/app/settings",
+	"/app/asset/$assetId",
+	"/app/receive",
+	"/auth/intro",
+	"/auth/create",
+	"/auth/create/password",
+	"/local-auth",
+];
 
 function createStoryRouter(Story: ComponentType) {
 	const rootRoute = createRootRoute();

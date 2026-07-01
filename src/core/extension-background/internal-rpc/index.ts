@@ -1,14 +1,24 @@
+import type {
+	PortfolioSnapshot,
+	ReceiveAddress,
+} from "@/core/accounts/application/accounts-rpc/model/types";
+import type { ChainGroup } from "@/core/chains/application/ChainGroup";
 import type { ConfirmationRequest } from "@/helpers/background";
 
 import type { ConfirmationResponder } from "../confirmations";
 import type { RequestHandlerMap } from "../transport";
+import { createAccountsInternalHandlers } from "./accounts";
+import { createChainsInternalHandlers } from "./chains";
 import { walletVaultInternalHandlers } from "./wallet-vault";
 import { walletConnectInternalHandlers } from "./walletconnect";
 
 export { syncWalletVaultAuthStore } from "./wallet-vault";
 
 export type CreateInternalRpcHandlersInput = {
+	chainGroups: readonly Pick<ChainGroup, "chains" | "id">[];
 	confirmations: ConfirmationResponder;
+	getPortfolio: () => Promise<PortfolioSnapshot>;
+	getReceiveAddress: () => Promise<ReceiveAddress>;
 };
 
 /**
@@ -16,7 +26,10 @@ export type CreateInternalRpcHandlersInput = {
  * dapp: the transport dispatches injected senders to a separate registry.
  */
 export function createInternalRpcHandlers({
+	chainGroups,
 	confirmations,
+	getPortfolio,
+	getReceiveAddress,
 }: CreateInternalRpcHandlersInput): RequestHandlerMap {
 	return {
 		ping: (message) => {
@@ -36,5 +49,7 @@ export function createInternalRpcHandlers({
 		},
 		...walletVaultInternalHandlers,
 		...walletConnectInternalHandlers,
+		...createChainsInternalHandlers(chainGroups),
+		...createAccountsInternalHandlers({ getPortfolio, getReceiveAddress }),
 	};
 }

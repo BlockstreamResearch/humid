@@ -1,0 +1,48 @@
+import { ArrowDownLeft01Icon, ArrowUpRight01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+
+import type { PortfolioActivity } from "@/routes/App/pages/Home/HomeContext/hooks/usePortfolio";
+
+/** Transaction history for the asset: direction, amount (mono), date, counterparty. */
+export function ActivityList({ items, symbol }: { items: PortfolioActivity[]; symbol: string }) {
+	return (
+		<div className="flex flex-col gap-1">
+			<p className="text-muted-foreground px-1 text-xs font-medium tracking-wide uppercase">
+				Activity
+			</p>
+			{items.length === 0 ? (
+				<p className="text-muted-foreground px-1 py-6 text-center text-sm">No activity yet.</p>
+			) : (
+				<div className="flex flex-col">
+					{items.map((item) => {
+						const isSent = item.direction === "sent";
+
+						return (
+							<div key={item.id} className="flex items-center gap-3 px-1 py-2.5">
+								<div className="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-full">
+									<HugeiconsIcon
+										icon={isSent ? ArrowUpRight01Icon : ArrowDownLeft01Icon}
+										size={16}
+									/>
+								</div>
+								<div className="min-w-0 flex-1">
+									<p className="text-sm font-medium capitalize">{item.direction}</p>
+									<p className="text-muted-foreground truncate text-xs">
+										{item.date} · {isSent ? "To" : "From"}: {item.counterparty}
+									</p>
+								</div>
+								<div className="text-right">
+									<p className="font-mono text-sm">
+										{isSent ? "−" : "+"}
+										{item.amount} {symbol}
+									</p>
+									<p className="text-muted-foreground text-xs">{item.fiat}</p>
+								</div>
+							</div>
+						);
+					})}
+				</div>
+			)}
+		</div>
+	);
+}

@@ -2,8 +2,10 @@ import { createRoute, lazyRouteComponent } from "@tanstack/react-router";
 
 import { appLayoutRoute } from "../../route";
 
-export const Route = createRoute({
+// Pathless layout (id, no path): wraps Overview + Asset in the home context without
+// adding a URL segment. Overview stays at /app; Asset at /app/asset/$assetId.
+export const homeLayoutRoute = createRoute({
 	getParentRoute: () => appLayoutRoute,
-	path: "/",
-	component: lazyRouteComponent(() => import("./index"), "AppHomePage"),
+	id: "home",
+	component: lazyRouteComponent(() => import("./index"), "HomeLayout"),
 });

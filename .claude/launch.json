@@ -1,0 +1,11 @@
+{
+	"version": "0.0.1",
+	"configurations": [
+		{
+			"name": "storybook",
+			"runtimeExecutable": "bunx",
+			"runtimeArgs": ["storybook", "dev", "-p", "6007", "--ci", "--quiet", "--no-open"],
+			"port": 6007
+		}
+	]
+}

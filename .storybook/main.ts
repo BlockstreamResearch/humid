@@ -39,6 +39,18 @@ const config: StorybookConfig = {
 		disableTelemetry: true,
 	},
 	viteFinal(viteConfig) {
+		// Give each Storybook instance (the dev server vs the verification server) its
+		// own Vite dep-optimization cache, keyed by port. A shared cache lets one
+		// instance's re-optimize (e.g. after installing a dependency) strand the other
+		// with a stale, half-aliased bundle — which surfaces as the runtime
+		// "initPegasusTransport" error from the real extension-rpc module.
+		const portFlagIndex = process.argv.findIndex((arg) => arg === "-p" || arg === "--port");
+		const storybookPort = portFlagIndex >= 0 ? (process.argv[portFlagIndex + 1] ?? "6006") : "6006";
+		viteConfig.cacheDir = path.resolve(
+			rootDir,
+			`node_modules/.cache/storybook-vite-${storybookPort}`,
+		);
+
 		const plugins = stripProjectOnlyPlugins(viteConfig.plugins ?? []);
 
 		// Tailwind v4 is supplied by the project config; only add it if stripping
@@ -71,6 +83,12 @@ const config: StorybookConfig = {
 			{
 				find: "@/core/secure-vault/application/wallet-vault/client",
 				replacement: path.resolve(rootDir, ".storybook/mocks/vault.ts"),
+			},
+			// The RPC entry point calls definePegasusMessageBus() at import, which throws
+			// outside an extension. Stub it; stories use mock data, not the real transport.
+			{
+				find: "@/core/extension-rpc",
+				replacement: path.resolve(rootDir, ".storybook/mocks/extension-rpc.ts"),
 			},
 			...existingEntries,
 		];

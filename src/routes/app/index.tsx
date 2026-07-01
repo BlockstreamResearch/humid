@@ -1,9 +1,11 @@
 import { Outlet } from "@tanstack/react-router";
 
+import { AppShell } from "./AppShell";
+
 export function AppLayout() {
 	return (
-		<div className="bg-background text-foreground flex size-full flex-col">
+		<AppShell>
 			<Outlet />
-		</div>
+		</AppShell>
 	);
 }

@@ -34,8 +34,18 @@ export type ResolveLiquidWalletAccountInput = {
 	updateKeyManagerState?: UpdateKeyManagerState;
 };
 
+/** One wallet-relevant transaction for an asset, derived from the LWK tx history. */
+export type LiquidActivityEntry = {
+	amountSats: string;
+	direction: "received" | "sent";
+	timestamp: number | null;
+	txid: string;
+};
+
 export type LiquidWalletBackend = {
+	getActivity: (account: LiquidWalletAccount, rawAssetId: string) => LiquidActivityEntry[];
 	getBalance: (account: LiquidWalletAccount, rawAssetId: string) => string;
+	getReceiveAddress: (account: LiquidWalletAccount) => { address: string; index: number };
 	getDescriptorEntries: (
 		account: LiquidWalletAccount,
 		params: LiquidGetWalletDescriptorParams,

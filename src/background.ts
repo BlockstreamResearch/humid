@@ -1,6 +1,11 @@
 import { createAccountRegistry } from "@/core/accounts/application/account-registry";
 import type { AccountModelState } from "@/core/accounts/application/account-registry/model/account-model";
+import type {
+	PortfolioSnapshot,
+	ReceiveAddress,
+} from "@/core/accounts/application/accounts-rpc/model/types";
 import type { Caip25Scopes } from "@/core/caip25";
+import { getUnlockedChainStoreState } from "@/core/chains/application/chain-store/secureChainStore";
 import { resolveUnlockedLiquidChain } from "@/core/chains/liquid/chains/resolveLiquidChain";
 import { createLiquidChainGroup } from "@/core/chains/liquid/createLiquidChainGroup";
 import { parseLiquidChainId } from "@/core/chains/liquid/domain/validation";
@@ -104,6 +109,27 @@ const init = async () => {
 		);
 	};
 
+	// Popup account runtime: resolve the selected Liquid chain into the input the
+	// chain group's runtime facade needs (materialize + derive against it).
+	const resolveSelectedLiquidAccountInput = async () => {
+		const chainStore = await getUnlockedChainStoreState();
+		const selectedChainId =
+			chainStore.selectedChainIds[liquidChainGroup.id] ?? liquidChainGroup.chains[0].id;
+		const chain = await resolveUnlockedLiquidChain(parseLiquidChainId(selectedChainId));
+
+		return {
+			chain,
+			keyManagerState: walletVaultBackground.keyManager.getState(),
+			updateKeyManagerState: walletVaultBackground.keyManager.updateState,
+		};
+	};
+
+	const getReceiveAddress = async (): Promise<ReceiveAddress> =>
+		liquidChainGroup.accountRuntime.getReceiveAddress(await resolveSelectedLiquidAccountInput());
+
+	const getPortfolio = async (): Promise<PortfolioSnapshot> =>
+		liquidChainGroup.accountRuntime.getPortfolio(await resolveSelectedLiquidAccountInput());
+
 	const dappAuthorization = createDappAuthorization({
 		confirm: confirmations.confirm,
 		dispatch: dispatchInjectedLiquidRequest,
@@ -121,7 +147,12 @@ const init = async () => {
 
 	registerBackgroundRpc(messageBus, {
 		injected: createInjectedRpcHandlers({ authorization: dappAuthorization }),
-		popup: createInternalRpcHandlers({ confirmations }),
+		popup: createInternalRpcHandlers({
+			chainGroups: [liquidChainGroup],
+			confirmations,
+			getPortfolio,
+			getReceiveAddress,
+		}),
 	});
 
 	updateBadgeOnStorageChange();
