@@ -4,6 +4,7 @@ export const accountsRpc = {
 		getReceiveAddress: "accounts.getReceiveAddress",
 		getState: "accounts.getState",
 		rename: "accounts.rename",
+		revealRecoveryPhrase: "accounts.revealRecoveryPhrase",
 		setSelected: "accounts.setSelected",
 	},
 } as const;

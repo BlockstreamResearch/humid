@@ -17,6 +17,8 @@ import { configureVaultMock, resetVaultMock, type VaultMockConfig } from "./mock
 const KNOWN_PATHS = [
 	"/app",
 	"/app/settings",
+	"/app/settings/account/$accountGroupId",
+	"/app/settings/account/$accountGroupId/recovery-phrase",
 	"/app/asset/$assetId",
 	"/app/receive",
 	"/auth/intro",

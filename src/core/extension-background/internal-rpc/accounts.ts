@@ -6,6 +6,7 @@ import type {
 	PortfolioSnapshot,
 	ReceiveAddress,
 	RenameAccountInput,
+	RevealRecoveryPhraseInput,
 	SetSelectedAccountInput,
 } from "@/core/accounts/application/accounts-rpc/model/types";
 import { walletVaultBackground } from "@/core/secure-vault/application/wallet-vault/background";
@@ -77,6 +78,23 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 			}));
 
 			return readAccountsState(next.accountModel);
+		},
+		[accountsRpc.methods.revealRecoveryPhrase]: (message) => {
+			const { accountGroupId } = message.data as RevealRecoveryPhraseInput;
+			const state = walletVaultBackground.keyManager.getState();
+			const group = state.accountModel.accountGroups[accountGroupId];
+
+			if (!group) throw new Error(`Unknown account group: ${accountGroupId}`);
+
+			const wallet = state.accountModel.wallets[group.walletId];
+			const secret = wallet ? state.secretMaterials[wallet.keySourceId] : undefined;
+
+			// The local-root seed stores the BIP-39 mnemonic as its value.
+			if (!secret || (secret.kind !== "seed" && secret.kind !== "mnemonic")) {
+				throw new Error("This account has no revealable recovery phrase.");
+			}
+
+			return { phrase: secret.value };
 		},
 		[accountsRpc.methods.getReceiveAddress]: () => deps.getReceiveAddress(),
 		[accountsRpc.methods.getPortfolio]: () => deps.getPortfolio(),

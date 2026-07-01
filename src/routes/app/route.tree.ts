@@ -1,5 +1,5 @@
 import { homeTree } from "./pages/Home/route.tree";
-import { Route as settingsRoute } from "./pages/Settings/route";
+import { settingsTree } from "./pages/Settings/route.tree";
 import { appLayoutRoute } from "./route";
 
-export const appTree = appLayoutRoute.addChildren([homeTree, settingsRoute]);
+export const appTree = appLayoutRoute.addChildren([homeTree, settingsTree]);

@@ -5,7 +5,9 @@ import type {
 	AccountsState,
 	PortfolioSnapshot,
 	ReceiveAddress,
+	RecoveryPhrase,
 	RenameAccountInput,
+	RevealRecoveryPhraseInput,
 	SetSelectedAccountInput,
 } from "./model/types";
 
@@ -21,6 +23,10 @@ function rename(input: RenameAccountInput): Promise<AccountsState> {
 	return requestBackground<AccountsState>(accountsRpc.methods.rename, input);
 }
 
+function revealRecoveryPhrase(input: RevealRecoveryPhraseInput): Promise<RecoveryPhrase> {
+	return requestBackground<RecoveryPhrase>(accountsRpc.methods.revealRecoveryPhrase, input);
+}
+
 function getReceiveAddress(): Promise<ReceiveAddress> {
 	return requestBackground<ReceiveAddress>(accountsRpc.methods.getReceiveAddress);
 }
@@ -34,5 +40,6 @@ export const accountsClient = {
 	getReceiveAddress,
 	getState,
 	rename,
+	revealRecoveryPhrase,
 	setSelected,
 };

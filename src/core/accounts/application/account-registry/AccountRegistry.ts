@@ -17,6 +17,10 @@ import {
 	type CreateLocalRootAccountModelInput,
 } from "./operations/createLocalRootAccountModel";
 import {
+	createNextAccountGroup,
+	type CreateNextAccountGroupInput,
+} from "./operations/createNextAccountGroup";
+import {
 	ensureChainAccount,
 	type EnsureChainAccountInput,
 	type EnsureChainAccountResult,
@@ -46,6 +50,10 @@ export class AccountRegistry {
 
 	createLocalRootAccountModel(input: CreateLocalRootAccountModelInput = {}) {
 		return createLocalRootAccountModel(input);
+	}
+
+	createNextAccountGroup(input: CreateNextAccountGroupInput) {
+		return createNextAccountGroup(input);
 	}
 
 	ensureChainAccount<TContext extends object, TMetadata extends ChainAccountMetadata>(

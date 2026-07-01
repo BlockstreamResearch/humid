@@ -16,6 +16,15 @@ export type RenameAccountInput = {
 	name: string;
 };
 
+export type RevealRecoveryPhraseInput = {
+	accountGroupId: AccountGroupId;
+};
+
+/** The recovery phrase (BIP-39 mnemonic) backing an account's wallet. Sensitive. */
+export type RecoveryPhrase = {
+	phrase: string;
+};
+
 /** A materialized receive address for the selected account on the selected chain. */
 export type ReceiveAddress = {
 	address: string;
