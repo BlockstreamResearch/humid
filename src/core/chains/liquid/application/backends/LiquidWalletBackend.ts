@@ -1,3 +1,4 @@
+import type { KeySourceId } from "@/core/accounts/application/account-registry/model/identifiers";
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
 
 import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
@@ -33,6 +34,8 @@ export type ResolveLiquidWalletAccountInput = {
 	accountGroupIndex?: number;
 	chain: LiquidChainRecord;
 	keyManagerState: KeyManagerState;
+	/** The wallet's key source whose seed to derive from; defaults to the local root. */
+	keySourceId?: KeySourceId;
 	updateKeyManagerState?: UpdateKeyManagerState;
 };
 

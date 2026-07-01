@@ -21,9 +21,12 @@ export function ReceivePage() {
 	}
 
 	if (query.isError || !query.data) {
+		const detail = query.error instanceof Error ? query.error.message : null;
+
 		return (
-			<div className="text-muted-foreground flex size-full items-center justify-center px-6 text-center text-sm">
-				Couldn&apos;t derive a receive address. Try again.
+			<div className="text-muted-foreground flex size-full flex-col items-center justify-center gap-2 px-6 text-center text-sm">
+				<p>Couldn&apos;t derive a receive address. Try again.</p>
+				{detail ? <p className="text-destructive/80 text-xs break-words">{detail}</p> : null}
 			</div>
 		);
 	}

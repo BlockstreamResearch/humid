@@ -12,13 +12,15 @@ import { toLiquidAssetId } from "../../../domain/validation";
 import { createLwkBlockchainClient } from "../createLwkBlockchainClient";
 import { createLwkMnemonicFromSeedMaterial } from "../createLwkMnemonic";
 import { createLwkNetwork } from "../createLwkNetwork";
-import { getLocalRootSeedMaterial } from "../getLocalRootSeedMaterial";
+import { getLocalRootSeedMaterial, getSeedMaterialForKeySource } from "../getLocalRootSeedMaterial";
 import { loadLwkWasm } from "../loadLwkWasm";
 
 export async function createLwkLiquidAccount(
 	input: ResolveLiquidWalletAccountInput,
 ): Promise<LiquidWalletAccount> {
-	const seedMaterial = getLocalRootSeedMaterial(input.keyManagerState);
+	const seedMaterial = input.keySourceId
+		? getSeedMaterialForKeySource(input.keyManagerState, input.keySourceId)
+		: getLocalRootSeedMaterial(input.keyManagerState);
 	const lwk = await loadLwkWasm();
 	const network = createLwkNetwork(lwk, input.chain.id);
 	const blockchainClient = createLwkBlockchainClient(lwk, input.chain, network);
@@ -76,9 +78,13 @@ export async function createLwkLiquidAccount(
 			policyAssetId,
 			rawPolicyAssetId,
 		};
-	} catch {
+	} catch (error) {
+		console.error("[liquid] Failed to derive the Liquid account", error);
+
+		const cause = error instanceof Error ? error.message : String(error);
+
 		throw new WalletRpcResourceUnavailableError(
-			"Could not derive a Liquid software wallet from the local root keyring.",
+			`Could not derive a Liquid software wallet from the local root keyring: ${cause}`,
 			undefined,
 			WALLET_RPC_ERROR_REASONS.WALLET_DERIVATION_FAILED,
 		);

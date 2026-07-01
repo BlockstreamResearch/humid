@@ -56,7 +56,7 @@ export function SettingsRootView({
 								Your accounts
 							</p>
 							<Link
-								className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium"
+								className="text-primary hover:text-primary/80 inline-flex items-center gap-1 text-xs font-medium"
 								to="/app/settings/add-account"
 							>
 								<HugeiconsIcon icon={Add01Icon} size={14} />
