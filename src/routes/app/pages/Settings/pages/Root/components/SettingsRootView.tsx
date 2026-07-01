@@ -90,6 +90,10 @@ function AccountRow({
 	onSwitch: (accountGroupId: AccountGroupId) => void;
 	selected: boolean;
 }) {
+	// Only wallets added via the Import flow carry `imported`; the onboarding wallet is
+	// always "generated", so the primary account is never badged as imported.
+	const isImported = group.metadata?.imported === true;
+
 	return (
 		<div className="hover:bg-accent flex items-center gap-2 rounded-lg px-2 py-2 transition-colors">
 			<Link
@@ -99,7 +103,7 @@ function AccountRow({
 			>
 				<AccountAvatar className="size-8" seed={group.id} />
 				<span className="truncate text-sm font-medium">{group.name}</span>
-				{group.metadata?.source === "imported" ? (
+				{isImported ? (
 					<UiBadge className="shrink-0" variant="secondary">
 						Imported
 					</UiBadge>

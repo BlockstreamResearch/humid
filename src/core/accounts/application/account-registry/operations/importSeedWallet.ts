@@ -63,7 +63,7 @@ export function importSeedWallet(input: ImportSeedWalletInput): ImportSeedWallet
 		groupIndex: 0,
 		id: accountGroupId,
 		kind: "multichain",
-		metadata: { source: "imported" },
+		metadata: { imported: true, source: "imported" },
 		name,
 		updatedAt: now,
 		walletId,
