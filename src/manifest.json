@@ -32,6 +32,6 @@
 			"matches": ["<all_urls>"]
 		}
 	],
-	"permissions": ["storage", "tabs", "activeTab", "scripting"],
+	"permissions": ["storage", "tabs", "activeTab", "scripting", "clipboardRead", "clipboardWrite"],
 	"host_permissions": ["file://*/*", "http://*/*", "https://*/*"]
 }
