@@ -11,6 +11,7 @@ import type { ComponentProps } from "react";
 import type { AccountGroupRecord } from "@/core/accounts/application/account-registry/model/account-group";
 import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
 import { AccountAvatar } from "@/routes/App/components/AccountAvatar";
+import { UiBadge } from "@/ui/UiBadge";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiScrollArea } from "@/ui/UiScrollArea";
 
@@ -98,6 +99,11 @@ function AccountRow({
 			>
 				<AccountAvatar className="size-8" seed={group.id} />
 				<span className="truncate text-sm font-medium">{group.name}</span>
+				{group.metadata?.source === "imported" ? (
+					<UiBadge className="shrink-0" variant="secondary">
+						Imported
+					</UiBadge>
+				) : null}
 			</Link>
 			{selected ? (
 				<span aria-label="Selected" className="size-2 shrink-0 rounded-full bg-emerald-500" />

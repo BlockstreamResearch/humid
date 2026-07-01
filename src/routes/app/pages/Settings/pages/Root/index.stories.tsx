@@ -28,6 +28,7 @@ const ACCOUNTS: AccountGroupRecord[] = [
 		createdAt: 0,
 		id: "account-group:3",
 		kind: "multichain",
+		metadata: { source: "imported" },
 		name: "Cold storage",
 		updatedAt: 0,
 		walletId: "wallet:2",
