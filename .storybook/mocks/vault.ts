@@ -85,3 +85,14 @@ export function lockVault(): Promise<VaultStatus> {
 export function resetVault(): Promise<VaultStatus> {
 	return settle();
 }
+
+// New wallet-vault client shape. Pages import `walletVaultClient` from
+// "@/core/secure-vault/application/wallet-vault/client"; this mock is aliased in
+// place of it so stories drive create/unlock/lock/reset via the config above
+// instead of the real pegasus/extension transport.
+export const walletVaultClient = {
+	create: createVault,
+	lock: lockVault,
+	reset: resetVault,
+	unlock: unlockVault,
+};

@@ -55,12 +55,23 @@ const config: StorybookConfig = {
 			: Object.entries(existingAlias ?? {}).map(([find, replacement]) => ({ find, replacement }));
 
 		viteConfig.resolve = viteConfig.resolve ?? {};
-		// Prepend the vault mock so it intercepts "@/core/vault" before the
-		// project's generic "@" -> "src" alias resolves it to the real module
-		// (which would pull in the extension store). A string alias is used
-		// because the rolldown-based Vite 8 resolver does not honor regex finds.
+		// Prepend mocks so they intercept before the project's generic "@" -> "src"
+		// alias resolves the real modules (which pull the extension runtime).
+		// String aliases are used because the rolldown-based Vite 8 resolver does
+		// not honor regex finds.
 		viteConfig.resolve.alias = [
-			{ find: "@/core/vault", replacement: path.resolve(rootDir, ".storybook/mocks/vault.ts") },
+			// The real webextension-polyfill throws at import outside an extension;
+			// stub it so any page that transitively imports it renders.
+			{
+				find: "webextension-polyfill",
+				replacement: path.resolve(rootDir, ".storybook/mocks/webextension-polyfill.ts"),
+			},
+			// The wallet-vault client (create/unlock/lock/reset) — driven by the
+			// configurable vault mock instead of the real pegasus transport.
+			{
+				find: "@/core/secure-vault/application/wallet-vault/client",
+				replacement: path.resolve(rootDir, ".storybook/mocks/vault.ts"),
+			},
 			...existingEntries,
 		];
 
