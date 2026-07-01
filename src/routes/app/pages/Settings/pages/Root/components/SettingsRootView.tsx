@@ -1,6 +1,7 @@
 import {
 	Add01Icon,
 	ArrowRight01Icon,
+	GlobalIcon,
 	ShieldKeyIcon,
 	SquareLock01Icon,
 } from "@hugeicons/core-free-icons";
@@ -48,6 +49,18 @@ export function SettingsRootView({
 							<HugeiconsIcon className="text-muted-foreground" icon={SquareLock01Icon} size={18} />
 							<span className="flex-1 text-sm font-medium">Lock wallet</span>
 						</button>
+						<Link
+							className="hover:bg-accent flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors"
+							to="/app/settings/chains"
+						>
+							<HugeiconsIcon className="text-muted-foreground" icon={GlobalIcon} size={18} />
+							<span className="flex-1 text-sm font-medium">Chains</span>
+							<HugeiconsIcon
+								className="text-muted-foreground/60"
+								icon={ArrowRight01Icon}
+								size={16}
+							/>
+						</Link>
 						<DisabledRow icon={ShieldKeyIcon} label="Change password" />
 					</section>
 

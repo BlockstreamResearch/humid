@@ -46,7 +46,7 @@ export function LiquidChainSettings({ chain, onChange }: LiquidChainSettingsProp
 				});
 			}}
 		>
-			<UiTabsList>
+			<UiTabsList variant="line">
 				<UiTabsTrigger value={LIQUID_CHAIN_BACKENDS.ESPLORA}>Esplora</UiTabsTrigger>
 				<UiTabsTrigger value={LIQUID_CHAIN_BACKENDS.WATERFALLS}>Waterfalls</UiTabsTrigger>
 			</UiTabsList>

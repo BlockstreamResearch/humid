@@ -1,5 +1,6 @@
 import {
 	getUnlockedChainStoreState,
+	setUnlockedChainRecord,
 	setUnlockedSelectedChainId,
 } from "@/core/chains/application/chain-store/secureChainStore";
 import type { ChainGroup } from "@/core/chains/application/ChainGroup";
@@ -8,6 +9,7 @@ import { chainsRpc } from "@/core/chains/application/chains-rpc/model/rpc";
 import type {
 	ChainsState,
 	SetSelectedChainInput,
+	UpdateChainInput,
 } from "@/core/chains/application/chains-rpc/model/types";
 
 import type { RequestHandlerMap } from "../transport";
@@ -50,6 +52,21 @@ export function createChainsInternalHandlers(
 			if (!chain) throw new Error(`Unknown chain: ${chainId}`);
 
 			await setUnlockedSelectedChainId(chain.chainGroupId, chainId);
+
+			return readChainsState(chainGroups);
+		},
+		[chainsRpc.methods.updateChain]: async (message) => {
+			const { chain } = message.data as UpdateChainInput;
+			const known = await readChainsState(chainGroups);
+			const existing = known.chains.find((candidate) => candidate.id === chain.id);
+
+			if (!existing) throw new Error(`Unknown chain: ${chain.id}`);
+
+			if (existing.chainGroupId !== chain.chainGroupId) {
+				throw new Error(`Chain group mismatch for ${chain.id}.`);
+			}
+
+			await setUnlockedChainRecord(chain);
 
 			return readChainsState(chainGroups);
 		},

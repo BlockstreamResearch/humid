@@ -9,3 +9,8 @@ export type ChainsState = {
 export type SetSelectedChainInput = {
 	chainId: ChainId;
 };
+
+/** Persist an updated chain record (e.g. its settings). */
+export type UpdateChainInput = {
+	chain: ChainRecord;
+};

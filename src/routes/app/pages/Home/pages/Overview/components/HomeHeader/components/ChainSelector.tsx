@@ -11,7 +11,7 @@ import {
 	UiDropdownMenuTrigger,
 } from "@/ui/UiDropdownMenu";
 
-function NetworkDot({ chainId }: { chainId: string }) {
+function ChainDot({ chainId }: { chainId: string }) {
 	let hash = 0;
 
 	for (let index = 0; index < chainId.length; index += 1) {
@@ -26,8 +26,8 @@ function NetworkDot({ chainId }: { chainId: string }) {
 	);
 }
 
-/** Network switcher — renders every chain in the store; no chain-specific logic. */
-export function NetworkSelector() {
+/** Chain switcher — renders every chain in the store; no chain-specific logic. */
+export function ChainSelector() {
 	const { chain, chains, selectChain } = useHome();
 
 	return (
@@ -38,7 +38,7 @@ export function NetworkSelector() {
 					"text-xs font-medium tracking-wide uppercase transition-colors",
 				)}
 			>
-				<NetworkDot chainId={chain.id} />
+				<ChainDot chainId={chain.id} />
 				{chain.name}
 				<HugeiconsIcon icon={ArrowDown01Icon} size={14} className="text-muted-foreground" />
 			</UiDropdownMenuTrigger>
@@ -51,7 +51,7 @@ export function NetworkSelector() {
 							value={option.id}
 							className="gap-2"
 						>
-							<NetworkDot chainId={option.id} />
+							<ChainDot chainId={option.id} />
 							{option.name}
 						</UiDropdownMenuRadioItem>
 					))}

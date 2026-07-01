@@ -13,7 +13,7 @@ function hueFromSeed(seed: string) {
 
 /**
  * Deterministic gradient avatar derived from a seed (the account group id). A
- * placeholder identicon (no network image) that stays stable per account.
+ * placeholder identicon (no remote image) that stays stable per account.
  */
 export function AccountAvatar({ className, seed }: { className?: string; seed: string }) {
 	const hue = hueFromSeed(seed);

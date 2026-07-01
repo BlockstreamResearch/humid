@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ChainId } from "@/core/chains/application/ChainRecord";
 import { chainsClient } from "@/core/chains/application/chains-rpc/client";
 
-const CHAINS_QUERY_KEY = ["chains"] as const;
+export const CHAINS_QUERY_KEY = ["chains"] as const;
 
 /** The chain axis: the available chains, the selected one, and a switch mutation. */
 export function useChains() {
