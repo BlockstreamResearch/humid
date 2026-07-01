@@ -22,10 +22,18 @@ export async function createLwkLiquidAccount(
 	const lwk = await loadLwkWasm();
 	const network = createLwkNetwork(lwk, input.chain.id);
 	const blockchainClient = createLwkBlockchainClient(lwk, input.chain, network);
-	const mnemonic = createLwkMnemonicFromSeedMaterial(lwk, seedMaterial);
+	const masterMnemonic = createLwkMnemonicFromSeedMaterial(lwk, seedMaterial);
 
 	try {
-		const signer = new lwk.Signer(mnemonic, network);
+		const masterSigner = new lwk.Signer(masterMnemonic, network);
+		// Each account group derives a distinct wallet from the one seed: group 0 is the
+		// master seed's account; groups N>=1 use a BIP-85 child mnemonic at index N, so the
+		// whole derivation stays inside LWK (no hand-rolled key math).
+		const accountGroupIndex = input.accountGroupIndex ?? 0;
+		const signer =
+			accountGroupIndex === 0
+				? masterSigner
+				: new lwk.Signer(masterSigner.derive_bip85_mnemonic(accountGroupIndex, 12), network);
 		const descriptor = signer.wpkhSlip77Descriptor();
 		const wollet = new lwk.Wollet(network, descriptor);
 		const dwid = wollet.dwid();

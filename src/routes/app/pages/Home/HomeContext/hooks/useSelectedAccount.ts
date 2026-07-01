@@ -4,7 +4,7 @@ import type { AccountGroupId } from "@/core/accounts/application/account-registr
 import { accountsClient } from "@/core/accounts/application/accounts-rpc/client";
 import type { RenameAccountInput } from "@/core/accounts/application/accounts-rpc/model/types";
 
-const ACCOUNTS_QUERY_KEY = ["accounts"] as const;
+export const ACCOUNTS_QUERY_KEY = ["accounts"] as const;
 
 /** The account axis: the account groups, the selected one, and a switch mutation. */
 export function useSelectedAccount() {

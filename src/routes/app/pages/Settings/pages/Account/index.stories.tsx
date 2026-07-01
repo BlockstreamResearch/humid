@@ -8,7 +8,10 @@ const meta = {
 	args: {
 		accountGroupId: "account-group:1",
 		accountName: "Account 1",
+		isRemoving: false,
+		onRemove: () => {},
 		onRename: () => {},
+		removeError: null,
 	},
 } satisfies Meta<typeof AccountDetailView>;
 

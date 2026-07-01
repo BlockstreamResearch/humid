@@ -55,10 +55,13 @@ export function SettingsRootView({
 							<p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
 								Your accounts
 							</p>
-							<span className="text-muted-foreground/50 inline-flex items-center gap-1 text-xs font-medium">
+							<Link
+								className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium"
+								to="/app/settings/add-account"
+							>
 								<HugeiconsIcon icon={Add01Icon} size={14} />
 								Add
-							</span>
+							</Link>
 						</div>
 						<div className="flex flex-col">
 							{accountGroups.map((group) => (

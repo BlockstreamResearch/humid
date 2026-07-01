@@ -116,10 +116,13 @@ const init = async () => {
 		const selectedChainId =
 			chainStore.selectedChainIds[liquidChainGroup.id] ?? liquidChainGroup.chains[0].id;
 		const chain = await resolveUnlockedLiquidChain(parseLiquidChainId(selectedChainId));
+		const keyManagerState = walletVaultBackground.keyManager.getState();
 
 		return {
+			accountGroupIndex:
+				accountRegistry.getSelectedAccountGroup(keyManagerState.accountModel).groupIndex ?? 0,
 			chain,
-			keyManagerState: walletVaultBackground.keyManager.getState(),
+			keyManagerState,
 			updateKeyManagerState: walletVaultBackground.keyManager.updateState,
 		};
 	};

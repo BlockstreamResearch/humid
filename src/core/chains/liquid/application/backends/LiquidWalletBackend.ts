@@ -29,6 +29,8 @@ export type LiquidWalletAccount = {
 };
 
 export type ResolveLiquidWalletAccountInput = {
+	/** Which account group (its HD `groupIndex`) to derive; defaults to 0 (the first). */
+	accountGroupIndex?: number;
 	chain: LiquidChainRecord;
 	keyManagerState: KeyManagerState;
 	updateKeyManagerState?: UpdateKeyManagerState;

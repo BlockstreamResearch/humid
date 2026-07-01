@@ -18,21 +18,37 @@ import {
 	SettingsRowSoon,
 } from "@/routes/App/pages/Settings/components/SettingsRow";
 import { cn } from "@/theme/utils.ts";
+import { UiButton } from "@/ui/UiButton/base";
+import {
+	UiDialog,
+	UiDialogContent,
+	UiDialogDescription,
+	UiDialogFooter,
+	UiDialogHeader,
+	UiDialogTitle,
+} from "@/ui/UiDialog";
 import { UiScrollArea } from "@/ui/UiScrollArea";
 
 type AccountDetailViewProps = {
 	accountGroupId: AccountGroupId;
 	accountName: string;
+	isRemoving: boolean;
+	onRemove: () => void;
 	onRename: (name: string) => void;
+	removeError: string | null;
 };
 
-/** Per-account settings: breadcrumb header + the account actions (rename now; rest pending). */
+/** Per-account settings: breadcrumb header + the account actions (rename + remove now). */
 export function AccountDetailView({
 	accountGroupId,
 	accountName,
+	isRemoving,
+	onRemove,
 	onRename,
+	removeError,
 }: AccountDetailViewProps) {
 	const [renameOpen, setRenameOpen] = useState(false);
+	const [removeOpen, setRemoveOpen] = useState(false);
 
 	return (
 		<div className="flex size-full min-h-0 flex-col">
@@ -77,21 +93,44 @@ export function AccountDetailView({
 					>
 						<SettingsRowContent icon={Shield01Icon} label="Reveal recovery phrase" />
 					</Link>
-					<div className={cn(settingsRowClass, "opacity-50")}>
-						<SettingsRowContent
-							icon={Delete01Icon}
-							label="Remove account"
-							trailing={<SettingsRowSoon />}
-						/>
-					</div>
+					<button
+						className={cn(settingsRowClass, "text-destructive hover:bg-destructive/10")}
+						onClick={() => setRemoveOpen(true)}
+						type="button"
+					>
+						<HugeiconsIcon className="shrink-0" icon={Delete01Icon} size={18} />
+						<span className="flex-1 text-sm font-medium">Remove account</span>
+					</button>
 				</div>
 			</UiScrollArea>
+
 			<RenameAccountDialog
 				currentName={accountName}
 				onOpenChange={setRenameOpen}
 				onSubmit={onRename}
 				open={renameOpen}
 			/>
+
+			<UiDialog onOpenChange={setRemoveOpen} open={removeOpen}>
+				<UiDialogContent>
+					<UiDialogHeader>
+						<UiDialogTitle>Remove account?</UiDialogTitle>
+						<UiDialogDescription>
+							This removes &ldquo;{accountName}&rdquo; from this wallet. Its funds stay recoverable
+							from your recovery phrase.
+						</UiDialogDescription>
+					</UiDialogHeader>
+					{removeError ? <p className="text-destructive text-sm">{removeError}</p> : null}
+					<UiDialogFooter>
+						<UiButton onClick={() => setRemoveOpen(false)} type="button" variant="outline">
+							Cancel
+						</UiButton>
+						<UiButton disabled={isRemoving} onClick={onRemove} type="button" variant="destructive">
+							{isRemoving ? "Removing…" : "Remove"}
+						</UiButton>
+					</UiDialogFooter>
+				</UiDialogContent>
+			</UiDialog>
 		</div>
 	);
 }

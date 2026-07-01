@@ -29,6 +29,8 @@ import { findDappSession, type FindDappSessionInput } from "./operations/findDap
 import { getSelectedAccountGroup } from "./operations/getSelectedAccountGroup";
 import { getWalletByKeySource } from "./operations/getWalletByKeySource";
 import { grantDappSession, type GrantDappSessionInput } from "./operations/grantDappSession";
+import { importSeedWallet, type ImportSeedWalletInput } from "./operations/importSeedWallet";
+import { removeAccountGroup, type RemoveAccountGroupInput } from "./operations/removeAccountGroup";
 import { resolveChainAccount } from "./operations/resolveChainAccount";
 import { revokeDappSession } from "./operations/revokeDappSession";
 
@@ -79,6 +81,14 @@ export class AccountRegistry {
 
 	grantDappSession(input: GrantDappSessionInput) {
 		return grantDappSession(input);
+	}
+
+	importSeedWallet(input: ImportSeedWalletInput) {
+		return importSeedWallet(input);
+	}
+
+	removeAccountGroup(input: RemoveAccountGroupInput) {
+		return removeAccountGroup(input);
 	}
 
 	resolveChainAccount(input: {

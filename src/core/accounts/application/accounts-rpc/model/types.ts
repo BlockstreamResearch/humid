@@ -16,6 +16,21 @@ export type RenameAccountInput = {
 	name: string;
 };
 
+/** Derive a new account (next index) on the current wallet's seed. */
+export type CreateAccountInput = {
+	name?: string;
+};
+
+/** Import a new wallet from a BIP-39 recovery phrase. */
+export type ImportAccountInput = {
+	mnemonic: string;
+	name?: string;
+};
+
+export type RemoveAccountInput = {
+	accountGroupId: AccountGroupId;
+};
+
 export type RevealRecoveryPhraseInput = {
 	accountGroupId: AccountGroupId;
 };

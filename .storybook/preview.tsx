@@ -19,6 +19,7 @@ const KNOWN_PATHS = [
 	"/app/settings",
 	"/app/settings/account/$accountGroupId",
 	"/app/settings/account/$accountGroupId/recovery-phrase",
+	"/app/settings/add-account",
 	"/app/asset/$assetId",
 	"/app/receive",
 	"/auth/intro",

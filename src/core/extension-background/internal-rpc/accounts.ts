@@ -1,14 +1,20 @@
+import { createAccountRegistry } from "@/core/accounts/application/account-registry";
 import type { AccountModelState } from "@/core/accounts/application/account-registry/model/account-model";
 import { getSelectedAccountGroup } from "@/core/accounts/application/account-registry/operations/getSelectedAccountGroup";
 import { accountsRpc } from "@/core/accounts/application/accounts-rpc/model/rpc";
 import type {
 	AccountsState,
+	CreateAccountInput,
+	ImportAccountInput,
 	PortfolioSnapshot,
 	ReceiveAddress,
+	RemoveAccountInput,
 	RenameAccountInput,
 	RevealRecoveryPhraseInput,
 	SetSelectedAccountInput,
 } from "@/core/accounts/application/accounts-rpc/model/types";
+import { keyManagerSecretMaterial } from "@/core/key-manager/secret-material";
+import { addImportedSeedToKeyManagerState } from "@/core/key-manager/state/import-seed";
 import { walletVaultBackground } from "@/core/secure-vault/application/wallet-vault/background";
 
 import type { RequestHandlerMap } from "../transport";
@@ -76,6 +82,55 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 					updatedAt: now,
 				},
 			}));
+
+			return readAccountsState(next.accountModel);
+		},
+		[accountsRpc.methods.createAccount]: async (message) => {
+			const { name } = (message.data ?? {}) as CreateAccountInput;
+			const accountRegistry = createAccountRegistry();
+
+			const next = await walletVaultBackground.keyManager.updateState((current) => {
+				const selectedGroup = getSelectedAccountGroup(current.accountModel);
+				const { accountGroup, accountModel } = accountRegistry.createNextAccountGroup({
+					accountModel: current.accountModel,
+					name,
+					walletId: selectedGroup.walletId,
+				});
+
+				return {
+					...current,
+					accountModel: { ...accountModel, selectedAccountGroupId: accountGroup.id },
+				};
+			});
+
+			return readAccountsState(next.accountModel);
+		},
+		[accountsRpc.methods.importAccount]: async (message) => {
+			const { mnemonic, name } = message.data as ImportAccountInput;
+
+			if (!keyManagerSecretMaterial.isValidMnemonic(mnemonic)) {
+				throw new Error("Invalid recovery phrase.");
+			}
+
+			const seedMaterial = keyManagerSecretMaterial.normalizeMnemonic(mnemonic);
+			const next = await walletVaultBackground.keyManager.updateState((current) =>
+				addImportedSeedToKeyManagerState(current, { name, seedMaterial }),
+			);
+
+			return readAccountsState(next.accountModel);
+		},
+		[accountsRpc.methods.removeAccount]: async (message) => {
+			const { accountGroupId } = message.data as RemoveAccountInput;
+			const accountRegistry = createAccountRegistry();
+
+			const next = await walletVaultBackground.keyManager.updateState((current) => {
+				const { accountModel } = accountRegistry.removeAccountGroup({
+					accountGroupId,
+					accountModel: current.accountModel,
+				});
+
+				return { ...current, accountModel };
+			});
 
 			return readAccountsState(next.accountModel);
 		},
