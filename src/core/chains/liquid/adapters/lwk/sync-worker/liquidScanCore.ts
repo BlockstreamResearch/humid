@@ -1,4 +1,5 @@
 import type {
+	LiquidActivityPage,
 	LiquidAssetBalance,
 	LiquidWalletSnapshot,
 } from "../../../application/backends/LiquidWalletBackend";
@@ -7,8 +8,7 @@ import { LIQUID_NATIVE_ASSET } from "../../../domain/LiquidAsset";
 import { createLwkBlockchainClient } from "../createLwkBlockchainClient";
 import { createLwkNetwork, type LwkNetwork } from "../createLwkNetwork";
 import { loadLwkWasm, type LwkWasmModule } from "../loadLwkWasm";
-import { fetchNativeFiatRate } from "../wallet/fetchFiatRate";
-import { readWalletAssetBalances, readWalletTransactions } from "../wallet/readWalletData";
+import { readWalletActivityForAsset, readWalletAssetBalances } from "../wallet/readWalletData";
 import { type AssetMetadata, resolveIssuedAssetMetadata } from "../wallet/resolveAssetMetadata";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
@@ -20,12 +20,27 @@ export type LiquidScanInput = {
 	id: number;
 };
 
+/** Inputs to read one asset's activity page from the wollet a prior scan cached. */
+export type LiquidReadActivityInput = LiquidScanInput & {
+	cursor: string | null;
+	limit: number;
+	rawAssetId: string;
+};
+
 /** Issued assets get 8 decimals until the registry pass provides their real precision. */
 const DEFAULT_ISSUED_ASSET_DECIMALS = 8;
 
 // Cached wollets accumulate scan deltas so repeat scans stay incremental while this context is
 // alive. Keyed by chain + descriptor (a wollet is bound to its network and descriptor).
 const wolletCache = new Map<string, LwkWollet>();
+
+/**
+ * A wollet is bound to its network (chain id + policy asset) and descriptor, so key the cache by
+ * those. Editing a custom chain's policy asset changes the network, so it keys a fresh wollet.
+ */
+function wolletCacheKey(input: { chain: LiquidChainRecord; descriptor: string }): string {
+	return `${input.chain.id}:${input.chain.settings.policyAsset ?? ""}:${input.descriptor}`;
+}
 
 /** One-off full scan on a fresh wollet; returns the serialized Update for the caller to apply. */
 export async function scanFresh(input: LiquidScanInput): Promise<Uint8Array | null> {
@@ -59,9 +74,7 @@ export async function scanFresh(input: LiquidScanInput): Promise<Uint8Array | nu
 export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletSnapshot> {
 	const lwk = await loadLwkWasm();
 	const network = createLwkNetwork(lwk, input.chain);
-	// Include the policy asset: it (with the id) defines the wollet's network, so editing a
-	// custom chain's policy asset must scan a fresh wollet rather than the cached one.
-	const cacheKey = `${input.chain.id}:${input.chain.settings.policyAsset ?? ""}:${input.descriptor}`;
+	const cacheKey = wolletCacheKey(input);
 
 	let wollet = wolletCache.get(cacheKey);
 
@@ -96,23 +109,51 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 	client.free();
 
 	const rawPolicyAssetId = network.policyAsset().toString();
-	// Asset metadata and the fiat rate are fetched in parallel — both are best-effort and off the
-	// balance read, so a slow registry / price server doesn't hold up the numbers.
-	const [assets, rate] = await Promise.all([
-		buildAssetBalances(lwk, network, wollet, readWalletAssetBalances(wollet), rawPolicyAssetId),
-		fetchNativeFiatRate(lwk),
-	]);
-	const activity = readWalletTransactions(wollet);
+	// Asset metadata is best-effort and off the balance read, so a slow registry doesn't hold up
+	// the numbers. Activity is not read here: it's fetched per-asset on demand via `readActivity`.
+	const assets = await buildAssetBalances(
+		lwk,
+		network,
+		wollet,
+		readWalletAssetBalances(wollet),
+		rawPolicyAssetId,
+	);
 
 	console.warn("[liquid-sync] scanAndRead done", {
-		activityCount: activity.length,
 		assetCount: assets.length,
-		hasRate: rate !== null,
 		id: input.id,
 		ms: Date.now() - scanStartedAt,
 	});
 
-	return { activity, assets, rate };
+	return { assets };
+}
+
+/**
+ * Read one asset's transaction history from the wollet a prior `scanAndRead` cached, as an
+ * offset-paginated page (newest first). A pure read — it never scans; before the first sync
+ * (no cached wollet yet) it returns an empty page, and the portfolio poll's scan populates the
+ * wollet for the next call. The offset crosses the boundary as an opaque cursor string.
+ */
+export function readActivity(input: LiquidReadActivityInput): LiquidActivityPage {
+	const wollet = wolletCache.get(wolletCacheKey(input));
+
+	if (!wollet) return { items: [], nextCursor: null };
+
+	const all = readWalletActivityForAsset(wollet, input.rawAssetId);
+	const offset = parseActivityCursor(input.cursor);
+	const items = all.slice(offset, offset + input.limit);
+	const nextOffset = offset + items.length;
+
+	return { items, nextCursor: nextOffset < all.length ? String(nextOffset) : null };
+}
+
+/** Parse the opaque activity cursor (a non-negative offset); anything invalid restarts from 0. */
+function parseActivityCursor(cursor: string | null): number {
+	if (cursor === null) return 0;
+
+	const parsed = Number.parseInt(cursor, 10);
+
+	return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 /**

@@ -2,7 +2,7 @@ import type { ComponentType, ReactNode } from "react";
 
 import type { ChainRecord } from "@/core/chains/application/ChainRecord";
 import type {
-	PortfolioViewActivity,
+	PortfolioViewActivityFeed,
 	PortfolioViewAsset,
 } from "@/core/chains/application/PortfolioView";
 import { createCustomLiquidChainRecord } from "@/core/chains/liquid/chains/createBuiltInLiquidChains";
@@ -22,15 +22,14 @@ type TokenRowComponent = ComponentType<{ token: PortfolioViewAsset }>;
 /** The asset detail body: the balance, the (generic) account actions slot, and activity. */
 type AssetViewComponent = ComponentType<{
 	actions: ReactNode;
-	activity: PortfolioViewActivity[];
+	activity: PortfolioViewActivityFeed;
 	token: PortfolioViewAsset;
 }>;
 
-/** The account balance headline for the native asset. */
+/** The native-asset balance headline (raw amount, formatted by the chain at render). */
 type BalanceHeadlineComponent = ComponentType<{
 	isSyncing: boolean;
-	native: { amount: string; symbol: string };
-	totalFiat: string | null;
+	native: { amount: bigint; decimals: number; symbol: string };
 }>;
 
 /**

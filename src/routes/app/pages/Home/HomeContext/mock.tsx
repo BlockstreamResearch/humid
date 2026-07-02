@@ -44,60 +44,28 @@ const ACCOUNT_GROUPS: AccountGroupRecord[] = [
 ];
 
 const PORTFOLIO: Portfolio = {
-	activity: {
-		lbtc: [
-			{
-				amount: "0.2413",
-				counterparty: "lq1qq…5424",
-				date: "Feb 2, 2023",
-				direction: "received",
-				fiat: "$502.15",
-				id: "a1",
-			},
-			{
-				amount: "0.0300",
-				counterparty: "lq1qq…8b94",
-				date: "Jan 11, 2023",
-				direction: "sent",
-				fiat: "$62.43",
-				id: "a2",
-			},
-			{
-				amount: "0.1000",
-				counterparty: "lq1qq…5424",
-				date: "Dec 28, 2022",
-				direction: "received",
-				fiat: "$208.10",
-				id: "a3",
-			},
-		],
-		usdt: [],
-	},
 	error: null,
 	isLoading: false,
 	isSyncing: false,
-	native: { amount: "2.45000000", symbol: "L-BTC" },
+	native: { amount: 245_000_000n, decimals: 8, symbol: "L-BTC" },
 	tokens: [
 		{
-			amount: "2.45000000",
-			fiat: "$154,350.00",
+			amount: 245_000_000n,
+			decimals: 8,
 			id: "lbtc",
 			metadata: { isNative: true },
 			name: "Liquid Bitcoin",
-			price: "$63,000.00",
 			symbol: "L-BTC",
 		},
 		{
-			amount: "422.10",
-			fiat: "$422.10",
+			amount: 42_210_000_000n,
+			decimals: 8,
 			id: "usdt",
 			metadata: { isNative: false },
 			name: "Tether USD",
-			price: "$1.00",
 			symbol: "USDt",
 		},
 	],
-	totalFiat: "$154,772.10",
 };
 
 function useMockHomeValue() {

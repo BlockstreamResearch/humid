@@ -2,16 +2,8 @@ import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 
-/** Asset header: back to Overview, the asset glyph + name, and its unit price. */
-export function AssetHeader({
-	name,
-	price,
-	symbol,
-}: {
-	name: string;
-	price: string;
-	symbol: string;
-}) {
+/** Asset header: back to Overview, the asset glyph, and its name. */
+export function AssetHeader({ name, symbol }: { name: string; symbol: string }) {
 	return (
 		<header className="border-border/60 flex shrink-0 items-center gap-2 border-b px-2 py-2.5">
 			<Link
@@ -25,7 +17,6 @@ export function AssetHeader({
 				{symbol.charAt(0)}
 			</div>
 			<p className="flex-1 truncate text-sm font-semibold">{name}</p>
-			<p className="text-muted-foreground font-mono text-sm">{price}</p>
 		</header>
 	);
 }

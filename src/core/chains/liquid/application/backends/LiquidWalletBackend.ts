@@ -49,6 +49,12 @@ export type LiquidActivityEntry = {
 	txid: string;
 };
 
+/** One page of an asset's activity plus the opaque cursor for the next page (null at the end). */
+export type LiquidActivityPage = {
+	items: LiquidActivityEntry[];
+	nextCursor: string | null;
+};
+
 /** One asset the wallet holds: its raw id, balance (base units), and display metadata. */
 export type LiquidAssetBalance = {
 	amountSats: string;
@@ -60,25 +66,12 @@ export type LiquidAssetBalance = {
 	symbol: string;
 };
 
-/** One transaction's net effect on the wallet, with a signed base-unit delta per asset. */
-export type LiquidWalletTx = {
-	deltas: { amountSats: string; rawAssetId: string }[];
-	feeSats: string;
-	timestamp: number | null;
-	txid: string;
-};
-
-/** The native asset's fiat price from LWK's price feed (issued assets have no direct rate). */
-export type LiquidFiatRate = {
-	currency: string;
-	nativeUnitPrice: string;
-};
-
-/** The full wallet read after a scan: asset balances, transaction history, and the fiat rate. */
+/**
+ * The wallet read after a scan: asset balances. Activity is not part of the snapshot — it's read
+ * per-asset on demand (paginated), off the balance path.
+ */
 export type LiquidWalletSnapshot = {
-	activity: LiquidWalletTx[];
 	assets: LiquidAssetBalance[];
-	rate: LiquidFiatRate | null;
 };
 
 export type LiquidWalletBackend = {

@@ -1,7 +1,6 @@
 import type {
+	LiquidActivityEntry,
 	LiquidAssetBalance,
-	LiquidFiatRate,
-	LiquidWalletTx,
 } from "../../../application/backends/LiquidWalletBackend";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 
@@ -17,20 +16,33 @@ export type ScanRequest = BaseScanRequest & { op: "scan" };
 /** An incremental scan on the worker's cached wollet, returning the read data directly. */
 export type ScanAndReadRequest = BaseScanRequest & { op: "scanAndRead" };
 
+/** A pure read of one asset's activity page from the worker's cached wollet (no scan). */
+export type ReadActivityRequest = BaseScanRequest & {
+	cursor: string | null;
+	limit: number;
+	op: "readActivity";
+	rawAssetId: string;
+};
+
 /**
- * A scan request for the sync worker. Only the public descriptor crosses the boundary —
+ * A request for the sync worker. Only the public descriptor crosses the boundary —
  * private keys never leave the background.
  */
-export type SyncWorkerRequest = ScanRequest | ScanAndReadRequest;
+export type SyncWorkerRequest = ReadActivityRequest | ScanRequest | ScanAndReadRequest;
 
 export type SyncWorkerResponse =
 	| { id: number; ok: true; op: "scan"; updateBytes: Uint8Array | null }
 	| {
-			activity: LiquidWalletTx[];
 			assets: LiquidAssetBalance[];
 			id: number;
 			ok: true;
 			op: "scanAndRead";
-			rate: LiquidFiatRate | null;
+	  }
+	| {
+			id: number;
+			items: LiquidActivityEntry[];
+			nextCursor: string | null;
+			ok: true;
+			op: "readActivity";
 	  }
 	| { id: number; ok: false; error: string };

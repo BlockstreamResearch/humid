@@ -1,22 +1,32 @@
 import type {
+	LiquidActivityEntry,
 	LiquidAssetBalance,
-	LiquidFiatRate,
-	LiquidWalletTx,
 } from "../../../application/backends/LiquidWalletBackend";
 import type { SyncWorkerRequest, SyncWorkerResponse } from "./protocol";
 
 export type ScanInput = { chain: SyncWorkerRequest["chain"]; descriptor: string };
 export type ScanResult = { updateBytes: Uint8Array | null };
 export type ScanAndReadResult = {
-	activity: LiquidWalletTx[];
 	assets: LiquidAssetBalance[];
-	rate: LiquidFiatRate | null;
+};
+
+/** Inputs to read one asset's activity page from the worker's cached wollet. */
+export type ReadActivityInput = ScanInput & {
+	cursor: string | null;
+	limit: number;
+	rawAssetId: string;
+};
+
+export type ActivityPageResult = {
+	items: LiquidActivityEntry[];
+	nextCursor: string | null;
 };
 
 type SuccessResponse = Extract<SyncWorkerResponse, { ok: true }>;
 
 /** A promise-per-request handle to a scan backend (a dedicated worker, offscreen, or inline). */
 export type SyncWorkerClient = {
+	readActivity: (input: ReadActivityInput) => Promise<ActivityPageResult>;
 	scan: (input: ScanInput) => Promise<ScanResult>;
 	scanAndRead: (input: ScanInput) => Promise<ScanAndReadResult>;
 };
@@ -78,6 +88,13 @@ export function createWorkerScanClient(): SyncWorkerClient {
 	}
 
 	return {
+		async readActivity(input) {
+			const response = await request({ op: "readActivity", ...input });
+
+			if (response.op !== "readActivity") throw new Error("Unexpected sync worker response.");
+
+			return { items: response.items, nextCursor: response.nextCursor };
+		},
 		async scan(input) {
 			const response = await request({ op: "scan", ...input });
 
@@ -90,7 +107,7 @@ export function createWorkerScanClient(): SyncWorkerClient {
 
 			if (response.op !== "scanAndRead") throw new Error("Unexpected sync worker response.");
 
-			return { activity: response.activity, assets: response.assets, rate: response.rate };
+			return { assets: response.assets };
 		},
 	};
 }

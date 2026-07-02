@@ -11,12 +11,10 @@ export function BalanceSummary({
 	error,
 	isSyncing,
 	native,
-	totalFiat,
 }: {
 	error: string | null;
 	isSyncing: boolean;
-	native: { amount: string; symbol: string } | null;
-	totalFiat: string | null;
+	native: { amount: bigint; decimals: number; symbol: string } | null;
 }) {
 	const { chain } = useHome();
 	const BalanceHeadline = chainGroupUis[chain.chainGroupId]?.BalanceHeadline;
@@ -40,5 +38,5 @@ export function BalanceSummary({
 		);
 	}
 
-	return <BalanceHeadline isSyncing={isSyncing} native={native} totalFiat={totalFiat} />;
+	return <BalanceHeadline isSyncing={isSyncing} native={native} />;
 }

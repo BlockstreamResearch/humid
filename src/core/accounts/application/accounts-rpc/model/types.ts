@@ -58,29 +58,33 @@ export type PortfolioAsset = {
 	symbol: string;
 };
 
-/** One transaction's net effect, with a signed base-unit delta per affected asset. */
-export type PortfolioTxEntry = {
-	deltas: { amountSats: string; rawAssetId: string }[];
-	feeSats: string;
+/**
+ * The selected account+chain wallet contents: every asset balance. Issued-asset names come from
+ * the registry when available. Activity is not part of this — it's fetched per asset on demand via
+ * `getActivity`, off the balance poll.
+ */
+export type PortfolioData = {
+	assets: PortfolioAsset[];
+};
+
+/** One transaction in an asset's history (that asset's signed net effect). */
+export type ActivityEntry = {
+	amountSats: string;
+	direction: "received" | "sent";
 	timestamp: number | null;
 	txid: string;
 };
 
-/** The native asset's fiat price (issued assets have no direct rate; null if unavailable). */
-export type PortfolioRate = {
-	currency: string;
-	nativeUnitPrice: string;
+/** One page of an asset's activity plus the opaque cursor for the next page (null at the end). */
+export type ActivityPage = {
+	items: ActivityEntry[];
+	nextCursor: string | null;
 };
 
-/**
- * The selected account+chain wallet contents: every asset balance, the transaction history,
- * and the native asset's fiat rate. Issued-asset fiat has no source, so only the native asset
- * is priced; issued-asset names come from the registry when available.
- */
-export type PortfolioData = {
-	activity: PortfolioTxEntry[];
-	assets: PortfolioAsset[];
-	rate: PortfolioRate | null;
+/** Read one page of an asset's activity for the selected account+chain (null cursor = first page). */
+export type GetActivityInput = {
+	cursor: string | null;
+	rawAssetId: string;
 };
 
 /**

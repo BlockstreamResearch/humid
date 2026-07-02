@@ -1,14 +1,13 @@
+import { formatUnits } from "@/helpers/formatters";
 import { UiSpinner } from "@/ui/UiSpinner";
 
-/** Liquid balance headline: the native L-BTC glyph, the amount, its fiat total, and a sync hint. */
+/** Liquid balance headline: the native L-BTC glyph, the amount, and a sync hint. */
 export function LiquidBalanceHeadline({
 	isSyncing,
 	native,
-	totalFiat,
 }: {
 	isSyncing: boolean;
-	native: { amount: string; symbol: string };
-	totalFiat: string | null;
+	native: { amount: bigint; decimals: number; symbol: string };
 }) {
 	return (
 		<div className="flex flex-col items-center gap-3 py-2">
@@ -17,9 +16,8 @@ export function LiquidBalanceHeadline({
 			</div>
 			<div className="flex flex-col items-center gap-0.5">
 				<p className="font-mono text-2xl font-semibold tracking-tight">
-					{native.amount} {native.symbol}
+					{formatUnits(native.amount, native.decimals)} {native.symbol}
 				</p>
-				{totalFiat ? <p className="text-muted-foreground text-sm">{totalFiat}</p> : null}
 				{isSyncing ? (
 					<p className="text-muted-foreground flex items-center gap-1.5 text-xs">
 						<UiSpinner className="size-3" /> Syncing…

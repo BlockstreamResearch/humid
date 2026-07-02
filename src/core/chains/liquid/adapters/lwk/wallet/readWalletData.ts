@@ -1,7 +1,4 @@
-import type {
-	LiquidActivityEntry,
-	LiquidWalletTx,
-} from "../../../application/backends/LiquidWalletBackend";
+import type { LiquidActivityEntry } from "../../../application/backends/LiquidWalletBackend";
 import type { LiquidChainId } from "../../../domain/LiquidChain";
 import { toLiquidAssetId } from "../../../domain/validation";
 import type { LwkWasmModule } from "../loadLwkWasm";
@@ -74,26 +71,6 @@ export function readWalletActivityForAsset(
 /** Every asset balance the wollet holds, raw as (asset id hex → base-unit amount). */
 export function readWalletAssetBalances(wollet: LwkWollet): Map<string, bigint> {
 	return normalizeBalanceMap(wollet.balance().entries());
-}
-
-/**
- * The full transaction history with each tx's signed per-asset deltas (negative = sent),
- * newest first. A single tx can touch several assets (e.g. a swap), so deltas is a list.
- * `wollet.transactions()` is already ordered height-descending with unconfirmed on top.
- */
-export function readWalletTransactions(wollet: LwkWollet): LiquidWalletTx[] {
-	return wollet.transactions().map((walletTx) => {
-		const timestamp = walletTx.timestamp();
-
-		return {
-			deltas: [...normalizeBalanceMap(walletTx.balance().entries())]
-				.filter(([, sats]) => sats !== 0n)
-				.map(([rawAssetId, sats]) => ({ amountSats: sats.toString(), rawAssetId })),
-			feeSats: toBigInt(walletTx.fee()).toString(),
-			timestamp: typeof timestamp === "number" ? timestamp : null,
-			txid: walletTx.txid().toString(),
-		} satisfies LiquidWalletTx;
-	});
 }
 
 /** Normalize LWK's `Balance.entries()` (documented as a Map; defended against variants). */

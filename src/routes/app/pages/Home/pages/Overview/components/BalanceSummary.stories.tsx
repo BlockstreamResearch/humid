@@ -17,8 +17,7 @@ const meta = {
 	args: {
 		error: null,
 		isSyncing: false,
-		native: { amount: "2.45000000", symbol: "L-BTC" },
-		totalFiat: null,
+		native: { amount: 245_000_000n, decimals: 8, symbol: "L-BTC" },
 	},
 } satisfies Meta<typeof BalanceSummary>;
 

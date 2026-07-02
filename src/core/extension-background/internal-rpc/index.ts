@@ -1,4 +1,6 @@
 import type {
+	ActivityPage,
+	GetActivityInput,
 	PortfolioSnapshot,
 	ReceiveAddress,
 } from "@/core/accounts/application/accounts-rpc/model/types";
@@ -17,6 +19,7 @@ export { syncWalletVaultAuthStore } from "./wallet-vault";
 export type CreateInternalRpcHandlersInput = {
 	chainGroups: readonly Pick<ChainGroup, "chains" | "id">[];
 	confirmations: ConfirmationResponder;
+	getActivity: (input: GetActivityInput) => Promise<ActivityPage>;
 	getPortfolio: () => Promise<PortfolioSnapshot>;
 	getReceiveAddress: () => Promise<ReceiveAddress>;
 };
@@ -28,6 +31,7 @@ export type CreateInternalRpcHandlersInput = {
 export function createInternalRpcHandlers({
 	chainGroups,
 	confirmations,
+	getActivity,
 	getPortfolio,
 	getReceiveAddress,
 }: CreateInternalRpcHandlersInput): RequestHandlerMap {
@@ -50,6 +54,6 @@ export function createInternalRpcHandlers({
 		...walletVaultInternalHandlers,
 		...walletConnectInternalHandlers,
 		...createChainsInternalHandlers(chainGroups),
-		...createAccountsInternalHandlers({ getPortfolio, getReceiveAddress }),
+		...createAccountsInternalHandlers({ getActivity, getPortfolio, getReceiveAddress }),
 	};
 }

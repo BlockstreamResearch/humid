@@ -4,7 +4,9 @@ import { getSelectedAccountGroup } from "@/core/accounts/application/account-reg
 import { accountsRpc } from "@/core/accounts/application/accounts-rpc/model/rpc";
 import type {
 	AccountsState,
+	ActivityPage,
 	CreateAccountInput,
+	GetActivityInput,
 	ImportAccountInput,
 	PortfolioSnapshot,
 	ReceiveAddress,
@@ -27,8 +29,11 @@ function readAccountsState(model: AccountModelState): AccountsState {
 }
 
 export type AccountsRuntimeDeps = {
+	// Read one page of an asset's activity for the selected account on the selected
+	// chain. Chain-specific; wired by the background composition root.
+	getActivity: (input: GetActivityInput) => Promise<ActivityPage>;
 	// Materialize + sync the selected account on the selected chain, then read its
-	// native balance and activity. Chain-specific; wired by the background root.
+	// balances and fiat rate. Chain-specific; wired by the background root.
 	getPortfolio: () => Promise<PortfolioSnapshot>;
 	// Materialize + derive the receive address for the selected account on the
 	// selected chain. Chain-specific; wired by the background composition root.
@@ -153,5 +158,7 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 		},
 		[accountsRpc.methods.getReceiveAddress]: () => deps.getReceiveAddress(),
 		[accountsRpc.methods.getPortfolio]: () => deps.getPortfolio(),
+		[accountsRpc.methods.getActivity]: (message) =>
+			deps.getActivity(message.data as GetActivityInput),
 	};
 }

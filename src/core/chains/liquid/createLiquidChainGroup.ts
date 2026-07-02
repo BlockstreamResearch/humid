@@ -7,6 +7,9 @@ import { createBuiltInLiquidChains } from "./chains/createBuiltInLiquidChains";
 import { LIQUID_CHAIN_GROUP_ID } from "./chains/LiquidChainRecord";
 import type { LiquidChainGroup } from "./contract";
 
+/** How many activity entries one on-demand `getActivity` page returns. */
+const ACTIVITY_PAGE_SIZE = 25;
+
 export function createLiquidChainGroup(): LiquidChainGroup {
 	const identityBackend = createLwkLiquidIdentityBackend();
 	const walletBackend = createLwkWalletBackend();
@@ -17,6 +20,17 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 
 	return {
 		accountRuntime: {
+			async getActivity(input, rawAssetId, cursor) {
+				const account = await walletBackend.resolveAccount(input);
+
+				return getSyncWorkerClient().readActivity({
+					chain: input.chain,
+					cursor,
+					descriptor: account.descriptor,
+					limit: ACTIVITY_PAGE_SIZE,
+					rawAssetId,
+				});
+			},
 			async getPortfolio(input) {
 				const account = await walletBackend.resolveAccount(input);
 				const snapshot = await getSyncWorkerClient().scanAndRead({
@@ -24,7 +38,7 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 					descriptor: account.descriptor,
 				});
 
-				return { activity: snapshot.activity, assets: snapshot.assets, rate: snapshot.rate };
+				return { assets: snapshot.assets };
 			},
 			async getReceiveAddress(input) {
 				const account = await walletBackend.resolveAccount(input);

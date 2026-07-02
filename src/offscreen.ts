@@ -24,12 +24,10 @@ function getScanClient(): SyncWorkerClient {
 browser.runtime.onMessage.addListener((message) => {
 	if (!isOffscreenScanMessage(message)) return undefined;
 
-	const { input, op } = message;
-
 	return (async (): Promise<OffscreenScanResponse> => {
 		try {
-			if (op === "scan") {
-				const { updateBytes } = await getScanClient().scan(input);
+			if (message.op === "scan") {
+				const { updateBytes } = await getScanClient().scan(message.input);
 
 				return {
 					ok: true,
@@ -38,7 +36,13 @@ browser.runtime.onMessage.addListener((message) => {
 				};
 			}
 
-			const result = await getScanClient().scanAndRead(input);
+			if (message.op === "readActivity") {
+				const page = await getScanClient().readActivity(message.input);
+
+				return { items: page.items, nextCursor: page.nextCursor, ok: true, op: "readActivity" };
+			}
+
+			const result = await getScanClient().scanAndRead(message.input);
 
 			return { ...result, ok: true, op: "scanAndRead" };
 		} catch (error) {

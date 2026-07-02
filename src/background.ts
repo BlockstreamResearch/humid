@@ -1,6 +1,8 @@
 import { createAccountRegistry } from "@/core/accounts/application/account-registry";
 import type { AccountModelState } from "@/core/accounts/application/account-registry/model/account-model";
 import type {
+	ActivityPage,
+	GetActivityInput,
 	PortfolioSnapshot,
 	ReceiveAddress,
 } from "@/core/accounts/application/accounts-rpc/model/types";
@@ -151,6 +153,18 @@ const init = async () => {
 
 	const getPortfolio = (): Promise<PortfolioSnapshot> => portfolioSync.getSnapshot();
 
+	// On-demand, paginated activity for one asset on the selected account+chain. Read straight
+	// from the scan worker's cached wollet (no scan), decoupled from the portfolio balance poll.
+	const getActivity = async (input: GetActivityInput): Promise<ActivityPage> => {
+		const { input: accountInput } = await resolveSelectedLiquidAccount();
+
+		return liquidChainGroup.accountRuntime.getActivity(
+			accountInput,
+			input.rawAssetId,
+			input.cursor,
+		);
+	};
+
 	const dappAuthorization = createDappAuthorization({
 		confirm: confirmations.confirm,
 		dispatch: dispatchInjectedLiquidRequest,
@@ -171,6 +185,7 @@ const init = async () => {
 		popup: createInternalRpcHandlers({
 			chainGroups: [liquidChainGroup],
 			confirmations,
+			getActivity,
 			getPortfolio,
 			getReceiveAddress,
 		}),

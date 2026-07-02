@@ -3,7 +3,9 @@ import { requestBackground } from "@/core/extension-rpc";
 import { accountsRpc } from "./model/rpc";
 import type {
 	AccountsState,
+	ActivityPage,
 	CreateAccountInput,
+	GetActivityInput,
 	ImportAccountInput,
 	PortfolioSnapshot,
 	ReceiveAddress,
@@ -38,6 +40,10 @@ function getPortfolio(): Promise<PortfolioSnapshot> {
 	return requestBackground<PortfolioSnapshot>(accountsRpc.methods.getPortfolio);
 }
 
+function getActivity(input: GetActivityInput): Promise<ActivityPage> {
+	return requestBackground<ActivityPage>(accountsRpc.methods.getActivity, input);
+}
+
 function createAccount(input: CreateAccountInput): Promise<AccountsState> {
 	return requestBackground<AccountsState>(accountsRpc.methods.createAccount, input);
 }
@@ -52,6 +58,7 @@ function removeAccount(input: RemoveAccountInput): Promise<AccountsState> {
 
 export const accountsClient = {
 	createAccount,
+	getActivity,
 	getPortfolio,
 	getReceiveAddress,
 	getState,

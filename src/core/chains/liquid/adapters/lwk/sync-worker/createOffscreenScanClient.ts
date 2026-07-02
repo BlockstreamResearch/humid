@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 
-import type { ScanInput, SyncWorkerClient } from "./createWorkerScanClient";
+import type { ReadActivityInput, ScanInput, SyncWorkerClient } from "./createWorkerScanClient";
 import {
 	base64ToBytes,
 	OFFSCREEN_SCAN_TARGET,
@@ -44,10 +44,12 @@ async function ensureOffscreenDocument(offscreen: ChromeOffscreenApi): Promise<v
 	await creatingDocument;
 }
 
-async function requestScan(
-	op: "scan" | "scanAndRead",
-	input: ScanInput,
-): Promise<OffscreenScanResponse> {
+/** A scan/read request payload for the offscreen document (the target is added on send). */
+type OffscreenRequestPayload =
+	| { input: ScanInput; op: "scan" | "scanAndRead" }
+	| { input: ReadActivityInput; op: "readActivity" };
+
+async function requestScan(payload: OffscreenRequestPayload): Promise<OffscreenScanResponse> {
 	const offscreen = getChromeOffscreen();
 
 	if (!offscreen) throw new Error("chrome.offscreen is unavailable in this context.");
@@ -55,8 +57,7 @@ async function requestScan(
 	await ensureOffscreenDocument(offscreen);
 
 	return (await browser.runtime.sendMessage({
-		input,
-		op,
+		...payload,
 		target: OFFSCREEN_SCAN_TARGET,
 	})) as OffscreenScanResponse;
 }
@@ -68,8 +69,16 @@ async function requestScan(
  */
 export function createOffscreenScanClient(): SyncWorkerClient {
 	return {
+		async readActivity(input) {
+			const response = await requestScan({ input, op: "readActivity" });
+
+			if (!response.ok) throw new Error(response.error);
+			if (response.op !== "readActivity") throw new Error("Unexpected offscreen scan response.");
+
+			return { items: response.items, nextCursor: response.nextCursor };
+		},
 		async scan(input) {
-			const response = await requestScan("scan", input);
+			const response = await requestScan({ input, op: "scan" });
 
 			if (!response.ok) throw new Error(response.error);
 			if (response.op !== "scan") throw new Error("Unexpected offscreen scan response.");
@@ -79,12 +88,12 @@ export function createOffscreenScanClient(): SyncWorkerClient {
 			};
 		},
 		async scanAndRead(input) {
-			const response = await requestScan("scanAndRead", input);
+			const response = await requestScan({ input, op: "scanAndRead" });
 
 			if (!response.ok) throw new Error(response.error);
 			if (response.op !== "scanAndRead") throw new Error("Unexpected offscreen scan response.");
 
-			return { activity: response.activity, assets: response.assets, rate: response.rate };
+			return { assets: response.assets };
 		},
 	};
 }

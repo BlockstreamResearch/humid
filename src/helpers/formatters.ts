@@ -48,11 +48,13 @@ export function truncateMiddle(value: string, lead = 6, tail = 4) {
 /**
  * Formats an integer base-unit amount (e.g. satoshis) as a decimal string with
  * `decimals` fractional places, trimming trailing fractional zeros. BigInt-based, so
- * no floating-point rounding. Non-numeric input formats as "0".
+ * no floating-point rounding. Accepts the raw bigint or an integer string; non-numeric
+ * input formats as "0".
  */
-export function formatUnits(amount: string, decimals: number) {
-	const negative = amount.startsWith("-");
-	const raw = negative ? amount.slice(1) : amount;
+export function formatUnits(amount: bigint | string, decimals: number) {
+	const text = typeof amount === "bigint" ? amount.toString() : amount;
+	const negative = text.startsWith("-");
+	const raw = negative ? text.slice(1) : text;
 
 	if (!/^\d+$/u.test(raw)) return "0";
 
@@ -62,4 +64,13 @@ export function formatUnits(amount: string, decimals: number) {
 	const sign = negative ? "-" : "";
 
 	return fraction ? `${sign}${whole}.${fraction}` : `${sign}${whole}`;
+}
+
+/** Parse a base-unit integer string (as it crosses the RPC boundary) to bigint; junk yields 0n. */
+export function parseBaseUnits(value: string): bigint {
+	try {
+		return BigInt(value);
+	} catch {
+		return 0n;
+	}
 }

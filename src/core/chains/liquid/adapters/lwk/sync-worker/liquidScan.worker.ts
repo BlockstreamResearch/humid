@@ -1,4 +1,4 @@
-import { scanAndRead, scanFresh } from "./liquidScanCore";
+import { readActivity, scanAndRead, scanFresh } from "./liquidScanCore";
 import type { SyncWorkerRequest, SyncWorkerResponse } from "./protocol";
 
 // Minimal dedicated-worker surface. Declaring it locally avoids pulling the `webworker`
@@ -23,6 +23,16 @@ async function handle(request: SyncWorkerRequest): Promise<void> {
 				ok: true,
 				op: "scan",
 				updateBytes: await scanFresh(request),
+			});
+		} else if (request.op === "readActivity") {
+			const page = readActivity(request);
+
+			ctx.postMessage({
+				id: request.id,
+				items: page.items,
+				nextCursor: page.nextCursor,
+				ok: true,
+				op: "readActivity",
 			});
 		} else {
 			ctx.postMessage({
