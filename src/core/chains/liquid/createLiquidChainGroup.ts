@@ -31,19 +31,23 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 					rawAssetId,
 				});
 			},
-			async getPortfolio(input) {
-				const account = await walletBackend.resolveAccount(input);
-				const snapshot = await getSyncWorkerClient().scanAndRead({
-					chain: input.chain,
-					descriptor: account.descriptor,
-				});
-
-				return { assets: snapshot.assets };
-			},
 			async getReceiveAddress(input) {
 				const account = await walletBackend.resolveAccount(input);
 
 				return walletBackend.getReceiveAddress(account);
+			},
+			async resolveScanTarget(input) {
+				const account = await walletBackend.resolveAccount(input);
+
+				return { chain: input.chain, descriptor: account.descriptor };
+			},
+			async scanPortfolio(target) {
+				const snapshot = await getSyncWorkerClient().scanAndRead({
+					chain: target.chain,
+					descriptor: target.descriptor,
+				});
+
+				return { assets: snapshot.assets };
 			},
 		},
 		chains: createBuiltInLiquidChains(),

@@ -1,6 +1,6 @@
-import browser from "webextension-polyfill";
-
 import type { PortfolioData } from "@/core/accounts/application/accounts-rpc/model/types";
+
+import { getSessionStorage } from "./sessionStorageArea";
 
 /** A persisted portfolio snapshot: the last synced data and when it synced. */
 export type PersistedPortfolioSnapshot = {
@@ -15,17 +15,6 @@ export type PortfolioSnapshotStore = {
 };
 
 const STORAGE_PREFIX = "portfolio-snapshot:";
-
-/** A minimal `storage.session`-shaped area (the polyfill's types may not declare `session`). */
-type SessionStorageArea = {
-	get: (key: string) => Promise<Record<string, unknown>>;
-	set: (items: Record<string, unknown>) => Promise<void>;
-};
-
-/** `chrome.storage.session` if this context exposes it (MV3; in-memory, cleared on browser restart). */
-function getSessionStorage(): SessionStorageArea | undefined {
-	return (browser.storage as unknown as { session?: SessionStorageArea }).session;
-}
 
 /**
  * A portfolio snapshot store backed by `chrome.storage.session`: it survives service-worker sleeps

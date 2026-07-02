@@ -19,6 +19,12 @@ export type LiquidPortfolio = {
 	assets: LiquidAssetBalance[];
 };
 
+/** A watch-only scan target: chain config + public descriptor, no keys — safe to cache/persist. */
+export type LiquidScanTarget = {
+	chain: LiquidChainRecord;
+	descriptor: string;
+};
+
 /** Popup-facing account operations that need the LWK runtime (materialize + derive). */
 export type LiquidAccountRuntime = {
 	getActivity: (
@@ -26,8 +32,11 @@ export type LiquidAccountRuntime = {
 		rawAssetId: string,
 		cursor: string | null,
 	) => Promise<LiquidActivityPage>;
-	getPortfolio: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidPortfolio>;
 	getReceiveAddress: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidReceiveAddress>;
+	/** Derive the account's watch-only scan target (chain + descriptor). Needs the unlocked vault. */
+	resolveScanTarget: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidScanTarget>;
+	/** Scan a watch-only target into a portfolio — vault-independent (no keys needed). */
+	scanPortfolio: (target: LiquidScanTarget) => Promise<LiquidPortfolio>;
 };
 
 export type LiquidChainGroup = ChainGroup<LiquidWalletRpcContext, LiquidChainRecord> & {

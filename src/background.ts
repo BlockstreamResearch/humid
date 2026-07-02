@@ -1,3 +1,5 @@
+import browser from "webextension-polyfill";
+
 import { createAccountRegistry } from "@/core/accounts/application/account-registry";
 import type { AccountModelState } from "@/core/accounts/application/account-registry/model/account-model";
 import type {
@@ -9,6 +11,7 @@ import type {
 import type { Caip25Scopes } from "@/core/caip25";
 import { getUnlockedChainStoreState } from "@/core/chains/application/chain-store/secureChainStore";
 import { resolveUnlockedLiquidChain } from "@/core/chains/liquid/chains/resolveLiquidChain";
+import type { LiquidScanTarget } from "@/core/chains/liquid/contract";
 import { createLiquidChainGroup } from "@/core/chains/liquid/createLiquidChainGroup";
 import { parseLiquidChainId } from "@/core/chains/liquid/domain/validation";
 import { createConfirmationResponder } from "@/core/extension-background/confirmations";
@@ -24,6 +27,7 @@ import {
 } from "@/core/extension-background/internal-rpc";
 import { createPortfolioSyncEngine } from "@/core/extension-background/portfolio-sync/createPortfolioSyncEngine";
 import { createSessionPortfolioSnapshotStore } from "@/core/extension-background/portfolio-sync/portfolioSnapshotStore";
+import { createSessionScanTargetStore } from "@/core/extension-background/portfolio-sync/scanTargetStore";
 import {
 	registerBackgroundRpc,
 	setupBackgroundTransport,
@@ -56,6 +60,13 @@ async function updateAccountModel(
 
 	return state.accountModel;
 }
+
+/** MV3 alarm that refreshes the last-active account's balances while the popup is closed. */
+const PORTFOLIO_REFRESH_ALARM = "portfolio-refresh";
+const PORTFOLIO_REFRESH_PERIOD_MINUTES = 1;
+
+/** Skip a background refresh if the cached snapshot was synced within this window. */
+const BACKGROUND_REFRESH_MIN_INTERVAL_MS = 60_000;
 
 const init = async () => {
 	const messageBus = setupBackgroundTransport();
@@ -141,16 +152,44 @@ const init = async () => {
 	const getReceiveAddress = async (): Promise<ReceiveAddress> =>
 		liquidChainGroup.accountRuntime.getReceiveAddress((await resolveSelectedLiquidAccount()).input);
 
-	// Decouple portfolio reads from wallet scans: the popup polls `getPortfolio`, which
-	// returns the cached balance instantly while the engine (re)syncs in the background.
+	// Persisted portfolio (survives SW sleep) + the last-active watch-only scan target (so the
+	// background alarm can refresh without the vault). Both live in session storage.
+	const snapshotStore = createSessionPortfolioSnapshotStore();
+	const scanTargetStore = createSessionScanTargetStore<LiquidScanTarget>();
+
+	// Decouple portfolio reads from wallet scans: the popup polls `getPortfolio`, which returns the
+	// cached balance instantly while the engine (re)syncs in the background. Each sync also caches
+	// the account's watch-only scan target so the background alarm below can refresh it vault-free.
 	const portfolioSync = createPortfolioSyncEngine(async () => {
 		const { accountGroupId, chainId, input } = await resolveSelectedLiquidAccount();
+		const key = `${accountGroupId}::${chainId}`;
 
 		return {
-			key: `${accountGroupId}::${chainId}`,
-			scan: () => liquidChainGroup.accountRuntime.getPortfolio(input),
+			key,
+			scan: async () => {
+				const target = await liquidChainGroup.accountRuntime.resolveScanTarget(input);
+				void scanTargetStore.save(key, target);
+
+				return liquidChainGroup.accountRuntime.scanPortfolio(target);
+			},
 		};
-	}, createSessionPortfolioSnapshotStore());
+	}, snapshotStore);
+
+	// Refresh the last-active account in the background without the vault: scan its cached watch-only
+	// target and persist the snapshot. Skips when nothing is cached or the snapshot is still fresh.
+	const backgroundRefresh = async (): Promise<void> => {
+		const active = await scanTargetStore.load();
+
+		if (!active) return;
+
+		const persisted = await snapshotStore.load(active.key);
+
+		if (persisted && Date.now() - persisted.syncedAt < BACKGROUND_REFRESH_MIN_INTERVAL_MS) return;
+
+		const portfolio = await liquidChainGroup.accountRuntime.scanPortfolio(active.target);
+
+		await snapshotStore.save(active.key, { data: portfolio, syncedAt: Date.now() });
+	};
 
 	const getPortfolio = (): Promise<PortfolioSnapshot> => portfolioSync.getSnapshot();
 
@@ -194,6 +233,34 @@ const init = async () => {
 
 	updateBadgeOnStorageChange();
 	initNotificationManagement();
+
+	// Create the periodic background-refresh alarm once (it persists across SW sleeps); guarding on
+	// get() avoids resetting its schedule every time the SW wakes and re-runs init.
+	if (!(await browser.alarms.get(PORTFOLIO_REFRESH_ALARM))) {
+		await browser.alarms.create(PORTFOLIO_REFRESH_ALARM, {
+			periodInMinutes: PORTFOLIO_REFRESH_PERIOD_MINUTES,
+		});
+	}
+
+	return { backgroundRefresh };
 };
 
-void init();
+// Run the background setup once per service-worker lifetime; the alarm listener awaits it.
+let initialization: ReturnType<typeof init> | null = null;
+const ensureInitialized = (): ReturnType<typeof init> => (initialization ??= init());
+
+// Registered at the top level so it catches the alarm that wakes the service worker. The refresh is
+// watch-only (scans a cached descriptor), so it works even though the vault re-locks on SW sleep.
+browser.alarms.onAlarm.addListener(async (alarm) => {
+	if (alarm.name !== PORTFOLIO_REFRESH_ALARM) return;
+
+	try {
+		const { backgroundRefresh } = await ensureInitialized();
+
+		await backgroundRefresh();
+	} catch (error) {
+		console.error("[liquid-sync] background refresh failed", error);
+	}
+});
+
+void ensureInitialized();
