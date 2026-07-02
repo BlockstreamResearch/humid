@@ -11,7 +11,10 @@ type ChainGroupView = {
 	name: string;
 };
 
-/** Chains list: chain groups with their chains; each chain opens its settings page. */
+/**
+ * Chains list: chain groups with their chains; each chain opens its settings, and each
+ * group has its own "Add chain" (a chain is added within — and by — its chain group).
+ */
 export function ChainListView({ groups }: { groups: ChainGroupView[] }) {
 	return (
 		<div className="flex size-full min-h-0 flex-col">
@@ -23,10 +26,7 @@ export function ChainListView({ groups }: { groups: ChainGroupView[] }) {
 				>
 					<HugeiconsIcon icon={ArrowLeft01Icon} size={18} />
 				</Link>
-				<h1 className="flex-1 text-base font-semibold">Chains</h1>
-				<Link className="text-primary text-sm font-medium" to="/app/settings/chains/add">
-					Add
-				</Link>
+				<h1 className="text-base font-semibold">Chains</h1>
 			</header>
 			<UiScrollArea className="min-h-0 flex-1">
 				<div className="flex flex-col gap-4 px-3 py-4">
@@ -51,6 +51,16 @@ export function ChainListView({ groups }: { groups: ChainGroupView[] }) {
 										/>
 									</Link>
 								))}
+								<Link
+									className="hover:bg-accent text-primary flex items-center gap-2 rounded-lg px-2 py-2.5 text-sm font-medium transition-colors"
+									search={{ group: group.id }}
+									to="/app/settings/chains/add"
+								>
+									<span aria-hidden className="text-base leading-none">
+										+
+									</span>
+									Add chain
+								</Link>
 							</div>
 						</section>
 					))}

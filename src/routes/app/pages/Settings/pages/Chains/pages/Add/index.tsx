@@ -1,44 +1,30 @@
-import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { Navigate, useNavigate } from "@tanstack/react-router";
 
-import type { ChainRecord } from "@/core/chains/application/ChainRecord";
 import { useChainActions } from "@/routes/App/pages/Settings/hooks/useChainActions";
 
 import { chainGroupUis } from "../../chainGroups";
-import { ChainAddView } from "./components/ChainAddView";
+import { ChainAddForm } from "../../components/ChainAddForm";
+import { Route } from "./route";
 
-// Only one chain group is registered today, so it's auto-selected (see TODO in the view).
-const defaultChainGroupUi = Object.values(chainGroupUis)[0];
-
-if (!defaultChainGroupUi) {
-	throw new Error("No chain group UI is registered.");
-}
-
-/** Add chain (container): builds a fresh custom-chain draft and persists it via addChain. */
+/** Add chain (container): resolves the target chain group from the URL and persists the draft. */
 export function ChainAddPage() {
+	const { group: groupId } = Route.useSearch();
 	const navigate = useNavigate();
 	const { addChain } = useChainActions();
-	const [draft, setDraft] = useState<ChainRecord>(() => defaultChainGroupUi.createDraft(""));
 
-	const Settings = defaultChainGroupUi.Settings;
+	const groupUi = groupId ? chainGroupUis[groupId] : undefined;
 
-	const handleSubmit = () => {
-		addChain.mutate(
-			{ chain: draft },
-			{ onSuccess: () => navigate({ to: "/app/settings/chains" }) },
-		);
-	};
+	// An add link always carries a known chain group; bail to the list otherwise.
+	if (!groupUi) return <Navigate replace to="/app/settings/chains" />;
 
 	return (
-		<ChainAddView
-			chainTypeLabel={defaultChainGroupUi.name}
+		<ChainAddForm
 			error={addChain.error instanceof Error ? addChain.error.message : null}
+			groupUi={groupUi}
 			isSubmitting={addChain.isPending}
-			name={draft.name}
-			onNameChange={(name) => setDraft({ ...draft, name })}
-			onSubmit={handleSubmit}
-		>
-			<Settings chain={draft} onChange={setDraft} />
-		</ChainAddView>
+			onSubmit={(chain) =>
+				addChain.mutate({ chain }, { onSuccess: () => navigate({ to: "/app/settings/chains" }) })
+			}
+		/>
 	);
 }

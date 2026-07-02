@@ -1,30 +1,17 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState } from "react";
 
-import { createCustomLiquidChainRecord } from "@/core/chains/liquid/chains/createBuiltInLiquidChains";
-import type { LiquidChainRecord } from "@/core/chains/liquid/chains/LiquidChainRecord";
-import { LiquidChainSettings } from "@/core/chains/liquid/chains/LiquidChainSettings";
+import { LIQUID_CHAIN_GROUP_ID } from "@/core/chains/liquid/chains/LiquidChainRecord";
 
-import { ChainAddView } from "./components/ChainAddView";
+import { chainGroupUis } from "../../chainGroups";
+import { ChainAddForm } from "../../components/ChainAddForm";
 
-/** Add chain: name + the Liquid group's settings on a fresh custom (regtest) draft. */
+/** Add chain: the common form with the Liquid group's Create body (network kind + settings). */
 function AddChainStory() {
-	const [chain, setChain] = useState<LiquidChainRecord>(() =>
-		createCustomLiquidChainRecord("My Regtest"),
-	);
+	const groupUi = chainGroupUis[LIQUID_CHAIN_GROUP_ID];
 
-	return (
-		<ChainAddView
-			chainTypeLabel="Liquid"
-			error={null}
-			isSubmitting={false}
-			name={chain.name}
-			onNameChange={(name) => setChain({ ...chain, name })}
-			onSubmit={() => {}}
-		>
-			<LiquidChainSettings chain={chain} onChange={setChain} />
-		</ChainAddView>
-	);
+	if (!groupUi) return null;
+
+	return <ChainAddForm error={null} groupUi={groupUi} isSubmitting={false} onSubmit={() => {}} />;
 }
 
 const meta = {

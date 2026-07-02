@@ -32,9 +32,10 @@ export type LiquidChainSettingsProps = {
 };
 
 /**
- * A chain's network kind is not editable here: built-in chains derive it from their id
- * and custom chains are always a custom Elements (regtest) network — so the editor only
- * exposes the policy asset (custom only), backend, and explorer.
+ * Editable settings for an existing Liquid chain: the backend (URL + Waterfalls flag,
+ * headers, request tuning) and explorer, plus the policy asset for custom (regtest)
+ * chains. The network kind is a chain's fixed identity and is chosen only when adding
+ * (see LiquidChainCreate), never here.
  */
 export function LiquidChainSettings({ chain, onChange }: LiquidChainSettingsProps) {
 	const settings = chain.settings;
