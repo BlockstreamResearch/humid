@@ -2,11 +2,11 @@ import { Navigate, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import type { ChainRecord } from "@/core/chains/application/ChainRecord";
+import { chainGroupUis } from "@/routes/App/chainGroupUis";
 import { useChains } from "@/routes/App/pages/Home/HomeContext/hooks/useChains";
 import { useChainActions } from "@/routes/App/pages/Settings/hooks/useChainActions";
 import { UiSpinner } from "@/ui/UiSpinner";
 
-import { chainGroupUis } from "../../chainGroups";
 import { ChainItemView } from "./components/ChainItemView";
 import { Route } from "./route";
 

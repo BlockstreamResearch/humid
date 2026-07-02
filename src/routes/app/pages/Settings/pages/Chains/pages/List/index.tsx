@@ -1,8 +1,8 @@
 import type { ChainRecord } from "@/core/chains/application/ChainRecord";
+import { chainGroupUis } from "@/routes/App/chainGroupUis";
 import { useChains } from "@/routes/App/pages/Home/HomeContext/hooks/useChains";
 import { UiSpinner } from "@/ui/UiSpinner";
 
-import { chainGroupUis } from "../../chainGroups";
 import { ChainListView } from "./components/ChainListView";
 
 /** Chain list (container): the chains grouped by chain group, each drilling into settings. */

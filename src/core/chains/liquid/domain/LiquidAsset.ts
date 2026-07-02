@@ -7,6 +7,15 @@ export const LIQUID_NATIVE_ASSET = {
 	symbol: "L-BTC",
 } as const;
 
+/**
+ * Chain-specific display metadata carried on each Liquid asset, read by the Liquid presentation
+ * components (the agnostic asset-UI blob, mirroring a chain record's `settings`). Grows with the
+ * bits a Liquid asset row/detail wants to show (issuer domain, registry-verified, …).
+ */
+export type LiquidAssetMetadata = {
+	isNative: boolean;
+};
+
 export type LiquidAssetId = `${LiquidChainId}/elip144:${string}`;
 
 export type ParsedLiquidAssetId = {

@@ -1,4 +1,8 @@
-import type { LiquidActivityEntry } from "../../../application/backends/LiquidWalletBackend";
+import type {
+	LiquidAssetBalance,
+	LiquidFiatRate,
+	LiquidWalletTx,
+} from "../../../application/backends/LiquidWalletBackend";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 
 type BaseScanRequest = {
@@ -22,11 +26,11 @@ export type SyncWorkerRequest = ScanRequest | ScanAndReadRequest;
 export type SyncWorkerResponse =
 	| { id: number; ok: true; op: "scan"; updateBytes: Uint8Array | null }
 	| {
+			activity: LiquidWalletTx[];
+			assets: LiquidAssetBalance[];
 			id: number;
 			ok: true;
 			op: "scanAndRead";
-			rawPolicyAssetId: string;
-			balance: string;
-			activity: LiquidActivityEntry[];
+			rate: LiquidFiatRate | null;
 	  }
 	| { id: number; ok: false; error: string };

@@ -1,4 +1,7 @@
-import type { LiquidActivityEntry } from "../../../application/backends/LiquidWalletBackend";
+import type {
+	LiquidActivityEntry,
+	LiquidWalletTx,
+} from "../../../application/backends/LiquidWalletBackend";
 import type { LiquidChainId } from "../../../domain/LiquidChain";
 import { toLiquidAssetId } from "../../../domain/validation";
 import type { LwkWasmModule } from "../loadLwkWasm";
@@ -66,6 +69,48 @@ export function readWalletActivityForAsset(
 	return entries.toSorted(
 		(a, b) => (b.timestamp ?? Number.POSITIVE_INFINITY) - (a.timestamp ?? Number.POSITIVE_INFINITY),
 	);
+}
+
+/** Every asset balance the wollet holds, raw as (asset id hex → base-unit amount). */
+export function readWalletAssetBalances(wollet: LwkWollet): Map<string, bigint> {
+	return normalizeBalanceMap(wollet.balance().entries());
+}
+
+/**
+ * The full transaction history with each tx's signed per-asset deltas (negative = sent),
+ * newest first. A single tx can touch several assets (e.g. a swap), so deltas is a list.
+ * `wollet.transactions()` is already ordered height-descending with unconfirmed on top.
+ */
+export function readWalletTransactions(wollet: LwkWollet): LiquidWalletTx[] {
+	return wollet.transactions().map((walletTx) => {
+		const timestamp = walletTx.timestamp();
+
+		return {
+			deltas: [...normalizeBalanceMap(walletTx.balance().entries())]
+				.filter(([, sats]) => sats !== 0n)
+				.map(([rawAssetId, sats]) => ({ amountSats: sats.toString(), rawAssetId })),
+			feeSats: toBigInt(walletTx.fee()).toString(),
+			timestamp: typeof timestamp === "number" ? timestamp : null,
+			txid: walletTx.txid().toString(),
+		} satisfies LiquidWalletTx;
+	});
+}
+
+/** Normalize LWK's `Balance.entries()` (documented as a Map; defended against variants). */
+function normalizeBalanceMap(entries: unknown): Map<string, bigint> {
+	const result = new Map<string, bigint>();
+
+	if (entries instanceof Map) {
+		for (const [key, value] of entries) result.set(String(key), toBigInt(value));
+	} else if (Array.isArray(entries)) {
+		for (const pair of entries) {
+			if (Array.isArray(pair)) result.set(String(pair[0]), toBigInt(pair[1]));
+		}
+	} else if (typeof entries === "object" && entries !== null) {
+		for (const [key, value] of Object.entries(entries)) result.set(key, toBigInt(value));
+	}
+
+	return result;
 }
 
 function amountToString(value: unknown): string {

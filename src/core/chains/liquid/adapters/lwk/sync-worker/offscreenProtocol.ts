@@ -1,4 +1,8 @@
-import type { LiquidActivityEntry } from "../../../application/backends/LiquidWalletBackend";
+import type {
+	LiquidAssetBalance,
+	LiquidFiatRate,
+	LiquidWalletTx,
+} from "../../../application/backends/LiquidWalletBackend";
 import type { ScanInput } from "./createWorkerScanClient";
 
 /** Discriminator so only the offscreen document (not other extension contexts) handles these. */
@@ -12,11 +16,11 @@ export type OffscreenScanMessage = {
 
 export type OffscreenScanResponse =
 	| {
-			activity: LiquidActivityEntry[];
-			balance: string;
+			activity: LiquidWalletTx[];
+			assets: LiquidAssetBalance[];
 			ok: true;
 			op: "scanAndRead";
-			rawPolicyAssetId: string;
+			rate: LiquidFiatRate | null;
 	  }
 	| { error: string; ok: false }
 	| { ok: true; op: "scan"; updateBase64: string | null };

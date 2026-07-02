@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { LIQUID_CHAIN_GROUP_ID } from "@/core/chains/liquid/chains/LiquidChainRecord";
+import { chainGroupUis } from "@/routes/App/chainGroupUis";
 
-import { chainGroupUis } from "../../chainGroups";
 import { ChainAddForm } from "../../components/ChainAddForm";
 
 /** Add chain: the common form with the Liquid group's Create body (network kind + settings). */

@@ -1,12 +1,16 @@
-import type { LiquidActivityEntry } from "../../../application/backends/LiquidWalletBackend";
+import type {
+	LiquidAssetBalance,
+	LiquidFiatRate,
+	LiquidWalletTx,
+} from "../../../application/backends/LiquidWalletBackend";
 import type { SyncWorkerRequest, SyncWorkerResponse } from "./protocol";
 
 export type ScanInput = { chain: SyncWorkerRequest["chain"]; descriptor: string };
 export type ScanResult = { updateBytes: Uint8Array | null };
 export type ScanAndReadResult = {
-	activity: LiquidActivityEntry[];
-	balance: string;
-	rawPolicyAssetId: string;
+	activity: LiquidWalletTx[];
+	assets: LiquidAssetBalance[];
+	rate: LiquidFiatRate | null;
 };
 
 type SuccessResponse = Extract<SyncWorkerResponse, { ok: true }>;
@@ -86,11 +90,7 @@ export function createWorkerScanClient(): SyncWorkerClient {
 
 			if (response.op !== "scanAndRead") throw new Error("Unexpected sync worker response.");
 
-			return {
-				activity: response.activity,
-				balance: response.balance,
-				rawPolicyAssetId: response.rawPolicyAssetId,
-			};
+			return { activity: response.activity, assets: response.assets, rate: response.rate };
 		},
 	};
 }

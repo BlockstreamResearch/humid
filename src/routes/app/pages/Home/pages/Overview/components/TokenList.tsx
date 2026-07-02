@@ -1,15 +1,23 @@
 import { Link } from "@tanstack/react-router";
 
-import type { PortfolioToken } from "@/routes/App/pages/Home/HomeContext/hooks/usePortfolio";
+import type { PortfolioViewAsset } from "@/core/chains/application/PortfolioView";
+import { chainGroupUis } from "@/routes/App/chainGroupUis";
+import { useHome } from "@/routes/App/pages/Home/HomeContext";
 
-/** Asset rows. Each row links to its asset page (`/app/asset/$assetId`). */
-export function TokenList({ tokens }: { tokens: PortfolioToken[] }) {
+/**
+ * Asset rows. Each row links to its asset page (`/app/asset/$assetId`); the row content itself is
+ * rendered by the selected chain group's `TokenRow`, so each chain decides how its assets look.
+ */
+export function TokenList({ tokens }: { tokens: PortfolioViewAsset[] }) {
+	const { chain } = useHome();
+	const TokenRow = chainGroupUis[chain.chainGroupId]?.TokenRow;
+
 	return (
 		<div className="flex flex-col gap-1">
 			<p className="text-muted-foreground px-1 text-xs font-medium tracking-wide uppercase">
 				Tokens
 			</p>
-			{tokens.length === 0 ? (
+			{tokens.length === 0 || !TokenRow ? (
 				<p className="text-muted-foreground px-1 py-6 text-center text-sm">No tokens yet.</p>
 			) : (
 				<div className="flex flex-col">
@@ -20,17 +28,7 @@ export function TokenList({ tokens }: { tokens: PortfolioToken[] }) {
 							params={{ assetId: token.id }}
 							className="hover:bg-accent flex items-center gap-3 rounded-lg px-1 py-2.5 transition-colors"
 						>
-							<div className="bg-muted flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
-								{token.symbol.charAt(0)}
-							</div>
-							<div className="min-w-0 flex-1">
-								<p className="text-sm font-medium">{token.symbol}</p>
-								<p className="text-muted-foreground truncate text-xs">{token.name}</p>
-							</div>
-							<div className="text-right">
-								<p className="font-mono text-sm">{token.amount}</p>
-								<p className="text-muted-foreground text-xs">{token.fiat}</p>
-							</div>
+							<TokenRow token={token} />
 						</Link>
 					))}
 				</div>

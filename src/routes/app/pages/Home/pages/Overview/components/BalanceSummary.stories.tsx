@@ -1,10 +1,19 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
+import { MockHomeProvider } from "@/routes/App/pages/Home/HomeContext/mock";
+
 import { BalanceSummary } from "./BalanceSummary";
 
 const meta = {
 	title: "Pages/App/Home/Overview/BalanceSummary",
 	component: BalanceSummary,
+	decorators: [
+		(Story) => (
+			<MockHomeProvider>
+				<Story />
+			</MockHomeProvider>
+		),
+	],
 	args: {
 		error: null,
 		isSyncing: false,

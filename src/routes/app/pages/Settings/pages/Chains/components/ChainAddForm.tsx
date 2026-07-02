@@ -4,11 +4,10 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 
 import type { ChainRecord } from "@/core/chains/application/ChainRecord";
+import type { ChainGroupUi } from "@/routes/App/chainGroupUis";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiInput } from "@/ui/UiInput/base";
 import { UiScrollArea } from "@/ui/UiScrollArea";
-
-import type { ChainGroupUi } from "../chainGroups";
 
 type ChainAddFormProps = {
 	error: string | null;

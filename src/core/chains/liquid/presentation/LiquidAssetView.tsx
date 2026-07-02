@@ -1,10 +1,38 @@
 import { ArrowDownLeft01Icon, ArrowUpRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { ReactNode } from "react";
 
-import type { PortfolioActivity } from "@/routes/App/pages/Home/HomeContext/hooks/usePortfolio";
+import type {
+	PortfolioViewActivity,
+	PortfolioViewAsset,
+} from "@/core/chains/application/PortfolioView";
 
-/** Transaction history for the asset: direction, amount (mono), date, counterparty. */
-export function ActivityList({ items, symbol }: { items: PortfolioActivity[]; symbol: string }) {
+/** Liquid asset detail body: the balance headline, the account actions, and the tx history. */
+export function LiquidAssetView({
+	actions,
+	activity,
+	token,
+}: {
+	actions: ReactNode;
+	activity: PortfolioViewActivity[];
+	token: PortfolioViewAsset;
+}) {
+	return (
+		<>
+			<div className="flex flex-col items-center gap-0.5 py-2">
+				<p className="font-mono text-2xl font-semibold tracking-tight">
+					{token.amount} {token.symbol}
+				</p>
+				<p className="text-muted-foreground text-sm">{token.fiat}</p>
+			</div>
+			{actions}
+			<LiquidActivityList items={activity} symbol={token.symbol} />
+		</>
+	);
+}
+
+/** Liquid transaction history: direction, amount (mono), date, and the (confidential) txid. */
+function LiquidActivityList({ items, symbol }: { items: PortfolioViewActivity[]; symbol: string }) {
 	return (
 		<div className="flex flex-col gap-1">
 			<p className="text-muted-foreground px-1 text-xs font-medium tracking-wide uppercase">

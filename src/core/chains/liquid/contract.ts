@@ -2,7 +2,9 @@ import type { ChainGroup } from "@/core/chains/application/ChainGroup";
 import type { LiquidWalletRpcContext } from "@/core/chains/liquid/application/createLiquidRpcRouter";
 
 import type {
-	LiquidActivityEntry,
+	LiquidAssetBalance,
+	LiquidFiatRate,
+	LiquidWalletTx,
 	ResolveLiquidWalletAccountInput,
 } from "./application/backends/LiquidWalletBackend";
 import type { LiquidChainRecord } from "./chains/LiquidChainRecord";
@@ -13,16 +15,11 @@ export type LiquidReceiveAddress = {
 	index: number;
 };
 
-/** The account's native-asset balance and transaction history for one chain. */
+/** The account's asset balances, transaction history, and native fiat rate for one chain. */
 export type LiquidPortfolio = {
-	activity: LiquidActivityEntry[];
-	native: {
-		amountSats: string;
-		decimals: number;
-		name: string;
-		rawAssetId: string;
-		symbol: string;
-	};
+	activity: LiquidWalletTx[];
+	assets: LiquidAssetBalance[];
+	rate: LiquidFiatRate | null;
 };
 
 /** Popup-facing account operations that need the LWK runtime (materialize + derive). */

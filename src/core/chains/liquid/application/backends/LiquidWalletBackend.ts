@@ -2,7 +2,7 @@ import type { KeySourceId } from "@/core/accounts/application/account-registry/m
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
 
 import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
-import type { LiquidAssetId } from "../../domain/LiquidAsset";
+import type { LiquidAssetId, LiquidAssetMetadata } from "../../domain/LiquidAsset";
 import type { LiquidChainId } from "../../domain/LiquidChain";
 import type {
 	LiquidGetWalletDescriptorParams,
@@ -47,6 +47,38 @@ export type LiquidActivityEntry = {
 	direction: "received" | "sent";
 	timestamp: number | null;
 	txid: string;
+};
+
+/** One asset the wallet holds: its raw id, balance (base units), and display metadata. */
+export type LiquidAssetBalance = {
+	amountSats: string;
+	decimals: number;
+	isNative: boolean;
+	metadata: LiquidAssetMetadata;
+	name: string;
+	rawAssetId: string;
+	symbol: string;
+};
+
+/** One transaction's net effect on the wallet, with a signed base-unit delta per asset. */
+export type LiquidWalletTx = {
+	deltas: { amountSats: string; rawAssetId: string }[];
+	feeSats: string;
+	timestamp: number | null;
+	txid: string;
+};
+
+/** The native asset's fiat price from LWK's price feed (issued assets have no direct rate). */
+export type LiquidFiatRate = {
+	currency: string;
+	nativeUnitPrice: string;
+};
+
+/** The full wallet read after a scan: asset balances, transaction history, and the fiat rate. */
+export type LiquidWalletSnapshot = {
+	activity: LiquidWalletTx[];
+	assets: LiquidAssetBalance[];
+	rate: LiquidFiatRate | null;
 };
 
 export type LiquidWalletBackend = {

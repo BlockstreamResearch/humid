@@ -1,8 +1,8 @@
 import { Navigate, useNavigate } from "@tanstack/react-router";
 
+import { chainGroupUis } from "@/routes/App/chainGroupUis";
 import { useChainActions } from "@/routes/App/pages/Settings/hooks/useChainActions";
 
-import { chainGroupUis } from "../../chainGroups";
 import { ChainAddForm } from "../../components/ChainAddForm";
 import { Route } from "./route";
 

@@ -6,7 +6,6 @@ import { createLiquidRpcRouter } from "./application/createLiquidRpcRouter";
 import { createBuiltInLiquidChains } from "./chains/createBuiltInLiquidChains";
 import { LIQUID_CHAIN_GROUP_ID } from "./chains/LiquidChainRecord";
 import type { LiquidChainGroup } from "./contract";
-import { LIQUID_NATIVE_ASSET } from "./domain/LiquidAsset";
 
 export function createLiquidChainGroup(): LiquidChainGroup {
 	const identityBackend = createLwkLiquidIdentityBackend();
@@ -20,21 +19,12 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 		accountRuntime: {
 			async getPortfolio(input) {
 				const account = await walletBackend.resolveAccount(input);
-				const portfolio = await getSyncWorkerClient().scanAndRead({
+				const snapshot = await getSyncWorkerClient().scanAndRead({
 					chain: input.chain,
 					descriptor: account.descriptor,
 				});
 
-				return {
-					activity: portfolio.activity,
-					native: {
-						amountSats: portfolio.balance,
-						decimals: LIQUID_NATIVE_ASSET.decimals,
-						name: LIQUID_NATIVE_ASSET.name,
-						rawAssetId: portfolio.rawPolicyAssetId,
-						symbol: LIQUID_NATIVE_ASSET.symbol,
-					},
-				};
+				return { activity: snapshot.activity, assets: snapshot.assets, rate: snapshot.rate };
 			},
 			async getReceiveAddress(input) {
 				const account = await walletBackend.resolveAccount(input);

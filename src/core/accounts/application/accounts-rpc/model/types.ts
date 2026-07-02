@@ -46,27 +46,41 @@ export type ReceiveAddress = {
 	index: number;
 };
 
-/** One transaction in the selected asset's history (chain-agnostic view). */
-export type PortfolioActivityEntry = {
+/** One asset the account holds on the selected chain: balance (base units) + display metadata. */
+export type PortfolioAsset = {
 	amountSats: string;
-	direction: "received" | "sent";
+	decimals: number;
+	isNative: boolean;
+	/** Chain-specific display blob, rendered by the owning chain group's presentation. */
+	metadata: unknown;
+	name: string;
+	rawAssetId: string;
+	symbol: string;
+};
+
+/** One transaction's net effect, with a signed base-unit delta per affected asset. */
+export type PortfolioTxEntry = {
+	deltas: { amountSats: string; rawAssetId: string }[];
+	feeSats: string;
 	timestamp: number | null;
 	txid: string;
 };
 
+/** The native asset's fiat price (issued assets have no direct rate; null if unavailable). */
+export type PortfolioRate = {
+	currency: string;
+	nativeUnitPrice: string;
+};
+
 /**
- * The selected account+chain balance: the native asset and its activity. Fiat prices
- * and issued-asset metadata have no source yet, so this stays native-only.
+ * The selected account+chain wallet contents: every asset balance, the transaction history,
+ * and the native asset's fiat rate. Issued-asset fiat has no source, so only the native asset
+ * is priced; issued-asset names come from the registry when available.
  */
 export type PortfolioData = {
-	activity: PortfolioActivityEntry[];
-	native: {
-		amountSats: string;
-		decimals: number;
-		name: string;
-		rawAssetId: string;
-		symbol: string;
-	};
+	activity: PortfolioTxEntry[];
+	assets: PortfolioAsset[];
+	rate: PortfolioRate | null;
 };
 
 /**

@@ -1,6 +1,12 @@
+import { chainGroupUis } from "@/routes/App/chainGroupUis";
+import { useHome } from "@/routes/App/pages/Home/HomeContext";
 import { UiSpinner } from "@/ui/UiSpinner";
 
-/** Portfolio headline: the native balance (mono) with its fiat value, plus a sync hint. */
+/**
+ * Portfolio headline. The empty / syncing / error states are generic (sync-level); when there's a
+ * balance, the selected chain group's `BalanceHeadline` renders it, so each chain owns how its
+ * native balance looks.
+ */
 export function BalanceSummary({
 	error,
 	isSyncing,
@@ -12,7 +18,10 @@ export function BalanceSummary({
 	native: { amount: string; symbol: string } | null;
 	totalFiat: string | null;
 }) {
-	if (!native) {
+	const { chain } = useHome();
+	const BalanceHeadline = chainGroupUis[chain.chainGroupId]?.BalanceHeadline;
+
+	if (!native || !BalanceHeadline) {
 		return (
 			<div className="flex flex-col items-center gap-2 py-6">
 				<div className="bg-muted text-muted-foreground flex size-14 items-center justify-center rounded-full text-xl">
@@ -31,22 +40,5 @@ export function BalanceSummary({
 		);
 	}
 
-	return (
-		<div className="flex flex-col items-center gap-3 py-2">
-			<div className="bg-muted flex size-14 items-center justify-center rounded-full text-lg font-semibold">
-				{native.symbol.charAt(0)}
-			</div>
-			<div className="flex flex-col items-center gap-0.5">
-				<p className="font-mono text-2xl font-semibold tracking-tight">
-					{native.amount} {native.symbol}
-				</p>
-				{totalFiat ? <p className="text-muted-foreground text-sm">{totalFiat}</p> : null}
-				{isSyncing ? (
-					<p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-						<UiSpinner className="size-3" /> Syncing…
-					</p>
-				) : null}
-			</div>
-		</div>
-	);
+	return <BalanceHeadline isSyncing={isSyncing} native={native} totalFiat={totalFiat} />;
 }
