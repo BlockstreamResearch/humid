@@ -23,6 +23,7 @@ import {
 	syncWalletVaultAuthStore,
 } from "@/core/extension-background/internal-rpc";
 import { createPortfolioSyncEngine } from "@/core/extension-background/portfolio-sync/createPortfolioSyncEngine";
+import { createSessionPortfolioSnapshotStore } from "@/core/extension-background/portfolio-sync/portfolioSnapshotStore";
 import {
 	registerBackgroundRpc,
 	setupBackgroundTransport,
@@ -149,7 +150,7 @@ const init = async () => {
 			key: `${accountGroupId}::${chainId}`,
 			scan: () => liquidChainGroup.accountRuntime.getPortfolio(input),
 		};
-	});
+	}, createSessionPortfolioSnapshotStore());
 
 	const getPortfolio = (): Promise<PortfolioSnapshot> => portfolioSync.getSnapshot();
 
