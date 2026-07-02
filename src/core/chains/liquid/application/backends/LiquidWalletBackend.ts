@@ -23,6 +23,8 @@ export type LiquidWalletAccount = {
 	accountIdentifier: string;
 	chain: LiquidChainRecord;
 	chainId: LiquidChainId;
+	/** The watch-only descriptor string — safe to hand to the scan worker (no keys). */
+	descriptor: string;
 	dwid: string;
 	implementation: unknown;
 	policyAssetId: LiquidAssetId;

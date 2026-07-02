@@ -1,8 +1,14 @@
-/** Portfolio headline: the native balance (mono) with its fiat value, or an empty state. */
+import { UiSpinner } from "@/ui/UiSpinner";
+
+/** Portfolio headline: the native balance (mono) with its fiat value, plus a sync hint. */
 export function BalanceSummary({
+	error,
+	isSyncing,
 	native,
 	totalFiat,
 }: {
+	error: string | null;
+	isSyncing: boolean;
 	native: { amount: string; symbol: string } | null;
 	totalFiat: string | null;
 }) {
@@ -12,7 +18,15 @@ export function BalanceSummary({
 				<div className="bg-muted text-muted-foreground flex size-14 items-center justify-center rounded-full text-xl">
 					—
 				</div>
-				<p className="text-muted-foreground text-sm">No assets yet</p>
+				{isSyncing ? (
+					<p className="text-muted-foreground flex items-center gap-1.5 text-sm">
+						<UiSpinner className="size-3.5" /> Syncing…
+					</p>
+				) : error ? (
+					<p className="text-destructive text-sm">Couldn't sync — retrying…</p>
+				) : (
+					<p className="text-muted-foreground text-sm">No assets yet</p>
+				)}
 			</div>
 		);
 	}
@@ -27,6 +41,11 @@ export function BalanceSummary({
 					{native.amount} {native.symbol}
 				</p>
 				{totalFiat ? <p className="text-muted-foreground text-sm">{totalFiat}</p> : null}
+				{isSyncing ? (
+					<p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+						<UiSpinner className="size-3" /> Syncing…
+					</p>
+				) : null}
 			</div>
 		</div>
 	);

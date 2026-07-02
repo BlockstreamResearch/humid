@@ -55,10 +55,10 @@ export type PortfolioActivityEntry = {
 };
 
 /**
- * The selected account+chain balance snapshot: the native asset and its activity.
- * Fiat prices and issued-asset metadata have no source yet, so this stays native-only.
+ * The selected account+chain balance: the native asset and its activity. Fiat prices
+ * and issued-asset metadata have no source yet, so this stays native-only.
  */
-export type PortfolioSnapshot = {
+export type PortfolioData = {
 	activity: PortfolioActivityEntry[];
 	native: {
 		amountSats: string;
@@ -67,4 +67,17 @@ export type PortfolioSnapshot = {
 		rawAssetId: string;
 		symbol: string;
 	};
+};
+
+/**
+ * The background's cached view of the selected account+chain portfolio. Reads return the
+ * last successfully synced `data` (null before the first sync) instantly while the
+ * background (re)syncs the wallet in a worker: `isSyncing` reflects that live state and
+ * `error` carries the last sync failure (with `data` possibly stale or still null).
+ */
+export type PortfolioSnapshot = {
+	data: PortfolioData | null;
+	error: string | null;
+	isSyncing: boolean;
+	syncedAt: number | null;
 };

@@ -68,6 +68,7 @@ export async function createLwkLiquidAccount(
 			accountIdentifier,
 			chain: input.chain,
 			chainId: input.chain.id,
+			descriptor: descriptor.toString(),
 			dwid,
 			implementation: {
 				blockchainClient,

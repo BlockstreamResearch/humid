@@ -73,7 +73,9 @@ const PORTFOLIO: Portfolio = {
 		],
 		usdt: [],
 	},
+	error: null,
 	isLoading: false,
+	isSyncing: false,
 	native: { amount: "2.45000000", symbol: "L-BTC" },
 	tokens: [
 		{

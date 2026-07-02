@@ -20,6 +20,7 @@ import {
 	createInternalRpcHandlers,
 	syncWalletVaultAuthStore,
 } from "@/core/extension-background/internal-rpc";
+import { createPortfolioSyncEngine } from "@/core/extension-background/portfolio-sync/createPortfolioSyncEngine";
 import {
 	registerBackgroundRpc,
 	setupBackgroundTransport,
@@ -109,9 +110,10 @@ const init = async () => {
 		);
 	};
 
-	// Popup account runtime: resolve the selected Liquid chain into the input the
-	// chain group's runtime facade needs (materialize + derive against it).
-	const resolveSelectedLiquidAccountInput = async () => {
+	// Popup account runtime: resolve the selected Liquid chain + account into the input the
+	// chain group's runtime facade needs (materialize + derive against it), plus the
+	// identifiers that key the portfolio cache.
+	const resolveSelectedLiquidAccount = async () => {
 		const chainStore = await getUnlockedChainStoreState();
 		const selectedChainId =
 			chainStore.selectedChainIds[liquidChainGroup.id] ?? liquidChainGroup.chains[0].id;
@@ -121,19 +123,33 @@ const init = async () => {
 		const selectedWallet = keyManagerState.accountModel.wallets[selectedGroup.walletId];
 
 		return {
-			accountGroupIndex: selectedGroup.groupIndex ?? 0,
-			chain,
-			keySourceId: selectedWallet?.keySourceId,
-			keyManagerState,
-			updateKeyManagerState: walletVaultBackground.keyManager.updateState,
+			accountGroupId: selectedGroup.id,
+			chainId: chain.id,
+			input: {
+				accountGroupIndex: selectedGroup.groupIndex ?? 0,
+				chain,
+				keySourceId: selectedWallet?.keySourceId,
+				keyManagerState,
+				updateKeyManagerState: walletVaultBackground.keyManager.updateState,
+			},
 		};
 	};
 
 	const getReceiveAddress = async (): Promise<ReceiveAddress> =>
-		liquidChainGroup.accountRuntime.getReceiveAddress(await resolveSelectedLiquidAccountInput());
+		liquidChainGroup.accountRuntime.getReceiveAddress((await resolveSelectedLiquidAccount()).input);
 
-	const getPortfolio = async (): Promise<PortfolioSnapshot> =>
-		liquidChainGroup.accountRuntime.getPortfolio(await resolveSelectedLiquidAccountInput());
+	// Decouple portfolio reads from wallet scans: the popup polls `getPortfolio`, which
+	// returns the cached balance instantly while the engine (re)syncs in the background.
+	const portfolioSync = createPortfolioSyncEngine(async () => {
+		const { accountGroupId, chainId, input } = await resolveSelectedLiquidAccount();
+
+		return {
+			key: `${accountGroupId}::${chainId}`,
+			scan: () => liquidChainGroup.accountRuntime.getPortfolio(input),
+		};
+	});
+
+	const getPortfolio = (): Promise<PortfolioSnapshot> => portfolioSync.getSnapshot();
 
 	const dappAuthorization = createDappAuthorization({
 		confirm: confirmations.confirm,

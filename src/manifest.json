@@ -36,6 +36,14 @@
 			"matches": ["<all_urls>"]
 		}
 	],
-	"permissions": ["storage", "tabs", "activeTab", "scripting", "clipboardRead", "clipboardWrite"],
+	"permissions": [
+		"storage",
+		"tabs",
+		"activeTab",
+		"scripting",
+		"clipboardRead",
+		"clipboardWrite",
+		"offscreen"
+	],
 	"host_permissions": ["file://*/*", "http://*/*", "https://*/*"]
 }

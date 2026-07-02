@@ -20,7 +20,12 @@ export function OverviewPage() {
 			<HomeHeader />
 			<UiScrollArea className="min-h-0 flex-1">
 				<div className="flex flex-col gap-6 px-5 py-4">
-					<BalanceSummary native={portfolio.native} totalFiat={portfolio.totalFiat} />
+					<BalanceSummary
+						error={portfolio.error}
+						isSyncing={portfolio.isSyncing}
+						native={portfolio.native}
+						totalFiat={portfolio.totalFiat}
+					/>
 					<QuickActions />
 					<TokenList tokens={portfolio.tokens} />
 				</div>

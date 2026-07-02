@@ -32,7 +32,7 @@ function getWebAccessibleResourceInputs() {
 }
 
 function getAdditionalInputs() {
-	return [...getWebAccessibleResourceInputs(), "src/notification.html"];
+	return [...getWebAccessibleResourceInputs(), "src/notification.html", "src/offscreen.html"];
 }
 
 // https://vitejs.dev/config/
