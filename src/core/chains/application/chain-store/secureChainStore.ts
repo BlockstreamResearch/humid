@@ -48,6 +48,23 @@ export async function setUnlockedChainRecord(
 	}, storage);
 }
 
+export async function removeUnlockedChainRecord(
+	chainId: ChainId,
+	storage?: SecureVaultStorage,
+): Promise<ChainStoreState> {
+	return chainJsonStore.update((state) => {
+		const currentState = state ?? createEmptyChainStoreState();
+
+		return {
+			...currentState,
+			chains: Object.fromEntries(
+				Object.entries(currentState.chains).filter(([id]) => id !== chainId),
+			),
+			updatedAt: Date.now(),
+		};
+	}, storage);
+}
+
 export async function getUnlockedChainRecord(
 	chainId: ChainId,
 	storage?: SecureVaultStorage,

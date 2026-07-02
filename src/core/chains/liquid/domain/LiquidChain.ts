@@ -7,3 +7,8 @@ export const LIQUID_CHAIN_IDS = [LIQUID_MAINNET_CHAIN_ID, LIQUID_TESTNET_CHAIN_I
 
 export type BuiltInLiquidChainId = (typeof LIQUID_CHAIN_IDS)[number];
 export type LiquidChainId = string;
+
+/** Whether a chain id is one of the two built-in Liquid chains (mainnet or testnet). */
+export function isBuiltInLiquidChainId(chainId: LiquidChainId): chainId is BuiltInLiquidChainId {
+	return chainId === LIQUID_MAINNET_CHAIN_ID || chainId === LIQUID_TESTNET_CHAIN_ID;
+}

@@ -1,4 +1,4 @@
-import { Navigate } from "@tanstack/react-router";
+import { Navigate, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import type { ChainRecord } from "@/core/chains/application/ChainRecord";
@@ -12,12 +12,14 @@ import { Route } from "./route";
 
 /**
  * Per-chain settings (container): resolves the chain from the route param, renders the
- * chain group's own settings component against a draft, and persists it on save.
+ * chain group's own settings component against a draft, persists it on save, and (for
+ * custom chains) removes it.
  */
 export function ChainItemPage() {
 	const { chainId } = Route.useParams();
 	const { chains, isLoading } = useChains();
-	const { updateChain } = useChainActions();
+	const { updateChain, removeChain } = useChainActions();
+	const navigate = useNavigate();
 
 	if (isLoading) {
 		return (
@@ -31,11 +33,23 @@ export function ChainItemPage() {
 
 	if (!chain) return <Navigate replace to="/app/settings/chains" />;
 
+	const groupUi = chainGroupUis[chain.chainGroupId];
+	const removable = groupUi ? !groupUi.isBuiltIn(chain.id) : false;
+
+	const handleRemove = () => {
+		removeChain.mutate(
+			{ chainId: chain.id },
+			{ onSuccess: () => navigate({ to: "/app/settings/chains" }) },
+		);
+	};
+
 	return (
 		<ChainSettingsEditor
 			key={chain.id}
 			chain={chain}
+			isRemoving={removeChain.isPending}
 			isSaving={updateChain.isPending}
+			onRemove={removable ? handleRemove : undefined}
 			onSave={(next) => updateChain.mutate({ chain: next })}
 		/>
 	);
@@ -43,18 +57,28 @@ export function ChainItemPage() {
 
 function ChainSettingsEditor({
 	chain,
+	isRemoving,
 	isSaving,
+	onRemove,
 	onSave,
 }: {
 	chain: ChainRecord;
+	isRemoving: boolean;
 	isSaving: boolean;
+	onRemove?: () => void;
 	onSave: (chain: ChainRecord) => void;
 }) {
 	const [draft, setDraft] = useState(chain);
 	const Settings = chainGroupUis[chain.chainGroupId]?.Settings;
 
 	return (
-		<ChainItemView chainName={chain.name} isSaving={isSaving} onSave={() => onSave(draft)}>
+		<ChainItemView
+			chainName={chain.name}
+			isRemoving={isRemoving}
+			isSaving={isSaving}
+			onRemove={onRemove}
+			onSave={() => onSave(draft)}
+		>
 			{Settings ? (
 				<Settings chain={draft} onChange={setDraft} />
 			) : (

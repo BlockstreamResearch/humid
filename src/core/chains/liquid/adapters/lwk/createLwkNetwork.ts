@@ -1,30 +1,32 @@
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 
-import {
-	LIQUID_CHAIN_IDS,
-	LIQUID_MAINNET_CHAIN_ID,
-	LIQUID_TESTNET_CHAIN_ID,
-	type LiquidChainId,
-} from "../../domain/LiquidChain";
+import { LIQUID_NETWORK_KINDS, type LiquidChainRecord } from "../../chains/LiquidChainRecord";
 import type { LwkWasmModule } from "./loadLwkWasm";
 
 export type LwkNetwork = ReturnType<LwkWasmModule["Network"]["mainnet"]>;
 
-export function createLwkNetwork(lwk: LwkWasmModule, chainId: LiquidChainId): LwkNetwork {
-	if (chainId === LIQUID_MAINNET_CHAIN_ID) {
-		return lwk.Network.mainnet();
-	}
+/**
+ * Build the LWK `Network` a chain targets from its settings. `regtest` is any custom
+ * Elements network: its `policyAsset` defines the L-BTC asset id (without one we use
+ * LWK's default regtest params). Address parameters follow from the network kind.
+ */
+export function createLwkNetwork(lwk: LwkWasmModule, chain: LiquidChainRecord): LwkNetwork {
+	const { network, policyAsset } = chain.settings;
 
-	if (chainId === LIQUID_TESTNET_CHAIN_ID) {
-		return lwk.Network.testnet();
+	switch (network) {
+		case LIQUID_NETWORK_KINDS.MAINNET:
+			return lwk.Network.mainnet();
+		case LIQUID_NETWORK_KINDS.TESTNET:
+			return lwk.Network.testnet();
+		case LIQUID_NETWORK_KINDS.REGTEST:
+			return policyAsset
+				? lwk.Network.regtest(new lwk.AssetId(policyAsset))
+				: lwk.Network.regtestDefault();
+		default:
+			throw new WalletRpcInvalidParamsError(
+				"Unsupported Liquid network.",
+				{ chainId: chain.id, network },
+				WALLET_RPC_ERROR_REASONS.UNSUPPORTED_CHAIN,
+			);
 	}
-
-	throw new WalletRpcInvalidParamsError(
-		"Unsupported Liquid chain ID.",
-		{
-			chainId,
-			supportedChainIds: LIQUID_CHAIN_IDS,
-		},
-		WALLET_RPC_ERROR_REASONS.UNSUPPORTED_CHAIN,
-	);
 }

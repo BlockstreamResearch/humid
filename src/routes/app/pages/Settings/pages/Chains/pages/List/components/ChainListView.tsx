@@ -23,7 +23,10 @@ export function ChainListView({ groups }: { groups: ChainGroupView[] }) {
 				>
 					<HugeiconsIcon icon={ArrowLeft01Icon} size={18} />
 				</Link>
-				<h1 className="text-base font-semibold">Chains</h1>
+				<h1 className="flex-1 text-base font-semibold">Chains</h1>
+				<Link className="text-primary text-sm font-medium" to="/app/settings/chains/add">
+					Add
+				</Link>
 			</header>
 			<UiScrollArea className="min-h-0 flex-1">
 				<div className="flex flex-col gap-4 px-3 py-4">

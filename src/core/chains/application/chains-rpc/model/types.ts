@@ -14,3 +14,13 @@ export type SetSelectedChainInput = {
 export type UpdateChainInput = {
 	chain: ChainRecord;
 };
+
+/** Persist a new custom chain record. */
+export type AddChainInput = {
+	chain: ChainRecord;
+};
+
+/** Remove a custom chain by id. */
+export type RemoveChainInput = {
+	chainId: ChainId;
+};

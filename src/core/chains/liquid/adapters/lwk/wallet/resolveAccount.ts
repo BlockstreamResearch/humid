@@ -22,7 +22,7 @@ export async function createLwkLiquidAccount(
 		? getSeedMaterialForKeySource(input.keyManagerState, input.keySourceId)
 		: getLocalRootSeedMaterial(input.keyManagerState);
 	const lwk = await loadLwkWasm();
-	const network = createLwkNetwork(lwk, input.chain.id);
+	const network = createLwkNetwork(lwk, input.chain);
 	const blockchainClient = createLwkBlockchainClient(lwk, input.chain, network);
 	const masterMnemonic = createLwkMnemonicFromSeedMaterial(lwk, seedMaterial);
 

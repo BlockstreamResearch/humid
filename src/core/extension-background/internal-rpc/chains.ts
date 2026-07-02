@@ -1,5 +1,6 @@
 import {
 	getUnlockedChainStoreState,
+	removeUnlockedChainRecord,
 	setUnlockedChainRecord,
 	setUnlockedSelectedChainId,
 } from "@/core/chains/application/chain-store/secureChainStore";
@@ -7,7 +8,9 @@ import type { ChainGroup } from "@/core/chains/application/ChainGroup";
 import type { ChainId, ChainRecord } from "@/core/chains/application/ChainRecord";
 import { chainsRpc } from "@/core/chains/application/chains-rpc/model/rpc";
 import type {
+	AddChainInput,
 	ChainsState,
+	RemoveChainInput,
 	SetSelectedChainInput,
 	UpdateChainInput,
 } from "@/core/chains/application/chains-rpc/model/types";
@@ -67,6 +70,48 @@ export function createChainsInternalHandlers(
 			}
 
 			await setUnlockedChainRecord(chain);
+
+			return readChainsState(chainGroups);
+		},
+		[chainsRpc.methods.addChain]: async (message) => {
+			const { chain } = message.data as AddChainInput;
+
+			if (!chainGroups.some((group) => group.id === chain.chainGroupId)) {
+				throw new Error(`Unknown chain group: ${chain.chainGroupId}`);
+			}
+
+			const known = await readChainsState(chainGroups);
+
+			if (known.chains.some((candidate) => candidate.id === chain.id)) {
+				throw new Error(`Chain already exists: ${chain.id}`);
+			}
+
+			await setUnlockedChainRecord(chain);
+
+			return readChainsState(chainGroups);
+		},
+		[chainsRpc.methods.removeChain]: async (message) => {
+			const { chainId } = message.data as RemoveChainInput;
+
+			// Built-in chains live in a group's static list — they cannot be removed.
+			const isBuiltIn = chainGroups.some((group) =>
+				group.chains.some((candidate) => candidate.id === chainId),
+			);
+
+			if (isBuiltIn) throw new Error(`Built-in chains cannot be removed: ${chainId}`);
+
+			const store = await getUnlockedChainStoreState();
+			const removed = store.chains[chainId];
+
+			if (!removed) throw new Error(`Unknown chain: ${chainId}`);
+
+			await removeUnlockedChainRecord(chainId);
+
+			// If the removed chain was selected for its group, fall back to a built-in.
+			if (store.selectedChainIds[removed.chainGroupId] === chainId) {
+				const group = chainGroups.find((candidate) => candidate.id === removed.chainGroupId);
+				if (group) await setUnlockedSelectedChainId(group.id, group.chains[0].id);
+			}
 
 			return readChainsState(chainGroups);
 		},
