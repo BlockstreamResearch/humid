@@ -8,7 +8,17 @@ export type WalletRpcConfirmationHandler = (
 	request: WalletRpcConfirmationRequest,
 ) => Promise<boolean>;
 
+export type WalletRpcAuthorization = {
+	/** Whether the session granted the capability with this id (the RPC method name). */
+	isGranted: (capabilityId: string) => boolean;
+};
+
 export type WalletRpcBaseContext = {
+	/**
+	 * Permission surface for a dapp call: present when the call is scoped to a session's
+	 * granted capabilities. Absent for internal/trusted calls, which get full access.
+	 */
+	authorization?: WalletRpcAuthorization;
 	confirm?: WalletRpcConfirmationHandler;
 };
 

@@ -8,6 +8,7 @@ import {
 import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
+import { restrictedLiquidAssetId } from "../../../domain/LiquidAsset";
 import {
 	LIQUID_DESCRIPTOR_TYPES,
 	LIQUID_WALLET_RPC_METHODS,
@@ -44,6 +45,12 @@ export const getLiquidWalletDescriptor = createWalletMethod<
 		group: WALLET_CAPABILITY_GROUPS.VIEW_ADDRESSES,
 		id: LIQUID_WALLET_RPC_METHODS.GET_WALLET_DESCRIPTOR,
 		label: "View addresses",
+		restricted: ({ context }) => ({
+			accountIdentifier: "",
+			chainId: context.chain.id,
+			descriptors: [],
+			policyAssetId: restrictedLiquidAssetId(context.chain.id),
+		}),
 	},
 	confirmation: ({ params, review }) => ({
 		data: {

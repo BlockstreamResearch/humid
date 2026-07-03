@@ -7,7 +7,6 @@ import {
 	type Caip25GetSessionResult,
 	type Caip25RevokeSessionResult,
 	type Caip27InvokeMethodParams,
-	isMethodAuthorized,
 	mergeRequestedScopes,
 	toCaip25Scopes,
 } from "@/core/caip25";
@@ -26,6 +25,8 @@ export type SupportedDappScope = {
 
 export type DappRequestDispatch = (request: {
 	chainId: string;
+	/** Methods the session granted; the method wrapper enforces them per-capability. */
+	grantedMethods: readonly string[];
 	method: string;
 	params: unknown;
 }) => Promise<unknown>;
@@ -183,14 +184,18 @@ export function createDappAuthorization(
 			);
 		}
 
-		if (!isMethodAuthorized(session.scope, invocation.scope, invocation.request.method)) {
+		// Chain scope is a hard gate. Per-method grants are enforced inside the method
+		// wrapper (ungranted read → RESTRICTED, ungranted action → error), so hand the
+		// granted set down instead of rejecting every ungranted method here.
+		if (!session.scope.chains.includes(invocation.scope)) {
 			throw dappAuthorizationErrors.unauthorized(
-				`Method "${invocation.request.method}" is not authorized for scope "${invocation.scope}".`,
+				`Scope "${invocation.scope}" is not authorized for this session.`,
 			);
 		}
 
 		return dispatch({
 			chainId: invocation.scope,
+			grantedMethods: session.scope.methods,
 			method: invocation.request.method,
 			params: invocation.request.params,
 		});

@@ -1,6 +1,7 @@
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
+	WalletRpcUnauthorizedError,
 	WalletRpcUserRejectedError,
 } from "@/core/wallet-rpc/errors";
 import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
@@ -60,6 +61,19 @@ export function createWalletMethod<
 > {
 	const handler = async (params: unknown, context: TContext): Promise<TResult> => {
 		const parsedParams = parse(params);
+
+		// Permission enforcement for dapp calls. An authorization surface means the call is
+		// scoped to a session's granted capabilities (internal calls omit it → full access).
+		// An ungranted read degrades to its RESTRICTED stub; anything else hard-errors — both
+		// before `review`, so we never resolve the account for a call we will not fulfil.
+		if (capability && context.authorization && !context.authorization.isGranted(capability.id)) {
+			if (capability.restricted) {
+				return capability.restricted({ context, params: parsedParams });
+			}
+
+			throw new WalletRpcUnauthorizedError(capability.id);
+		}
+
 		const reviewed = await review({
 			context,
 			params: parsedParams,

@@ -23,3 +23,12 @@ export type ParsedLiquidAssetId = {
 	chainId: LiquidChainId;
 	rawAssetId: string;
 };
+
+/**
+ * A redacted asset-id sentinel returned in place of a real one when a read capability
+ * is not granted. Well-formed (chain-scoped, all-zero raw id) so the dapp still gets a
+ * shaped response, but it identifies no real asset.
+ */
+export function restrictedLiquidAssetId(chainId: LiquidChainId): LiquidAssetId {
+	return `${chainId}/elip144:${"0".repeat(64)}`;
+}

@@ -4,7 +4,7 @@ import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
-import type { ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
+import { restrictedLiquidAssetId, type ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
 import {
 	LIQUID_WALLET_RPC_METHODS,
 	type LiquidGetUTXOsParams,
@@ -38,6 +38,13 @@ export const getLiquidUTXOs = createWalletMethod<
 		group: WALLET_CAPABILITY_GROUPS.VIEW_BALANCES,
 		id: LIQUID_WALLET_RPC_METHODS.GET_UTXOS,
 		label: "View coins",
+		restricted: ({ context, params }) => ({
+			accountIdentifier: "",
+			assetId: params.assetId ?? restrictedLiquidAssetId(context.chain.id),
+			chainId: context.chain.id,
+			policyAssetId: restrictedLiquidAssetId(context.chain.id),
+			utxos: [],
+		}),
 	},
 	confirmation: ({ review }) => ({
 		data: {

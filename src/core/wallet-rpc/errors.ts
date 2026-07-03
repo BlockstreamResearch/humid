@@ -4,6 +4,7 @@ export const WALLET_RPC_ERROR_CODES = {
 	INVALID_PARAMS: -32602,
 	METHOD_NOT_FOUND: -32601,
 	RESOURCE_UNAVAILABLE: -32002,
+	UNAUTHORIZED: 4100,
 } as const;
 
 export const WALLET_RPC_ERROR_REASONS = {
@@ -26,6 +27,7 @@ export const WALLET_RPC_ERROR_REASONS = {
 	MISSING_LOCAL_ROOT_KEYRING: "missing_local_root_keyring",
 	NOT_IMPLEMENTED: "not_implemented",
 	RESOURCE_UNAVAILABLE: "resource_unavailable",
+	UNAUTHORIZED: "unauthorized",
 	UNSUPPORTED_CHAIN: "unsupported_chain",
 	UNSUPPORTED_DESCRIPTOR_FORMAT: "unsupported_descriptor_format",
 	UNSUPPORTED_DESCRIPTOR_TYPE: "unsupported_descriptor_type",
@@ -118,6 +120,18 @@ export class WalletRpcResourceUnavailableError extends WalletRpcError {
 	) {
 		super(WALLET_RPC_ERROR_CODES.RESOURCE_UNAVAILABLE, message, reason, data);
 		this.name = "WalletRpcResourceUnavailableError";
+	}
+}
+
+export class WalletRpcUnauthorizedError extends WalletRpcError {
+	constructor(method: string, message?: string) {
+		super(
+			WALLET_RPC_ERROR_CODES.UNAUTHORIZED,
+			message ?? `The dapp has not been granted permission for "${method}".`,
+			WALLET_RPC_ERROR_REASONS.UNAUTHORIZED,
+			{ method },
+		);
+		this.name = "WalletRpcUnauthorizedError";
 	}
 }
 

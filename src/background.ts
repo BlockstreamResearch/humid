@@ -107,15 +107,18 @@ const init = async () => {
 
 	const dispatchInjectedLiquidRequest: DappRequestDispatch = async ({
 		chainId,
+		grantedMethods,
 		method,
 		params,
 	}) => {
 		const liquidChainId = parseLiquidChainId(chainId);
 		const chain = await resolveUnlockedLiquidChain(liquidChainId);
+		const grantedMethodSet = new Set(grantedMethods);
 
 		return liquidChainGroup.walletRpcDispatcher.dispatch(
 			{ method, params },
 			{
+				authorization: { isGranted: (capabilityId) => grantedMethodSet.has(capabilityId) },
 				chain,
 				confirm: confirmations.confirm,
 				keyManagerState: walletVaultBackground.keyManager.getState(),
