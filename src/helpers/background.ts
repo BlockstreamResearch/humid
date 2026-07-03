@@ -7,6 +7,16 @@ export type ConfirmationRequest = {
 	data?: unknown;
 };
 
+/**
+ * The popup's answer to a confirmation. `approved` is the accept/reject decision;
+ * `result` carries optional structured data a richer confirmation collects (e.g. the
+ * permissions the user selected on the dapp-connect modal).
+ */
+export type ConfirmationDecision<TResult = unknown> = {
+	approved: boolean;
+	result?: TResult;
+};
+
 export interface ExtensionMessage<T = unknown> {
 	method: string;
 	id?: number;

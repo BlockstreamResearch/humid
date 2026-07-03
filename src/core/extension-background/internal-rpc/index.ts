@@ -45,11 +45,13 @@ export function createInternalRpcHandlers({
 		confirm: async (message) => {
 			const data = message.data as Partial<ConfirmationRequest> | undefined;
 
-			return confirmations.waitForConfirmationResponse(
-				data?.title ?? "Confirm action?",
-				data?.message,
-				data?.data,
-			);
+			const decision = await confirmations.confirm({
+				title: data?.title ?? "Confirm action?",
+				message: data?.message,
+				data: data?.data,
+			});
+
+			return decision.approved;
 		},
 		...walletVaultInternalHandlers,
 		...walletConnectInternalHandlers,

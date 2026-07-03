@@ -34,7 +34,11 @@ import {
 } from "@/core/extension-background/transport";
 import { walletVaultBackground } from "@/core/secure-vault/application/wallet-vault/background";
 import * as walletConnect from "@/core/walletconnect/background";
-import { initNotificationManagement, updateBadgeOnStorageChange } from "@/helpers/background";
+import {
+	type ConfirmationRequest,
+	initNotificationManagement,
+	updateBadgeOnStorageChange,
+} from "@/helpers/background";
 import { authStore } from "@/store/auth";
 
 export type {
@@ -76,13 +80,18 @@ const init = async () => {
 	syncWalletVaultAuthStore(await walletVaultBackground.initializeStorage());
 
 	const confirmations = createConfirmationResponder(messageBus);
+	// Adapter for callers that only need approval (method + WalletConnect confirmations): run the
+	// universal confirm and collapse its decision to a boolean.
+	const confirmApproved = (request: ConfirmationRequest): Promise<boolean> =>
+		confirmations.confirm(request).then((decision) => decision.approved);
 	const liquidChainGroup = createLiquidChainGroup();
 	const accountRegistry = createAccountRegistry();
 
 	// Liquid capability glue: keep the requested CAIP-25 scopes the Liquid chain
 	// group can actually serve (valid chain ids + dispatcher methods).
 	const resolveSupportedLiquidScope = (requested: Caip25Scopes): SupportedDappScope => {
-		const supportedMethods = liquidChainGroup.walletRpcDispatcher.methods;
+		const dispatcher = liquidChainGroup.walletRpcDispatcher;
+		const supportedMethods = dispatcher.methods;
 		const chains = new Set<string>();
 		const methods = new Set<string>();
 
@@ -102,7 +111,12 @@ const init = async () => {
 			}
 		}
 
-		return { chains: [...chains], events: [], methods: [...methods] };
+		return {
+			capabilities: dispatcher.capabilities.filter((capability) => methods.has(capability.id)),
+			chains: [...chains],
+			events: [],
+			methods: [...methods],
+		};
 	};
 
 	const dispatchInjectedLiquidRequest: DappRequestDispatch = async ({
@@ -120,7 +134,7 @@ const init = async () => {
 			{
 				authorization: { isGranted: (capabilityId) => grantedMethodSet.has(capabilityId) },
 				chain,
-				confirm: confirmations.confirm,
+				confirm: confirmApproved,
 				keyManagerState: walletVaultBackground.keyManager.getState(),
 				updateKeyManagerState: walletVaultBackground.keyManager.updateState,
 			},
@@ -220,7 +234,7 @@ const init = async () => {
 	walletConnect.registerWalletConnectNamespaceAdapter(liquidChainGroup.walletConnectAdapter);
 
 	await walletConnect.initializeWalletConnectBackground({
-		confirm: confirmations.confirm,
+		confirm: confirmApproved,
 	});
 
 	registerBackgroundRpc(messageBus, {

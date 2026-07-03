@@ -1,4 +1,4 @@
-@import "./theme/global.css";
+@import "../theme/global.css";
 
 @layer utilities {
 	html,

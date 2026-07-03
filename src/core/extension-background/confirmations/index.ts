@@ -1,5 +1,6 @@
 import {
 	closeNotification,
+	ConfirmationDecision,
 	ConfirmationRequest,
 	MsgProtocolRequestMethods,
 	MsgProtocolResponseMethods,
@@ -13,47 +14,37 @@ const CONFIRMATION_TIMEOUT_MS = 30_000;
 const NOTIFICATION_SETTLE_MS = 200;
 
 export type ConfirmationResponder = {
-	/** Confirmation handler shape consumed by chain-group and WalletConnect adapters. */
-	confirm: (request: ConfirmationRequest) => Promise<boolean>;
-	/** Low-level form: open a confirmation window and await the popup decision. */
-	waitForConfirmationResponse: (
-		title: string,
-		message: string | undefined,
-		data: unknown,
-		id?: number,
-	) => Promise<boolean>;
+	/**
+	 * Open a confirmation window, show the request, and await the popup's decision.
+	 * Always resolves a {@link ConfirmationDecision}; the result shape is whatever the
+	 * request's renderer produces (`TResult`), so callers that only need approval read
+	 * `.approved` and callers that collect data (e.g. connect) read `.result`.
+	 */
+	confirm: <TResult = unknown>(
+		request: ConfirmationRequest,
+	) => Promise<ConfirmationDecision<TResult>>;
 };
 
 export function createConfirmationResponder(
 	messageBus: BackgroundMessageBus,
 ): ConfirmationResponder {
-	const waitForConfirmationResponse = async (
-		title: string,
-		message: string | undefined,
-		data: unknown,
-		id = Math.floor(Math.random() * 1_000_000),
-	): Promise<boolean> => {
+	const confirm = async <TResult = unknown>(
+		request: ConfirmationRequest,
+	): Promise<ConfirmationDecision<TResult>> => {
+		const id = Math.floor(Math.random() * 1_000_000);
 		const windowId = await openNotification();
 
 		await sleep(NOTIFICATION_SETTLE_MS);
 
 		messageBus.sendMessage(
 			MsgProtocolRequestMethods.RequestConfirmation,
-			{
-				method: MsgProtocolRequestMethods.RequestConfirmation,
-				id,
-				data: {
-					title,
-					message,
-					data,
-				},
-			},
+			{ id, data: request },
 			"popup",
 		);
 
 		return new Promise((resolve) => {
 			const timeout = setTimeout(() => {
-				resolve(false);
+				resolve({ approved: false });
 				void closeNotification(windowId);
 			}, CONFIRMATION_TIMEOUT_MS);
 
@@ -64,15 +55,12 @@ export function createConfirmationResponder(
 
 					clearTimeout(timeout);
 					removeResponseListener();
-					resolve(Boolean(response.data));
+					resolve((response.data ?? { approved: false }) as ConfirmationDecision<TResult>);
 					void closeNotification(windowId);
 				},
 			);
 		});
 	};
 
-	return {
-		confirm: (request) => waitForConfirmationResponse(request.title, request.message, request.data),
-		waitForConfirmationResponse,
-	};
+	return { confirm };
 }

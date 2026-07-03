@@ -7,6 +7,7 @@ import {
 import { initPegasusTransport } from "@webext-pegasus/transport/background";
 
 import {
+	ConfirmationDecision,
 	ConfirmationRequest,
 	EventProtocolListeners,
 	ExtensionMessage,
@@ -20,11 +21,10 @@ import { sleep } from "@/helpers/promise";
 export type PegasusMsgProtocolMap = {
 	[MsgProtocolRequestMethods.Request]: ExtensionMessage;
 	[MsgProtocolResponseMethods.RequestResponse]: ExtensionMessage<unknown>;
-	[MsgProtocolRequestMethods.RequestConfirmation]: ExtensionMessage<ConfirmationRequest>;
-	[MsgProtocolResponseMethods.ConfirmResponse]: {
-		id: number;
-		data: boolean;
-	};
+	// Symmetric request/response: the pegasus key already identifies the message, so the
+	// payload carries only the correlation id + the confirmation body (no redundant method).
+	[MsgProtocolRequestMethods.RequestConfirmation]: { id: number; data: ConfirmationRequest };
+	[MsgProtocolResponseMethods.ConfirmResponse]: { id: number; data: ConfirmationDecision };
 };
 
 export type PegasusEventProtocolMap = {

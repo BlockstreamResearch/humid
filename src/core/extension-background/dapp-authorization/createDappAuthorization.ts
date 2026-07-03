@@ -1,6 +1,8 @@
 import type { AccountRegistry } from "@/core/accounts/application/account-registry/AccountRegistry";
+import type { AccountGroupRecord } from "@/core/accounts/application/account-registry/model/account-group";
 import type { AccountModelState } from "@/core/accounts/application/account-registry/model/account-model";
 import type { DappSessionScope } from "@/core/accounts/application/account-registry/model/dapp-session";
+import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
 import {
 	type Caip25CreateSessionParams,
 	type Caip25CreateSessionResult,
@@ -10,14 +12,21 @@ import {
 	mergeRequestedScopes,
 	toCaip25Scopes,
 } from "@/core/caip25";
-import type { ConfirmationRequest } from "@/helpers/background";
+import type { WalletCapabilityDescriptor } from "@/core/wallet-methods/capability";
+import type { ConfirmationDecision, ConfirmationRequest } from "@/helpers/background";
 
+import {
+	DAPP_CONNECT_CONFIRMATION_KIND,
+	type DappConnectConfirmationData,
+	type DappConnectConfirmationResult,
+} from "./connectConfirmation";
 import { dappAuthorizationErrors } from "./errors";
 
 const INJECTED_TRANSPORT = "injected" as const;
 
 /** Chain-derived part of a granted scope (chains + methods + notifications). */
 export type SupportedDappScope = {
+	capabilities: WalletCapabilityDescriptor[];
 	chains: string[];
 	events: string[];
 	methods: string[];
@@ -32,7 +41,10 @@ export type DappRequestDispatch = (request: {
 }) => Promise<unknown>;
 
 export type DappAuthorizationDependencies = {
-	confirm: (request: ConfirmationRequest) => Promise<boolean>;
+	/** Show a confirmation and resolve the user's decision (approval + optional typed result). */
+	confirm: <TResult = unknown>(
+		request: ConfirmationRequest,
+	) => Promise<ConfirmationDecision<TResult>>;
 	/** Executes an authorized chain request (chain resolution + context build). */
 	dispatch: DappRequestDispatch;
 	/** Current account model, or null when the vault is locked. */
@@ -93,24 +105,43 @@ export function createDappAuthorization(
 			);
 		}
 
+		const accountGroups = listConnectableAccountGroups(accountModel);
+		const currentAccountGroupId = trySelectedAccountGroupId(registry, accountModel);
+
+		const connectData: DappConnectConfirmationData = {
+			accounts: accountGroups.map((group) => ({
+				id: group.id,
+				isCurrent: group.id === currentAccountGroupId,
+				name: group.name,
+			})),
+			capabilities: supported.capabilities,
+			chains: supported.chains,
+			kind: DAPP_CONNECT_CONFIRMATION_KIND,
+			origin: requestingOrigin,
+		};
+
+		const decision = await confirm<DappConnectConfirmationResult>({
+			title: "Connect this dapp?",
+			message: requestingOrigin,
+			data: connectData,
+		});
+
+		if (!decision.approved) {
+			throw dappAuthorizationErrors.userRejected("User rejected the connection request.");
+		}
+
 		const scope: DappSessionScope = {
-			accountGroupIds: selectedAccountGroupIds(registry, accountModel),
+			accountGroupIds: resolveGrantedAccountGroupIds(
+				accountGroups,
+				currentAccountGroupId,
+				decision.result,
+			),
 			chainAccountIds: [],
 			chains: supported.chains,
 			events: supported.events,
-			methods: supported.methods,
+			methods: resolveGrantedMethods(supported.methods, decision.result),
 		};
 		const sessionScopes = toCaip25Scopes(scope);
-
-		const approved = await confirm({
-			title: "Connect this dapp?",
-			message: requestingOrigin,
-			data: { origin: requestingOrigin, scopes: sessionScopes },
-		});
-
-		if (!approved) {
-			throw dappAuthorizationErrors.userRejected("User rejected the connection request.");
-		}
 
 		const createdAt = now();
 		const expiresAt =
@@ -204,6 +235,20 @@ export function createDappAuthorization(
 	return { createSession, getSession, invokeMethod, revokeSession };
 }
 
+function resolveGrantedMethods(
+	supportedMethods: string[],
+	result: DappConnectConfirmationResult | undefined,
+): string[] {
+	const selected = result?.grantedMethods;
+
+	// No structured result (e.g. an older popup that only returns approve/reject) → grant all
+	// supported. When the connect modal returns a selection, grant only the chosen subset,
+	// intersected with what is supported so a client can never widen its own grant.
+	if (!selected) return supportedMethods;
+
+	return supportedMethods.filter((method) => selected.includes(method));
+}
+
 function requireOrigin(origin: string | null): string {
 	if (!origin) {
 		throw dappAuthorizationErrors.unauthorized("Could not determine the requesting dapp origin.");
@@ -247,15 +292,39 @@ function parseInvokeParams(params: unknown): Caip27InvokeMethodParams {
 	};
 }
 
-function selectedAccountGroupIds(
+function listConnectableAccountGroups(accountModel: AccountModelState): AccountGroupRecord[] {
+	return Object.values(accountModel.accountGroups)
+		.filter((group) => !group.hidden)
+		.toSorted((a, b) => (a.groupIndex ?? 0) - (b.groupIndex ?? 0));
+}
+
+function trySelectedAccountGroupId(
 	registry: AccountRegistry,
 	accountModel: AccountModelState,
-): DappSessionScope["accountGroupIds"] {
+): AccountGroupId | undefined {
 	try {
-		return [registry.getSelectedAccountGroup(accountModel).id];
+		return registry.getSelectedAccountGroup(accountModel).id;
 	} catch {
-		return [];
+		return undefined;
 	}
+}
+
+function resolveGrantedAccountGroupIds(
+	accountGroups: AccountGroupRecord[],
+	currentAccountGroupId: AccountGroupId | undefined,
+	result: DappConnectConfirmationResult | undefined,
+): AccountGroupId[] {
+	const selected = result?.grantedAccountGroupIds;
+
+	// No structured result (e.g. an older popup) → default to the current account only. When the
+	// connect modal returns a selection, grant only the chosen groups (∩ what exists).
+	if (!selected) {
+		return currentAccountGroupId ? [currentAccountGroupId] : [];
+	}
+
+	const selectedSet = new Set(selected);
+
+	return accountGroups.map((group) => group.id).filter((id) => selectedSet.has(id));
 }
 
 function injectedSessionIdsForOrigin(accountModel: AccountModelState, origin: string) {

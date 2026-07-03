@@ -1,4 +1,5 @@
-import type { WalletRpcBaseContext, WalletRpcDispatcher } from "@/core/wallet-rpc/types";
+import type { WalletMethodRegistry } from "@/core/wallet-methods/createWalletMethodRegistry";
+import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 import type { WalletConnectNamespaceAdapter } from "@/core/walletconnect/types";
 
 import type { ChainGroupId, ChainRecord } from "./ChainRecord";
@@ -10,5 +11,6 @@ export type ChainGroup<
 	chains: readonly TChain[];
 	id: ChainGroupId;
 	walletConnectAdapter: WalletConnectNamespaceAdapter;
-	walletRpcDispatcher: WalletRpcDispatcher<TContext>;
+	/** The chain's RPC surface: JSON-RPC dispatcher plus its connect-time capabilities. */
+	walletRpcDispatcher: WalletMethodRegistry<TContext>;
 };

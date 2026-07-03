@@ -2,7 +2,7 @@ import { definePegasusMessageBus } from "@webext-pegasus/transport";
 import { useEffect } from "react";
 
 import type { PegasusMsgProtocolMap } from "@/background";
-import { useConfirm } from "@/common/ConfirmationPopup";
+import { useConfirm } from "@/common/Confirmation";
 import { MsgProtocolRequestMethods, MsgProtocolResponseMethods } from "@/helpers/background";
 
 type ActionsHandlerProps = {
@@ -16,12 +16,11 @@ export default function ActionsHandler({ messageBus }: ActionsHandlerProps) {
 		const removeRequestConfirmationListener = messageBus.onMessage(
 			MsgProtocolRequestMethods.RequestConfirmation,
 			async ({ data }) => {
-				const confirmationData = data.data;
-				const isConfirmed = await confirm(confirmationData?.title, confirmationData?.message);
+				const decision = data.data ? await confirm(data.data) : { approved: false };
 
 				await messageBus.sendMessage(MsgProtocolResponseMethods.ConfirmResponse, {
 					id: data.id ?? -1,
-					data: isConfirmed,
+					data: decision,
 				});
 			},
 		);

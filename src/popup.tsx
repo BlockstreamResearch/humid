@@ -8,7 +8,7 @@ import { initPegasusTransport } from "@webext-pegasus/transport/popup";
 import React from "react";
 import { createRoot } from "react-dom/client";
 
-import { ConfirmProvider } from "@/common/ConfirmationPopup";
+import { ConfirmProvider } from "@/common/Confirmation";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
 import { initGlobalErrorReporting } from "@/core/report";

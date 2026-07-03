@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
-import { useConfirm } from "@/common/ConfirmationPopup";
+import { useConfirm } from "@/common/Confirmation";
 import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/client";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiField, UiFieldError, UiFieldGroup, UiFieldLabel } from "@/ui/UiField";
@@ -86,12 +86,12 @@ export function LocalAuthPage() {
 
 		clearFeedback();
 
-		const confirmed = await confirm(
-			"Reset local vault?",
-			"This will remove the encrypted vault from this browser profile.",
-		);
+		const { approved } = await confirm({
+			title: "Reset local vault?",
+			message: "This will remove the encrypted vault from this browser profile.",
+		});
 
-		if (!confirmed) {
+		if (!approved) {
 			setResetNotice("Reset cancelled. Your encrypted vault is still on this device.");
 			return;
 		}
