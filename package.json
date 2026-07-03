@@ -3,7 +3,8 @@
 	"version": "1.0.0",
 	"private": true,
 	"workspaces": [
-		"apps/*"
+		"apps/*",
+		"packages/*"
 	],
 	"type": "module",
 	"scripts": {
@@ -13,6 +14,10 @@
 		"build:watch": "vite build --watch --mode development",
 		"analyze": "vite build --mode analyze",
 		"preview": "vite preview",
+		"web:dev": "bun --filter='./apps/web' run dev",
+		"web:build": "bun --filter='./apps/web' run build",
+		"web:preview": "bun --filter='./apps/web' run preview",
+		"web:typecheck": "bun --filter='./apps/web' run typecheck",
 		"typecheck": "tsc --noEmit",
 		"lint": "oxlint .",
 		"lint:fix": "oxlint . --fix",

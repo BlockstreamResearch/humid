@@ -1,0 +1,17 @@
+{
+	"name": "@humid/appkit-injected-adapter",
+	"version": "1.0.0",
+	"private": true,
+	"description": "AppKit adapter for injected CAIP-25 / CAIP-27 wallets — agnostic core plus a ready-to-use HUMID Liquid preset.",
+	"type": "module",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"peerDependencies": {
+		"@reown/appkit": ">=1.8.0",
+		"@reown/appkit-common": ">=1.8.0",
+		"@reown/appkit-controllers": ">=1.8.0",
+		"@walletconnect/universal-provider": ">=2.0.0"
+	}
+}

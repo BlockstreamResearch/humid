@@ -12,7 +12,11 @@
 	},
 	"overrides": [
 		{
-			"files": ["apps/extension/src/ui/**", "apps/extension/src/routes/app/components/**"],
+			"files": [
+				"apps/extension/src/ui/**",
+				"apps/extension/src/routes/app/components/**",
+				"apps/web/src/components/**"
+			],
 			"rules": {
 				"jsx-a11y/prefer-tag-over-role": "warn",
 				"jsx-a11y/no-redundant-roles": "warn",
