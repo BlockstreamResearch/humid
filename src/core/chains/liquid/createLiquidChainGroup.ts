@@ -36,6 +36,11 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 
 				return walletBackend.getReceiveAddress(account);
 			},
+			async resolveAccountIdentifier(input) {
+				const account = await walletBackend.resolveAccount(input);
+
+				return account.accountIdentifier;
+			},
 			async resolveScanTarget(input) {
 				const account = await walletBackend.resolveAccount(input);
 

@@ -16,6 +16,7 @@ import type {
 } from "@/core/chains/application/chains-rpc/model/types";
 
 import type { RequestHandlerMap } from "../transport";
+import { emitWalletEvent } from "../wallet-events";
 
 // Only the fields the handlers read — sidesteps the ChainGroup dispatcher's
 // generic variance so a concrete LiquidChainGroup assigns cleanly.
@@ -55,6 +56,9 @@ export function createChainsInternalHandlers(
 			if (!chain) throw new Error(`Unknown chain: ${chainId}`);
 
 			await setUnlockedSelectedChainId(chain.chainGroupId, chainId);
+
+			// The wallet's active chain changed — notify connected dapps (MetaMask-style chainChanged).
+			emitWalletEvent("chainChanged", { chainId });
 
 			return readChainsState(chainGroups);
 		},

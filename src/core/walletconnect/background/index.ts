@@ -18,6 +18,8 @@ import { getWalletConnectStatus as readWalletConnectStatus } from "./status";
 import type { WalletConnectBackgroundOptions } from "./types";
 import { assertWalletConnectUri } from "./uri";
 
+export { emitWalletConnectWalletEvent } from "./session-events";
+
 export function registerWalletConnectNamespaceAdapter(
 	adapter: WalletConnectNamespaceAdapter,
 ): () => void {

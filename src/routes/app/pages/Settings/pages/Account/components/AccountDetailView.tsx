@@ -3,6 +3,7 @@ import {
 	Delete01Icon,
 	Key01Icon,
 	PencilEdit01Icon,
+	PlugSocketIcon,
 	Shield01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -92,6 +93,13 @@ export function AccountDetailView({
 						to="/app/settings/account/$accountGroupId/recovery-phrase"
 					>
 						<SettingsRowContent icon={Shield01Icon} label="Reveal recovery phrase" />
+					</Link>
+					<Link
+						className={cn(settingsRowClass, "hover:bg-accent")}
+						params={{ accountGroupId }}
+						to="/app/settings/account/$accountGroupId/connected-dapps"
+					>
+						<SettingsRowContent icon={PlugSocketIcon} label="Connected dapps" />
 					</Link>
 					<button
 						className={cn(settingsRowClass, "text-destructive hover:bg-destructive/10")}

@@ -14,9 +14,19 @@ export const LIQUID_WALLET_RPC_METHODS = {
 	SIGN_PSET: "signPset",
 } as const;
 
-export const LIQUID_WALLETCONNECT_EVENTS = [] as const;
-
 export const LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT = "bip122_walletDescriptorChanged";
+
+/**
+ * CAIP-25 events advertised in a Liquid session's scope (both transports). The dapp subscribes to
+ * these and the wallet emits each on the matching state change. Hybrid naming: `accountsChanged` /
+ * `chainChanged` are the EIP-1193 core (MetaMask parity + what reown AppKit's adapter listens for);
+ * `bip122_walletDescriptorChanged` is the ELIP-1 chain-scoped notification.
+ */
+export const LIQUID_WALLETCONNECT_EVENTS = [
+	"accountsChanged",
+	"chainChanged",
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
+] as const;
 
 export type LiquidWalletConnectEvent = (typeof LIQUID_WALLETCONNECT_EVENTS)[number];
 

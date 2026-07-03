@@ -5,13 +5,16 @@ import {
 	createSecureVault,
 	getSecureVaultStatus,
 	getUnlockedSecureVaultStorage,
+	getVaultLastActivityAt,
 	initializeSecureVaultStorage,
 	lockSecureVault,
 	resetSecureVault,
+	touchVaultActivity,
 	unlockSecureVault,
 } from "@/core/secure-vault/background";
 import type { SecureVaultStatus } from "@/core/secure-vault/types";
 
+import { getAutoLockMinutes } from "../auto-lock";
 import type {
 	WalletVaultCreateInput,
 	WalletVaultStatus,
@@ -20,6 +23,25 @@ import type {
 
 async function initializeStorage(): Promise<WalletVaultStatus> {
 	const status = await initializeSecureVaultStorage();
+
+	// The vault storage may have been restored from the session-cached data key (surviving an MV3
+	// service-worker restart). If so, rehydrate the key-manager + chain state too; otherwise the
+	// vault is genuinely locked. Fall back to locked if rehydration fails.
+	if (status.isUnlocked) {
+		try {
+			const storage = getUnlockedSecureVaultStorage();
+
+			await keyManagerStore.loadUnlockedState(storage);
+			await getUnlockedChainStoreState(storage);
+
+			return toWalletVaultStatus(status);
+		} catch {
+			clearUnlockedState();
+
+			return toWalletVaultStatus(await lockSecureVault());
+		}
+	}
+
 	clearUnlockedState();
 
 	return toWalletVaultStatus(status);
@@ -91,6 +113,36 @@ async function getStatus(): Promise<WalletVaultStatus> {
 	return toWalletVaultStatus(await getSecureVaultStatus());
 }
 
+/**
+ * Idle auto-lock: called periodically (MV3 alarm). Locks the vault once it has been unlocked but
+ * unused for at least the configured timeout. A zero timeout disables it (lock only on browser
+ * close or a manual lock). Returns whether it locked this time.
+ */
+async function enforceAutoLock(): Promise<boolean> {
+	const minutes = await getAutoLockMinutes();
+
+	if (minutes <= 0) return false;
+
+	const status = await getSecureVaultStatus();
+
+	if (!status.isUnlocked) return false;
+
+	const lastActivityAt = await getVaultLastActivityAt();
+
+	// No timestamp yet (freshly restored, or storage unsupported) → start the clock, don't lock.
+	if (lastActivityAt === null) {
+		await touchVaultActivity();
+
+		return false;
+	}
+
+	if (Date.now() - lastActivityAt < minutes * 60_000) return false;
+
+	await lock();
+
+	return true;
+}
+
 function toWalletVaultStatus(status: SecureVaultStatus): WalletVaultStatus {
 	const keyManagerState = keyManagerStore.getCachedState();
 
@@ -119,6 +171,7 @@ function clearUnlockedState(): void {
 
 export const walletVaultBackground = {
 	create,
+	enforceAutoLock,
 	getStatus,
 	initializeStorage,
 	keyManager: {

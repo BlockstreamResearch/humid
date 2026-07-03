@@ -10,14 +10,20 @@ import type {
 } from "@/core/accounts/application/accounts-rpc/model/types";
 import type { Caip25Scopes } from "@/core/caip25";
 import { getUnlockedChainStoreState } from "@/core/chains/application/chain-store/secureChainStore";
-import { buildLiquidDappAccountScope } from "@/core/chains/liquid/application/dappAccountScope";
+import {
+	buildLiquidDappAccountScope,
+	resolveAccountGroupIdsForIdentifiers,
+} from "@/core/chains/liquid/application/dappAccountScope";
 import { resolveUnlockedLiquidChain } from "@/core/chains/liquid/chains/resolveLiquidChain";
 import type { LiquidScanTarget } from "@/core/chains/liquid/contract";
 import { createLiquidChainGroup } from "@/core/chains/liquid/createLiquidChainGroup";
+import { LIQUID_WALLETCONNECT_EVENTS } from "@/core/chains/liquid/domain/LiquidRpc";
 import { parseLiquidChainId } from "@/core/chains/liquid/domain/validation";
 import { createConfirmationResponder } from "@/core/extension-background/confirmations";
 import {
 	createDappAuthorization,
+	createDappConnectInternalHandlers,
+	createDappSessionsInternalHandlers,
 	type DappRequestDispatch,
 	type SupportedDappScope,
 } from "@/core/extension-background/dapp-authorization";
@@ -31,10 +37,17 @@ import { createSessionPortfolioSnapshotStore } from "@/core/extension-background
 import { createSessionScanTargetStore } from "@/core/extension-background/portfolio-sync/scanTargetStore";
 import {
 	registerBackgroundRpc,
+	type RequestHandlerMap,
 	setupBackgroundTransport,
 } from "@/core/extension-background/transport";
+import {
+	emitWalletEvent,
+	initWalletEventBroadcaster,
+} from "@/core/extension-background/wallet-events";
 import { walletVaultBackground } from "@/core/secure-vault/application/wallet-vault/background";
+import { touchVaultActivity } from "@/core/secure-vault/background";
 import * as walletConnect from "@/core/walletconnect/background";
+import type { WalletConnectSessionSummary } from "@/core/walletconnect/types";
 import {
 	type ConfirmationRequest,
 	initNotificationManagement,
@@ -66,6 +79,20 @@ async function updateAccountModel(
 	return state.accountModel;
 }
 
+/** Wrap popup handlers so any popup-context request counts as wallet activity (resets idle lock). */
+function withVaultActivityTouch(handlers: RequestHandlerMap): RequestHandlerMap {
+	return Object.fromEntries(
+		Object.entries(handlers).map(([method, handler]) => [
+			method,
+			(message, sender) => {
+				void touchVaultActivity();
+
+				return handler(message, sender);
+			},
+		]),
+	);
+}
+
 /** MV3 alarm that refreshes the last-active account's balances while the popup is closed. */
 const PORTFOLIO_REFRESH_ALARM = "portfolio-refresh";
 const PORTFOLIO_REFRESH_PERIOD_MINUTES = 1;
@@ -74,7 +101,14 @@ const PORTFOLIO_REFRESH_PERIOD_MINUTES = 1;
 const BACKGROUND_REFRESH_MIN_INTERVAL_MS = 60_000;
 
 const init = async () => {
-	const messageBus = setupBackgroundTransport();
+	const { eventBus, messageBus } = setupBackgroundTransport();
+
+	// Capture the event bus so the wallet-event broadcaster can push provider events (accountsChanged,
+	// chainChanged, …) to dapps over both transports: injected (window.humid.on) and, via this sink,
+	// WalletConnect (per-session). The WC sink no-ops until the WalletConnect client is up (below).
+	initWalletEventBroadcaster(eventBus, (event, payload) => {
+		void walletConnect.emitWalletConnectWalletEvent(event, payload).catch(() => undefined);
+	});
 
 	await authStore.backendReady();
 
@@ -115,7 +149,7 @@ const init = async () => {
 		return {
 			capabilities: dispatcher.capabilities.filter((capability) => methods.has(capability.id)),
 			chains: [...chains],
-			events: [],
+			events: [...LIQUID_WALLETCONNECT_EVENTS],
 			methods: [...methods],
 		};
 	};
@@ -230,11 +264,101 @@ const init = async () => {
 		);
 	};
 
+	// Resolve (and materialize) the CAIP-10 account ids the granted account groups map to on a chain,
+	// so the connect result can advertise them (no follow-up descriptor read + approval at connect).
+	const resolveConnectedAccountIds = async (
+		chainId: string,
+		accountGroupIds: readonly string[],
+	): Promise<string[]> => {
+		let liquidChainId;
+
+		try {
+			liquidChainId = parseLiquidChainId(chainId);
+		} catch {
+			return [];
+		}
+
+		const chain = await resolveUnlockedLiquidChain(liquidChainId);
+		const keyManagerState = walletVaultBackground.keyManager.getState();
+		const { accountModel } = keyManagerState;
+		const accountIds: string[] = [];
+
+		for (const accountGroupId of accountGroupIds) {
+			const group = Object.values(accountModel.accountGroups).find(
+				(candidate) => candidate.id === accountGroupId,
+			);
+
+			if (!group) continue;
+
+			accountIds.push(
+				await liquidChainGroup.accountRuntime.resolveAccountIdentifier({
+					accountGroupIndex: group.groupIndex ?? 0,
+					chain,
+					keySourceId: accountModel.wallets[group.walletId]?.keySourceId,
+					keyManagerState,
+					updateKeyManagerState: walletVaultBackground.keyManager.updateState,
+				}),
+			);
+		}
+
+		return accountIds;
+	};
+
+	// Connected-dapps viewer plumbing. Injected sessions store their account groups directly; a
+	// WalletConnect session stores CAIP-10 accounts, so map those back to account groups (via the same
+	// Liquid resolver the WC request path uses) so both transports list under the same accounts.
+	const listWalletConnectSessions = (): WalletConnectSessionSummary[] =>
+		walletConnect.getWalletConnectStatus().sessions;
+
+	const resolveWalletConnectAccountGroupIds = (session: WalletConnectSessionSummary): string[] => {
+		const accountModel = getAccountModel();
+
+		if (!accountModel) return [];
+
+		const accountsByChain = new Map<string, string[]>();
+
+		for (const scope of Object.values(session.namespaces)) {
+			for (const account of scope.accounts) {
+				const chainId = account.split(":").slice(0, 2).join(":");
+				const accounts = accountsByChain.get(chainId) ?? [];
+				accounts.push(account);
+				accountsByChain.set(chainId, accounts);
+			}
+		}
+
+		const accountGroupIds = new Set<string>();
+
+		for (const [chainId, accounts] of accountsByChain) {
+			let liquidChainId;
+
+			try {
+				liquidChainId = parseLiquidChainId(chainId);
+			} catch {
+				continue;
+			}
+
+			for (const groupId of resolveAccountGroupIdsForIdentifiers(
+				accountModel,
+				liquidChainId,
+				accounts,
+			)) {
+				accountGroupIds.add(groupId);
+			}
+		}
+
+		return [...accountGroupIds];
+	};
+
+	const disconnectWalletConnect = async (topic: string): Promise<void> => {
+		await walletConnect.disconnectWalletConnectSession({ topic });
+	};
+
 	const dappAuthorization = createDappAuthorization({
 		confirm: confirmations.confirm,
 		dispatch: dispatchInjectedLiquidRequest,
 		getAccountModel,
 		registry: accountRegistry,
+		resolveConnectedAccountIds,
 		resolveSupportedScope: resolveSupportedLiquidScope,
 		updateAccountModel,
 	});
@@ -247,17 +371,30 @@ const init = async () => {
 
 	registerBackgroundRpc(messageBus, {
 		injected: createInjectedRpcHandlers({ authorization: dappAuthorization }),
-		popup: createInternalRpcHandlers({
-			chainGroups: [liquidChainGroup],
-			confirmations,
-			getActivity,
-			getPortfolio,
-			getReceiveAddress,
+		popup: withVaultActivityTouch({
+			...createInternalRpcHandlers({
+				chainGroups: [liquidChainGroup],
+				confirmations,
+				getActivity,
+				getPortfolio,
+				getReceiveAddress,
+			}),
+			...createDappConnectInternalHandlers({ getAccountModel, registry: accountRegistry }),
+			...createDappSessionsInternalHandlers({
+				disconnectWalletConnect,
+				getAccountModel,
+				listWalletConnectSessions,
+				registry: accountRegistry,
+				resolveWalletConnectAccountGroupIds,
+				updateAccountModel,
+			}),
 		}),
 	});
 
 	updateBadgeOnStorageChange();
-	initNotificationManagement();
+	// Cancel a pending confirmation when the user closes the notification window (so an abandoned
+	// connect/sign prompt doesn't wedge the dapp's request until the timeout).
+	initNotificationManagement(() => confirmations.cancelActive());
 
 	// Create the periodic background-refresh alarm once (it persists across SW sleeps); guarding on
 	// get() avoids resetting its schedule every time the SW wakes and re-runs init.
@@ -274,13 +411,20 @@ const init = async () => {
 let initialization: ReturnType<typeof init> | null = null;
 const ensureInitialized = (): ReturnType<typeof init> => (initialization ??= init());
 
-// Registered at the top level so it catches the alarm that wakes the service worker. The refresh is
-// watch-only (scans a cached descriptor), so it works even though the vault re-locks on SW sleep.
+// Registered at the top level so it catches the alarm that wakes the service worker: it enforces the
+// idle auto-lock and runs the watch-only portfolio refresh (which works whether or not the vault is
+// unlocked).
 browser.alarms.onAlarm.addListener(async (alarm) => {
 	if (alarm.name !== PORTFOLIO_REFRESH_ALARM) return;
 
 	try {
 		const { backgroundRefresh } = await ensureInitialized();
+
+		const locked = await walletVaultBackground.enforceAutoLock();
+
+		// Idle auto-lock hit — mirror it to dapps like a manual lock (they re-query and get an empty
+		// set while the vault stays locked).
+		if (locked) emitWalletEvent("accountsChanged");
 
 		await backgroundRefresh();
 	} catch (error) {

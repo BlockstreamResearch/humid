@@ -5,6 +5,11 @@ export {
 	type DappRequestDispatch,
 	type SupportedDappScope,
 } from "./createDappAuthorization";
+export { createDappConnectInternalHandlers } from "./connectableAccounts";
+export {
+	createDappSessionsInternalHandlers,
+	type DappSessionsHandlersDependencies,
+} from "./dappSessions";
 export {
 	DAPP_CONNECT_CONFIRMATION_KIND,
 	type DappConnectConfirmationData,

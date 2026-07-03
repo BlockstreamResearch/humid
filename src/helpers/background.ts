@@ -91,7 +91,7 @@ export async function getNotification(): Promise<browser.Windows.Window | null> 
 	);
 }
 
-export function initNotificationManagement(): void {
+export function initNotificationManagement(onUnexpectedClose?: () => void): void {
 	browser.windows.onRemoved.addListener((windowId) => {
 		if (windowId !== notificationWindowId) return;
 
@@ -99,6 +99,9 @@ export function initNotificationManagement(): void {
 
 		if (!isClosingNotificationByUserAction) {
 			console.warn("Notification closed unexpectedly. Clean up pending operations.");
+			// The user dismissed the prompt — cancel the awaiting confirmation so the dapp request
+			// behind it returns now instead of blocking until the timeout.
+			onUnexpectedClose?.();
 		}
 
 		isClosingNotificationByUserAction = false;

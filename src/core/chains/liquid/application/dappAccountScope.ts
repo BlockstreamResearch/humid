@@ -29,10 +29,11 @@ export type LiquidDappAccountTarget = {
  */
 export type LiquidDappAccountScope = {
 	/**
-	 * Target when the dapp names no account: the first authorized group (null if none). ELIP-1
-	 * says a no-account read/sign applies to the session's account and MUST reject on ambiguity;
-	 * we instead default to the first authorized group (MetaMask-style) — a deliberate deviation
-	 * for multi-account sessions.
+	 * Target when the dapp names no account: the wallet's globally-selected account when it is in
+	 * the authorized set, else the lowest-`groupIndex` authorized group (null if none). ELIP-1 says
+	 * a no-account read/sign applies to the session's account and MUST reject on ambiguity; we
+	 * instead follow the wallet's selection (MetaMask-style Model B) — a deliberate deviation for
+	 * multi-account sessions that also makes an in-wallet account switch reactive for the dapp.
 	 */
 	default: LiquidDappAccountTarget | null;
 	/**
@@ -117,8 +118,9 @@ export function resolveAccountGroupIdsForIdentifiers(
 /**
  * Build a {@link LiquidDappAccountScope} from a session's authorized account groups and the
  * current account model. Chain-agnostic inputs in, Liquid derivation coordinates out: the default
- * is the lowest-`groupIndex` authorized group; `resolve` searches only those groups, so an
- * unauthorized account-id can never map to a target.
+ * follows the wallet's selected account when authorized (Model B), else the lowest-`groupIndex`
+ * authorized group; `resolve` searches only those groups, so an unauthorized account-id can never
+ * map to a target.
  */
 export function buildLiquidDappAccountScope(input: {
 	accountGroupIds: readonly string[];
@@ -138,8 +140,16 @@ export function buildLiquidDappAccountScope(input: {
 		keySourceId: accountModel.wallets[group.walletId]?.keySourceId,
 	});
 
+	// Model B (MetaMask-style): the no-account default follows the wallet's globally-selected account
+	// when it is within the session's authorized set, so switching account in the wallet reactively
+	// changes what an injected dapp reads (paired with the accountsChanged event). Falls back to the
+	// lowest-`groupIndex` authorized group otherwise.
+	const defaultGroup =
+		authorizedGroups.find((group) => group.id === accountModel.selectedAccountGroupId) ??
+		authorizedGroups[0];
+
 	return {
-		default: authorizedGroups.length > 0 ? toTarget(authorizedGroups[0]) : null,
+		default: defaultGroup ? toTarget(defaultGroup) : null,
 		resolve: (accountIdentifier) => {
 			for (const group of authorizedGroups) {
 				const chainAccount = resolveChainAccount({

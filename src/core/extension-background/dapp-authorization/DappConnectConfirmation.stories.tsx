@@ -73,13 +73,14 @@ const meta = {
 	args: {
 		data: {
 			accounts: [
-				{ id: "account-group:1", isCurrent: true, name: "Account 1" },
-				{ id: "account-group:2", isCurrent: false, name: "Account 2" },
+				{ id: "account-group:1", isConnected: false, isCurrent: true, name: "Account 1" },
+				{ id: "account-group:2", isConnected: true, isCurrent: false, name: "Account 2" },
 			],
 			capabilities,
 			chains: ["bip122:1466275836220db2944ca059a3a10ef6"],
 			kind: "dappConnect",
 			origin: "https://app.example.org",
+			requiresUnlock: false,
 		},
 		onConfirm: fn(),
 		onDecline: fn(),
@@ -92,6 +93,20 @@ type Story = StoryObj<typeof meta>;
 
 /** All requested permissions, checked by default; the user reviews and trims. */
 export const Default: Story = {};
+
+/** Locked wallet: the connect request opens on an unlock step before the account list. */
+export const Locked: Story = {
+	args: {
+		data: {
+			accounts: [],
+			capabilities,
+			chains: ["bip122:1466275836220db2944ca059a3a10ef6"],
+			kind: "dappConnect",
+			origin: "https://app.example.org",
+			requiresUnlock: true,
+		},
+	},
+};
 
 /** Unchecking "Sign transactions" grants only the remaining capabilities. */
 export const GrantSubset: Story = {

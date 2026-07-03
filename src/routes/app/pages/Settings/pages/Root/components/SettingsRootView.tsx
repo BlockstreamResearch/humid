@@ -16,9 +16,20 @@ import { UiBadge } from "@/ui/UiBadge";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiScrollArea } from "@/ui/UiScrollArea";
 
+// Idle auto-lock choices shown in Settings (must mirror AUTO_LOCK_MINUTES_OPTIONS on the backend).
+const AUTO_LOCK_OPTIONS: { label: string; minutes: number }[] = [
+	{ label: "5 minutes", minutes: 5 },
+	{ label: "15 minutes", minutes: 15 },
+	{ label: "30 minutes", minutes: 30 },
+	{ label: "1 hour", minutes: 60 },
+	{ label: "Never (until browser close)", minutes: 0 },
+];
+
 type SettingsRootViewProps = {
 	accountGroups: AccountGroupRecord[];
+	autoLockMinutes: number;
 	isLocking: boolean;
+	onAutoLockChange: (minutes: number) => void;
 	onLock: () => void;
 	onSwitch: (accountGroupId: AccountGroupId) => void;
 	selectedAccountGroupId: AccountGroupId | null;
@@ -27,7 +38,9 @@ type SettingsRootViewProps = {
 /** Settings landing: general vault actions + the account list (switch / drill in). */
 export function SettingsRootView({
 	accountGroups,
+	autoLockMinutes,
 	isLocking,
+	onAutoLockChange,
 	onLock,
 	onSwitch,
 	selectedAccountGroupId,
@@ -49,6 +62,24 @@ export function SettingsRootView({
 							<HugeiconsIcon className="text-muted-foreground" icon={SquareLock01Icon} size={18} />
 							<span className="flex-1 text-sm font-medium">Lock wallet</span>
 						</button>
+						<div className="flex items-center gap-3 rounded-lg px-2 py-2.5">
+							<HugeiconsIcon className="text-muted-foreground" icon={SquareLock01Icon} size={18} />
+							<label className="flex-1 text-sm font-medium" htmlFor="settings-auto-lock">
+								Auto-lock when idle
+							</label>
+							<select
+								id="settings-auto-lock"
+								className="border-input bg-background text-foreground rounded-md border px-2 py-1 text-sm"
+								value={String(autoLockMinutes)}
+								onChange={(event) => onAutoLockChange(Number(event.target.value))}
+							>
+								{AUTO_LOCK_OPTIONS.map((option) => (
+									<option key={option.minutes} value={option.minutes}>
+										{option.label}
+									</option>
+								))}
+							</select>
+						</div>
 						<Link
 							className="hover:bg-accent flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors"
 							to="/app/settings/chains"

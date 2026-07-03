@@ -20,6 +20,7 @@ import { addImportedSeedToKeyManagerState } from "@/core/key-manager/state/impor
 import { walletVaultBackground } from "@/core/secure-vault/application/wallet-vault/background";
 
 import type { RequestHandlerMap } from "../transport";
+import { emitWalletEvent } from "../wallet-events";
 
 function readAccountsState(model: AccountModelState): AccountsState {
 	return {
@@ -56,6 +57,11 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 				...current,
 				accountModel: { ...current.accountModel, selectedAccountGroupId: accountGroupId },
 			}));
+
+			// The active account changed in the wallet. Notify connected dapps; injected dapps re-query
+			// their origin-scoped session so their primary account follows the wallet's selection when
+			// it is within their authorized set (Model B).
+			emitWalletEvent("accountsChanged");
 
 			return readAccountsState(next.accountModel);
 		},

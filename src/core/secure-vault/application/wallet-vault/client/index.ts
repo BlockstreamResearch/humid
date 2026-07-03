@@ -35,9 +35,19 @@ async function requestWalletVault(method: string, data?: unknown): Promise<Walle
 	return status;
 }
 
+function getAutoLock(): Promise<{ minutes: number }> {
+	return requestBackground<{ minutes: number }>(walletVaultRpc.methods.getAutoLock);
+}
+
+function setAutoLock(minutes: number): Promise<{ minutes: number }> {
+	return requestBackground<{ minutes: number }>(walletVaultRpc.methods.setAutoLock, { minutes });
+}
+
 export const walletVaultClient = {
 	create,
+	getAutoLock,
 	lock,
 	reset,
+	setAutoLock,
 	unlock,
 };

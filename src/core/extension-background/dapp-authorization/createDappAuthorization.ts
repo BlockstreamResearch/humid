@@ -15,6 +15,13 @@ import {
 import type { WalletCapabilityDescriptor } from "@/core/wallet-methods/capability";
 import type { ConfirmationDecision, ConfirmationRequest } from "@/helpers/background";
 
+import { emitWalletEvent } from "../wallet-events";
+import {
+	buildDappConnectAccounts,
+	connectedAccountGroupIdsForOrigin,
+	listConnectableAccountGroups,
+	trySelectedAccountGroupId,
+} from "./connectableAccounts";
 import {
 	DAPP_CONNECT_CONFIRMATION_KIND,
 	type DappConnectConfirmationData,
@@ -54,6 +61,14 @@ export type DappAuthorizationDependencies = {
 	registry: AccountRegistry;
 	/** Chain-aware filter: which of the requested CAIP-25 scopes are supported. */
 	resolveSupportedScope: (requested: ReturnType<typeof mergeRequestedScopes>) => SupportedDappScope;
+	/**
+	 * Resolve (and materialize) the CAIP-10 account ids a session grants on a chain, so the connect
+	 * result advertises them and a dapp doesn't need a follow-up read to learn its account. Optional.
+	 */
+	resolveConnectedAccountIds?: (
+		chainId: string,
+		accountGroupIds: readonly string[],
+	) => Promise<string[]>;
 	/** Persist an account-model mutation (wraps the unlocked key-manager update). */
 	updateAccountModel: (
 		update: (accountModel: AccountModelState) => AccountModelState,
@@ -81,6 +96,7 @@ export function createDappAuthorization(
 		dispatch,
 		getAccountModel,
 		registry,
+		resolveConnectedAccountIds,
 		resolveSupportedScope,
 		updateAccountModel,
 		now = () => Date.now(),
@@ -95,7 +111,6 @@ export function createDappAuthorization(
 		params: unknown;
 	}): Promise<Caip25CreateSessionResult> => {
 		const requestingOrigin = requireOrigin(origin);
-		const accountModel = requireUnlocked(getAccountModel());
 
 		const requested = mergeRequestedScopes(asCreateSessionParams(params));
 		const supported = resolveSupportedScope(requested);
@@ -107,19 +122,24 @@ export function createDappAuthorization(
 			);
 		}
 
-		const accountGroups = listConnectableAccountGroups(accountModel);
-		const currentAccountGroupId = trySelectedAccountGroupId(registry, accountModel);
-
+		// Don't require an unlocked vault up front: a locked wallet still opens the connect modal,
+		// which unlocks first and then loads the accounts (the account list only lives in memory
+		// while unlocked). When already unlocked we pass the accounts straight in.
+		const initialModel = getAccountModel();
+		// Pre-check the accounts the origin's existing session already grants, so a reconnect doesn't
+		// silently drop them (they show as "Connected" in the modal alongside the current account).
+		const connectedAccountGroupIds = initialModel
+			? connectedAccountGroupIdsForOrigin(registry, initialModel, requestingOrigin)
+			: [];
 		const connectData: DappConnectConfirmationData = {
-			accounts: accountGroups.map((group) => ({
-				id: group.id,
-				isCurrent: group.id === currentAccountGroupId,
-				name: group.name,
-			})),
+			accounts: initialModel
+				? buildDappConnectAccounts(initialModel, registry, connectedAccountGroupIds)
+				: [],
 			capabilities: supported.capabilities,
 			chains: supported.chains,
 			kind: DAPP_CONNECT_CONFIRMATION_KIND,
 			origin: requestingOrigin,
+			requiresUnlock: initialModel === null,
 		};
 
 		const decision = await confirm<DappConnectConfirmationResult>({
@@ -132,6 +152,11 @@ export function createDappAuthorization(
 			throw dappAuthorizationErrors.userRejected("User rejected the connection request.");
 		}
 
+		// The modal unlocks the vault as part of approval, so the account model is available now.
+		const accountModel = requireUnlocked(getAccountModel());
+		const accountGroups = listConnectableAccountGroups(accountModel);
+		const currentAccountGroupId = trySelectedAccountGroupId(registry, accountModel);
+
 		const scope: DappSessionScope = {
 			accountGroupIds: resolveGrantedAccountGroupIds(
 				accountGroups,
@@ -143,7 +168,23 @@ export function createDappAuthorization(
 			events: supported.events,
 			methods: resolveGrantedMethods(supported.methods, decision.result),
 		};
-		const sessionScopes = toCaip25Scopes(scope);
+
+		// Resolve (and materialize) the granted account ids per chain so the connect result advertises
+		// them — the dapp then learns its account without a follow-up read (and its extra approval).
+		const accountsByChain: Record<string, string[]> = {};
+
+		if (resolveConnectedAccountIds) {
+			await Promise.all(
+				supported.chains.map(async (chainId) => {
+					accountsByChain[chainId] = await resolveConnectedAccountIds(
+						chainId,
+						scope.accountGroupIds,
+					).catch(() => []);
+				}),
+			);
+		}
+
+		const sessionScopes = toCaip25Scopes(scope, accountsByChain);
 
 		const createdAt = now();
 		const expiresAt =
@@ -190,6 +231,12 @@ export function createDappAuthorization(
 		if (injectedSessionIdsForOrigin(accountModel, origin).length === 0) return { revoked: false };
 
 		await updateAccountModel((model) => revokeInjectedSessionsForOrigin(registry, model, origin));
+
+		// Session gone. On the global injected bus we can't safely raise a per-origin `disconnect`
+		// (it would reach every dapp), so we signal a scope change — each dapp re-queries its own
+		// origin-scoped session and the one that lost it derives its disconnect. WalletConnect, being
+		// point-to-point, raises a real disconnect on its own transport.
+		emitWalletEvent("wallet_sessionChanged");
 
 		return { revoked: true };
 	};
@@ -293,23 +340,6 @@ function parseInvokeParams(params: unknown): Caip27InvokeMethodParams {
 		scope,
 		sessionId: typeof params.sessionId === "string" ? params.sessionId : undefined,
 	};
-}
-
-function listConnectableAccountGroups(accountModel: AccountModelState): AccountGroupRecord[] {
-	return Object.values(accountModel.accountGroups)
-		.filter((group) => !group.hidden)
-		.toSorted((a, b) => (a.groupIndex ?? 0) - (b.groupIndex ?? 0));
-}
-
-function trySelectedAccountGroupId(
-	registry: AccountRegistry,
-	accountModel: AccountModelState,
-): AccountGroupId | undefined {
-	try {
-		return registry.getSelectedAccountGroup(accountModel).id;
-	} catch {
-		return undefined;
-	}
 }
 
 function resolveGrantedAccountGroupIds(

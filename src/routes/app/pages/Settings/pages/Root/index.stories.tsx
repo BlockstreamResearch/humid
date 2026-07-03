@@ -40,7 +40,9 @@ const meta = {
 	component: SettingsRootView,
 	args: {
 		accountGroups: ACCOUNTS,
+		autoLockMinutes: 15,
 		isLocking: false,
+		onAutoLockChange: () => {},
 		onLock: () => {},
 		onSwitch: () => {},
 		selectedAccountGroupId: "account-group:1",

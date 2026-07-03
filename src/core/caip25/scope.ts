@@ -30,15 +30,18 @@ export function mergeRequestedScopes(params: Caip25CreateSessionParams): Caip25S
 }
 
 /**
- * Present a stored flat session scope as per-chain CAIP-25 scope objects.
- * `accounts` stay empty until chain accounts are materialized (handoff item 4).
+ * Present a stored flat session scope as per-chain CAIP-25 scope objects. `accountsByChain`
+ * supplies the resolved CAIP-10 account ids per chain (empty when the caller can't resolve them).
  */
-export function toCaip25Scopes(scope: DappSessionScope): Caip25Scopes {
+export function toCaip25Scopes(
+	scope: DappSessionScope,
+	accountsByChain: Record<string, string[]> = {},
+): Caip25Scopes {
 	const scopes: Caip25Scopes = {};
 
 	for (const scopeString of scope.chains) {
 		scopes[scopeString] = {
-			accounts: [],
+			accounts: accountsByChain[scopeString] ?? [],
 			methods: [...scope.methods],
 			notifications: [...scope.events],
 		};

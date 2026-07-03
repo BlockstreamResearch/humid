@@ -33,6 +33,8 @@ export type LiquidAccountRuntime = {
 		cursor: string | null,
 	) => Promise<LiquidActivityPage>;
 	getReceiveAddress: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidReceiveAddress>;
+	/** The ELIP-1 account id (`chain_id:dwid`) for the derived account. Needs the unlocked vault. */
+	resolveAccountIdentifier: (input: ResolveLiquidWalletAccountInput) => Promise<string>;
 	/** Derive the account's watch-only scan target (chain + descriptor). Needs the unlocked vault. */
 	resolveScanTarget: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidScanTarget>;
 	/** Scan a watch-only target into a portfolio — vault-independent (no keys needed). */

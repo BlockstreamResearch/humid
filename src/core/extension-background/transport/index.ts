@@ -27,13 +27,37 @@ export type PegasusMsgProtocolMap = {
 	[MsgProtocolResponseMethods.ConfirmResponse]: { id: number; data: ConfirmationDecision };
 };
 
+/**
+ * Payload for the wallet provider events broadcast to injected dapps (window.humid.on). This is a
+ * GLOBAL broadcast bus — it reaches every window.humid on every tab — so an event carries only
+ * non-sensitive context (a chainId at most); a dapp re-queries the origin-scoped RPC to read its own
+ * authorized view. The point-to-point WalletConnect transport carries the full scoped payload.
+ */
+export type WalletProviderEventPayload = { chainId?: string };
+
 export type PegasusEventProtocolMap = {
 	[EventProtocolListeners.ExtensionEvent]: unknown;
+	// Hybrid event scheme: EIP-1193 core (MetaMask parity + what reown AppKit's adapter listens for)
+	// + CAIP-25 wallet_sessionChanged + the ELIP-1 chain-scoped `bip122_walletDescriptorChanged`
+	// (name kept in sync with LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT).
+	accountsChanged: WalletProviderEventPayload;
+	bip122_walletDescriptorChanged: WalletProviderEventPayload;
+	chainChanged: WalletProviderEventPayload;
+	connect: WalletProviderEventPayload;
+	disconnect: WalletProviderEventPayload;
+	wallet_sessionChanged: WalletProviderEventPayload;
 };
 
 export type BackgroundMessageBus = ReturnType<
 	typeof definePegasusMessageBus<PegasusMsgProtocolMap>
 >;
+
+export type BackgroundEventBus = ReturnType<typeof definePegasusEventBus<PegasusEventProtocolMap>>;
+
+export type BackgroundTransport = {
+	eventBus: BackgroundEventBus;
+	messageBus: BackgroundMessageBus;
+};
 
 export type RequestHandler = (
 	message: ExtensionMessage,
@@ -48,17 +72,20 @@ export type BackgroundRpcHandlers = {
 };
 
 /**
- * Wires the background transport: pegasus init, the self-id RPC service, and the
- * event/message buses. Returns the message bus the rest of the background uses.
+ * Wires the background transport: pegasus init, the self-id RPC service, and the event/message
+ * buses. Returns both — the message bus for RPC, the event bus for broadcasting wallet provider
+ * events to injected dapps (window.humid.on). The event bus was previously discarded, so nothing
+ * could emit; capturing it here is what makes the wallet-event broadcaster possible.
  */
-export function setupBackgroundTransport(): BackgroundMessageBus {
+export function setupBackgroundTransport(): BackgroundTransport {
 	initPegasusTransport();
 
 	registerRPCService<ISelfIDService>("getSelfID", getSelfIDService);
 
-	definePegasusEventBus<PegasusEventProtocolMap>();
+	const eventBus = definePegasusEventBus<PegasusEventProtocolMap>();
+	const messageBus = definePegasusMessageBus<PegasusMsgProtocolMap>();
 
-	return definePegasusMessageBus<PegasusMsgProtocolMap>();
+	return { eventBus, messageBus };
 }
 
 /**
