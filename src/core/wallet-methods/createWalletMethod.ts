@@ -5,6 +5,7 @@ import {
 } from "@/core/wallet-rpc/errors";
 import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
+import type { WalletMethodCapability } from "./capability";
 import type { ConfirmationPolicy } from "./ConfirmationPolicy";
 
 export type WalletMethodInput<TParams, TContext, TReview> = {
@@ -19,10 +20,26 @@ export type CreateWalletMethodInput<
 	TReview,
 	TResult,
 > = {
+	/**
+	 * Permission descriptor for this method: drives the connect-time checkbox and
+	 * invoke-time enforcement. Optional so non-dapp/internal methods can opt out.
+	 */
+	capability?: WalletMethodCapability<TParams, TContext, TResult>;
 	confirmation?: ConfirmationPolicy<TParams, TContext, TReview>;
 	execute: (input: WalletMethodInput<TParams, TContext, TReview>) => Promise<TResult> | TResult;
 	parse: (params: unknown) => TParams;
 	review: (input: { context: TContext; params: TParams }) => Promise<TReview> | TReview;
+};
+
+/**
+ * A wallet RPC method handler with its permission descriptor attached, so a
+ * chain-agnostic registry can collect capabilities straight off the method fns.
+ */
+export type WalletMethod<TParams, TContext extends WalletRpcBaseContext, TResult> = ((
+	params: unknown,
+	context: TContext,
+) => Promise<TResult>) & {
+	capability?: WalletMethodCapability<TParams, TContext, TResult>;
 };
 
 export function createWalletMethod<
@@ -31,12 +48,17 @@ export function createWalletMethod<
 	TReview,
 	TResult,
 >({
+	capability,
 	confirmation,
 	execute,
 	parse,
 	review,
-}: CreateWalletMethodInput<TParams, TContext, TReview, TResult>) {
-	return async (params: unknown, context: TContext): Promise<TResult> => {
+}: CreateWalletMethodInput<TParams, TContext, TReview, TResult>): WalletMethod<
+	TParams,
+	TContext,
+	TResult
+> {
+	const handler = async (params: unknown, context: TContext): Promise<TResult> => {
 		const parsedParams = parse(params);
 		const reviewed = await review({
 			context,
@@ -73,4 +95,6 @@ export function createWalletMethod<
 			review: reviewed,
 		});
 	};
+
+	return Object.assign(handler, { capability });
 }

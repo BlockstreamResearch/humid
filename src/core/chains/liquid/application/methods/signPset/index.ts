@@ -1,8 +1,10 @@
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
+import { WALLET_CAPABILITY_GROUPS } from "@/core/wallet-methods/capability";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
+import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type { LiquidSignPsetResult, ParsedLiquidSignPsetParams } from "../../../domain/pset/types";
 import { parseLiquidSignPsetParams } from "../../../domain/pset/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
@@ -25,6 +27,13 @@ export const signLiquidPset = createWalletMethod<
 	LiquidSignPsetReview,
 	LiquidSignPsetResult
 >({
+	capability: {
+		access: "action",
+		description: "Sign Liquid transactions (PSETs) for this account.",
+		group: WALLET_CAPABILITY_GROUPS.SIGN_TRANSACTIONS,
+		id: LIQUID_WALLET_RPC_METHODS.SIGN_PSET,
+		label: "Sign transactions",
+	},
 	confirmation: ({ params, review }) => ({
 		data: {
 			accountIdentifier: review.account.accountIdentifier,

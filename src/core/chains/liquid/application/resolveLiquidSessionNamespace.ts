@@ -1,6 +1,6 @@
 import { resolveUnlockedLiquidChain } from "../chains/resolveLiquidChain";
 import { LIQUID_CHAIN_IDS, LIQUID_NAMESPACE, type LiquidChainId } from "../domain/LiquidChain";
-import { LIQUID_WALLETCONNECT_EVENTS, LIQUID_WALLETCONNECT_METHODS } from "../domain/LiquidRpc";
+import { LIQUID_WALLETCONNECT_EVENTS } from "../domain/LiquidRpc";
 import { parseLiquidChainId } from "../domain/validation";
 import type {
 	LiquidWalletBackend,
@@ -19,12 +19,15 @@ export type LiquidSessionNamespaceProposal = {
 };
 
 export type ResolveLiquidSessionNamespaceInput = {
+	/** The RPC methods to advertise for this namespace (the router's registered methods). */
+	methods: readonly string[];
 	proposal: LiquidSessionNamespaceProposal;
 	walletBackend: LiquidWalletBackend;
 	walletContext: Omit<ResolveLiquidWalletAccountInput, "chain">;
 };
 
 export async function resolveLiquidSessionNamespace({
+	methods,
 	proposal,
 	walletBackend,
 	walletContext,
@@ -59,7 +62,7 @@ export async function resolveLiquidSessionNamespace({
 			accountIdentifiers.some((accountIdentifier) => accountIdentifier.startsWith(`${chainId}:`)),
 		),
 		events: [...LIQUID_WALLETCONNECT_EVENTS],
-		methods: [...LIQUID_WALLETCONNECT_METHODS],
+		methods: [...methods],
 	};
 }
 

@@ -1,9 +1,11 @@
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
+import { WALLET_CAPABILITY_GROUPS } from "@/core/wallet-methods/capability";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
+import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import {
 	LIQUID_SIGN_MESSAGE_PROTOCOLS,
 	type LiquidSignMessageResult,
@@ -32,6 +34,13 @@ export const signLiquidMessage = createWalletMethod<
 	LiquidSignMessageMethodReview,
 	LiquidSignMessageResult
 >({
+	capability: {
+		access: "action",
+		description: "Sign arbitrary messages with this account.",
+		group: WALLET_CAPABILITY_GROUPS.SIGN_MESSAGES,
+		id: LIQUID_WALLET_RPC_METHODS.SIGN_MESSAGE,
+		label: "Sign messages",
+	},
 	confirmation: ({ params, review }) => ({
 		data: {
 			accountIdentifier: review.message.accountIdentifier,

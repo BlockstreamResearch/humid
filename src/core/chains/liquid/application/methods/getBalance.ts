@@ -1,10 +1,15 @@
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
+import { WALLET_CAPABILITY_GROUPS } from "@/core/wallet-methods/capability";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
 import type { ParsedLiquidAssetId } from "../../domain/LiquidAsset";
-import type { LiquidGetBalanceParams, LiquidGetBalanceResult } from "../../domain/LiquidRpc";
+import {
+	LIQUID_WALLET_RPC_METHODS,
+	type LiquidGetBalanceParams,
+	type LiquidGetBalanceResult,
+} from "../../domain/LiquidRpc";
 import { parseLiquidAssetId, parseLiquidGetBalanceParams } from "../../domain/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../backends/LiquidWalletBackend";
 
@@ -27,6 +32,13 @@ export const getLiquidBalance = createWalletMethod<
 	LiquidGetBalanceReview,
 	LiquidGetBalanceResult
 >({
+	capability: {
+		access: "read",
+		description: "See this account's asset balances.",
+		group: WALLET_CAPABILITY_GROUPS.VIEW_BALANCES,
+		id: LIQUID_WALLET_RPC_METHODS.GET_BALANCE,
+		label: "View balance",
+	},
 	confirmation: ({ review }) => ({
 		data: {
 			accountIdentifier: review.account.accountIdentifier,

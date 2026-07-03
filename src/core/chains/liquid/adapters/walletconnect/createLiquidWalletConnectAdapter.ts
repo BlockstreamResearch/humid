@@ -27,6 +27,7 @@ export function createLiquidWalletConnectAdapter({
 	return {
 		getSupportedNamespace: async (proposal: WalletKitTypes.SessionProposal["params"], context) => {
 			const namespace = await resolveLiquidSessionNamespace({
+				methods: dispatcher.methods,
 				proposal,
 				walletBackend,
 				walletContext: {

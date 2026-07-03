@@ -2,6 +2,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
 import type { KeyManagerState } from "@/core/key-manager/types";
+import { WALLET_CAPABILITY_GROUPS } from "@/core/wallet-methods/capability";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
 
@@ -11,6 +12,7 @@ import {
 	type ParsedLiquidGetIdentitySharedKeyParams,
 } from "../../../domain/identity/types";
 import { parseLiquidGetIdentitySharedKeyParams } from "../../../domain/identity/validation";
+import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type { LiquidIdentityBackend } from "../../backends/LiquidIdentityBackend";
 
 export type LiquidGetIdentitySharedKeyContext = {
@@ -26,6 +28,13 @@ export const getLiquidIdentitySharedKey = createWalletMethod<
 	null,
 	LiquidGetIdentitySharedKeyResult
 >({
+	capability: {
+		access: "action",
+		description: "Derive a shared secret between your identity and another party.",
+		group: WALLET_CAPABILITY_GROUPS.IDENTITY,
+		id: LIQUID_WALLET_RPC_METHODS.GET_IDENTITY_SHARED_KEY,
+		label: "Derive shared secret",
+	},
 	confirmation: ({ context, params }) => ({
 		data: {
 			chainId: context.chain.id,

@@ -1,84 +1,30 @@
-import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
-import { createWalletRpcDispatcher } from "@/core/wallet-rpc/dispatcher";
-import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
+import { createWalletMethodRegistry } from "@/core/wallet-methods/createWalletMethodRegistry";
 
-import type { LiquidChainRecord } from "../chains/LiquidChainRecord";
-import { LIQUID_WALLET_RPC_METHODS } from "../domain/LiquidRpc";
 import type { LiquidIdentityBackend } from "./backends/LiquidIdentityBackend";
 import type { LiquidWalletBackend } from "./backends/LiquidWalletBackend";
-import { getLiquidBalance } from "./methods/getBalance";
-import { getLiquidIdentityPublicKey } from "./methods/getIdentityPublicKey";
-import { getLiquidIdentitySharedKey } from "./methods/getIdentitySharedKey";
-import { getLiquidUTXOs } from "./methods/getUTXOs";
-import { getLiquidWalletDescriptor } from "./methods/getWalletDescriptor";
-import { processLiquidConfidentialTransaction } from "./methods/processConfidentialTransaction";
-import { sendLiquidTransfer } from "./methods/sendTransfer";
-import { signLiquidIdentity } from "./methods/signIdentity";
-import { signLiquidMessage } from "./methods/signMessage";
-import { signLiquidPset } from "./methods/signPset";
+import type { LiquidRpcMethodContext, LiquidWalletRpcContext } from "./LiquidRpcContext";
+import { LIQUID_RPC_METHODS } from "./liquidRpcMethods";
 
-export type LiquidWalletRpcContext = WalletRpcBaseContext & {
-	chain: LiquidChainRecord;
-	keyManagerState: KeyManagerState;
-	updateKeyManagerState?: UpdateKeyManagerState;
-};
+export type { LiquidWalletRpcContext };
 
 export type CreateLiquidRpcRouterDependencies = {
 	identityBackend: LiquidIdentityBackend;
 	walletBackend: LiquidWalletBackend;
 };
 
+/**
+ * Builds the Liquid dapp RPC registry from {@link LIQUID_RPC_METHODS}: the JSON-RPC
+ * dispatcher plus the connect-time capabilities, both derived from that one list.
+ * The wallet and identity backends are injected into each method's context here, so
+ * dispatch callers only supply the chain and key-manager state
+ * ({@link LiquidWalletRpcContext}).
+ */
 export function createLiquidRpcRouter({
 	identityBackend,
 	walletBackend,
 }: CreateLiquidRpcRouterDependencies) {
-	return createWalletRpcDispatcher<LiquidWalletRpcContext>({
-		[LIQUID_WALLET_RPC_METHODS.GET_BALANCE]: (params, context) =>
-			getLiquidBalance(params, {
-				...context,
-				walletBackend,
-			}),
-		[LIQUID_WALLET_RPC_METHODS.GET_UTXOS]: (params, context) =>
-			getLiquidUTXOs(params, {
-				...context,
-				walletBackend,
-			}),
-		[LIQUID_WALLET_RPC_METHODS.GET_WALLET_DESCRIPTOR]: (params, context) =>
-			getLiquidWalletDescriptor(params, {
-				...context,
-				walletBackend,
-			}),
-		[LIQUID_WALLET_RPC_METHODS.GET_IDENTITY_PUBLIC_KEY]: (params, context) =>
-			getLiquidIdentityPublicKey(params, {
-				...context,
-				identityBackend,
-			}),
-		[LIQUID_WALLET_RPC_METHODS.GET_IDENTITY_SHARED_KEY]: (params, context) =>
-			getLiquidIdentitySharedKey(params, {
-				...context,
-				identityBackend,
-			}),
-		[LIQUID_WALLET_RPC_METHODS.PROCESS_CONFIDENTIAL_TRANSACTION]: () =>
-			processLiquidConfidentialTransaction(),
-		[LIQUID_WALLET_RPC_METHODS.SEND_TRANSFER]: (params, context) =>
-			sendLiquidTransfer(params, {
-				...context,
-				walletBackend,
-			}),
-		[LIQUID_WALLET_RPC_METHODS.SIGN_IDENTITY]: (params, context) =>
-			signLiquidIdentity(params, {
-				...context,
-				identityBackend,
-			}),
-		[LIQUID_WALLET_RPC_METHODS.SIGN_MESSAGE]: (params, context) =>
-			signLiquidMessage(params, {
-				...context,
-				walletBackend,
-			}),
-		[LIQUID_WALLET_RPC_METHODS.SIGN_PSET]: (params, context) =>
-			signLiquidPset(params, {
-				...context,
-				walletBackend,
-			}),
-	});
+	return createWalletMethodRegistry<LiquidWalletRpcContext, LiquidRpcMethodContext>(
+		LIQUID_RPC_METHODS,
+		(context) => ({ ...context, identityBackend, walletBackend }),
+	);
 }
