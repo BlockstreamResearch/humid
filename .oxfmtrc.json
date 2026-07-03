@@ -16,8 +16,8 @@
 		"dist/**",
 		"build/**",
 		"node_modules/**",
-		"public/**",
+		"apps/extension/public/**",
 		"bun.lock",
-		"src/api/modules/**/types.ts"
+		"apps/extension/src/api/modules/**/types.ts"
 	]
 }

@@ -33,7 +33,7 @@ const config: StorybookConfig = {
 		name: "@storybook/react-vite",
 		options: {},
 	},
-	stories: ["../src/**/*.stories.@(ts|tsx)"],
+	stories: ["../apps/extension/src/**/*.stories.@(ts|tsx)"],
 	addons: [],
 	core: {
 		disableTelemetry: true,

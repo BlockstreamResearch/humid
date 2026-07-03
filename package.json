@@ -1,7 +1,10 @@
 {
-	"name": "humid",
+	"name": "humid-workspace",
 	"version": "1.0.0",
 	"private": true,
+	"workspaces": [
+		"apps/*"
+	],
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
@@ -15,7 +18,7 @@
 		"lint:fix": "oxlint . --fix",
 		"format": "oxfmt . --write",
 		"format:check": "oxfmt . --check",
-		"validate:i18n": "i18n-check -l src/localization/resources -s en -f i18next",
+		"validate:i18n": "i18n-check -l apps/extension/src/localization/resources -s en -f i18next",
 		"storybook": "storybook dev -p 6006",
 		"build-storybook": "storybook build",
 		"check": "bun run typecheck && bun run lint && bun run format:check"
@@ -33,6 +36,7 @@
 		"@noble/hashes": "1.8.0",
 		"@reactuses/core": "^6.3.3",
 		"@reown/walletkit": "^1.5.5",
+		"@scure/bip39": "^1.6.0",
 		"@tailwindcss/vite": "^4.0.13",
 		"@tanstack/react-query": "^5.101.0",
 		"@tanstack/react-router": "^1.170.11",
