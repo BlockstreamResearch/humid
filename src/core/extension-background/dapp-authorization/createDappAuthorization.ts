@@ -103,7 +103,7 @@ export function createDappAuthorization(
 		sessionTtlMs = null,
 	} = dependencies;
 
-	const createSession = async ({
+	const runCreateSession = async ({
 		origin,
 		params,
 	}: {
@@ -171,17 +171,18 @@ export function createDappAuthorization(
 
 		// Resolve (and materialize) the granted account ids per chain so the connect result advertises
 		// them — the dapp then learns its account without a follow-up read (and its extra approval).
+		// Sequential on purpose: materializing derives accounts and writes the key-manager state, so
+		// running chains concurrently would race that write (and the shared LWK derivation) and could
+		// drop a freshly-created account, leaving the active chain with no account.
 		const accountsByChain: Record<string, string[]> = {};
 
 		if (resolveConnectedAccountIds) {
-			await Promise.all(
-				supported.chains.map(async (chainId) => {
-					accountsByChain[chainId] = await resolveConnectedAccountIds(
-						chainId,
-						scope.accountGroupIds,
-					).catch(() => []);
-				}),
-			);
+			for (const chainId of supported.chains) {
+				accountsByChain[chainId] = await resolveConnectedAccountIds(
+					chainId,
+					scope.accountGroupIds,
+				).catch(() => []);
+			}
 		}
 
 		const sessionScopes = toCaip25Scopes(scope, accountsByChain);
@@ -217,7 +218,17 @@ export function createDappAuthorization(
 					})
 				: null;
 
-		return { sessionScopes: session ? toCaip25Scopes(session.scope) : {} };
+		if (!session || !accountModel) return { sessionScopes: {} };
+
+		// Advertise the session's authorized CAIP-10 accounts per chain (read from the already
+		// materialized chain accounts) so wallet_getSession is CAIP-25 complete: AppKit's
+		// restore-on-load reads accounts[0] from here, and dapps list them without a follow-up call.
+		return {
+			sessionScopes: toCaip25Scopes(
+				session.scope,
+				resolveSessionAccountsByChain(accountModel, session.scope),
+			),
+		};
 	};
 
 	const revokeSession = async ({
@@ -282,6 +293,31 @@ export function createDappAuthorization(
 		});
 	};
 
+	// Dedup concurrent createSession from the same origin: a dapp (or a duplicating/flaky transport)
+	// can deliver wallet_createSession several times before the first resolves. Opening a confirmation
+	// per copy makes each new one supersede (reject) the previous, so the dapp receives one of those
+	// rejects even though a later copy is approved. Sharing the single in-flight promise collapses every
+	// copy onto one approval, so they all resolve with the same result.
+	const inFlightCreateSessions = new Map<string, Promise<Caip25CreateSessionResult>>();
+
+	const createSession = async (input: {
+		origin: string | null;
+		params: unknown;
+	}): Promise<Caip25CreateSessionResult> => {
+		const requestingOrigin = requireOrigin(input.origin);
+		const existing = inFlightCreateSessions.get(requestingOrigin);
+
+		if (existing) return existing;
+
+		const pending = runCreateSession(input).finally(() => {
+			inFlightCreateSessions.delete(requestingOrigin);
+		});
+
+		inFlightCreateSessions.set(requestingOrigin, pending);
+
+		return pending;
+	};
+
 	return { createSession, getSession, invokeMethod, revokeSession };
 }
 
@@ -313,6 +349,35 @@ function requireUnlocked(accountModel: AccountModelState | null): AccountModelSt
 	}
 
 	return accountModel;
+}
+
+/**
+ * The authorized CAIP-10 account ids per chain for a stored session, read from the account model's
+ * already-materialized chain accounts (created at connect). Ordered by the session's `accountGroupIds`
+ * so it matches what `wallet_createSession` advertised. A read, not a derivation — cheap enough for the
+ * dapp's getSession polling.
+ */
+function resolveSessionAccountsByChain(
+	accountModel: AccountModelState,
+	scope: DappSessionScope,
+): Record<string, string[]> {
+	const accountsByChain: Record<string, string[]> = {};
+
+	for (const chainId of scope.chains) {
+		const accountIds: string[] = [];
+
+		for (const accountGroupId of scope.accountGroupIds) {
+			const chainAccount = Object.values(accountModel.chainAccounts).find(
+				(candidate) => candidate.chainId === chainId && candidate.accountGroupId === accountGroupId,
+			);
+
+			if (chainAccount) accountIds.push(chainAccount.accountIdentifier);
+		}
+
+		accountsByChain[chainId] = accountIds;
+	}
+
+	return accountsByChain;
 }
 
 function asCreateSessionParams(params: unknown): Caip25CreateSessionParams {

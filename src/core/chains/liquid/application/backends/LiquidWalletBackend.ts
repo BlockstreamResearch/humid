@@ -1,4 +1,7 @@
-import type { KeySourceId } from "@/core/accounts/application/account-registry/model/identifiers";
+import type {
+	AccountGroupId,
+	KeySourceId,
+} from "@/core/accounts/application/account-registry/model/identifiers";
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
 
 import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
@@ -32,6 +35,13 @@ export type LiquidWalletAccount = {
 };
 
 export type ResolveLiquidWalletAccountInput = {
+	/**
+	 * Which account group the derived chain account belongs to, so `ensureChainAccount` keys the
+	 * materialized account to the right group. Without it, persistence defaults to the *selected*
+	 * group — so materializing a non-selected group (multi-account connect, or a dapp call on a
+	 * non-selected authorized account) collides with the selected group's chain account on that chain.
+	 */
+	accountGroupId?: AccountGroupId;
 	/** Which account group (its HD `groupIndex`) to derive; defaults to 0 (the first). */
 	accountGroupIndex?: number;
 	chain: LiquidChainRecord;

@@ -83,6 +83,7 @@ export async function resolveDappAccount(
 	}
 
 	return walletBackend.resolveAccount({
+		accountGroupId: target.accountGroupId,
 		accountGroupIndex: target.accountGroupIndex,
 		chain,
 		keySourceId: target.keySourceId,

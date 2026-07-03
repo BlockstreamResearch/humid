@@ -199,6 +199,7 @@ const init = async () => {
 			accountGroupId: selectedGroup.id,
 			chainId: chain.id,
 			input: {
+				accountGroupId: selectedGroup.id,
 				accountGroupIndex: selectedGroup.groupIndex ?? 0,
 				chain,
 				keySourceId: selectedWallet?.keySourceId,
@@ -292,6 +293,7 @@ const init = async () => {
 
 			accountIds.push(
 				await liquidChainGroup.accountRuntime.resolveAccountIdentifier({
+					accountGroupId: group.id,
 					accountGroupIndex: group.groupIndex ?? 0,
 					chain,
 					keySourceId: accountModel.wallets[group.walletId]?.keySourceId,

@@ -48,6 +48,7 @@ export async function createLwkLiquidAccount(
 
 			await input.updateKeyManagerState((state) => {
 				const ensured = accountRegistry.ensureDescriptorWalletAccount({
+					accountGroupId: input.accountGroupId,
 					accountModel: state.accountModel,
 					chainId: input.chain.id,
 					context: {
