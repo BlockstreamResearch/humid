@@ -10,6 +10,7 @@ import type {
 } from "@/core/accounts/application/accounts-rpc/model/types";
 import type { Caip25Scopes } from "@/core/caip25";
 import { getUnlockedChainStoreState } from "@/core/chains/application/chain-store/secureChainStore";
+import { buildLiquidDappAccountScope } from "@/core/chains/liquid/application/dappAccountScope";
 import { resolveUnlockedLiquidChain } from "@/core/chains/liquid/chains/resolveLiquidChain";
 import type { LiquidScanTarget } from "@/core/chains/liquid/contract";
 import { createLiquidChainGroup } from "@/core/chains/liquid/createLiquidChainGroup";
@@ -120,6 +121,7 @@ const init = async () => {
 	};
 
 	const dispatchInjectedLiquidRequest: DappRequestDispatch = async ({
+		accountGroupIds,
 		chainId,
 		grantedMethods,
 		method,
@@ -128,14 +130,20 @@ const init = async () => {
 		const liquidChainId = parseLiquidChainId(chainId);
 		const chain = await resolveUnlockedLiquidChain(liquidChainId);
 		const grantedMethodSet = new Set(grantedMethods);
+		const keyManagerState = walletVaultBackground.keyManager.getState();
 
 		return liquidChainGroup.walletRpcDispatcher.dispatch(
 			{ method, params },
 			{
+				accountScope: buildLiquidDappAccountScope({
+					accountGroupIds,
+					accountModel: keyManagerState.accountModel,
+					chainId: liquidChainId,
+				}),
 				authorization: { isGranted: (capabilityId) => grantedMethodSet.has(capabilityId) },
 				chain,
 				confirm: confirmApproved,
-				keyManagerState: walletVaultBackground.keyManager.getState(),
+				keyManagerState,
 				updateKeyManagerState: walletVaultBackground.keyManager.updateState,
 			},
 		);

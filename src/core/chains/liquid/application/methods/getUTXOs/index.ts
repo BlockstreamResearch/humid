@@ -12,6 +12,7 @@ import {
 } from "../../../domain/LiquidRpc";
 import { parseLiquidAssetId, parseLiquidGetUTXOsParams } from "../../../domain/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
+import { resolveDappAccount } from "../../dappAccountScope";
 
 export type LiquidGetUTXOsContext = {
 	chain: LiquidChainRecord;
@@ -69,11 +70,7 @@ export const getLiquidUTXOs = createWalletMethod<
 	},
 	parse: parseLiquidGetUTXOsParams,
 	review: async ({ context, params }) => {
-		const account = await context.walletBackend.resolveAccount({
-			chain: context.chain,
-			keyManagerState: context.keyManagerState,
-			updateKeyManagerState: context.updateKeyManagerState,
-		});
+		const account = await resolveDappAccount(context);
 
 		return {
 			account,

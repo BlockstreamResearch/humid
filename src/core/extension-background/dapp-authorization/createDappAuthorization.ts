@@ -33,6 +33,8 @@ export type SupportedDappScope = {
 };
 
 export type DappRequestDispatch = (request: {
+	/** Account groups the session authorized; the chain binds execution to this set. */
+	accountGroupIds: readonly string[];
 	chainId: string;
 	/** Methods the session granted; the method wrapper enforces them per-capability. */
 	grantedMethods: readonly string[];
@@ -225,6 +227,7 @@ export function createDappAuthorization(
 		}
 
 		return dispatch({
+			accountGroupIds: session.scope.accountGroupIds,
 			chainId: invocation.scope,
 			grantedMethods: session.scope.methods,
 			method: invocation.request.method,

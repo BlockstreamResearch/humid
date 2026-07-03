@@ -14,6 +14,7 @@ import {
 } from "../../../domain/message/types";
 import { parseLiquidSignMessageParams } from "../../../domain/message/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
+import { resolveDappAccount } from "../../dappAccountScope";
 
 export type LiquidSignMessageContext = {
 	chain: LiquidChainRecord;
@@ -57,11 +58,7 @@ export const signLiquidMessage = createWalletMethod<
 		context.walletBackend.signMessage(review.account, params),
 	parse: parseSignMessageParams,
 	review: async ({ context, params }) => {
-		const account = await context.walletBackend.resolveAccount({
-			chain: context.chain,
-			keyManagerState: context.keyManagerState,
-			updateKeyManagerState: context.updateKeyManagerState,
-		});
+		const account = await resolveDappAccount(context);
 
 		return {
 			account,

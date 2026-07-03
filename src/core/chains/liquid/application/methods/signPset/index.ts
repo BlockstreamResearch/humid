@@ -8,6 +8,7 @@ import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type { LiquidSignPsetResult, ParsedLiquidSignPsetParams } from "../../../domain/pset/types";
 import { parseLiquidSignPsetParams } from "../../../domain/pset/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
+import { resolveDappAccount } from "../../dappAccountScope";
 
 export type LiquidSignPsetContext = {
 	chain: LiquidChainRecord;
@@ -53,10 +54,6 @@ export const signLiquidPset = createWalletMethod<
 	execute: ({ context, params, review }) => context.walletBackend.signPset(review.account, params),
 	parse: parseLiquidSignPsetParams,
 	review: async ({ context }) => ({
-		account: await context.walletBackend.resolveAccount({
-			chain: context.chain,
-			keyManagerState: context.keyManagerState,
-			updateKeyManagerState: context.updateKeyManagerState,
-		}),
+		account: await resolveDappAccount(context),
 	}),
 });

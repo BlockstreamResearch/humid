@@ -20,6 +20,7 @@ import {
 	parseLiquidGetWalletDescriptorParams,
 } from "../../../domain/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
+import { resolveDappAccount } from "../../dappAccountScope";
 
 export type LiquidGetWalletDescriptorContext = {
 	chain: LiquidChainRecord;
@@ -70,11 +71,7 @@ export const getLiquidWalletDescriptor = createWalletMethod<
 	}),
 	parse: parseGetWalletDescriptorParams,
 	review: async ({ context }) => ({
-		account: await context.walletBackend.resolveAccount({
-			chain: context.chain,
-			keyManagerState: context.keyManagerState,
-			updateKeyManagerState: context.updateKeyManagerState,
-		}),
+		account: await resolveDappAccount(context),
 	}),
 });
 
