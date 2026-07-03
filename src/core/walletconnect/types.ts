@@ -21,6 +21,12 @@ export type WalletConnectSupportedNamespace = {
 export type WalletConnectSupportedNamespaces = Record<string, WalletConnectSupportedNamespace>;
 
 export type WalletConnectAdapterContext = {
+	/**
+	 * The session's approved scope for the request's namespace: granted `methods` and CAIP-10
+	 * `accounts`. The chain adapter enforces them (per-method + per-account), mirroring the
+	 * injected CAIP-25/27 path. Absent when the session scope can't be resolved.
+	 */
+	approvedScope?: { accounts: readonly string[]; methods: readonly string[] };
 	confirm?: WalletConnectConfirmationHandler;
 	keyManagerState: KeyManagerState;
 	updateKeyManagerState?: UpdateKeyManagerState;

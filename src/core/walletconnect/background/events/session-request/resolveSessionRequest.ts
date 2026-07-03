@@ -4,9 +4,11 @@ import { walletVaultBackground } from "@/core/secure-vault/application/wallet-va
 import { getWalletConnectNamespaceAdapter } from "@/core/walletconnect/namespace-registry";
 
 import { getBackgroundOptions } from "../../state";
+import type { WalletKitClient } from "../../types";
 import { WalletConnectRequestError } from "./WalletConnectRequestError";
 
 export async function resolveSessionRequest(
+	walletKit: WalletKitClient,
 	event: WalletKitTypes.SessionRequest,
 ): Promise<unknown> {
 	const keyManagerState = walletVaultBackground.keyManager.getState();
@@ -17,8 +19,26 @@ export async function resolveSessionRequest(
 	}
 
 	return adapter.handleSessionRequest(event, {
+		approvedScope: resolveApprovedScope(walletKit, event.topic, adapter.namespace),
 		confirm: getBackgroundOptions().confirm,
 		keyManagerState,
 		updateKeyManagerState: walletVaultBackground.keyManager.updateState,
 	});
+}
+
+/**
+ * The methods + accounts the session granted for this namespace, read from the live WalletConnect
+ * session. Undefined when the session or its namespace can't be found, so the adapter falls back
+ * to its pre-enforcement behavior rather than hard-failing a legitimate request.
+ */
+function resolveApprovedScope(
+	walletKit: WalletKitClient,
+	topic: string,
+	namespace: string,
+): { accounts: readonly string[]; methods: readonly string[] } | undefined {
+	const approved = walletKit.getActiveSessions()[topic]?.namespaces[namespace];
+
+	if (!approved) return undefined;
+
+	return { accounts: approved.accounts ?? [], methods: approved.methods ?? [] };
 }

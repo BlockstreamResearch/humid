@@ -34,9 +34,32 @@ export async function signPset(
 			}
 		}
 
-		// TODO: Replace generic LWK signing with requested-input-only signing once lwk_wasm
-		// exposes an input allowlist or lower-level signer API.
+		// The LWK signer signs every wallet-owned input, but ELIP-1 forbids signing inputs the dapp
+		// did not list. Until lwk_wasm exposes per-input signing, fail closed: sign, then reject if
+		// the wallet signed any input that was not requested (the PSET is never returned/broadcast).
+		// TODO: Replace with requested-input-only signing once lwk_wasm exposes an input allowlist.
+		const requestedIndexes = new Set(params.signInputs.map((requested) => requested.index));
+		const signaturesBefore = countSignaturesPerInput(implementation.wollet.psetDetails(pset));
+
 		let signedPset = implementation.signer.sign(pset);
+
+		const overSignedIndex = countSignaturesPerInput(
+			implementation.wollet.psetDetails(signedPset),
+		).findIndex(
+			(count, index) => count > (signaturesBefore[index] ?? 0) && !requestedIndexes.has(index),
+		);
+
+		if (overSignedIndex !== -1) {
+			throw new WalletRpcResourceUnavailableError(
+				"Refusing to sign a Liquid PSET input the request did not list.",
+				{
+					overSignedInputIndex: overSignedIndex,
+					requestedInputIndexes: [...requestedIndexes],
+				},
+				WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST,
+			);
+		}
+
 		let txid: string | undefined;
 
 		if (params.broadcast) {
@@ -63,4 +86,15 @@ export async function signPset(
 				: WALLET_RPC_ERROR_REASONS.WALLET_PSET_SIGNING_FAILED,
 		);
 	}
+}
+
+/** Per PSET input, how many signatures the wallet sees present — used to detect over-signing. */
+function countSignaturesPerInput(details: {
+	signatures: () => Array<{ hasSignature: () => unknown }>;
+}): number[] {
+	return details.signatures().map((inputSignatures) => {
+		const signatures = inputSignatures.hasSignature();
+
+		return Array.isArray(signatures) ? signatures.length : 0;
+	});
 }

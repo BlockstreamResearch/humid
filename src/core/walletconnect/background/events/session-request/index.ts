@@ -11,7 +11,7 @@ export async function handleSessionRequest(
 	event: WalletKitTypes.SessionRequest,
 ): Promise<void> {
 	try {
-		const result = await resolveSessionRequest(event);
+		const result = await resolveSessionRequest(walletKit, event);
 
 		await walletKit.respondSessionRequest({
 			response: {

@@ -28,7 +28,12 @@ export type LiquidDappAccountTarget = {
  * Liquid-specific part.
  */
 export type LiquidDappAccountScope = {
-	/** Target when the dapp names no account: the first authorized group (null if none). */
+	/**
+	 * Target when the dapp names no account: the first authorized group (null if none). ELIP-1
+	 * says a no-account read/sign applies to the session's account and MUST reject on ambiguity;
+	 * we instead default to the first authorized group (MetaMask-style) — a deliberate deviation
+	 * for multi-account sessions.
+	 */
 	default: LiquidDappAccountTarget | null;
 	/**
 	 * Map an ELIP-1 account-id (`chain_id:dwid`) to its derivation target, but only when it
@@ -83,6 +88,30 @@ export async function resolveDappAccount(
 		keyManagerState,
 		updateKeyManagerState,
 	});
+}
+
+/**
+ * Map a set of ELIP-1 account-ids (`chain_id:dwid`) to the account groups that own them on the
+ * given chain. The injected path authorizes account *groups* directly; the WalletConnect path
+ * authorizes *accounts* (its approved scope names CAIP-10 accounts), so it converts them here
+ * before {@link buildLiquidDappAccountScope}. Unknown / other-chain ids are dropped.
+ */
+export function resolveAccountGroupIdsForIdentifiers(
+	accountModel: AccountModelState,
+	chainId: ChainId,
+	accountIdentifiers: readonly string[],
+): AccountGroupId[] {
+	const wanted = new Set(accountIdentifiers);
+	const groupIds = new Set<AccountGroupId>();
+
+	for (const chainAccount of Object.values(accountModel.chainAccounts)) {
+		if (chainAccount.chainId !== chainId) continue;
+		if (!wanted.has(chainAccount.accountIdentifier)) continue;
+
+		groupIds.add(chainAccount.accountGroupId);
+	}
+
+	return [...groupIds];
 }
 
 /**
