@@ -15,7 +15,7 @@ export function OverviewPage() {
 	const { portfolio } = useHome();
 
 	return (
-		<div className="flex size-full min-h-0 flex-col">
+		<div className="flex size-full flex-col">
 			<HomeHeader />
 			<UiScrollArea className="min-h-0 flex-1">
 				<div className="flex flex-col gap-6 px-5 py-4">

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 
 import { DEFAULT_AUTO_LOCK_MINUTES } from "@/core/secure-vault/application/wallet-vault/auto-lock";
 import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/client";
@@ -16,8 +17,14 @@ const AUTO_LOCK_QUERY_KEY = ["wallet-vault", "auto-lock"] as const;
  */
 export function SettingsRootPage() {
 	const accounts = useSelectedAccount();
+	const navigate = useNavigate();
 	const queryClient = useQueryClient();
-	const lockMutation = useMutation({ mutationFn: () => walletVaultClient.lock() });
+	const lockMutation = useMutation({
+		mutationFn: () => walletVaultClient.lock(),
+		onSuccess: () => {
+			void navigate({ replace: true, to: "/local-auth" });
+		},
+	});
 	const autoLockQuery = useQuery({
 		queryFn: () => walletVaultClient.getAutoLock(),
 		queryKey: AUTO_LOCK_QUERY_KEY,

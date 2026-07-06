@@ -14,7 +14,7 @@ const TABS = [
 /** Shared bottom navigation. Presentational — the active tab is resolved by the shell. */
 export function AppFooter({ active }: { active: AppTab }) {
 	return (
-		<nav className="border-border/60 flex shrink-0 border-t">
+		<nav className="border-border/60 flex h-15 border-t">
 			{TABS.map(({ icon, label, tab, to }) => {
 				const isActive = tab === active;
 

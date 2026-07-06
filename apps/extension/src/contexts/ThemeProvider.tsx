@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-type Theme = "dark" | "light" | "system";
+export type Theme = "dark" | "light" | "system";
+type ResolvedTheme = Exclude<Theme, "system">;
 
 type ThemeProviderProps = {
 	children: React.ReactNode;
@@ -10,7 +11,7 @@ type ThemeProviderProps = {
 
 type ThemeProviderState = {
 	theme: Theme;
-	systemTheme: Omit<Theme, "system">;
+	systemTheme: ResolvedTheme;
 	setTheme: (theme: Theme) => void;
 };
 
@@ -22,6 +23,10 @@ const initialState: ThemeProviderState = {
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
+function getSystemTheme(): ResolvedTheme {
+	return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 export function ThemeProvider({
 	children,
 	defaultTheme = "system",
@@ -31,11 +36,19 @@ export function ThemeProvider({
 	const [theme, setTheme] = useState<Theme>(
 		() => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
 	);
+	const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => getSystemTheme());
 
-	const systemTheme = useMemo(
-		() => (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
-		[],
-	);
+	useEffect(() => {
+		const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+		const handleSystemThemeChange = (event: MediaQueryListEvent) => {
+			setSystemTheme(event.matches ? "dark" : "light");
+		};
+
+		setSystemTheme(mediaQuery.matches ? "dark" : "light");
+		mediaQuery.addEventListener("change", handleSystemThemeChange);
+
+		return () => mediaQuery.removeEventListener("change", handleSystemThemeChange);
+	}, []);
 
 	useEffect(() => {
 		const root = window.document.documentElement;
@@ -50,18 +63,25 @@ export function ThemeProvider({
 		root.classList.add(theme);
 	}, [systemTheme, theme]);
 
+	const updateTheme = useCallback(
+		(nextTheme: Theme) => {
+			localStorage.setItem(storageKey, nextTheme);
+			setTheme(nextTheme);
+		},
+		[storageKey],
+	);
+
+	const value = useMemo(
+		() => ({
+			theme,
+			systemTheme,
+			setTheme: updateTheme,
+		}),
+		[systemTheme, theme, updateTheme],
+	);
+
 	return (
-		<ThemeProviderContext.Provider
-			{...props}
-			value={{
-				theme,
-				systemTheme,
-				setTheme: (theme: Theme) => {
-					localStorage.setItem(storageKey, theme);
-					setTheme(theme);
-				},
-			}}
-		>
+		<ThemeProviderContext.Provider {...props} value={value}>
 			{children}
 		</ThemeProviderContext.Provider>
 	);

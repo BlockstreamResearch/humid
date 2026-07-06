@@ -2,5 +2,8 @@
 	"name": "humid",
 	"version": "1.0.0",
 	"private": true,
-	"type": "module"
+	"type": "module",
+	"dependencies": {
+		"@paper-design/shaders-react": "^0.0.77"
+	}
 }

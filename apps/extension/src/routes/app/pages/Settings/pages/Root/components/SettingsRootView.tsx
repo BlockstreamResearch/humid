@@ -2,6 +2,7 @@ import {
 	Add01Icon,
 	ArrowRight01Icon,
 	GlobalIcon,
+	PaintBoardIcon,
 	ShieldKeyIcon,
 	SquareLock01Icon,
 } from "@hugeicons/core-free-icons";
@@ -86,6 +87,18 @@ export function SettingsRootView({
 						>
 							<HugeiconsIcon className="text-muted-foreground" icon={GlobalIcon} size={18} />
 							<span className="flex-1 text-sm font-medium">Chains</span>
+							<HugeiconsIcon
+								className="text-muted-foreground/60"
+								icon={ArrowRight01Icon}
+								size={16}
+							/>
+						</Link>
+						<Link
+							className="hover:bg-accent flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors"
+							to="/app/settings/theme"
+						>
+							<HugeiconsIcon className="text-muted-foreground" icon={PaintBoardIcon} size={18} />
+							<span className="flex-1 text-sm font-medium">Theme</span>
 							<HugeiconsIcon
 								className="text-muted-foreground/60"
 								icon={ArrowRight01Icon}

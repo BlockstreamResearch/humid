@@ -8,6 +8,7 @@ import {
 	LIQUID_MAINNET_CHAIN_ID,
 	LIQUID_TESTNET_CHAIN_ID,
 } from "@/core/chains/liquid/domain/LiquidChain";
+import UiPageBackgroundWrp from "@/ui/UiPageBackgroundWrp";
 
 import type { Portfolio } from "./hooks/usePortfolio";
 import { HomeContext } from "./index";
@@ -114,5 +115,9 @@ function useMockHomeValue() {
 export function MockHomeProvider({ children }: PropsWithChildren) {
 	const value = useMockHomeValue();
 
-	return <HomeContext.Provider value={value}>{children}</HomeContext.Provider>;
+	return (
+		<HomeContext.Provider value={value}>
+			<UiPageBackgroundWrp>{children}</UiPageBackgroundWrp>
+		</HomeContext.Provider>
+	);
 }

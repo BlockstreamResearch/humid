@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
+import UiPageBackgroundWrp from "@/ui/UiPageBackgroundWrp";
+
 import { AuthCreateProvider } from "../../index";
 import { AuthCreatePasswordPage } from "./index";
 
@@ -21,7 +23,9 @@ const meta = {
 	decorators: [
 		(Story) => (
 			<AuthCreateProvider initialSeedMaterial={SAMPLE_SEED_MATERIAL}>
-				<Story />
+				<UiPageBackgroundWrp>
+					<Story />
+				</UiPageBackgroundWrp>
 			</AuthCreateProvider>
 		),
 	],

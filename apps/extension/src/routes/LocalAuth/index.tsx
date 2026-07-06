@@ -10,6 +10,7 @@ import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/
 import { UiButton } from "@/ui/UiButton/base";
 import { UiField, UiFieldError, UiFieldGroup, UiFieldLabel } from "@/ui/UiField";
 import { UiInput } from "@/ui/UiInput/base";
+import UiPageBackgroundWrp from "@/ui/UiPageBackgroundWrp";
 
 const localAuthFormSchema = z.object({
 	passphrase: z.string().min(1, "Enter your password to unlock the vault."),
@@ -100,72 +101,74 @@ export function LocalAuthPage() {
 	};
 
 	return (
-		<main className="flex size-full flex-col gap-4 p-5">
-			<form className="flex flex-1 flex-col justify-center gap-4" onSubmit={handleUnlock}>
-				<div className="flex flex-col gap-3">
-					<p className="text-muted-foreground text-xs font-medium tracking-normal uppercase">
-						Locked
-					</p>
-					<h1 className="cn-font-heading text-2xl leading-tight font-semibold">Unlock Humid</h1>
-					<p className="text-muted-foreground text-sm leading-6">
-						A local vault exists. Unlock it to continue to the app area.
-					</p>
-				</div>
+		<UiPageBackgroundWrp>
+			<main className="flex size-full flex-col gap-4 p-5">
+				<form className="flex flex-1 flex-col justify-center gap-4" onSubmit={handleUnlock}>
+					<div className="flex flex-col gap-3">
+						<p className="text-muted-foreground text-xs font-medium tracking-normal uppercase">
+							Locked
+						</p>
+						<h1 className="cn-font-heading text-2xl leading-tight font-semibold">Unlock Humid</h1>
+						<p className="text-muted-foreground text-sm leading-6">
+							A local vault exists. Unlock it to continue to the app area.
+						</p>
+					</div>
 
-				<UiFieldGroup>
-					<Controller
-						name="passphrase"
-						control={control}
-						render={({ field, fieldState }) => {
-							const errorId = "local-auth-password-error";
-							const hasError = fieldState.invalid || Boolean(unlockErrorMessage);
+					<UiFieldGroup>
+						<Controller
+							name="passphrase"
+							control={control}
+							render={({ field, fieldState }) => {
+								const errorId = "local-auth-password-error";
+								const hasError = fieldState.invalid || Boolean(unlockErrorMessage);
 
-							return (
-								<UiField data-invalid={hasError}>
-									<UiFieldLabel htmlFor="local-auth-password">Password</UiFieldLabel>
-									<UiInput
-										{...field}
-										ref={(element) => {
-											field.ref(element);
-											passphraseInputRef.current = element;
-										}}
-										id="local-auth-password"
-										aria-describedby={hasError ? errorId : undefined}
-										aria-invalid={hasError}
-										autoComplete="current-password"
-										disabled={isMutating}
-										placeholder="Enter passphrase"
-										type="password"
-										onChange={(event) => {
-											field.onChange(event);
-											clearFeedback();
-										}}
-									/>
-									<UiFieldError
-										id={errorId}
-										errors={[
-											fieldState.error,
-											unlockErrorMessage ? { message: unlockErrorMessage } : undefined,
-										]}
-									/>
-								</UiField>
-							);
-						}}
-					/>
-				</UiFieldGroup>
+								return (
+									<UiField data-invalid={hasError}>
+										<UiFieldLabel htmlFor="local-auth-password">Password</UiFieldLabel>
+										<UiInput
+											{...field}
+											ref={(element) => {
+												field.ref(element);
+												passphraseInputRef.current = element;
+											}}
+											id="local-auth-password"
+											aria-describedby={hasError ? errorId : undefined}
+											aria-invalid={hasError}
+											autoComplete="current-password"
+											disabled={isMutating}
+											placeholder="Enter passphrase"
+											type="password"
+											onChange={(event) => {
+												field.onChange(event);
+												clearFeedback();
+											}}
+										/>
+										<UiFieldError
+											id={errorId}
+											errors={[
+												fieldState.error,
+												unlockErrorMessage ? { message: unlockErrorMessage } : undefined,
+											]}
+										/>
+									</UiField>
+								);
+							}}
+						/>
+					</UiFieldGroup>
 
-				<UiFieldError>{resetErrorMessage}</UiFieldError>
+					<UiFieldError>{resetErrorMessage}</UiFieldError>
 
-				{resetNotice && <p className="text-muted-foreground text-sm leading-5">{resetNotice}</p>}
+					{resetNotice && <p className="text-muted-foreground text-sm leading-5">{resetNotice}</p>}
 
-				<UiButton type="submit" size="lg" disabled={!canSubmit}>
-					{unlockVaultMutation.isPending ? "Unlocking..." : "Unlock"}
+					<UiButton type="submit" size="lg" disabled={!canSubmit}>
+						{unlockVaultMutation.isPending ? "Unlocking..." : "Unlock"}
+					</UiButton>
+				</form>
+
+				<UiButton type="button" variant="outline" disabled={isMutating} onClick={handleReset}>
+					{resetVaultMutation.isPending ? "Resetting..." : "Reset local vault"}
 				</UiButton>
-			</form>
-
-			<UiButton type="button" variant="outline" disabled={isMutating} onClick={handleReset}>
-				{resetVaultMutation.isPending ? "Resetting..." : "Reset local vault"}
-			</UiButton>
-		</main>
+			</main>
+		</UiPageBackgroundWrp>
 	);
 }
