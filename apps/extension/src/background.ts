@@ -7,6 +7,9 @@ import type {
 	GetActivityInput,
 	PortfolioSnapshot,
 	ReceiveAddress,
+	SendTransferInput,
+	SendTransferResult,
+	TransferReview,
 } from "@/core/accounts/application/accounts-rpc/model/types";
 import type { Caip25Scopes } from "@/core/caip25";
 import { getUnlockedChainStoreState } from "@/core/chains/application/chain-store/secureChainStore";
@@ -238,6 +241,23 @@ const init = async () => {
 	const getReceiveAddress = async (): Promise<ReceiveAddress> =>
 		liquidChainGroup.accountRuntime.getReceiveAddress((await resolveSelectedLiquidAccount()).input);
 
+	// In-extension send: preview then execute against the SELECTED account (resolved exactly like
+	// getReceiveAddress). Both call the chain group's runtime, which calls the same backend fns the
+	// dapp path uses — but WITHOUT the dapp confirmation popup, because the popup's own review screen
+	// is the confirmation. inspectTransfer never signs/broadcasts; sendTransfer syncs, builds, signs,
+	// and broadcasts via the offscreen document (that broadcast path is unchanged).
+	const inspectTransfer = async (input: SendTransferInput): Promise<TransferReview> =>
+		liquidChainGroup.accountRuntime.inspectTransfer(
+			(await resolveSelectedLiquidAccount()).input,
+			input,
+		);
+
+	const sendTransfer = async (input: SendTransferInput): Promise<SendTransferResult> =>
+		liquidChainGroup.accountRuntime.sendTransfer(
+			(await resolveSelectedLiquidAccount()).input,
+			input,
+		);
+
 	// Decouple portfolio reads from wallet scans: the popup polls `getPortfolio`, which returns the
 	// cached balance instantly while the engine (re)syncs in the background. Each sync also caches
 	// the account's watch-only scan target so the background alarm below can refresh it vault-free.
@@ -257,19 +277,32 @@ const init = async () => {
 	}, snapshotStore);
 
 	// Refresh the last-active account in the background without the vault: scan its cached watch-only
-	// target and persist the snapshot. Skips when nothing is cached or the snapshot is still fresh.
+	// target and persist the snapshot. Skips when nothing is cached, the snapshot is still fresh, the
+	// popup's engine is already scanning this key, or a previous background refresh is still running —
+	// so the alarm never runs a scan concurrent with (or stacked on) another (which would burst the
+	// esplora endpoint into a 429).
+	let backgroundRefreshInFlight = false;
 	const backgroundRefresh = async (): Promise<void> => {
+		if (backgroundRefreshInFlight) return;
+
 		const active = await scanTargetStore.load();
 
 		if (!active) return;
+		if (portfolioSync.isSyncing(active.key)) return;
 
 		const persisted = await snapshotStore.load(active.key);
 
 		if (persisted && Date.now() - persisted.syncedAt < BACKGROUND_REFRESH_MIN_INTERVAL_MS) return;
 
-		const portfolio = await liquidChainGroup.accountRuntime.scanPortfolio(active.target);
+		backgroundRefreshInFlight = true;
 
-		await snapshotStore.save(active.key, { data: portfolio, syncedAt: Date.now() });
+		try {
+			const portfolio = await liquidChainGroup.accountRuntime.scanPortfolio(active.target);
+
+			await snapshotStore.save(active.key, { data: portfolio, syncedAt: Date.now() });
+		} finally {
+			backgroundRefreshInFlight = false;
+		}
 	};
 
 	const getPortfolio = (): Promise<PortfolioSnapshot> => portfolioSync.getSnapshot();
@@ -407,8 +440,10 @@ const init = async () => {
 				getActivity,
 				getPortfolio,
 				getReceiveAddress,
+				inspectTransfer,
 				purgeAccountPortfolio,
 				refreshPortfolio,
+				sendTransfer,
 			}),
 			...createDappConnectInternalHandlers({ getAccountModel, registry: accountRegistry }),
 			...createDappSessionsInternalHandlers({

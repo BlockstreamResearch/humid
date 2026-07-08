@@ -41,6 +41,12 @@ browser.runtime.onMessage.addListener((message) => {
 				return { items: page.items, nextCursor: page.nextCursor, ok: true, op: "readActivity" };
 			}
 
+			if (message.op === "broadcast") {
+				const { txid } = await getScanClient().broadcast(message.input);
+
+				return { ok: true, op: "broadcast", txid };
+			}
+
 			const result = await getScanClient().scanAndRead(message.input);
 
 			return { ...result, ok: true, op: "scanAndRead" };

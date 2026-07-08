@@ -51,6 +51,34 @@ export type ReceiveAddress = {
 	index: number;
 };
 
+/**
+ * A popup-initiated transfer for the selected account+chain. `amount` is a raw base-unit string (the
+ * Send form parses the user's human amount into base units at the input boundary); `rawAssetId` is
+ * the raw hex asset id, omitted for the native policy asset (L-BTC). Shared by the preview and send.
+ */
+export type SendTransferInput = {
+	amount: string;
+	rawAssetId?: string;
+	recipientAddress: string;
+};
+
+/**
+ * A transfer preview (no signing/broadcast): the resolved recipient, amount, and asset, plus the
+ * recipient's confidentiality per ELIP-1 — `recipientConfidential: false` means the popup should warn
+ * that confidentiality will be lost before confirming.
+ */
+export type TransferReview = {
+	amount: string;
+	assetId: string;
+	recipientAddress: string;
+	recipientConfidential: boolean;
+};
+
+/** The result of a broadcast transfer: the on-chain transaction id. */
+export type SendTransferResult = {
+	txid: string;
+};
+
 /** One asset the account holds on the selected chain: balance (base units) + display metadata. */
 export type PortfolioAsset = {
 	amountSats: string;

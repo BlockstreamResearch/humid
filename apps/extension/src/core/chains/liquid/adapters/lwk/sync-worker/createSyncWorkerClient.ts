@@ -4,6 +4,8 @@ import type { SyncWorkerClient } from "./createWorkerScanClient";
 
 export type {
 	ActivityPageResult,
+	BroadcastInput,
+	BroadcastResult,
 	ReadActivityInput,
 	ScanAndReadResult,
 	ScanInput,

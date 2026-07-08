@@ -28,6 +28,13 @@ export type LiquidReadActivityInput = LiquidScanInput & {
 	rawAssetId: string;
 };
 
+/** Inputs to broadcast an already-signed, finalized PSET (base64); `id` correlates the trace logs. */
+export type LiquidBroadcastInput = {
+	chain: LiquidChainRecord;
+	id: number;
+	psetBase64: string;
+};
+
 /** Issued assets get 8 decimals until the registry pass provides their real precision. */
 const DEFAULT_ISSUED_ASSET_DECIMALS = 8;
 
@@ -69,6 +76,37 @@ export async function scanFresh(input: LiquidScanInput): Promise<Uint8Array | nu
 	wollet.free();
 
 	return updateBytes;
+}
+
+/**
+ * Broadcast an already-signed, finalized PSET (base64) via the chain's Esplora client, returning the
+ * resulting txid. The build/sign/finalize run in the service worker (where the keys live); only this
+ * network step runs here — a `window`-having context (offscreen doc / Firefox bg page) — because
+ * LWK's Esplora client does its async retry/backoff via `web_sys::window()`, which the SW lacks.
+ */
+export async function broadcastPset(input: LiquidBroadcastInput): Promise<string> {
+	const lwk = await loadLwkWasm();
+	const network = createLwkNetwork(lwk, input.chain);
+	const client = createLwkBlockchainClient(lwk, input.chain, network);
+	const pset = new lwk.Pset(input.psetBase64);
+
+	console.warn("[liquid-sync] broadcast…", { chainId: input.chain.id, id: input.id });
+	const startedAt = Date.now();
+	const txid = await client.broadcast(pset);
+	const txidString = txid.toString();
+
+	console.warn("[liquid-sync] broadcast done", {
+		id: input.id,
+		ms: Date.now() - startedAt,
+		txid: txidString,
+	});
+
+	// Free the per-broadcast wasm objects so repeated sends don't leak wasm heap.
+	txid.free();
+	pset.free();
+	client.free();
+
+	return txidString;
 }
 
 /** Incremental scan on a cached wollet; reads balance and activity directly from it. */

@@ -13,6 +13,7 @@ import type {
 } from "../../../../domain/LiquidRpc";
 import { toLiquidAssetId } from "../../../../domain/validation";
 import { loadLwkWasm } from "../../loadLwkWasm";
+import { getSyncWorkerClient } from "../../sync-worker/createSyncWorkerClient";
 import { getLwkImplementation } from "../getLwkImplementation";
 
 export async function inspectTransfer(
@@ -88,21 +89,32 @@ export async function sendTransfer(
 		const unsignedPset = builder.finish(implementation.wollet);
 		const signedPset = implementation.signer.sign(unsignedPset);
 		const finalizedPset = implementation.wollet.finalize(signedPset);
-		const txid = await implementation.blockchainClient.broadcast(finalizedPset);
+		// Build/sign/finalize stay in the service worker (where the vault keys live). Only the
+		// already-signed, finalized PSET crosses to a `window`-having context (the offscreen
+		// document on Chrome) to broadcast, because LWK's Esplora client needs `window` for its
+		// async retry/sleep — the same reason the portfolio scan runs off the service worker.
+		const { txid } = await getSyncWorkerClient().broadcast({
+			chain: account.chain,
+			psetBase64: finalizedPset.toString(),
+		});
 
-		return {
-			txid: txid.toString(),
-		};
+		return { txid };
 	} catch (error) {
 		if (error instanceof WalletRpcInvalidParamsError) {
 			throw error;
 		}
 
-		throw new WalletRpcResourceUnavailableError(
+		// Attach the underlying failure as the cause so real errors (broadcast, insufficient funds,
+		// address) stay diagnosable instead of collapsing into an opaque WALLET_TRANSFER_FAILED.
+		const failure = new WalletRpcResourceUnavailableError(
 			"Could not build, sign, and broadcast the Liquid transfer.",
 			undefined,
 			WALLET_RPC_ERROR_REASONS.WALLET_TRANSFER_FAILED,
 		);
+
+		failure.cause = error;
+
+		throw failure;
 	}
 }
 

@@ -12,6 +12,10 @@ export type ScanAndReadResult = {
 	utxos: LiquidUtxoSnapshot[];
 };
 
+/** Inputs to broadcast an already-signed, finalized PSET (base64) built in the service worker. */
+export type BroadcastInput = { chain: ScanInput["chain"]; psetBase64: string };
+export type BroadcastResult = { txid: string };
+
 /** Inputs to read one asset's activity page from the worker's cached wollet. */
 export type ReadActivityInput = ScanInput & {
 	cursor: string | null;
@@ -28,6 +32,7 @@ type SuccessResponse = Extract<SyncWorkerResponse, { ok: true }>;
 
 /** A promise-per-request handle to a scan backend (a dedicated worker, offscreen, or inline). */
 export type SyncWorkerClient = {
+	broadcast: (input: BroadcastInput) => Promise<BroadcastResult>;
 	readActivity: (input: ReadActivityInput) => Promise<ActivityPageResult>;
 	scan: (input: ScanInput) => Promise<ScanResult>;
 	scanAndRead: (input: ScanInput) => Promise<ScanAndReadResult>;
@@ -90,6 +95,16 @@ export function createWorkerScanClient(): SyncWorkerClient {
 	}
 
 	return {
+		broadcast() {
+			// LWK can't run in a dedicated Worker (Esplora's async retry/sleep needs a `window` a
+			// Worker lacks), so this path never broadcasts — the offscreen/inline clients do. Present
+			// only to satisfy SyncWorkerClient; this worker client is unused since the scan moved off it.
+			return Promise.reject(
+				new Error(
+					"The dedicated sync worker cannot broadcast; use the offscreen or inline client.",
+				),
+			);
+		},
 		async readActivity(input) {
 			const response = await request({ op: "readActivity", ...input });
 

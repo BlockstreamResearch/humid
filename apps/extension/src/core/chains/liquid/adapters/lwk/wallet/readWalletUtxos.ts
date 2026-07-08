@@ -45,13 +45,25 @@ export function readWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[] {
 			);
 		}
 
+		// ELIP-1 `spendable` = "whether the wallet considers the UTXO spendable under wallet policy".
+		// LWK's `WalletTxOut` exposes no explicit spendable/maturity flag, so the only real per-UTXO
+		// policy signal is confirmation status: `height()` is the block height, or `undefined` while
+		// the output is still unconfirmed ("Return the height of the block containing this output if
+		// it's confirmed."). This wallet is a plain BIP-84 wpkh singlesig descriptor — no timelocks or
+		// custom scripts, and Liquid has no coinbase maturity for user wallets — so confirmation is the
+		// only meaningful policy dimension. We take the conservative, dapp-safe reading: an owned,
+		// confirmed UTXO is spendable; an unconfirmed (mempool, still RBF-replaceable) one is not. The
+		// permissive self-send/RBF reading — treating one's own unconfirmed change as spendable (a
+		// constant `true`) — is the defensible alternative.
+		const spendable = utxo.height() !== undefined;
+
 		return {
 			address: utxo.address().toString(),
 			amountSats: unblinded.value().toString(),
 			confidential: rawTxOut.isPartiallyBlinded(),
 			rawAssetId: unblinded.asset().toString(),
 			scriptPubKey: utxo.scriptPubkey().toString(),
-			spendable: true,
+			spendable,
 			txid,
 			txOut: rawTxOut.toString(),
 			vout,

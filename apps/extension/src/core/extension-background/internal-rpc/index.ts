@@ -3,6 +3,9 @@ import type {
 	GetActivityInput,
 	PortfolioSnapshot,
 	ReceiveAddress,
+	SendTransferInput,
+	SendTransferResult,
+	TransferReview,
 } from "@/core/accounts/application/accounts-rpc/model/types";
 import type { ChainGroup } from "@/core/chains/application/ChainGroup";
 import type { ConfirmationRequest } from "@/helpers/background";
@@ -22,8 +25,10 @@ export type CreateInternalRpcHandlersInput = {
 	getActivity: (input: GetActivityInput) => Promise<ActivityPage>;
 	getPortfolio: () => Promise<PortfolioSnapshot>;
 	getReceiveAddress: () => Promise<ReceiveAddress>;
+	inspectTransfer: (input: SendTransferInput) => Promise<TransferReview>;
 	purgeAccountPortfolio: (accountGroupId: string) => Promise<void>;
 	refreshPortfolio: () => Promise<PortfolioSnapshot>;
+	sendTransfer: (input: SendTransferInput) => Promise<SendTransferResult>;
 };
 
 /**
@@ -36,8 +41,10 @@ export function createInternalRpcHandlers({
 	getActivity,
 	getPortfolio,
 	getReceiveAddress,
+	inspectTransfer,
 	purgeAccountPortfolio,
 	refreshPortfolio,
+	sendTransfer,
 }: CreateInternalRpcHandlersInput): RequestHandlerMap {
 	return {
 		ping: (message) => {
@@ -64,8 +71,10 @@ export function createInternalRpcHandlers({
 			getActivity,
 			getPortfolio,
 			getReceiveAddress,
+			inspectTransfer,
 			purgeAccountPortfolio,
 			refreshPortfolio,
+			sendTransfer,
 		}),
 	};
 }

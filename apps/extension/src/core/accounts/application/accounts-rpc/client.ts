@@ -14,7 +14,10 @@ import type {
 	RemoveWalletInput,
 	RenameAccountInput,
 	RevealRecoveryPhraseInput,
+	SendTransferInput,
+	SendTransferResult,
 	SetSelectedAccountInput,
+	TransferReview,
 } from "./model/types";
 
 function getState(): Promise<AccountsState> {
@@ -50,6 +53,16 @@ function getActivity(input: GetActivityInput): Promise<ActivityPage> {
 	return requestBackground<ActivityPage>(accountsRpc.methods.getActivity, input);
 }
 
+/** Preview a send from the selected account (validate recipient, resolve asset) — no broadcast. */
+function inspectTransfer(input: SendTransferInput): Promise<TransferReview> {
+	return requestBackground<TransferReview>(accountsRpc.methods.inspectTransfer, input);
+}
+
+/** Build, sign, and broadcast a send from the selected account; resolves with the broadcast txid. */
+function sendTransfer(input: SendTransferInput): Promise<SendTransferResult> {
+	return requestBackground<SendTransferResult>(accountsRpc.methods.sendTransfer, input);
+}
+
 function createAccount(input: CreateAccountInput): Promise<AccountsState> {
 	return requestBackground<AccountsState>(accountsRpc.methods.createAccount, input);
 }
@@ -73,10 +86,12 @@ export const accountsClient = {
 	getReceiveAddress,
 	getState,
 	importAccount,
+	inspectTransfer,
 	refreshPortfolio,
 	removeAccount,
 	removeWallet,
 	rename,
 	revealRecoveryPhrase,
+	sendTransfer,
 	setSelected,
 };

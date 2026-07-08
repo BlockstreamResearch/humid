@@ -95,3 +95,24 @@ export function parseBaseUnits(value: string): bigint {
 		return 0n;
 	}
 }
+
+/**
+ * The inverse of `formatUnits`: parse a human decimal amount (e.g. "1.5") into an integer base-unit
+ * string (e.g. "150000000" at 8 decimals) at the input boundary. BigInt-based, so no floating-point
+ * rounding. Returns null for anything that isn't a well-formed non-negative decimal, or when the
+ * fractional part has more than `decimals` places (more precision than the asset can represent).
+ */
+export function parseUnits(value: string, decimals: number): string | null {
+	const trimmed = value.trim();
+
+	if (!/^\d*\.?\d*$/u.test(trimmed) || trimmed === "" || trimmed === ".") return null;
+
+	const [whole = "", fraction = ""] = trimmed.split(".");
+
+	if (fraction.length > decimals) return null;
+
+	const digits = `${whole}${fraction.padEnd(decimals, "0")}`;
+
+	// Strip leading zeros so the result is a canonical integer string ("0" stays "0").
+	return digits.replace(/^0+(?=\d)/u, "");
+}

@@ -19,6 +19,8 @@ export type PortfolioSyncEngine = {
 	 * single-flights (joins an in-flight scan) — and resolve with the fresh snapshot.
 	 */
 	refresh: () => Promise<PortfolioSnapshot>;
+	/** Whether a scan is currently in flight for this key, so other scan paths can avoid overlapping. */
+	isSyncing: (key: string) => boolean;
 };
 
 type CacheEntry = {
@@ -29,10 +31,16 @@ type CacheEntry = {
 	inFlight: boolean;
 	/** The in-flight scan promise, shared so concurrent reads/refreshes single-flight onto it. */
 	inFlightSync: Promise<void> | null;
+	/** When we last STARTED a scan (success or failure) — the throttle key, so a failing scan backs off. */
+	lastAttemptAt: number | null;
 	syncedAt: number | null;
 };
 
-/** Skip starting a fresh scan if the cache was refreshed within this window (throttle). */
+/**
+ * Skip starting a fresh scan if we ATTEMPTED one within this window — success OR failure. Throttling
+ * on the attempt (not the last success) means a failing / rate-limited scan backs off instead of the
+ * popup's polling re-scanning on every read (which would hammer a 429ing endpoint indefinitely).
+ */
 const MIN_SYNC_INTERVAL_MS = 60_000;
 
 /**
@@ -63,6 +71,7 @@ export function createPortfolioSyncEngine(
 			hydrated: false,
 			inFlight: false,
 			inFlightSync: null,
+			lastAttemptAt: null,
 			syncedAt: null,
 		};
 		cache.set(key, entry);
@@ -94,9 +103,9 @@ export function createPortfolioSyncEngine(
 	 * forced refresh) joins that same in-flight promise instead of starting a second concurrent scan
 	 * — so rapid refresh clicks collapse to one wallet scan.
 	 *
-	 * Throttle: an unforced sync is skipped when the cache was refreshed within `MIN_SYNC_INTERVAL_MS`.
-	 * `force` bypasses ONLY this time throttle — never the single-flight guard above — so a manual
-	 * refresh always re-scans now, yet still can't launch a duplicate scan.
+	 * Throttle: an unforced sync is skipped when we ATTEMPTED one within `MIN_SYNC_INTERVAL_MS` (a
+	 * failing scan counts, so a 429ing endpoint isn't hammered). `force` bypasses ONLY this time
+	 * throttle — never the single-flight guard above — so a manual refresh always re-scans now.
 	 */
 	const runSync = (target: PortfolioSyncTarget, options?: { force?: boolean }): Promise<void> => {
 		const entry = ensureEntry(target.key);
@@ -106,11 +115,11 @@ export function createPortfolioSyncEngine(
 
 		if (
 			!options?.force &&
-			entry.syncedAt !== null &&
-			Date.now() - entry.syncedAt < MIN_SYNC_INTERVAL_MS
+			entry.lastAttemptAt !== null &&
+			Date.now() - entry.lastAttemptAt < MIN_SYNC_INTERVAL_MS
 		) {
 			console.warn("[liquid-sync] engine skip: throttled", {
-				agoMs: Date.now() - entry.syncedAt,
+				agoMs: Date.now() - entry.lastAttemptAt,
 				key: target.key,
 			});
 
@@ -149,6 +158,10 @@ export function createPortfolioSyncEngine(
 			} finally {
 				entry.inFlight = false;
 				entry.inFlightSync = null;
+				// Stamp the attempt at the END so the throttle window opens AFTER the scan settles: a
+				// slow failing scan (LWK retries a 429 for ~a minute) still leaves a full quiet gap
+				// before the next attempt, instead of re-scanning the instant it gives up.
+				entry.lastAttemptAt = Date.now();
 			}
 		})();
 
@@ -166,6 +179,9 @@ export function createPortfolioSyncEngine(
 	});
 
 	return {
+		isSyncing(key) {
+			return cache.get(key)?.inFlight === true;
+		},
 		async getSnapshot() {
 			const target = await resolveTarget();
 			const entry = ensureEntry(target.key);

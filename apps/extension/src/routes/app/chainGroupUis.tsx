@@ -12,6 +12,7 @@ import { LiquidChainSettings } from "@/core/chains/liquid/chains/LiquidChainSett
 import { isBuiltInLiquidChainId } from "@/core/chains/liquid/domain/LiquidChain";
 import { LiquidAssetView } from "@/core/chains/liquid/presentation/LiquidAssetView";
 import { LiquidBalanceHeadline } from "@/core/chains/liquid/presentation/LiquidBalanceHeadline";
+import { liquidExplorerTxUrl } from "@/core/chains/liquid/presentation/liquidExplorerTxUrl";
 import { LiquidTokenRow } from "@/core/chains/liquid/presentation/LiquidTokenRow";
 
 type ChainComponent = ComponentType<{ chain: ChainRecord; onChange: (chain: ChainRecord) => void }>;
@@ -47,6 +48,8 @@ export type ChainGroupUi = {
 	Settings: ChainComponent;
 	TokenRow: TokenRowComponent;
 	createDraft: (name: string) => ChainRecord;
+	/** "View on explorer" URL for a broadcast txid, or null if the chain has no explorer configured. */
+	explorerTxUrl: (chain: ChainRecord, txid: string) => string | null;
 	isBuiltIn: (chainId: string) => boolean;
 	name: string;
 };
@@ -61,6 +64,7 @@ export const chainGroupUis: Record<string, ChainGroupUi> = {
 		Settings: LiquidChainSettings as ChainComponent,
 		TokenRow: LiquidTokenRow,
 		createDraft: (name) => createCustomLiquidChainRecord(name),
+		explorerTxUrl: liquidExplorerTxUrl,
 		isBuiltIn: isBuiltInLiquidChainId,
 		name: "Liquid",
 	},

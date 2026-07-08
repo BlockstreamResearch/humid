@@ -3,9 +3,9 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 
 import { cn } from "@/theme/utils.ts";
-import { UiButton, UiButtonVariants } from "@/ui/UiButton/base";
+import { UiButtonVariants } from "@/ui/UiButton/base";
 
-/** Primary money actions. Receive opens the receive screen; Send is wired later. */
+/** Primary money actions: Receive opens the receive screen; Send opens the send flow. */
 export function QuickActions() {
 	return (
 		<div className="flex gap-2">
@@ -16,10 +16,13 @@ export function QuickActions() {
 				<HugeiconsIcon icon={ArrowDownLeft01Icon} size={18} />
 				Receive
 			</Link>
-			<UiButton type="button" variant="outline" size="lg" className="flex-1">
+			<Link
+				to="/app/send"
+				className={cn(UiButtonVariants({ size: "lg", variant: "outline" }), "flex-1")}
+			>
 				<HugeiconsIcon icon={ArrowUpRight01Icon} size={18} />
 				Send
-			</UiButton>
+			</Link>
 		</div>
 	);
 }

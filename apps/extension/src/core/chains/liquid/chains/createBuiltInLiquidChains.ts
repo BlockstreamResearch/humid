@@ -14,10 +14,20 @@ import {
 	type LiquidNetworkKind,
 } from "./LiquidChainRecord";
 
-const LIQUID_DEFAULT_ESPLORA_URLS = {
-	[LIQUID_MAINNET_CHAIN_ID]: "https://blockstream.info/liquid/api",
-	[LIQUID_TESTNET_CHAIN_ID]: "https://blockstream.info/liquidtestnet/api",
-} as const satisfies Record<BuiltInLiquidChainId, string>;
+// Default blockchain backend per built-in chain. Testnet uses the public Waterfalls server (run by
+// the LWK author): with `waterfalls: true` a whole-wallet scan is ONE server-side request, instead of
+// the dozens of per-address history queries a plain esplora scan fans out — which tripped
+// blockstream's free-tier rate limit (HTTP 429). Trade-off: waterfalls sends the descriptor to that
+// server, which is fine for testnet dev but a privacy choice on mainnet — so mainnet stays on
+// blockstream esplora for now (revisit with a Blockstream API key, a self-hosted node, or the
+// encrypted-descriptor waterfalls mode).
+const LIQUID_DEFAULT_BACKENDS = {
+	[LIQUID_MAINNET_CHAIN_ID]: { url: "https://blockstream.info/liquid/api" },
+	[LIQUID_TESTNET_CHAIN_ID]: {
+		url: "https://waterfalls.liquidwebwallet.org/liquidtestnet/api",
+		waterfalls: true,
+	},
+} satisfies Record<BuiltInLiquidChainId, LiquidChainBackend>;
 
 const LIQUID_DEFAULT_EXPLORER_URLS = {
 	[LIQUID_MAINNET_CHAIN_ID]: "https://blockstream.info/liquid/",
@@ -73,15 +83,13 @@ function createDefaultLiquidNetwork(chainId: LiquidChainId): LiquidNetworkKind {
 }
 
 function createDefaultLiquidChainBackend(chainId: LiquidChainId): LiquidChainBackend {
-	const defaultUrl = LIQUID_DEFAULT_ESPLORA_URLS[chainId as BuiltInLiquidChainId];
+	const backend = LIQUID_DEFAULT_BACKENDS[chainId as BuiltInLiquidChainId];
 
-	if (!defaultUrl) {
+	if (!backend) {
 		throw new Error("Custom Liquid chains must provide backend settings.");
 	}
 
-	return {
-		url: defaultUrl,
-	};
+	return { ...backend };
 }
 
 /** Create a fresh custom (regtest) Liquid chain with a generated id, for the add-chain form. */

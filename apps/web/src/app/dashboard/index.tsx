@@ -12,7 +12,7 @@ import {
 	type Caip25Scopes,
 	type CaipRpcProvider,
 } from "@humid/appkit-injected-adapter";
-import { useAppKit, useDisconnect } from "@reown/appkit/react";
+import { useAppKit, useAppKitAccount, useDisconnect } from "@reown/appkit/react";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -349,6 +349,12 @@ function ConnectionCard({
 	const { call, pending, result } = useRpcCall();
 	const hasSession = Boolean(session && Object.keys(session).length);
 
+	// AppKit's reactive account for our custom bip122 namespace. The injected adapter bridges
+	// window.humid events into AppKit, so isConnected / address update on wallet-side connect,
+	// account switch, revoke, or lock — no polling here (the wallet_getSession poll drives the
+	// permission badges only).
+	const { address, isConnected } = useAppKitAccount({ namespace: LIQUID_NAMESPACE });
+
 	return (
 		<Card>
 			<CardHeader>
@@ -360,6 +366,11 @@ function ConnectionCard({
 			</CardHeader>
 			<CardContent className="flex flex-col gap-4">
 				<div className="flex flex-wrap items-center gap-3 text-sm">
+					<StatusRow
+						label="Connection"
+						value={isConnected ? "connected" : "disconnected"}
+						active={isConnected}
+					/>
 					<StatusRow label="Session" value={hasSession ? "active" : "none"} active={hasSession} />
 					<span className="text-muted-foreground">Active chain:</span>
 					<Select value={chainId} onValueChange={onChainChange}>
@@ -376,16 +387,27 @@ function ConnectionCard({
 					</Select>
 				</div>
 
+				{isConnected ? (
+					<p className="text-muted-foreground text-sm">
+						Connected as{" "}
+						<code className="text-foreground font-mono text-xs">{truncateAddress(address)}</code>
+					</p>
+				) : null}
+
 				<div className="flex flex-wrap gap-2">
-					<Button onClick={onConnectAppKit} disabled={pending}>
-						Connect (AppKit)
-					</Button>
+					{isConnected ? null : (
+						<Button onClick={onConnectAppKit} disabled={pending}>
+							Connect (AppKit)
+						</Button>
+					)}
 					<Button variant="outline" onClick={() => call(onCreateSession)} disabled={pending}>
 						Create session (direct)
 					</Button>
-					<Button variant="outline" onClick={() => call(onDisconnect)} disabled={pending}>
-						Disconnect
-					</Button>
+					{isConnected ? (
+						<Button variant="outline" onClick={() => call(onDisconnect)} disabled={pending}>
+							Disconnect
+						</Button>
+					) : null}
 				</div>
 				<ResultPanel result={result} />
 			</CardContent>
@@ -1042,6 +1064,12 @@ function buildAllScopes(): Caip25Scopes {
 			},
 		]),
 	);
+}
+
+/** Shorten a wallet address for the connected indicator: first 6 + last 4, e.g. tb1qab…7890. */
+function truncateAddress(address: string | undefined): string {
+	if (!address) return "";
+	return address.length <= 10 ? address : `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
 function policyAssetIdForChain(chainId: string): string {

@@ -36,6 +36,14 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 
 				return walletBackend.getReceiveAddress(account);
 			},
+			async inspectTransfer(input, transfer) {
+				const account = await walletBackend.resolveAccount(input);
+				// No `assetId` means the native policy asset (L-BTC). Preview only — no sync needed, since
+				// `inspectTransfer` just validates the recipient and resolves the asset (no UTXO selection).
+				const rawAssetId = transfer.rawAssetId ?? account.rawPolicyAssetId;
+
+				return walletBackend.inspectTransfer(account, transfer, rawAssetId);
+			},
 			async resolveAccountIdentifier(input) {
 				const account = await walletBackend.resolveAccount(input);
 
@@ -53,6 +61,16 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 				});
 
 				return { assets: snapshot.assets, utxos: snapshot.utxos };
+			},
+			async sendTransfer(input, transfer) {
+				const account = await walletBackend.resolveAccount(input);
+				const rawAssetId = transfer.rawAssetId ?? account.rawPolicyAssetId;
+				// Each resolve derives a fresh (unsynced) wallet, so sync it before building — the same
+				// order the dapp path uses (review syncs, then execute builds/signs/broadcasts). The
+				// signing + offscreen broadcast inside `sendTransfer` are unchanged.
+				await walletBackend.syncAccount(account);
+
+				return walletBackend.sendTransfer(account, transfer, rawAssetId);
 			},
 		},
 		chains: createBuiltInLiquidChains(),

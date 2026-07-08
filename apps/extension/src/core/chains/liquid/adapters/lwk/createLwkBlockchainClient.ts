@@ -2,12 +2,11 @@ import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
 import type { LwkNetwork } from "./createLwkNetwork";
 import type { LwkWasmModule } from "./loadLwkWasm";
 
-// LWK defaults Esplora request concurrency to 1 — fully sequential. In a browser that makes a
-// cold full scan crawl: dozens of address-history requests fired one at a time (and repeated on
-// every incremental scan too, since it re-queries the address set). Fan them out; a public
-// esplora handles this fine and it cuts a cold scan from ~a minute to a few seconds. Per-chain
-// backend settings can still override it.
-const DEFAULT_ESPLORA_CONCURRENCY = 8;
+// LWK defaults Esplora request concurrency to 1 (fully sequential), which crawls on a cold scan.
+// We fan out a little to speed it up — but 8 tripped the public blockstream endpoint's rate limit
+// (HTTP 429, then LWK retries for ~a minute and the whole scan fails), so keep a GENTLE default. A
+// private / self-hosted esplora can raise it via the per-chain `backend.concurrency` setting.
+const DEFAULT_ESPLORA_CONCURRENCY = 2;
 
 /**
  * Build the LWK Esplora client for a chain's backend settings via the

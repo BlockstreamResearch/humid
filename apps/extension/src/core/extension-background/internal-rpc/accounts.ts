@@ -14,7 +14,10 @@ import type {
 	RemoveWalletInput,
 	RenameAccountInput,
 	RevealRecoveryPhraseInput,
+	SendTransferInput,
+	SendTransferResult,
 	SetSelectedAccountInput,
+	TransferReview,
 } from "@/core/accounts/application/accounts-rpc/model/types";
 import { LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT } from "@/core/chains/liquid/domain/LiquidRpc";
 import { keyManagerSecretMaterial } from "@/core/key-manager/secret-material";
@@ -42,9 +45,15 @@ export type AccountsRuntimeDeps = {
 	// Materialize + derive the receive address for the selected account on the
 	// selected chain. Chain-specific; wired by the background composition root.
 	getReceiveAddress: () => Promise<ReceiveAddress>;
+	// Preview a send from the selected account+chain (validate recipient, resolve asset,
+	// report ELIP-1 confidentiality) WITHOUT signing/broadcasting. Wired by the root.
+	inspectTransfer: (input: SendTransferInput) => Promise<TransferReview>;
 	// Force an immediate re-sync of the selected account's portfolio (bypasses the
 	// engine throttle, single-flighted) and return the fresh snapshot. Wired by the root.
 	refreshPortfolio: () => Promise<PortfolioSnapshot>;
+	// Build, sign, and broadcast a send from the selected account+chain; resolves with the
+	// broadcast txid. The popup UI is the review+confirm — no dapp confirm round-trip. Wired by root.
+	sendTransfer: (input: SendTransferInput) => Promise<SendTransferResult>;
 	// Garbage-collect a removed account's persisted portfolio (session-storage
 	// snapshots + cached scan target). Best-effort; wired by the background root.
 	purgeAccountPortfolio: (accountGroupId: string) => Promise<void>;
@@ -233,5 +242,12 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 		[accountsRpc.methods.refreshPortfolio]: () => deps.refreshPortfolio(),
 		[accountsRpc.methods.getActivity]: (message) =>
 			deps.getActivity(message.data as GetActivityInput),
+		// Preview + execute the in-extension send. Both resolve the selected account via the same
+		// runtime as getReceiveAddress and call the backend directly (no dapp confirmation popup): the
+		// popup's own review screen is the confirmation.
+		[accountsRpc.methods.inspectTransfer]: (message) =>
+			deps.inspectTransfer(message.data as SendTransferInput),
+		[accountsRpc.methods.sendTransfer]: (message) =>
+			deps.sendTransfer(message.data as SendTransferInput),
 	};
 }
