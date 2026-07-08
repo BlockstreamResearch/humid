@@ -1,10 +1,6 @@
+import { createInlineScanClient } from "./createInlineScanClient";
 import { createOffscreenScanClient, getChromeOffscreen } from "./createOffscreenScanClient";
-import { createWorkerScanClient, type SyncWorkerClient } from "./createWorkerScanClient";
-import {
-	readActivity as runReadActivity,
-	scanAndRead as runScanAndRead,
-	scanFresh as runScanFresh,
-} from "./liquidScanCore";
+import type { SyncWorkerClient } from "./createWorkerScanClient";
 
 export type {
 	ActivityPageResult,
@@ -16,37 +12,19 @@ export type {
 } from "./createWorkerScanClient";
 
 /**
- * Picks how the background runs the heavy LWK scan for its context:
- * - a dedicated `Worker` where one exists (a Firefox background page, or our offscreen document);
- * - an offscreen document on Chrome, whose MV3 service worker can't spawn a `Worker` itself;
- * - inline on the current thread as a last resort.
+ * Picks how a background context runs the heavy LWK scan.
+ *
+ * LWK's Esplora client performs its async retry / rate-limit backoff via the DOM `window`
+ * (`web_sys::window()`), which a dedicated `Worker` never has — so the scan must NOT run in a Worker
+ * (doing so throws "Cannot access browser window for async sleep" the moment a sleep is hit). The
+ * Chrome MV3 service worker has no `window` either, so it delegates to the offscreen document, which
+ * owns a real `window` and scans inline. Any context that already has a `window` — the offscreen
+ * document itself, a Firefox background page — scans inline directly.
  */
 export function createSyncWorkerClient(): SyncWorkerClient {
-	if (typeof Worker !== "undefined") return createWorkerScanClient();
-	if (getChromeOffscreen()) return createOffscreenScanClient();
+	if (typeof window === "undefined" && getChromeOffscreen()) return createOffscreenScanClient();
 
 	return createInlineScanClient();
-}
-
-/** Fallback where neither a `Worker` nor an offscreen document exists: scan on the current thread. */
-function createInlineScanClient(): SyncWorkerClient {
-	console.warn(
-		"[liquid-sync] No Worker or offscreen document available — running scans inline on this thread",
-	);
-
-	let seq = 0;
-
-	return {
-		async readActivity(input) {
-			return runReadActivity({ ...input, id: (seq += 1) });
-		},
-		async scan(input) {
-			return { updateBytes: await runScanFresh({ ...input, id: (seq += 1) }) };
-		},
-		async scanAndRead(input) {
-			return runScanAndRead({ ...input, id: (seq += 1) });
-		},
-	};
 }
 
 let sharedClient: SyncWorkerClient | null = null;

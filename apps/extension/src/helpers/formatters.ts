@@ -21,6 +21,27 @@ export function formatDateDMYT(date: Date | number) {
 	return dayjs(date).format("DD.MM.YYYY HH:mm");
 }
 
+/**
+ * Formats a past timestamp (ms) as a short "time ago" freshness label — "just now", "5m ago",
+ * "2h ago", "3d ago". `now` is injectable so callers can tick it on an interval (and tests can
+ * pin it). Sub-minute gaps read as "just now"; anything in between rounds down but never to "0m".
+ */
+export function formatTimeAgo(timestamp: number, now: number = Date.now()): string {
+	const seconds = Math.max(0, Math.floor((now - timestamp) / 1000));
+
+	if (seconds < 45) return "just now";
+
+	const minutes = Math.floor(seconds / 60);
+
+	if (minutes < 60) return `${Math.max(1, minutes)}m ago`;
+
+	const hours = Math.floor(minutes / 60);
+
+	if (hours < 24) return `${hours}h ago`;
+
+	return `${Math.floor(hours / 24)}d ago`;
+}
+
 export function formatByteLength(length: number) {
 	const units = ["B", "KB", "MB", "GB", "TB"];
 

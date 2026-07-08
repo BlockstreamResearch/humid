@@ -13,11 +13,13 @@ import {
 import { parseLiquidAssetId, parseLiquidGetBalanceParams } from "../../domain/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../dappAccountScope";
+import type { ReadPortfolioSnapshot } from "../LiquidRpcContext";
 
 export type LiquidGetBalanceContext = {
 	chain: LiquidChainRecord;
 	confirm?: WalletRpcConfirmationHandler;
 	keyManagerState: KeyManagerState;
+	readPortfolioSnapshot?: ReadPortfolioSnapshot;
 	updateKeyManagerState?: UpdateKeyManagerState;
 	walletBackend: LiquidWalletBackend;
 };
@@ -58,14 +60,38 @@ export const getLiquidBalance = createWalletMethod<
 		title: "Share Liquid balance?",
 	}),
 	execute: async ({ context, review }) => {
-		await context.walletBackend.syncAccount(review.account);
+		const { account, requestedAsset } = review;
+
+		// Snapshot-first: when a persisted portfolio snapshot exists for this account+chain, serve the
+		// balance from it with no scan. A miss (cold cache, or a non-selected account that has no
+		// snapshot) falls through to the live scan below; reads never trigger a sync.
+		if (context.readPortfolioSnapshot && account.accountGroupId) {
+			const snapshot = await context.readPortfolioSnapshot(account.accountGroupId, account.chainId);
+
+			if (snapshot) {
+				const asset = snapshot.data.assets.find(
+					(entry) => entry.rawAssetId === requestedAsset.rawAssetId,
+				);
+
+				return {
+					accountIdentifier: account.accountIdentifier,
+					assetId: requestedAsset.assetId,
+					// An asset absent from the snapshot (not held / zero balance) reads as "0".
+					balance: asset?.amountSats ?? "0",
+					chainId: account.chainId,
+					policyAssetId: account.policyAssetId,
+				};
+			}
+		}
+
+		await context.walletBackend.syncAccount(account);
 
 		return {
-			accountIdentifier: review.account.accountIdentifier,
-			assetId: review.requestedAsset.assetId,
-			balance: context.walletBackend.getBalance(review.account, review.requestedAsset.rawAssetId),
-			chainId: review.account.chainId,
-			policyAssetId: review.account.policyAssetId,
+			accountIdentifier: account.accountIdentifier,
+			assetId: requestedAsset.assetId,
+			balance: context.walletBackend.getBalance(account, requestedAsset.rawAssetId),
+			chainId: account.chainId,
+			policyAssetId: account.policyAssetId,
 		};
 	},
 	parse: parseLiquidGetBalanceParams,

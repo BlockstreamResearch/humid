@@ -12,12 +12,18 @@ const PORTFOLIO_IDLE_POLL_MS = 20_000;
 /** Faster poll while a background sync is in flight, so fresh data shows up quickly. */
 const PORTFOLIO_ACTIVE_SYNC_POLL_MS = 2_000;
 
+/** Query key for the selected account+chain portfolio; shared with the manual-refresh mutation. */
+export const portfolioQueryKey = (accountGroupId: string, chainId: string) =>
+	["portfolio", accountGroupId, chainId] as const;
+
 /** The portfolio axis: the balance headline data and the token list (activity is fetched per asset). */
 export type Portfolio = {
 	error: string | null;
 	isLoading: boolean;
 	isSyncing: boolean;
 	native: { amount: bigint; decimals: number; symbol: string } | null;
+	/** When the background last successfully synced this account+chain (ms), or null before any sync. */
+	syncedAt: number | null;
 	tokens: PortfolioViewAsset[];
 };
 
@@ -26,6 +32,7 @@ const EMPTY_PORTFOLIO: Portfolio = {
 	isLoading: false,
 	isSyncing: false,
 	native: null,
+	syncedAt: null,
 	tokens: [],
 };
 
@@ -40,7 +47,7 @@ const EMPTY_PORTFOLIO: Portfolio = {
 export function usePortfolio(keys: { accountGroupId: string; chainId: string }): Portfolio {
 	const query = useQuery({
 		queryFn: () => accountsClient.getPortfolio(),
-		queryKey: ["portfolio", keys.accountGroupId, keys.chainId],
+		queryKey: portfolioQueryKey(keys.accountGroupId, keys.chainId),
 		refetchInterval: (portfolioQuery) =>
 			portfolioQuery.state.data?.isSyncing ? PORTFOLIO_ACTIVE_SYNC_POLL_MS : PORTFOLIO_IDLE_POLL_MS,
 	});
@@ -56,10 +63,10 @@ function toPortfolio(snapshot: PortfolioSnapshot | undefined, isPending: boolean
 	// No response yet (first read on a cold background): empty, and treated as syncing.
 	if (!snapshot) return { ...EMPTY_PORTFOLIO, isLoading: isPending, isSyncing: isPending };
 
-	const { data, error, isSyncing } = snapshot;
+	const { data, error, isSyncing, syncedAt } = snapshot;
 
 	// Synced but no data yet, or a sync failed before any data was cached.
-	if (!data) return { ...EMPTY_PORTFOLIO, error, isSyncing };
+	if (!data) return { ...EMPTY_PORTFOLIO, error, isSyncing, syncedAt };
 
 	const nativeAsset = data.assets.find((asset) => asset.isNative) ?? null;
 
@@ -67,6 +74,7 @@ function toPortfolio(snapshot: PortfolioSnapshot | undefined, isPending: boolean
 		error,
 		isLoading: false,
 		isSyncing,
+		syncedAt,
 		native: nativeAsset
 			? {
 					amount: parseBaseUnits(nativeAsset.amountSats),

@@ -5,9 +5,14 @@ import { getWalletKitClientState } from "./state";
 
 // Wallet provider events a WalletConnect session can carry — must be advertised in the session's
 // namespace `events` (see LIQUID_WALLETCONNECT_EVENTS). Others are dropped: WalletConnect rejects an
-// event a session never negotiated. `wallet_sessionChanged` is injected-only (not chain-scoped);
-// `bip122_walletDescriptorChanged` is advertised but its emission is deferred.
-const WC_DELIVERABLE_EVENTS = new Set(["accountsChanged", "chainChanged"]);
+// event a session never negotiated. `wallet_sessionChanged` is injected-only (not chain-scoped).
+// `bip122_walletDescriptorChanged` is delivered as a minimal signal (the dapp re-queries
+// getWalletDescriptor); a full ELIP-1 descriptor payload over WC is a noted future enhancement.
+const WC_DELIVERABLE_EVENTS = new Set([
+	"accountsChanged",
+	"chainChanged",
+	"bip122_walletDescriptorChanged",
+]);
 
 /** The CAIP-2 chains a namespace scope covers: its `chains`, or those derived from its accounts. */
 function chainsForScope(scope: { accounts: string[]; chains?: string[] }): string[] {

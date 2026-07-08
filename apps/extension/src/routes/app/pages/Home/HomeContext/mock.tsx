@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type PropsWithChildren, useCallback, useMemo, useState } from "react";
 
 import type { AccountGroupRecord } from "@/core/accounts/application/account-registry/model/account-group";
@@ -48,6 +49,7 @@ const PORTFOLIO: Portfolio = {
 	error: null,
 	isLoading: false,
 	isSyncing: false,
+	syncedAt: Date.now() - 120_000,
 	native: { amount: 245_000_000n, decimals: 8, symbol: "L-BTC" },
 	tokens: [
 		{
@@ -111,13 +113,19 @@ function useMockHomeValue() {
 	);
 }
 
+// Story/test-only client so components that reach for React Query (e.g. the portfolio refresh
+// mutation) render without a backend; there are no real queries here.
+const mockQueryClient = new QueryClient();
+
 /** Story/test provider: injects the interactive mock value into HomeContext. */
 export function MockHomeProvider({ children }: PropsWithChildren) {
 	const value = useMockHomeValue();
 
 	return (
-		<HomeContext.Provider value={value}>
-			<UiPageBackgroundWrp>{children}</UiPageBackgroundWrp>
-		</HomeContext.Provider>
+		<QueryClientProvider client={mockQueryClient}>
+			<HomeContext.Provider value={value}>
+				<UiPageBackgroundWrp>{children}</UiPageBackgroundWrp>
+			</HomeContext.Provider>
+		</QueryClientProvider>
 	);
 }

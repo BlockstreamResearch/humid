@@ -3,6 +3,7 @@ export {
 	type DappAuthorization,
 	type DappAuthorizationDependencies,
 	type DappRequestDispatch,
+	DEFAULT_INJECTED_SESSION_TTL_MS,
 	type SupportedDappScope,
 } from "./createDappAuthorization";
 export { createDappConnectInternalHandlers } from "./connectableAccounts";

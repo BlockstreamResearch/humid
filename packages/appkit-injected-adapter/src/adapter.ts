@@ -7,11 +7,24 @@ import {
 } from "@reown/appkit-controllers";
 import type UniversalProvider from "@walletconnect/universal-provider";
 
-import { createInjectedProvider } from "./provider";
+import { createInjectedProvider, waitForProvider } from "./provider";
 import { createSession, getSession, invokeMethod, revokeSession } from "./rpc";
-import type { Caip25Scopes, InjectedCaipAdapterOptions, InjectedProvider } from "./types";
+import type {
+	Caip25Scopes,
+	InjectedCaipAdapterOptions,
+	InjectedProvider,
+	RawInjectedProvider,
+} from "./types";
 
 const DEFAULT_ACCOUNT_TYPE = "payment";
+
+/** window.<wallet> events that should re-sync this origin's AppKit account / network view. */
+const WALLET_BRIDGE_EVENTS = [
+	"accountsChanged",
+	"chainChanged",
+	"wallet_sessionChanged",
+	"disconnect",
+] as const;
 
 /**
  * An AppKit AdapterBlueprint for an injected wallet that authorizes via CAIP-25 and invokes methods
@@ -21,6 +34,12 @@ const DEFAULT_ACCOUNT_TYPE = "payment";
 export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector> {
 	private readonly options: InjectedCaipAdapterOptions;
 	private readonly injectedProvider: InjectedProvider;
+
+	/** off-handles for the window.<wallet> subscriptions this adapter bridges into AppKit. */
+	private walletEventUnsubscribers: Array<() => void> = [];
+	/** Last account/chain this adapter told AppKit about — used to suppress duplicate emits. */
+	private lastEmittedAddress: string | undefined;
+	private lastEmittedChainId: string | undefined;
 
 	constructor(options: InjectedCaipAdapterOptions) {
 		// AppKit matches a passed adapter to a chain namespace by `adapter.namespace` (see
@@ -81,6 +100,10 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 			this.options.connector.id,
 		);
 
+		// From here on, bridge wallet-side account/chain/session changes into AppKit. Seed the
+		// last-emitted snapshot with what we just connected so only a real change triggers the next emit.
+		await this.subscribeToWalletEvents({ address: account.address, chainId: network.id });
+
 		return {
 			id: this.options.connector.id,
 			type: "INJECTED" as const,
@@ -100,6 +123,9 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 			}
 
 			this.onDisconnect(this.options.connector.id);
+			this.unsubscribeFromWalletEvents();
+			this.lastEmittedAddress = undefined;
+			this.lastEmittedChainId = undefined;
 		}
 
 		return { connections: this.connections };
@@ -174,6 +200,9 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 			],
 			this.options.connector.id,
 		);
+
+		// Restored a live session — start bridging wallet-side changes, seeded with the restored account.
+		await this.subscribeToWalletEvents({ address: account.address, chainId: network.id });
 
 		return {
 			id: this.options.connector.id,
@@ -261,6 +290,147 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		return {};
 	}
 
+	/**
+	 * Bridge the injected wallet's own events into AppKit. AppKit's base only re-emits `accountChanged`
+	 * / `switchNetwork` for the EVM namespace (see AdapterBlueprint.onAccountsChanged / onChainChanged),
+	 * so for this (bip122) adapter we subscribe to `window.<wallet>` directly and emit the adapter events
+	 * ourselves. Each relevant event re-reads THIS origin's session (read-only, no prompt) and reconciles
+	 * account + chain against the last thing we told AppKit. Seed avoids a duplicate emit right after
+	 * connect/restore.
+	 */
+	private async subscribeToWalletEvents(seed?: { address: string; chainId: string | number }) {
+		if (seed) {
+			this.lastEmittedAddress = seed.address;
+			this.lastEmittedChainId = seed.chainId.toString();
+		}
+
+		// Never stack handlers across reconnects: drop any previous subscription first.
+		this.unsubscribeFromWalletEvents();
+
+		let raw: RawInjectedProvider;
+		try {
+			raw = await waitForProvider(this.options.getProvider, this.options.providerTimeoutMs);
+		} catch {
+			return; // Provider not on the page; nothing to bridge (a later connect re-subscribes).
+		}
+
+		const subscribe = raw.on;
+		if (!subscribe) return; // Wallet exposes no event channel.
+
+		for (const eventName of WALLET_BRIDGE_EVENTS) {
+			const unsubscribe = subscribe({
+				event: eventName,
+				listener: (payload) => {
+					void this.handleWalletEvent(payload);
+				},
+			});
+
+			if (unsubscribe) this.walletEventUnsubscribers.push(unsubscribe);
+		}
+	}
+
+	/** Drop every window.<wallet> subscription this adapter registered. */
+	private unsubscribeFromWalletEvents() {
+		for (const unsubscribe of this.walletEventUnsubscribers) {
+			try {
+				unsubscribe();
+			} catch {
+				// Best-effort: a wallet that already tore down its channel is fine to ignore.
+			}
+		}
+
+		this.walletEventUnsubscribers = [];
+	}
+
+	/**
+	 * React to one wallet event. The broadcast payload is only a trigger — CAIP-25 accounts are
+	 * per-origin, so we re-read `wallet_getSession` for THIS origin and emit the AppKit adapter events
+	 * that move `useAppKitAccount` / `useAppKitNetwork`.
+	 */
+	private async handleWalletEvent(payload: unknown) {
+		let sessionScopes: Caip25Scopes;
+		try {
+			({ sessionScopes } = await getSession(this.injectedProvider));
+		} catch {
+			return; // Transient read failure: keep the current view rather than flapping.
+		}
+
+		const network = this.resolveNetworkForEvent(payload);
+		const accountIdentifier = sessionScopes[network.caipNetworkId]?.accounts?.[0];
+
+		if (!accountIdentifier) {
+			// This origin has no account on the active chain anymore (session revoked / wallet locked):
+			// mirror disconnect()'s onDisconnect so AppKit clears the connection. Guarded to fire once.
+			if (this.lastEmittedAddress !== undefined) {
+				this.lastEmittedAddress = undefined;
+				this.lastEmittedChainId = undefined;
+				this.onDisconnect(this.options.connector.id);
+			}
+
+			return;
+		}
+
+		const { address } = parseCaipAccountId(accountIdentifier);
+		const nextChainId = network.id.toString();
+		const chainChanged =
+			this.lastEmittedChainId !== undefined && nextChainId !== this.lastEmittedChainId;
+		const accountChanged = address !== this.lastEmittedAddress;
+
+		if (!chainChanged && !accountChanged) return; // Nothing AppKit doesn't already know.
+
+		this.lastEmittedAddress = address;
+		this.lastEmittedChainId = nextChainId;
+
+		// bip122 is EVM-gated out of the base's onChainChanged, so emit `switchNetwork` ourselves; the
+		// base subscriber matches the network by `network.id` and re-syncs `useAppKitNetwork` under it.
+		if (chainChanged) {
+			this.emit("switchNetwork", { chainId: network.id });
+		}
+
+		// Reuse onConnect with the exact ParsedCaipAddress object shape connect() uses: it emits the
+		// (ungated) `accountChanged` AND refreshes the stored connection's account + caipNetwork.
+		this.onConnect(
+			[
+				{
+					address,
+					chainId: network.id,
+					chainNamespace: this.options.namespace as ChainNamespace,
+				},
+			],
+			this.options.connector.id,
+		);
+	}
+
+	/**
+	 * The network an event refers to: the event's own chainId when it carries one (chainChanged), else
+	 * the active connection's network, else the configured default. Accepts a CAIP-2 id or a bare ref.
+	 */
+	private resolveNetworkForEvent(payload: unknown): CaipNetwork {
+		const eventChainId = extractEventChainId(payload);
+
+		if (eventChainId) {
+			const reference = eventChainId.includes(":")
+				? eventChainId.slice(eventChainId.lastIndexOf(":") + 1)
+				: eventChainId;
+			const match = this.resolveNetworks().find(
+				(network) =>
+					network.caipNetworkId === eventChainId ||
+					network.id.toString() === eventChainId ||
+					network.id.toString() === reference,
+			);
+
+			if (match) return match;
+		}
+
+		const activeNetwork = this.getConnection({
+			connectors: this.connectors,
+			connections: this.connections,
+			connectorId: this.options.connector.id,
+		})?.caipNetwork;
+
+		return activeNetwork ?? this.resolveNetwork(this.lastEmittedChainId);
+	}
+
 	private buildSessionScopes(): Caip25Scopes {
 		const notifications = [...(this.options.notifications ?? [])];
 
@@ -294,6 +464,19 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 
 		return network;
 	}
+}
+
+/** Pull a chain id out of a wallet event payload (`{ chainId }` or a bare string), if present. */
+function extractEventChainId(payload: unknown): string | undefined {
+	if (typeof payload === "string") return payload;
+
+	if (payload && typeof payload === "object" && "chainId" in payload) {
+		const { chainId } = payload as { chainId?: unknown };
+		if (typeof chainId === "string") return chainId;
+		if (typeof chainId === "number") return chainId.toString();
+	}
+
+	return undefined;
 }
 
 function parseCaipAccountId(accountIdentifier: string): { address: string; scope: string } {

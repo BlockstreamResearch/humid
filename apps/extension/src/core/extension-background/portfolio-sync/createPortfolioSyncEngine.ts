@@ -14,6 +14,11 @@ export type PortfolioSyncTarget = {
 export type PortfolioSyncEngine = {
 	/** Read the cached snapshot for the current target, triggering a throttled background sync. */
 	getSnapshot: () => Promise<PortfolioSnapshot>;
+	/**
+	 * Force an immediate re-sync of the current target — bypasses the throttle but still
+	 * single-flights (joins an in-flight scan) — and resolve with the fresh snapshot.
+	 */
+	refresh: () => Promise<PortfolioSnapshot>;
 };
 
 type CacheEntry = {
@@ -22,6 +27,8 @@ type CacheEntry = {
 	/** Whether we've tried to hydrate this key from the durable store (once per SW lifetime). */
 	hydrated: boolean;
 	inFlight: boolean;
+	/** The in-flight scan promise, shared so concurrent reads/refreshes single-flight onto it. */
+	inFlightSync: Promise<void> | null;
 	syncedAt: number | null;
 };
 
@@ -55,6 +62,7 @@ export function createPortfolioSyncEngine(
 			error: null,
 			hydrated: false,
 			inFlight: false,
+			inFlightSync: null,
 			syncedAt: null,
 		};
 		cache.set(key, entry);
@@ -79,53 +87,83 @@ export function createPortfolioSyncEngine(
 		}
 	};
 
-	const runSync = async (target: PortfolioSyncTarget): Promise<void> => {
+	/**
+	 * Kick a sync for `target`, resolving when the wallet scan settles.
+	 *
+	 * Single-flight: if a scan is already running for this key, EVERY caller (a background read or a
+	 * forced refresh) joins that same in-flight promise instead of starting a second concurrent scan
+	 * — so rapid refresh clicks collapse to one wallet scan.
+	 *
+	 * Throttle: an unforced sync is skipped when the cache was refreshed within `MIN_SYNC_INTERVAL_MS`.
+	 * `force` bypasses ONLY this time throttle — never the single-flight guard above — so a manual
+	 * refresh always re-scans now, yet still can't launch a duplicate scan.
+	 */
+	const runSync = (target: PortfolioSyncTarget, options?: { force?: boolean }): Promise<void> => {
 		const entry = ensureEntry(target.key);
 
-		if (entry.inFlight) {
-			console.warn("[liquid-sync] engine skip: still in-flight", { key: target.key });
+		// Single-flight: join the scan already in progress for this key (forced or not).
+		if (entry.inFlightSync) return entry.inFlightSync;
 
-			return;
-		}
-
-		if (entry.syncedAt !== null && Date.now() - entry.syncedAt < MIN_SYNC_INTERVAL_MS) {
+		if (
+			!options?.force &&
+			entry.syncedAt !== null &&
+			Date.now() - entry.syncedAt < MIN_SYNC_INTERVAL_MS
+		) {
 			console.warn("[liquid-sync] engine skip: throttled", {
 				agoMs: Date.now() - entry.syncedAt,
 				key: target.key,
 			});
 
-			return;
+			return Promise.resolve();
 		}
 
 		entry.inFlight = true;
 		const startedAt = Date.now();
 
-		console.warn("[liquid-sync] engine sync start", { key: target.key });
+		console.warn("[liquid-sync] engine sync start", {
+			forced: options?.force === true,
+			key: target.key,
+		});
 
-		try {
-			entry.data = await target.scan();
-			entry.error = null;
-			entry.syncedAt = Date.now();
+		const sync = (async () => {
+			try {
+				entry.data = await target.scan();
+				entry.error = null;
+				entry.syncedAt = Date.now();
 
-			// Persist the fresh snapshot so the next cold read (after the SW slept) shows it instantly.
-			void store?.save(target.key, { data: entry.data, syncedAt: entry.syncedAt });
+				// Persist the fresh snapshot so the next cold read (after the SW slept) shows it instantly.
+				void store?.save(target.key, { data: entry.data, syncedAt: entry.syncedAt });
 
-			console.warn("[liquid-sync] engine sync ok", {
-				key: target.key,
-				ms: Date.now() - startedAt,
-			});
-		} catch (cause) {
-			entry.error = cause instanceof Error ? cause.message : String(cause);
+				console.warn("[liquid-sync] engine sync ok", {
+					key: target.key,
+					ms: Date.now() - startedAt,
+				});
+			} catch (cause) {
+				entry.error = cause instanceof Error ? cause.message : String(cause);
 
-			console.error("[liquid-sync] engine sync failed", {
-				error: entry.error,
-				key: target.key,
-				ms: Date.now() - startedAt,
-			});
-		} finally {
-			entry.inFlight = false;
-		}
+				console.error("[liquid-sync] engine sync failed", {
+					error: entry.error,
+					key: target.key,
+					ms: Date.now() - startedAt,
+				});
+			} finally {
+				entry.inFlight = false;
+				entry.inFlightSync = null;
+			}
+		})();
+
+		// Publish the in-flight promise before returning so the next caller single-flights onto it.
+		entry.inFlightSync = sync;
+
+		return sync;
 	};
+
+	const snapshotOf = (entry: CacheEntry): PortfolioSnapshot => ({
+		data: entry.data,
+		error: entry.error,
+		isSyncing: entry.inFlight,
+		syncedAt: entry.syncedAt,
+	});
 
 	return {
 		async getSnapshot() {
@@ -136,15 +174,22 @@ export function createPortfolioSyncEngine(
 			// the last-known balance instead of empty while the fresh scan runs.
 			await hydrate(target.key, entry);
 
-			// Fire-and-forget: the read never waits on the scan (deduped + throttled inside).
+			// Fire-and-forget: the read never waits on the scan (single-flighted + throttled inside).
 			void runSync(target);
 
-			return {
-				data: entry.data,
-				error: entry.error,
-				isSyncing: entry.inFlight,
-				syncedAt: entry.syncedAt,
-			};
+			return snapshotOf(entry);
+		},
+		async refresh() {
+			const target = await resolveTarget();
+			const entry = ensureEntry(target.key);
+
+			await hydrate(target.key, entry);
+
+			// Await the forced scan so the returned snapshot is the fresh one; `force` bypasses the
+			// time throttle while `runSync` still single-flights (joins any in-flight scan).
+			await runSync(target, { force: true });
+
+			return snapshotOf(entry);
 		},
 	};
 }

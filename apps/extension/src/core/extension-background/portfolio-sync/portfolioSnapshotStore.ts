@@ -11,6 +11,8 @@ export type PersistedPortfolioSnapshot = {
 /** Loads/saves the last synced portfolio per (account, chain) key, to survive service-worker sleep. */
 export type PortfolioSnapshotStore = {
 	load: (key: string) => Promise<PersistedPortfolioSnapshot | null>;
+	/** Purge every chain's persisted snapshot for one account group (garbage-collect on removal). */
+	removeForAccountGroup: (accountGroupId: string) => Promise<void>;
 	save: (key: string, snapshot: PersistedPortfolioSnapshot) => Promise<void>;
 };
 
@@ -26,7 +28,7 @@ export function createSessionPortfolioSnapshotStore(): PortfolioSnapshotStore {
 	const session = getSessionStorage();
 
 	if (!session) {
-		return { load: async () => null, save: async () => {} };
+		return { load: async () => null, removeForAccountGroup: async () => {}, save: async () => {} };
 	}
 
 	return {
@@ -42,6 +44,19 @@ export function createSessionPortfolioSnapshotStore(): PortfolioSnapshotStore {
 				return null;
 			}
 		},
+		async removeForAccountGroup(accountGroupId) {
+			// Snapshots are keyed `portfolio-snapshot:${accountGroupId}::${chainId}`, so a prefix match
+			// purges every chain's snapshot for this account without enumerating the chains.
+			const prefix = `${STORAGE_PREFIX}${accountGroupId}::`;
+
+			try {
+				const staleKeys = (await session.keys()).filter((key) => key.startsWith(prefix));
+
+				if (staleKeys.length > 0) await session.remove(staleKeys);
+			} catch {
+				// Best-effort: any leftover snapshot is re-scanned as stale and cleared on browser restart.
+			}
+		},
 		async save(key, snapshot) {
 			try {
 				await session.set({ [STORAGE_PREFIX + key]: snapshot });
@@ -52,16 +67,26 @@ export function createSessionPortfolioSnapshotStore(): PortfolioSnapshotStore {
 	};
 }
 
-/** Shape-check a value read back from storage (defends against schema drift / corruption). */
+/**
+ * Shape-check a value read back from storage (defends against schema drift / corruption). Both
+ * `assets` and `utxos` must be arrays: HUMID needs no migrations (pre-beta), so a snapshot written
+ * before `utxos` existed is simply rejected here and re-scanned from empty — cheaper and sounder
+ * than back-filling, and the session store is cleared on browser restart anyway.
+ */
 function isPersistedSnapshot(value: unknown): value is PersistedPortfolioSnapshot {
 	if (typeof value !== "object" || value === null) return false;
 
 	const candidate = value as { data?: unknown; syncedAt?: unknown };
 
-	return (
-		typeof candidate.syncedAt === "number" &&
-		typeof candidate.data === "object" &&
-		candidate.data !== null &&
-		Array.isArray((candidate.data as { assets?: unknown }).assets)
-	);
+	if (
+		typeof candidate.syncedAt !== "number" ||
+		typeof candidate.data !== "object" ||
+		candidate.data === null
+	) {
+		return false;
+	}
+
+	const data = candidate.data as { assets?: unknown; utxos?: unknown };
+
+	return Array.isArray(data.assets) && Array.isArray(data.utxos);
 }

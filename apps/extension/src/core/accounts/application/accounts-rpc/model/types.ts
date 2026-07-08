@@ -1,5 +1,5 @@
 import type { AccountGroupRecord } from "../../account-registry/model/account-group";
-import type { AccountGroupId } from "../../account-registry/model/identifiers";
+import type { AccountGroupId, WalletId } from "../../account-registry/model/identifiers";
 
 /** The popup's view of the account axis: the account groups and the selected one. */
 export type AccountsState = {
@@ -31,6 +31,11 @@ export type RemoveAccountInput = {
 	accountGroupId: AccountGroupId;
 };
 
+/** Forget an entire wallet: all its accounts, their cached data, and its plaintext seed. */
+export type RemoveWalletInput = {
+	walletId: WalletId;
+};
+
 export type RevealRecoveryPhraseInput = {
 	accountGroupId: AccountGroupId;
 };
@@ -59,12 +64,33 @@ export type PortfolioAsset = {
 };
 
 /**
- * The selected account+chain wallet contents: every asset balance. Issued-asset names come from
- * the registry when available. Activity is not part of this — it's fetched per asset on demand via
- * `getActivity`, off the balance poll.
+ * One wallet UTXO in raw base units, mirroring the ELIP-1 `getUTXOs` entry shape but keeping the
+ * repo's snapshot conventions: the asset is the raw hex id (`rawAssetId`, not the CAIP `assetId`)
+ * and the amount is a base-unit string (`amountSats`, same representation as `PortfolioAsset`), so
+ * the CAIP formatting stays a render/serve-time concern. Persisted with the snapshot so a later
+ * step can serve the dapp `getUTXOs` RPC from here instead of a live LWK scan.
+ */
+export type PortfolioUtxo = {
+	address: string;
+	amountSats: string;
+	confidential: boolean;
+	rawAssetId: string;
+	scriptPubKey: string;
+	spendable: boolean;
+	txid: string;
+	txOut: string;
+	vout: number;
+};
+
+/**
+ * The selected account+chain wallet contents: every asset balance plus the raw UTXO set. Issued-asset
+ * names come from the registry when available. Activity is not part of this — it's fetched per asset
+ * on demand via `getActivity`, off the balance poll. The popup reads only `assets`; `utxos` exists to
+ * back the dapp `getUTXOs`/`getBalance` RPCs from the persisted snapshot.
  */
 export type PortfolioData = {
 	assets: PortfolioAsset[];
+	utxos: PortfolioUtxo[];
 };
 
 /** One transaction in an asset's history (that asset's signed net effect). */

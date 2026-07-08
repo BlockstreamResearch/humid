@@ -1,5 +1,6 @@
 import type { AccountModelState } from "../model/account-model";
 import type { AccountGroupId } from "../model/identifiers";
+import { removeAccountGroupEntities } from "./removeAccountGroupEntities";
 
 export type RemoveAccountGroupInput = {
 	accountGroupId: AccountGroupId;
@@ -39,18 +40,10 @@ export function removeAccountGroup(input: RemoveAccountGroupInput): RemoveAccoun
 	const now = input.updatedAt ?? Date.now();
 
 	const accountGroups = { ...input.accountModel.accountGroups };
-	delete accountGroups[group.id];
-
 	const chainAccounts = { ...input.accountModel.chainAccounts };
 	const addresses = { ...input.accountModel.addresses };
 
-	for (const chainAccountId of group.chainAccountIds) {
-		for (const addressId of chainAccounts[chainAccountId]?.addressIds ?? []) {
-			delete addresses[addressId];
-		}
-
-		delete chainAccounts[chainAccountId];
-	}
+	removeAccountGroupEntities({ accountGroups, addresses, chainAccounts }, group);
 
 	const selectedAccountGroupId =
 		input.accountModel.selectedAccountGroupId === group.id

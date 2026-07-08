@@ -1,6 +1,7 @@
 import type {
 	LiquidActivityEntry,
 	LiquidAssetBalance,
+	LiquidUtxoSnapshot,
 } from "../../../application/backends/LiquidWalletBackend";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 
@@ -37,6 +38,7 @@ export type SyncWorkerResponse =
 			id: number;
 			ok: true;
 			op: "scanAndRead";
+			utxos: LiquidUtxoSnapshot[];
 	  }
 	| {
 			id: number;

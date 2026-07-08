@@ -8,6 +8,8 @@ export type ActiveScanTarget<T> = {
 
 /** Persists the last-active watch-only scan target so a background refresh can scan without the vault. */
 export type ScanTargetStore<T> = {
+	/** Drop the single cached target (e.g. when the account it points at is removed). */
+	clear: () => Promise<void>;
 	load: () => Promise<ActiveScanTarget<T> | null>;
 	save: (key: string, target: T) => Promise<void>;
 };
@@ -24,10 +26,17 @@ export function createSessionScanTargetStore<T>(): ScanTargetStore<T> {
 	const session = getSessionStorage();
 
 	if (!session) {
-		return { load: async () => null, save: async () => {} };
+		return { clear: async () => {}, load: async () => null, save: async () => {} };
 	}
 
 	return {
+		async clear() {
+			try {
+				await session.remove([STORAGE_KEY]);
+			} catch {
+				// Best-effort: a stale target is re-populated by the next popup scan (or cleared on restart).
+			}
+		},
 		async load() {
 			try {
 				const result = await session.get(STORAGE_KEY);

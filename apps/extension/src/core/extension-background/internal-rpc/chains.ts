@@ -14,6 +14,7 @@ import type {
 	SetSelectedChainInput,
 	UpdateChainInput,
 } from "@/core/chains/application/chains-rpc/model/types";
+import { LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT } from "@/core/chains/liquid/domain/LiquidRpc";
 
 import type { RequestHandlerMap } from "../transport";
 import { emitWalletEvent } from "../wallet-events";
@@ -59,6 +60,9 @@ export function createChainsInternalHandlers(
 
 			// The wallet's active chain changed — notify connected dapps (MetaMask-style chainChanged).
 			emitWalletEvent("chainChanged", { chainId });
+			// The selected chain determines the descriptor's policy asset, so the connected account's
+			// descriptor changed too (ELIP-1) — a dapp re-queries getWalletDescriptor for its own view.
+			emitWalletEvent(LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT, { chainId });
 
 			return readChainsState(chainGroups);
 		},

@@ -18,7 +18,7 @@ export function SettingsAccountPage() {
 	const { accountGroupId } = Route.useParams();
 	const navigate = useNavigate();
 	const accounts = useSelectedAccount();
-	const { removeAccount } = useAccountActions();
+	const { forgetWallet, removeAccount } = useAccountActions();
 
 	if (accounts.isLoading) {
 		return (
@@ -32,11 +32,26 @@ export function SettingsAccountPage() {
 
 	if (!account) return <Navigate replace to="/app/settings" />;
 
+	// Forgetting a wallet destroys its seed, so it is only offered when another wallet survives it —
+	// mirroring the backend's last-wallet guard (a surviving group = a group under a different wallet).
+	const canForgetWallet = accounts.accountGroups.some(
+		(group) => group.walletId !== account.walletId,
+	);
+
 	return (
 		<AccountDetailView
 			accountGroupId={account.id}
 			accountName={account.name}
+			canForgetWallet={canForgetWallet}
+			forgetError={errorMessage(forgetWallet.error)}
+			isForgetting={forgetWallet.isPending}
 			isRemoving={removeAccount.isPending}
+			onForgetWallet={() =>
+				forgetWallet.mutate(
+					{ walletId: account.walletId },
+					{ onSuccess: () => void navigate({ to: "/app/settings" }) },
+				)
+			}
 			onRemove={() =>
 				removeAccount.mutate(
 					{ accountGroupId: account.id },

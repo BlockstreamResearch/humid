@@ -93,7 +93,7 @@ export function createOffscreenScanClient(): SyncWorkerClient {
 			if (!response.ok) throw new Error(response.error);
 			if (response.op !== "scanAndRead") throw new Error("Unexpected offscreen scan response.");
 
-			return { assets: response.assets };
+			return { assets: response.assets, utxos: response.utxos };
 		},
 	};
 }

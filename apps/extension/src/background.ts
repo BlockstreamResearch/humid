@@ -25,6 +25,7 @@ import {
 	createDappConnectInternalHandlers,
 	createDappSessionsInternalHandlers,
 	type DappRequestDispatch,
+	DEFAULT_INJECTED_SESSION_TTL_MS,
 	type SupportedDappScope,
 } from "@/core/extension-background/dapp-authorization";
 import { createInjectedRpcHandlers } from "@/core/extension-background/injected-rpc";
@@ -154,6 +155,30 @@ const init = async () => {
 		};
 	};
 
+	// Persisted portfolio (survives SW sleep) + the last-active watch-only scan target (so the
+	// background alarm can refresh without the vault). Both live in session storage. Created above the
+	// dispatchers so the injected dapp read path can serve balances/UTXOs from the snapshot below.
+	const snapshotStore = createSessionPortfolioSnapshotStore();
+	const scanTargetStore = createSessionScanTargetStore<LiquidScanTarget>();
+
+	// Serve dapp reads (getBalance/getUTXOs) from the persisted snapshot when one exists for the target
+	// account+chain; a miss leaves the method on its live-scan path, and reads never trigger a sync.
+	// KEEP IN SYNC with the engine key built in `portfolioSync` below (`${accountGroupId}::${chainId}`).
+	const readPortfolioSnapshot = (accountGroupId: string, chainId: string) =>
+		snapshotStore.load(`${accountGroupId}::${chainId}`);
+
+	// Garbage-collect a removed account's session-storage portfolio: every chain's persisted snapshot
+	// for the group, plus the single-slot scan target. The scan target is a "last-active" cache, so we
+	// clear it unconditionally on any removal rather than trying to prove it pointed at this account:
+	// it is re-populated by the very next popup scan (removal happens in the open popup, so that scan is
+	// imminent) — clearing can never serve stale data, and at worst skips one background refresh cycle.
+	// Best-effort: both stores swallow their own storage errors, so this never throws. Lives at the
+	// composition root so the forthcoming forget-wallet flow can call it per removed account group.
+	const purgeAccountPortfolio = async (accountGroupId: string): Promise<void> => {
+		await snapshotStore.removeForAccountGroup(accountGroupId);
+		await scanTargetStore.clear();
+	};
+
 	const dispatchInjectedLiquidRequest: DappRequestDispatch = async ({
 		accountGroupIds,
 		chainId,
@@ -178,6 +203,7 @@ const init = async () => {
 				chain,
 				confirm: confirmApproved,
 				keyManagerState,
+				readPortfolioSnapshot,
 				updateKeyManagerState: walletVaultBackground.keyManager.updateState,
 			},
 		);
@@ -211,11 +237,6 @@ const init = async () => {
 
 	const getReceiveAddress = async (): Promise<ReceiveAddress> =>
 		liquidChainGroup.accountRuntime.getReceiveAddress((await resolveSelectedLiquidAccount()).input);
-
-	// Persisted portfolio (survives SW sleep) + the last-active watch-only scan target (so the
-	// background alarm can refresh without the vault). Both live in session storage.
-	const snapshotStore = createSessionPortfolioSnapshotStore();
-	const scanTargetStore = createSessionScanTargetStore<LiquidScanTarget>();
 
 	// Decouple portfolio reads from wallet scans: the popup polls `getPortfolio`, which returns the
 	// cached balance instantly while the engine (re)syncs in the background. Each sync also caches
@@ -252,6 +273,10 @@ const init = async () => {
 	};
 
 	const getPortfolio = (): Promise<PortfolioSnapshot> => portfolioSync.getSnapshot();
+
+	// Manual refresh: force an immediate re-sync of the selected account's portfolio (bypasses the
+	// engine's time throttle, still single-flighted) and return the fresh snapshot to the popup.
+	const refreshPortfolio = (): Promise<PortfolioSnapshot> => portfolioSync.refresh();
 
 	// On-demand, paginated activity for one asset on the selected account+chain. Read straight
 	// from the scan worker's cached wollet (no scan), decoupled from the portfolio balance poll.
@@ -362,6 +387,8 @@ const init = async () => {
 		registry: accountRegistry,
 		resolveConnectedAccountIds,
 		resolveSupportedScope: resolveSupportedLiquidScope,
+		// New injected sessions carry a default 30-day expiry; findDappSession drops them once lapsed.
+		sessionTtlMs: DEFAULT_INJECTED_SESSION_TTL_MS,
 		updateAccountModel,
 	});
 
@@ -380,6 +407,8 @@ const init = async () => {
 				getActivity,
 				getPortfolio,
 				getReceiveAddress,
+				purgeAccountPortfolio,
+				refreshPortfolio,
 			}),
 			...createDappConnectInternalHandlers({ getAccountModel, registry: accountRegistry }),
 			...createDappSessionsInternalHandlers({

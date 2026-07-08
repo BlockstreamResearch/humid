@@ -12,12 +12,15 @@ import {
 } from "../../../domain/LiquidRpc";
 import { parseLiquidAssetId, parseLiquidGetUTXOsParams } from "../../../domain/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
+import { mapLiquidUtxosForAsset } from "../../backends/mapLiquidUtxosForAsset";
 import { resolveDappAccount } from "../../dappAccountScope";
+import type { ReadPortfolioSnapshot } from "../../LiquidRpcContext";
 
 export type LiquidGetUTXOsContext = {
 	chain: LiquidChainRecord;
 	confirm?: WalletRpcConfirmationHandler;
 	keyManagerState: KeyManagerState;
+	readPortfolioSnapshot?: ReadPortfolioSnapshot;
 	updateKeyManagerState?: UpdateKeyManagerState;
 	walletBackend: LiquidWalletBackend;
 };
@@ -58,14 +61,34 @@ export const getLiquidUTXOs = createWalletMethod<
 		title: "Share Liquid UTXOs?",
 	}),
 	execute: async ({ context, review }) => {
-		await context.walletBackend.syncAccount(review.account);
+		const { account, requestedAsset } = review;
+
+		// Snapshot-first: when a persisted portfolio snapshot exists for this account+chain, serve the
+		// UTXOs from it with no scan, via the SAME mapping the live scan path uses (so the two can't
+		// drift). A miss (cold cache, or a non-selected account that has no snapshot) falls through to
+		// the live scan below; reads never trigger a sync.
+		if (context.readPortfolioSnapshot && account.accountGroupId) {
+			const snapshot = await context.readPortfolioSnapshot(account.accountGroupId, account.chainId);
+
+			if (snapshot) {
+				return {
+					accountIdentifier: account.accountIdentifier,
+					assetId: requestedAsset.assetId,
+					chainId: account.chainId,
+					policyAssetId: account.policyAssetId,
+					utxos: mapLiquidUtxosForAsset(snapshot.data.utxos, requestedAsset),
+				};
+			}
+		}
+
+		await context.walletBackend.syncAccount(account);
 
 		return {
-			accountIdentifier: review.account.accountIdentifier,
-			assetId: review.requestedAsset.assetId,
-			chainId: review.account.chainId,
-			policyAssetId: review.account.policyAssetId,
-			utxos: context.walletBackend.getUtxos(review.account, review.requestedAsset.rawAssetId),
+			accountIdentifier: account.accountIdentifier,
+			assetId: requestedAsset.assetId,
+			chainId: account.chainId,
+			policyAssetId: account.policyAssetId,
+			utxos: context.walletBackend.getUtxos(account, requestedAsset.rawAssetId),
 		};
 	},
 	parse: parseLiquidGetUTXOsParams,

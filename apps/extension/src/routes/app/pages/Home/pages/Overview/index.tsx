@@ -4,6 +4,7 @@ import { QuickActions } from "../../components/QuickActions";
 import { useHome } from "../../HomeContext";
 import { BalanceSummary } from "./components/BalanceSummary";
 import { HomeHeader } from "./components/HomeHeader";
+import { PortfolioRefresh } from "./components/PortfolioRefresh";
 import { TokenList } from "./components/TokenList";
 
 /**
@@ -19,11 +20,14 @@ export function OverviewPage() {
 			<HomeHeader />
 			<UiScrollArea className="min-h-0 flex-1">
 				<div className="flex flex-col gap-6 px-5 py-4">
-					<BalanceSummary
-						error={portfolio.error}
-						isSyncing={portfolio.isSyncing}
-						native={portfolio.native}
-					/>
+					<div className="flex flex-col gap-2">
+						<BalanceSummary
+							error={portfolio.error}
+							isSyncing={portfolio.isSyncing}
+							native={portfolio.native}
+						/>
+						<PortfolioRefresh />
+					</div>
 					<QuickActions />
 					<TokenList tokens={portfolio.tokens} />
 				</div>

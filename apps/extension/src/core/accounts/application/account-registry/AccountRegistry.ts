@@ -31,6 +31,7 @@ import { getWalletByKeySource } from "./operations/getWalletByKeySource";
 import { grantDappSession, type GrantDappSessionInput } from "./operations/grantDappSession";
 import { importSeedWallet, type ImportSeedWalletInput } from "./operations/importSeedWallet";
 import { removeAccountGroup, type RemoveAccountGroupInput } from "./operations/removeAccountGroup";
+import { removeWallet, type RemoveWalletInput } from "./operations/removeWallet";
 import { resolveChainAccount } from "./operations/resolveChainAccount";
 import { revokeAccountFromDappSession } from "./operations/revokeAccountFromDappSession";
 import { revokeDappSession } from "./operations/revokeDappSession";
@@ -90,6 +91,10 @@ export class AccountRegistry {
 
 	removeAccountGroup(input: RemoveAccountGroupInput) {
 		return removeAccountGroup(input);
+	}
+
+	removeWallet(input: RemoveWalletInput) {
+		return removeWallet(input);
 	}
 
 	resolveChainAccount(input: {

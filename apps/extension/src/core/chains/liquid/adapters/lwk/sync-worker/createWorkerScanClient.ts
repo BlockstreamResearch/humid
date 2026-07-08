@@ -1,6 +1,7 @@
 import type {
 	LiquidActivityEntry,
 	LiquidAssetBalance,
+	LiquidUtxoSnapshot,
 } from "../../../application/backends/LiquidWalletBackend";
 import type { SyncWorkerRequest, SyncWorkerResponse } from "./protocol";
 
@@ -8,6 +9,7 @@ export type ScanInput = { chain: SyncWorkerRequest["chain"]; descriptor: string 
 export type ScanResult = { updateBytes: Uint8Array | null };
 export type ScanAndReadResult = {
 	assets: LiquidAssetBalance[];
+	utxos: LiquidUtxoSnapshot[];
 };
 
 /** Inputs to read one asset's activity page from the worker's cached wollet. */
@@ -107,7 +109,7 @@ export function createWorkerScanClient(): SyncWorkerClient {
 
 			if (response.op !== "scanAndRead") throw new Error("Unexpected sync worker response.");
 
-			return { assets: response.assets };
+			return { assets: response.assets, utxos: response.utxos };
 		},
 	};
 }

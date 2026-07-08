@@ -1,6 +1,7 @@
 import type {
 	LiquidActivityEntry,
 	LiquidAssetBalance,
+	LiquidUtxoSnapshot,
 } from "../../../application/backends/LiquidWalletBackend";
 import type { ReadActivityInput, ScanInput } from "./createWorkerScanClient";
 
@@ -24,6 +25,7 @@ export type OffscreenScanResponse =
 			assets: LiquidAssetBalance[];
 			ok: true;
 			op: "scanAndRead";
+			utxos: LiquidUtxoSnapshot[];
 	  }
 	| { error: string; ok: false }
 	| {

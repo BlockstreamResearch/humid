@@ -22,6 +22,8 @@ export type CreateInternalRpcHandlersInput = {
 	getActivity: (input: GetActivityInput) => Promise<ActivityPage>;
 	getPortfolio: () => Promise<PortfolioSnapshot>;
 	getReceiveAddress: () => Promise<ReceiveAddress>;
+	purgeAccountPortfolio: (accountGroupId: string) => Promise<void>;
+	refreshPortfolio: () => Promise<PortfolioSnapshot>;
 };
 
 /**
@@ -34,6 +36,8 @@ export function createInternalRpcHandlers({
 	getActivity,
 	getPortfolio,
 	getReceiveAddress,
+	purgeAccountPortfolio,
+	refreshPortfolio,
 }: CreateInternalRpcHandlersInput): RequestHandlerMap {
 	return {
 		ping: (message) => {
@@ -56,6 +60,12 @@ export function createInternalRpcHandlers({
 		...walletVaultInternalHandlers,
 		...walletConnectInternalHandlers,
 		...createChainsInternalHandlers(chainGroups),
-		...createAccountsInternalHandlers({ getActivity, getPortfolio, getReceiveAddress }),
+		...createAccountsInternalHandlers({
+			getActivity,
+			getPortfolio,
+			getReceiveAddress,
+			purgeAccountPortfolio,
+			refreshPortfolio,
+		}),
 	};
 }

@@ -4,6 +4,7 @@ import type { LiquidWalletRpcContext } from "@/core/chains/liquid/application/cr
 import type {
 	LiquidActivityPage,
 	LiquidAssetBalance,
+	LiquidUtxoSnapshot,
 	ResolveLiquidWalletAccountInput,
 } from "./application/backends/LiquidWalletBackend";
 import type { LiquidChainRecord } from "./chains/LiquidChainRecord";
@@ -14,9 +15,10 @@ export type LiquidReceiveAddress = {
 	index: number;
 };
 
-/** The account's asset balances for one chain (activity is fetched apart, on demand). */
+/** The account's asset balances and raw UTXO set for one chain (activity is fetched apart, on demand). */
 export type LiquidPortfolio = {
 	assets: LiquidAssetBalance[];
+	utxos: LiquidUtxoSnapshot[];
 };
 
 /** A watch-only scan target: chain config + public descriptor, no keys — safe to cache/persist. */

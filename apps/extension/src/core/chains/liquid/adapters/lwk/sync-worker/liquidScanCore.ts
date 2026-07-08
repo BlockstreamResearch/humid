@@ -9,6 +9,7 @@ import { createLwkBlockchainClient } from "../createLwkBlockchainClient";
 import { createLwkNetwork, type LwkNetwork } from "../createLwkNetwork";
 import { loadLwkWasm, type LwkWasmModule } from "../loadLwkWasm";
 import { readWalletActivityForAsset, readWalletAssetBalances } from "../wallet/readWalletData";
+import { readWalletUtxos } from "../wallet/readWalletUtxos";
 import { type AssetMetadata, resolveIssuedAssetMetadata } from "../wallet/resolveAssetMetadata";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
@@ -119,13 +120,18 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 		rawPolicyAssetId,
 	);
 
+	// The raw UTXO set rides along in the snapshot via the same mapping the dapp getUTXOs RPC uses,
+	// so a later step can serve getUTXOs/getBalance from the persisted snapshot instead of rescanning.
+	const utxos = readWalletUtxos(wollet);
+
 	console.warn("[liquid-sync] scanAndRead done", {
 		assetCount: assets.length,
 		id: input.id,
 		ms: Date.now() - scanStartedAt,
+		utxoCount: utxos.length,
 	});
 
-	return { assets };
+	return { assets, utxos };
 }
 
 /**

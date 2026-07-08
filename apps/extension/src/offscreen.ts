@@ -1,22 +1,21 @@
 import browser from "webextension-polyfill";
 
-import {
-	createWorkerScanClient,
-	type SyncWorkerClient,
-} from "@/core/chains/liquid/adapters/lwk/sync-worker/createWorkerScanClient";
+import { createInlineScanClient } from "@/core/chains/liquid/adapters/lwk/sync-worker/createInlineScanClient";
+import type { SyncWorkerClient } from "@/core/chains/liquid/adapters/lwk/sync-worker/createWorkerScanClient";
 import {
 	bytesToBase64,
 	isOffscreenScanMessage,
 	type OffscreenScanResponse,
 } from "@/core/chains/liquid/adapters/lwk/sync-worker/offscreenProtocol";
 
-// This hidden document exists solely to run the heavy Liquid scan in a Worker, off the MV3
-// service worker thread (which can't spawn Workers). The background posts scan requests here and
-// awaits the result; the Worker — and its warm wasm — lives as long as this document does.
+// This hidden document runs the heavy Liquid scan on ITS OWN main thread. It exists because the MV3
+// service worker has no DOM `window`, and LWK's Esplora client needs one for its async retry/sleep —
+// a dedicated Worker has no `window` either, so the scan runs INLINE here, not in a Worker. The warm
+// wasm lives as long as this document does. The background posts scan requests here and awaits them.
 let client: SyncWorkerClient | null = null;
 
 function getScanClient(): SyncWorkerClient {
-	client ??= createWorkerScanClient();
+	client ??= createInlineScanClient();
 
 	return client;
 }

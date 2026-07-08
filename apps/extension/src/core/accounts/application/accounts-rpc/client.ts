@@ -11,6 +11,7 @@ import type {
 	ReceiveAddress,
 	RecoveryPhrase,
 	RemoveAccountInput,
+	RemoveWalletInput,
 	RenameAccountInput,
 	RevealRecoveryPhraseInput,
 	SetSelectedAccountInput,
@@ -40,6 +41,11 @@ function getPortfolio(): Promise<PortfolioSnapshot> {
 	return requestBackground<PortfolioSnapshot>(accountsRpc.methods.getPortfolio);
 }
 
+/** Force an immediate re-sync of the selected account's portfolio, bypassing the engine throttle. */
+function refreshPortfolio(): Promise<PortfolioSnapshot> {
+	return requestBackground<PortfolioSnapshot>(accountsRpc.methods.refreshPortfolio);
+}
+
 function getActivity(input: GetActivityInput): Promise<ActivityPage> {
 	return requestBackground<ActivityPage>(accountsRpc.methods.getActivity, input);
 }
@@ -56,6 +62,10 @@ function removeAccount(input: RemoveAccountInput): Promise<AccountsState> {
 	return requestBackground<AccountsState>(accountsRpc.methods.removeAccount, input);
 }
 
+function removeWallet(input: RemoveWalletInput): Promise<AccountsState> {
+	return requestBackground<AccountsState>(accountsRpc.methods.removeWallet, input);
+}
+
 export const accountsClient = {
 	createAccount,
 	getActivity,
@@ -63,7 +73,9 @@ export const accountsClient = {
 	getReceiveAddress,
 	getState,
 	importAccount,
+	refreshPortfolio,
 	removeAccount,
+	removeWallet,
 	rename,
 	revealRecoveryPhrase,
 	setSelected,

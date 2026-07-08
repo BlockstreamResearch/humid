@@ -23,6 +23,13 @@ import type {
 import type { LiquidSignPsetResult, ParsedLiquidSignPsetParams } from "../../domain/pset/types";
 
 export type LiquidWalletAccount = {
+	/**
+	 * The account group this chain account belongs to, threaded from the resolve input. Keys the
+	 * persisted portfolio snapshot (`${accountGroupId}::${chainId}`) so a dapp read can serve from
+	 * the cached snapshot instead of a live scan. Optional: internal callers that resolve without a
+	 * group (the default account) leave it undefined, and the snapshot lookup is simply skipped.
+	 */
+	accountGroupId?: AccountGroupId;
 	accountIdentifier: string;
 	chain: LiquidChainRecord;
 	chainId: LiquidChainId;
@@ -77,11 +84,30 @@ export type LiquidAssetBalance = {
 };
 
 /**
- * The wallet read after a scan: asset balances. Activity is not part of the snapshot — it's read
- * per-asset on demand (paginated), off the balance path.
+ * One wallet UTXO in raw base units — the Liquid-side mirror of the snapshot `PortfolioUtxo`
+ * (structurally identical, kept decoupled the same way `LiquidAssetBalance` mirrors `PortfolioAsset`).
+ * `rawAssetId` is the raw hex id and `amountSats` the base-unit string; the dapp `getUTXOs` mapping
+ * adds the CAIP `assetId` on top of this.
+ */
+export type LiquidUtxoSnapshot = {
+	address: string;
+	amountSats: string;
+	confidential: boolean;
+	rawAssetId: string;
+	scriptPubKey: string;
+	spendable: boolean;
+	txid: string;
+	txOut: string;
+	vout: number;
+};
+
+/**
+ * The wallet read after a scan: asset balances plus the raw UTXO set. Activity is not part of the
+ * snapshot — it's read per-asset on demand (paginated), off the balance path.
  */
 export type LiquidWalletSnapshot = {
 	assets: LiquidAssetBalance[];
+	utxos: LiquidUtxoSnapshot[];
 };
 
 export type LiquidWalletBackend = {

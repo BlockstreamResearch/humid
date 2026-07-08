@@ -31,6 +31,14 @@ import { dappAuthorizationErrors } from "./errors";
 
 const INJECTED_TRANSPORT = "injected" as const;
 
+/**
+ * Default lifetime for an injected dapp session: 30 days. Passed at the composition root so new
+ * injected sessions carry an `expiresAt` and eventually lapse — `findDappSession` drops expired
+ * sessions — instead of persisting until an explicit revoke. WalletConnect manages its own session
+ * lifetime, so this is injected-only.
+ */
+export const DEFAULT_INJECTED_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 /** Chain-derived part of a granted scope (chains + methods + notifications). */
 export type SupportedDappScope = {
 	capabilities: WalletCapabilityDescriptor[];

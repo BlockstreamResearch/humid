@@ -5,6 +5,7 @@ import {
 	PencilEdit01Icon,
 	PlugSocketIcon,
 	Shield01Icon,
+	WalletRemove01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
@@ -33,23 +34,32 @@ import { UiScrollArea } from "@/ui/UiScrollArea";
 type AccountDetailViewProps = {
 	accountGroupId: AccountGroupId;
 	accountName: string;
+	canForgetWallet: boolean;
+	forgetError: string | null;
+	isForgetting: boolean;
 	isRemoving: boolean;
+	onForgetWallet: () => void;
 	onRemove: () => void;
 	onRename: (name: string) => void;
 	removeError: string | null;
 };
 
-/** Per-account settings: breadcrumb header + the account actions (rename + remove now). */
+/** Per-account settings: breadcrumb header + the account actions (rename, remove, forget wallet). */
 export function AccountDetailView({
 	accountGroupId,
 	accountName,
+	canForgetWallet,
+	forgetError,
+	isForgetting,
 	isRemoving,
+	onForgetWallet,
 	onRemove,
 	onRename,
 	removeError,
 }: AccountDetailViewProps) {
 	const [renameOpen, setRenameOpen] = useState(false);
 	const [removeOpen, setRemoveOpen] = useState(false);
+	const [forgetOpen, setForgetOpen] = useState(false);
 
 	return (
 		<div className="flex size-full min-h-0 flex-col">
@@ -109,6 +119,16 @@ export function AccountDetailView({
 						<HugeiconsIcon className="shrink-0" icon={Delete01Icon} size={18} />
 						<span className="flex-1 text-sm font-medium">Remove account</span>
 					</button>
+					{canForgetWallet ? (
+						<button
+							className={cn(settingsRowClass, "text-destructive hover:bg-destructive/10")}
+							onClick={() => setForgetOpen(true)}
+							type="button"
+						>
+							<HugeiconsIcon className="shrink-0" icon={WalletRemove01Icon} size={18} />
+							<span className="flex-1 text-sm font-medium">Forget wallet</span>
+						</button>
+					) : null}
 				</div>
 			</UiScrollArea>
 
@@ -135,6 +155,33 @@ export function AccountDetailView({
 						</UiButton>
 						<UiButton disabled={isRemoving} onClick={onRemove} type="button" variant="destructive">
 							{isRemoving ? "Removing…" : "Remove"}
+						</UiButton>
+					</UiDialogFooter>
+				</UiDialogContent>
+			</UiDialog>
+
+			<UiDialog onOpenChange={setForgetOpen} open={forgetOpen}>
+				<UiDialogContent>
+					<UiDialogHeader>
+						<UiDialogTitle>Forget this wallet?</UiDialogTitle>
+						<UiDialogDescription>
+							This permanently removes every account under this wallet and erases its recovery
+							phrase from this device. You can only restore access by re-importing the recovery
+							phrase — make sure you have it saved.
+						</UiDialogDescription>
+					</UiDialogHeader>
+					{forgetError ? <p className="text-destructive text-sm">{forgetError}</p> : null}
+					<UiDialogFooter>
+						<UiButton onClick={() => setForgetOpen(false)} type="button" variant="outline">
+							Cancel
+						</UiButton>
+						<UiButton
+							disabled={isForgetting}
+							onClick={onForgetWallet}
+							type="button"
+							variant="destructive"
+						>
+							{isForgetting ? "Forgetting…" : "Forget wallet"}
 						</UiButton>
 					</UiDialogFooter>
 				</UiDialogContent>

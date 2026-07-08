@@ -52,7 +52,7 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 					descriptor: target.descriptor,
 				});
 
-				return { assets: snapshot.assets };
+				return { assets: snapshot.assets, utxos: snapshot.utxos };
 			},
 		},
 		chains: createBuiltInLiquidChains(),
