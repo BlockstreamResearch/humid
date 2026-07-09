@@ -69,6 +69,23 @@ export type LiquidSendTransferParams = {
 	assetId?: LiquidAssetId;
 	memo?: string;
 	recipientAddress: string;
+	/**
+	 * Set only by the in-extension native L-BTC "Max" flow: DRAIN every L-BTC input to the recipient
+	 * (ignoring `amount`) so the broadcast pays the LWK-computed fee off the current UTXO set, immune to
+	 * fee drift between the estimate and the re-sync inside the send. The dapp path never sets it.
+	 */
+	sendAll?: boolean;
+};
+
+/** Params for a max-send estimate: the recipient the native drain PSET is built against. */
+export type LiquidEstimateMaxSendParams = {
+	recipientAddress: string;
+};
+
+/** The max sendable amount (base-unit string) plus the L-BTC fee the estimate assumes ("0" if issued). */
+export type LiquidEstimateMaxSendResult = {
+	feeSats: string;
+	maxAmount: string;
 };
 
 export type LiquidGetBalanceResult = {

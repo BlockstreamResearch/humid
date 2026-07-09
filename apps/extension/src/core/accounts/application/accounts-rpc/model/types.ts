@@ -55,11 +55,36 @@ export type ReceiveAddress = {
  * A popup-initiated transfer for the selected account+chain. `amount` is a raw base-unit string (the
  * Send form parses the user's human amount into base units at the input boundary); `rawAssetId` is
  * the raw hex asset id, omitted for the native policy asset (L-BTC). Shared by the preview and send.
+ *
+ * `sendAll` is set only by the native L-BTC "Max" flow: it tells the backend to DRAIN every L-BTC
+ * input (ignoring `amount`) so the broadcast is immune to any fee drift between the estimate and the
+ * re-sync inside the send. The dapp send path never sets it, so it stays backward-compatible.
  */
 export type SendTransferInput = {
 	amount: string;
 	rawAssetId?: string;
 	recipientAddress: string;
+	sendAll?: boolean;
+};
+
+/**
+ * Ask the backend for the maximum sendable amount of an asset from the selected account+chain.
+ * `rawAssetId` is the raw hex asset id, omitted for the native policy asset (L-BTC). A valid
+ * `recipientAddress` is required because the native estimate builds a real drain PSET against it.
+ */
+export type EstimateMaxSendInput = {
+	rawAssetId?: string;
+	recipientAddress: string;
+};
+
+/**
+ * The maximum sendable amount (base-unit string, raw-bigint rule) plus the L-BTC fee the estimate
+ * assumes. For an issued asset `maxAmount` is the full balance and `feeSats` is "0" (its fee is paid
+ * separately in L-BTC); for native L-BTC `maxAmount` is the balance minus the LWK-computed drain fee.
+ */
+export type EstimateMaxSendResult = {
+	feeSats: string;
+	maxAmount: string;
 };
 
 /**

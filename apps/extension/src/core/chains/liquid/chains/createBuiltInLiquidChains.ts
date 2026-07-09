@@ -106,8 +106,10 @@ export function createCustomLiquidChainRecord(name: string): LiquidChainRecord {
 }
 
 // Custom chains can't derive a real genesis-based id (LWK's WASM Network fixes the
-// regtest genesis), so mint a unique id in the CAIP-2 bip122 shape instead.
-function generateCustomLiquidChainId(): LiquidChainId {
+// regtest genesis), so mint a unique id in the CAIP-2 bip122 shape instead. Exported so the
+// dapp-facing wallet_addChain path mints the wallet's OWN id rather than trusting a dapp-supplied
+// one (which could collide with / spoof a built-in genesis hash).
+export function generateCustomLiquidChainId(): LiquidChainId {
 	const bytes = crypto.getRandomValues(new Uint8Array(16));
 	const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 

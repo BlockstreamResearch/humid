@@ -108,6 +108,7 @@ function toActivity(entry: ActivityEntry): PortfolioViewActivity {
 		fee: parseBaseUnits(entry.feeSats),
 		id: entry.txid,
 		status: entry.timestamp === null ? "pending" : "confirmed",
+		timestamp: entry.timestamp,
 	};
 }
 
@@ -125,5 +126,6 @@ function toOptimisticActivity(entry: PendingTransfer): PortfolioViewActivity {
 		fee: null,
 		id: entry.txid,
 		status: "pending",
+		timestamp: null,
 	};
 }

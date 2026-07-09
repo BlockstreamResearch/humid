@@ -8,7 +8,11 @@ import type {
 	ResolveLiquidWalletAccountInput,
 } from "./application/backends/LiquidWalletBackend";
 import type { LiquidChainRecord } from "./chains/LiquidChainRecord";
-import type { LiquidSendTransferResult, LiquidTransferReview } from "./domain/LiquidRpc";
+import type {
+	LiquidEstimateMaxSendResult,
+	LiquidSendTransferResult,
+	LiquidTransferReview,
+} from "./domain/LiquidRpc";
 
 /** A materialized receive address for display (the wallet's last unused address). */
 export type LiquidReceiveAddress = {
@@ -38,10 +42,30 @@ export type LiquidPopupTransferInput = {
 	amount: string;
 	rawAssetId?: string;
 	recipientAddress: string;
+	/**
+	 * Set only by the native L-BTC "Max" flow: DRAIN every L-BTC input to the recipient (ignoring
+	 * `amount`), so the broadcast is immune to fee drift between the estimate and the send's re-sync.
+	 */
+	sendAll?: boolean;
+};
+
+/** A popup-initiated max-send estimate for the selected account (native drain builds against it). */
+export type LiquidPopupEstimateMaxSendInput = {
+	rawAssetId?: string;
+	recipientAddress: string;
 };
 
 /** Popup-facing account operations that need the LWK runtime (materialize + derive). */
 export type LiquidAccountRuntime = {
+	/**
+	 * Estimate the max sendable amount (+ assumed L-BTC fee) for an asset on the selected account.
+	 * Syncs the account first (unlike `inspectTransfer`): the native drain fee depends on the current
+	 * UTXO set, and the issued-asset max is read off the synced wollet's balance.
+	 */
+	estimateMaxSend: (
+		input: ResolveLiquidWalletAccountInput,
+		estimate: LiquidPopupEstimateMaxSendInput,
+	) => Promise<LiquidEstimateMaxSendResult>;
 	getActivity: (
 		input: ResolveLiquidWalletAccountInput,
 		rawAssetId: string,

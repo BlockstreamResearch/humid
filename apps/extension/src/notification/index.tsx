@@ -11,7 +11,9 @@ import type { PegasusMsgProtocolMap } from "@/background";
 import { ConfirmProvider } from "@/common/Confirmation";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
+import { dappAddChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappAddChainConfirmation";
 import { dappConnectConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappConnectConfirmation";
+import { dappSwitchChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappSwitchChainConfirmation";
 import { initGlobalErrorReporting } from "@/core/report";
 
 import ActionsHandler from "./ActionsHandler";
@@ -26,8 +28,13 @@ if (!rootElement) {
 	throw new Error("Notification root element was not found");
 }
 
-// Confirmations shown in the notification window: the generic host + the connect renderer.
-const confirmationRenderers = [dappConnectConfirmationRenderer];
+// Confirmations shown in the notification window: the generic host + the dapp renderers (connect,
+// add-chain, switch-chain).
+const confirmationRenderers = [
+	dappConnectConfirmationRenderer,
+	dappAddChainConfirmationRenderer,
+	dappSwitchChainConfirmationRenderer,
+];
 
 createRoot(rootElement).render(
 	<React.StrictMode>

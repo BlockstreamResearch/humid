@@ -22,6 +22,9 @@ export async function resolveSessionRequest(
 		approvedScope: resolveApprovedScope(walletKit, event.topic, adapter.namespace),
 		confirm: getBackgroundOptions().confirm,
 		keyManagerState,
+		// Same serve-from-cache hook the injected dapp path uses: the adapter spreads it into the
+		// dispatched context so WC getBalance/getUTXOs serve from the snapshot when one exists.
+		readPortfolioSnapshot: getBackgroundOptions().readPortfolioSnapshot,
 		updateKeyManagerState: walletVaultBackground.keyManager.updateState,
 	});
 }

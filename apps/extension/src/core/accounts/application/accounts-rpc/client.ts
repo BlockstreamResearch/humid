@@ -5,6 +5,8 @@ import type {
 	AccountsState,
 	ActivityPage,
 	CreateAccountInput,
+	EstimateMaxSendInput,
+	EstimateMaxSendResult,
 	GetActivityInput,
 	ImportAccountInput,
 	PortfolioSnapshot,
@@ -58,6 +60,11 @@ function inspectTransfer(input: SendTransferInput): Promise<TransferReview> {
 	return requestBackground<TransferReview>(accountsRpc.methods.inspectTransfer, input);
 }
 
+/** Estimate the max sendable amount (+ assumed L-BTC fee) for an asset on the selected account. */
+function estimateMaxSend(input: EstimateMaxSendInput): Promise<EstimateMaxSendResult> {
+	return requestBackground<EstimateMaxSendResult>(accountsRpc.methods.estimateMaxSend, input);
+}
+
 /** Build, sign, and broadcast a send from the selected account; resolves with the broadcast txid. */
 function sendTransfer(input: SendTransferInput): Promise<SendTransferResult> {
 	return requestBackground<SendTransferResult>(accountsRpc.methods.sendTransfer, input);
@@ -81,6 +88,7 @@ function removeWallet(input: RemoveWalletInput): Promise<AccountsState> {
 
 export const accountsClient = {
 	createAccount,
+	estimateMaxSend,
 	getActivity,
 	getPortfolio,
 	getReceiveAddress,

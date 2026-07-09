@@ -1,7 +1,16 @@
 import { ArrowDownLeft01Icon, ArrowUpRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import dayjs from "dayjs";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 
 import type { ChainRecord } from "@/core/chains/application/ChainRecord";
 import type {
@@ -9,7 +18,7 @@ import type {
 	PortfolioViewActivityFeed,
 	PortfolioViewAsset,
 } from "@/core/chains/application/PortfolioView";
-import { formatUnits } from "@/helpers/formatters";
+import { formatUnits, handleTimestamp } from "@/helpers/formatters";
 import { UiSpinner } from "@/ui/UiSpinner";
 
 import { LiquidTxDetailSheet } from "./LiquidTxDetailSheet";
@@ -71,6 +80,61 @@ const ESTIMATED_ROW_HEIGHT = 64;
 /** The asset page mounts this list inside a base-ui ScrollArea; its viewport is the real scroller. */
 const ACTIVITY_SCROLL_SELECTOR = '[data-slot="scroll-area-viewport"]';
 
+/** A flattened activity list entry: either a day/section header or one transaction row. */
+type ActivityRow =
+	| { kind: "header"; label: string }
+	| { item: PortfolioViewActivity; kind: "item" };
+
+/**
+ * Flatten the newest-first activity into day sections. Pending entries (optimistic or still in the
+ * mempool, so no block time) cluster under a single "Pending" header at the top; confirmed entries
+ * are grouped by calendar day, labelled "Today" / "Yesterday" / "MMM D, YYYY". A header is emitted
+ * whenever the bucket label changes, so the flat array keeps the list's existing newest-first order —
+ * which the virtualizer then renders row-by-row.
+ */
+function buildActivityRows(items: PortfolioViewActivity[]): ActivityRow[] {
+	const now = dayjs();
+	const todayKey = now.format("YYYY-MM-DD");
+	const yesterdayKey = now.subtract(1, "day").format("YYYY-MM-DD");
+
+	const labelFor = (item: PortfolioViewActivity): string => {
+		if (item.status === "pending" || item.timestamp === null) return "Pending";
+
+		const day = handleTimestamp(item.timestamp);
+		const dayKey = day.format("YYYY-MM-DD");
+
+		if (dayKey === todayKey) return "Today";
+		if (dayKey === yesterdayKey) return "Yesterday";
+
+		return day.format("MMM D, YYYY");
+	};
+
+	const rows: ActivityRow[] = [];
+	let currentLabel: string | null = null;
+
+	for (const item of items) {
+		const label = labelFor(item);
+
+		if (label !== currentLabel) {
+			rows.push({ kind: "header", label });
+			currentLabel = label;
+		}
+
+		rows.push({ item, kind: "item" });
+	}
+
+	return rows;
+}
+
+/** A day/section divider in the activity list: a small muted uppercase label above its rows. */
+function ActivitySectionHeader({ label }: { label: string }) {
+	return (
+		<p className="text-muted-foreground px-1 pt-3 pb-1 text-[0.7rem] font-medium tracking-wide uppercase">
+			{label}
+		</p>
+	);
+}
+
 function LiquidActivityBody({
 	chain,
 	decimals,
@@ -96,12 +160,22 @@ function LiquidActivityBody({
 	}, []);
 
 	const { hasMore, isLoadingMore, onLoadMore } = feed;
-	const count = feed.items.length;
+
+	// Flatten the newest-first entries into day sections (a header row per bucket) and virtualize over
+	// that combined array; header keys and txids are disjoint so measured sizes never collide.
+	const rows = useMemo(() => buildActivityRows(feed.items), [feed.items]);
+	const count = rows.length;
 
 	const virtualizer = useVirtualizer({
 		count,
 		estimateSize: () => ESTIMATED_ROW_HEIGHT,
-		getItemKey: (index) => feed.items[index]?.id ?? index,
+		getItemKey: (index) => {
+			const row = rows[index];
+
+			if (!row) return index;
+
+			return row.kind === "header" ? `header:${row.label}` : row.item.id;
+		},
 		getScrollElement: () => scrollEl,
 		overscan: 6,
 		scrollMargin,
@@ -171,9 +245,9 @@ function LiquidActivityBody({
 				style={{ height: virtualizer.getTotalSize() }}
 			>
 				{virtualItems.map((virtualItem) => {
-					const item = feed.items[virtualItem.index];
+					const row = rows[virtualItem.index];
 
-					if (!item) return null;
+					if (!row) return null;
 
 					return (
 						<div
@@ -183,12 +257,16 @@ function LiquidActivityBody({
 							className="absolute top-0 left-0 w-full"
 							style={{ transform: `translateY(${virtualItem.start - scrollMargin}px)` }}
 						>
-							<LiquidActivityRow
-								decimals={decimals}
-								item={item}
-								onOpen={() => setSelected(item)}
-								symbol={symbol}
-							/>
+							{row.kind === "header" ? (
+								<ActivitySectionHeader label={row.label} />
+							) : (
+								<LiquidActivityRow
+									decimals={decimals}
+									item={row.item}
+									onOpen={() => setSelected(row.item)}
+									symbol={symbol}
+								/>
+							)}
 						</div>
 					);
 				})}
@@ -211,7 +289,7 @@ function LiquidActivityBody({
 	);
 }
 
-/** One activity row: direction glyph, direction + (pending) status, date/counterparty, signed amount. */
+/** One activity row: direction glyph, direction + (pending) status, counterparty, signed amount. */
 function LiquidActivityRow({
 	decimals,
 	item,
@@ -241,7 +319,6 @@ function LiquidActivityRow({
 					{isPending ? <LiquidTxStatusBadge status="pending" /> : null}
 				</div>
 				<p className="text-muted-foreground truncate text-xs">
-					{isPending ? "" : `${item.date} · `}
 					{isSent ? "To" : "From"}: {item.counterparty}
 				</p>
 			</div>

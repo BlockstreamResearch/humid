@@ -4,6 +4,8 @@ import { createAccountRegistry } from "@/core/accounts/application/account-regis
 import type { AccountModelState } from "@/core/accounts/application/account-registry/model/account-model";
 import type {
 	ActivityPage,
+	EstimateMaxSendInput,
+	EstimateMaxSendResult,
 	GetActivityInput,
 	PortfolioSnapshot,
 	ReceiveAddress,
@@ -12,11 +14,17 @@ import type {
 	TransferReview,
 } from "@/core/accounts/application/accounts-rpc/model/types";
 import type { Caip25Scopes } from "@/core/caip25";
+import { addUnlockedChainRecord } from "@/core/chains/application/chain-store/addChainRecord";
 import { getUnlockedChainStoreState } from "@/core/chains/application/chain-store/secureChainStore";
 import {
 	buildLiquidDappAccountScope,
 	resolveAccountGroupIdsForIdentifiers,
 } from "@/core/chains/liquid/application/dappAccountScope";
+import { generateCustomLiquidChainId } from "@/core/chains/liquid/chains/createBuiltInLiquidChains";
+import {
+	LIQUID_CHAIN_GROUP_ID,
+	parseLiquidChainRecord,
+} from "@/core/chains/liquid/chains/LiquidChainRecord";
 import { resolveUnlockedLiquidChain } from "@/core/chains/liquid/chains/resolveLiquidChain";
 import type { LiquidScanTarget } from "@/core/chains/liquid/contract";
 import { createLiquidChainGroup } from "@/core/chains/liquid/createLiquidChainGroup";
@@ -29,6 +37,7 @@ import {
 	createDappSessionsInternalHandlers,
 	type DappRequestDispatch,
 	DEFAULT_INJECTED_SESSION_TTL_MS,
+	type PreparedChainAddition,
 	type SupportedDappScope,
 } from "@/core/extension-background/dapp-authorization";
 import { createInjectedRpcHandlers } from "@/core/extension-background/injected-rpc";
@@ -126,11 +135,36 @@ const init = async () => {
 	const liquidChainGroup = createLiquidChainGroup();
 	const accountRegistry = createAccountRegistry();
 
-	// Liquid capability glue: keep the requested CAIP-25 scopes the Liquid chain
-	// group can actually serve (valid chain ids + dispatcher methods).
-	const resolveSupportedLiquidScope = (requested: Caip25Scopes): SupportedDappScope => {
+	// The Liquid chain ids the wallet can actually serve right now: the built-ins (always) plus any
+	// stored custom chains — the latter only readable while unlocked, so a locked connect falls back
+	// to built-ins only (a custom chain requested then is simply not granted; built-ins always are).
+	const readKnownLiquidChainIds = async (): Promise<Set<string>> => {
+		const ids = new Set<string>(liquidChainGroup.chains.map((chain) => chain.id));
+
+		try {
+			const store = await getUnlockedChainStoreState();
+
+			for (const chain of Object.values(store.chains)) {
+				if (chain.chainGroupId === liquidChainGroup.id) ids.add(chain.id);
+			}
+		} catch {
+			// Vault locked / store unavailable: built-in chains only.
+		}
+
+		return ids;
+	};
+
+	// Liquid capability glue: keep the requested CAIP-25 scopes the Liquid chain group can actually
+	// serve — valid chain ids the wallet KNOWS (built-in ∪ stored) + dispatcher methods. Gating on
+	// known chains means a session can only be GRANTED chains the wallet can serve; an unknown or
+	// dapp-supplied chain id never enters a granted scope (the invoke-time hard gate and the
+	// dispatch-time resolveUnlockedLiquidChain throw stay as the backstops).
+	const resolveSupportedLiquidScope = async (
+		requested: Caip25Scopes,
+	): Promise<SupportedDappScope> => {
 		const dispatcher = liquidChainGroup.walletRpcDispatcher;
 		const supportedMethods = dispatcher.methods;
+		const knownChainIds = await readKnownLiquidChainIds();
 		const chains = new Set<string>();
 		const methods = new Set<string>();
 
@@ -142,6 +176,9 @@ const init = async () => {
 			} catch {
 				continue;
 			}
+
+			// Tightened: only grant chains the wallet can actually serve.
+			if (!knownChainIds.has(chainId)) continue;
 
 			chains.add(chainId);
 
@@ -254,6 +291,14 @@ const init = async () => {
 
 	const sendTransfer = async (input: SendTransferInput): Promise<SendTransferResult> =>
 		liquidChainGroup.accountRuntime.sendTransfer(
+			(await resolveSelectedLiquidAccount()).input,
+			input,
+		);
+
+	// Max-send estimate for the selected account: the runtime syncs, then either returns the full
+	// issued-asset balance or drains L-BTC to read the fee (see `accountRuntime.estimateMaxSend`).
+	const estimateMaxSend = async (input: EstimateMaxSendInput): Promise<EstimateMaxSendResult> =>
+		liquidChainGroup.accountRuntime.estimateMaxSend(
 			(await resolveSelectedLiquidAccount()).input,
 			input,
 		);
@@ -413,12 +458,106 @@ const init = async () => {
 		await walletConnect.disconnectWalletConnectSession({ topic });
 	};
 
+	// Prune a removed account's WalletConnect sessions. Resolve which live sessions the removed account
+	// groups authorize FIRST (synchronously) — the caller runs this BEFORE the model mutation deletes
+	// the chain accounts WC session→account resolution matches on. Policy (v1, no per-account WC
+	// pruning): disconnect a session only when its SOLE authorized account group is being removed; a
+	// multi-account session is left intact and a warning notes it. Best-effort: a failed disconnect must
+	// never abort the account removal that follows.
+	const purgeAccountWalletConnectSessions = async (
+		accountGroupIds: readonly string[],
+	): Promise<void> => {
+		const removed = new Set(accountGroupIds);
+
+		if (removed.size === 0) return;
+
+		const topicsToDisconnect: string[] = [];
+
+		for (const session of listWalletConnectSessions()) {
+			const authorized = resolveWalletConnectAccountGroupIds(session);
+
+			if (!authorized.some((id) => removed.has(id))) continue;
+
+			if (authorized.length === 1) {
+				topicsToDisconnect.push(session.topic);
+			} else {
+				console.warn(
+					`[walletconnect] session ${session.topic} authorizes multiple accounts; left intact after account removal (no per-account WalletConnect pruning yet)`,
+				);
+			}
+		}
+
+		await Promise.all(
+			topicsToDisconnect.map((topic) =>
+				disconnectWalletConnect(topic).catch((error) =>
+					console.warn(`[walletconnect] failed to disconnect session ${topic}`, error),
+				),
+			),
+		);
+	};
+
+	// Validate a dapp-proposed Liquid chain (throws on bad params) and hand back its display fields plus
+	// a commit that — only on approval — mints the wallet's OWN id, re-checks for a duplicate (the same
+	// guard the popup add-chain path uses), and persists it. Liquid/chain-store specifics live here.
+	const prepareLiquidChainAddition = (params: unknown): PreparedChainAddition => {
+		// Validate via the same record parser the vault uses. The dapp-supplied `chainId` is IGNORED —
+		// the wallet mints its OWN id on approval (below), so validate against a throwaway one (a custom
+		// chain's network is defined by its settings, not its id, so the throwaway never affects it).
+		const proposal =
+			params && typeof params === "object" ? (params as Record<string, unknown>) : {};
+		const proposed = parseLiquidChainRecord({
+			chainGroupId: LIQUID_CHAIN_GROUP_ID,
+			id: generateCustomLiquidChainId(),
+			name: proposal.name,
+			settings: proposal.settings,
+		});
+
+		return {
+			backendUrl: proposed.settings.backend.url,
+			name: proposed.name,
+			network: proposed.settings.network,
+			commit: async () => {
+				const chainId = generateCustomLiquidChainId();
+
+				await addUnlockedChainRecord(
+					{
+						chainGroupId: LIQUID_CHAIN_GROUP_ID,
+						id: chainId,
+						name: proposed.name,
+						settings: proposed.settings,
+					},
+					[liquidChainGroup],
+				);
+
+				return chainId;
+			},
+		};
+	};
+
+	// wallet_switchChain plumbing: is this a chain the wallet knows (built-in ∪ store)? Returns its
+	// display name for the approval, or null → the dapp must call wallet_addChain first.
+	const resolveKnownLiquidChain = async (chainId: string): Promise<{ name: string } | null> => {
+		const builtIn = liquidChainGroup.chains.find((chain) => chain.id === chainId);
+
+		if (builtIn) return { name: builtIn.name };
+
+		try {
+			const stored = (await getUnlockedChainStoreState()).chains[chainId];
+
+			return stored && stored.chainGroupId === liquidChainGroup.id ? { name: stored.name } : null;
+		} catch {
+			return null;
+		}
+	};
+
 	const dappAuthorization = createDappAuthorization({
 		confirm: confirmations.confirm,
 		dispatch: dispatchInjectedLiquidRequest,
 		getAccountModel,
+		prepareChainAddition: prepareLiquidChainAddition,
 		registry: accountRegistry,
 		resolveConnectedAccountIds,
+		resolveKnownChain: resolveKnownLiquidChain,
 		resolveSupportedScope: resolveSupportedLiquidScope,
 		// New injected sessions carry a default 30-day expiry; findDappSession drops them once lapsed.
 		sessionTtlMs: DEFAULT_INJECTED_SESSION_TTL_MS,
@@ -429,6 +568,9 @@ const init = async () => {
 
 	await walletConnect.initializeWalletConnectBackground({
 		confirm: confirmApproved,
+		// Same snapshot reader wired into the injected dapp path above: WC getBalance/getUTXOs now
+		// serve from the persisted snapshot (no live scan) when the target account has one.
+		readPortfolioSnapshot,
 	});
 
 	registerBackgroundRpc(messageBus, {
@@ -437,11 +579,13 @@ const init = async () => {
 			...createInternalRpcHandlers({
 				chainGroups: [liquidChainGroup],
 				confirmations,
+				estimateMaxSend,
 				getActivity,
 				getPortfolio,
 				getReceiveAddress,
 				inspectTransfer,
 				purgeAccountPortfolio,
+				purgeAccountWalletConnectSessions,
 				refreshPortfolio,
 				sendTransfer,
 			}),

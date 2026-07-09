@@ -1,6 +1,7 @@
 export const accountsRpc = {
 	methods: {
 		createAccount: "accounts.createAccount",
+		estimateMaxSend: "accounts.estimateMaxSend",
 		getActivity: "accounts.getActivity",
 		getPortfolio: "accounts.getPortfolio",
 		getReceiveAddress: "accounts.getReceiveAddress",

@@ -14,7 +14,16 @@ export {
 	liquidWalletRpcMethods,
 } from "./liquid";
 export { createInjectedProvider, waitForProvider } from "./provider";
-export { CAIP25_METHODS, createSession, getSession, invokeMethod, revokeSession } from "./rpc";
+export {
+	addChain,
+	type AddChainParams,
+	CAIP25_METHODS,
+	createSession,
+	getSession,
+	invokeMethod,
+	revokeSession,
+	switchChain,
+} from "./rpc";
 export type {
 	Caip25CreateSessionResult,
 	Caip25ScopeObject,

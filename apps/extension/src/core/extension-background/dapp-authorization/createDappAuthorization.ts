@@ -23,11 +23,15 @@ import {
 	trySelectedAccountGroupId,
 } from "./connectableAccounts";
 import {
+	DAPP_ADD_CHAIN_CONFIRMATION_KIND,
 	DAPP_CONNECT_CONFIRMATION_KIND,
+	DAPP_SWITCH_CHAIN_CONFIRMATION_KIND,
+	type DappAddChainConfirmationData,
 	type DappConnectConfirmationData,
 	type DappConnectConfirmationResult,
+	type DappSwitchChainConfirmationData,
 } from "./connectConfirmation";
-import { dappAuthorizationErrors } from "./errors";
+import { DappAuthorizationError, dappAuthorizationErrors } from "./errors";
 
 const INJECTED_TRANSPORT = "injected" as const;
 
@@ -45,6 +49,23 @@ export type SupportedDappScope = {
 	chains: string[];
 	events: string[];
 	methods: string[];
+};
+
+/**
+ * A validated, dapp-proposed chain ready to add (wallet_addChain). `commit` mints the wallet's OWN
+ * id, rejects a duplicate, and persists it — it runs ONLY after the user approves the add-chain
+ * confirmation, so validation (which produced the display fields) and persistence are separate
+ * consents, and the dapp-supplied id is never trusted.
+ */
+export type PreparedChainAddition = {
+	/** Esplora backend URL the wallet will hit — the security-sensitive field shown for approval. */
+	backendUrl: string;
+	/** Persist under a freshly minted, wallet-owned id; resolves to that id. Runs only on approval. */
+	commit: () => Promise<string>;
+	/** Proposed human-readable chain name. */
+	name: string;
+	/** Target network ("mainnet" | "testnet" | "regtest"). */
+	network: string;
 };
 
 export type DappRequestDispatch = (request: {
@@ -66,9 +87,22 @@ export type DappAuthorizationDependencies = {
 	dispatch: DappRequestDispatch;
 	/** Current account model, or null when the vault is locked. */
 	getAccountModel: () => AccountModelState | null;
+	/**
+	 * Validate a dapp-proposed chain (wallet_addChain) and return its display fields plus a `commit`
+	 * that persists it under a freshly minted, wallet-owned id (never the dapp's). Chain-group
+	 * specific; injected at the root. Throws on invalid params. Absent → wallet_addChain is refused.
+	 */
+	prepareChainAddition?: (params: unknown) => PreparedChainAddition;
 	registry: AccountRegistry;
+	/**
+	 * Resolve a KNOWN chain (built-in ∪ store) by id for wallet_switchChain, returning its display
+	 * name — or null when the wallet doesn't recognize it. Injected at the root.
+	 */
+	resolveKnownChain?: (chainId: string) => Promise<{ name: string } | null>;
 	/** Chain-aware filter: which of the requested CAIP-25 scopes are supported. */
-	resolveSupportedScope: (requested: ReturnType<typeof mergeRequestedScopes>) => SupportedDappScope;
+	resolveSupportedScope: (
+		requested: ReturnType<typeof mergeRequestedScopes>,
+	) => SupportedDappScope | Promise<SupportedDappScope>;
 	/**
 	 * Resolve (and materialize) the CAIP-10 account ids a session grants on a chain, so the connect
 	 * result advertises them and a dapp doesn't need a follow-up read to learn its account. Optional.
@@ -87,6 +121,8 @@ export type DappAuthorizationDependencies = {
 };
 
 export type DappAuthorization = {
+	/** wallet_addChain: propose a new chain; gated behind a mandatory approval, id minted by wallet. */
+	addChain: (input: { origin: string | null; params: unknown }) => Promise<{ chainId: string }>;
 	createSession: (input: {
 		origin: string | null;
 		params: unknown;
@@ -94,6 +130,8 @@ export type DappAuthorization = {
 	getSession: (input: { origin: string | null }) => Caip25GetSessionResult;
 	invokeMethod: (input: { origin: string | null; params: unknown }) => Promise<unknown>;
 	revokeSession: (input: { origin: string | null }) => Promise<Caip25RevokeSessionResult>;
+	/** wallet_switchChain: widen THIS connection's granted chain scope (per-connection, gated). */
+	switchChain: (input: { origin: string | null; params: unknown }) => Promise<{ chainId: string }>;
 };
 
 export function createDappAuthorization(
@@ -103,8 +141,10 @@ export function createDappAuthorization(
 		confirm,
 		dispatch,
 		getAccountModel,
+		prepareChainAddition,
 		registry,
 		resolveConnectedAccountIds,
+		resolveKnownChain,
 		resolveSupportedScope,
 		updateAccountModel,
 		now = () => Date.now(),
@@ -121,7 +161,7 @@ export function createDappAuthorization(
 		const requestingOrigin = requireOrigin(origin);
 
 		const requested = mergeRequestedScopes(asCreateSessionParams(params));
-		const supported = resolveSupportedScope(requested);
+		const supported = await resolveSupportedScope(requested);
 
 		if (supported.chains.length === 0) {
 			throw dappAuthorizationErrors.unsupportedScopes(
@@ -326,7 +366,159 @@ export function createDappAuthorization(
 		return pending;
 	};
 
-	return { createSession, getSession, invokeMethod, revokeSession };
+	// wallet_addChain (EIP-3085-style): a dapp MAY propose a new chain, but only behind a mandatory
+	// user approval, and the wallet mints its OWN id (never the dapp's — a dapp-supplied id could
+	// collide with / spoof a built-in genesis hash). Adding is a SEPARATE consent from authorizing:
+	// it persists the chain (making it switch-able) but does NOT widen this caller's session scope.
+	const addChain = async ({
+		origin,
+		params,
+	}: {
+		origin: string | null;
+		params: unknown;
+	}): Promise<{ chainId: string }> => {
+		const requestingOrigin = requireOrigin(origin);
+
+		if (!prepareChainAddition) {
+			throw dappAuthorizationErrors.invalidParams("Adding chains is not supported.");
+		}
+
+		// Validate the proposal up front (reject garbage before prompting). The wallet's own id is
+		// minted later, inside `commit`, so a rejected request never persists anything.
+		let prepared: PreparedChainAddition;
+
+		try {
+			prepared = prepareChainAddition(params);
+		} catch (error) {
+			if (error instanceof DappAuthorizationError) throw error;
+
+			throw dappAuthorizationErrors.invalidParams(
+				error instanceof Error ? error.message : "Invalid wallet_addChain parameters.",
+			);
+		}
+
+		const data: DappAddChainConfirmationData = {
+			backendUrl: prepared.backendUrl,
+			kind: DAPP_ADD_CHAIN_CONFIRMATION_KIND,
+			name: prepared.name,
+			network: prepared.network,
+			origin: requestingOrigin,
+		};
+
+		const decision = await confirm({ title: "Add this network?", message: requestingOrigin, data });
+
+		if (!decision.approved) {
+			throw dappAuthorizationErrors.userRejected("User rejected the add-chain request.");
+		}
+
+		// Only now (on approval) mint the id, re-check for a duplicate, and persist. Returns the minted
+		// id so the dapp can follow up with wallet_switchChain to have this connection granted it.
+		return { chainId: await prepared.commit() };
+	};
+
+	// wallet_switchChain: a PER-CONNECTION scope expansion (no global wallet-wide effect). Injected
+	// has no per-connection "active" chain — the dapp passes its target chain as `scope` on every
+	// wallet_invokeMethod — so this only ensures the chain is in THIS origin's granted scope.
+	const switchChain = async ({
+		origin,
+		params,
+	}: {
+		origin: string | null;
+		params: unknown;
+	}): Promise<{ chainId: string }> => {
+		const requestingOrigin = requireOrigin(origin);
+		const chainId = parseSwitchChainParams(params);
+		const accountModel = requireUnlocked(getAccountModel());
+
+		const session = registry.findDappSession(accountModel, {
+			now: now(),
+			origin: requestingOrigin,
+			transport: INJECTED_TRANSPORT,
+		});
+
+		if (!session) {
+			throw dappAuthorizationErrors.unauthorized(
+				'No active session. Call "wallet_createSession" first.',
+			);
+		}
+
+		// Already granted to this connection → no-op success (just confirms it's authorized).
+		if (session.scope.chains.includes(chainId)) {
+			return { chainId };
+		}
+
+		// Unknown to the wallet → the dapp must add it first (EVM signals this exact case with 4902).
+		const known = resolveKnownChain ? await resolveKnownChain(chainId) : null;
+
+		if (!known) {
+			throw dappAuthorizationErrors.unrecognizedChain(
+				`Chain "${chainId}" is not recognized. Call "wallet_addChain" first.`,
+				{ chainId },
+			);
+		}
+
+		// Known but not yet in THIS origin's session → widening the scope exposes the connected account
+		// on another chain, so require the same consent the connect grant does.
+		const decision = await confirm({
+			title: "Use this network?",
+			message: requestingOrigin,
+			data: {
+				chainId,
+				chainName: known.name,
+				kind: DAPP_SWITCH_CHAIN_CONFIRMATION_KIND,
+				origin: requestingOrigin,
+			} satisfies DappSwitchChainConfirmationData,
+		});
+
+		if (!decision.approved) {
+			throw dappAuthorizationErrors.userRejected("User rejected the switch-chain request.");
+		}
+
+		// Materialize the account(s) on the newly-granted chain (derives + persists the chain accounts)
+		// so wallet_getSession advertises them and wallet_invokeMethod can dispatch — mirrors connect.
+		if (resolveConnectedAccountIds) {
+			await resolveConnectedAccountIds(chainId, session.scope.accountGroupIds).catch(() => []);
+		}
+
+		// Add the chain to THIS session's granted scope and persist. Re-read the session inside the
+		// updater so a concurrent revoke (during the approval prompt) is never clobbered.
+		await updateAccountModel((model) => {
+			const current = model.dappSessions[session.id];
+
+			if (!current) return model;
+
+			return {
+				...model,
+				dappSessions: {
+					...model.dappSessions,
+					[session.id]: {
+						...current,
+						scope: {
+							...current.scope,
+							chains: [...new Set([...current.scope.chains, chainId])],
+						},
+						updatedAt: now(),
+					},
+				},
+				updatedAt: now(),
+			};
+		});
+
+		// Signal the scope change so the dapp re-queries its (now wider) session — mirrors revokeSession.
+		emitWalletEvent("wallet_sessionChanged");
+
+		return { chainId };
+	};
+
+	return { addChain, createSession, getSession, invokeMethod, revokeSession, switchChain };
+}
+
+function parseSwitchChainParams(params: unknown): string {
+	if (!isRecord(params) || typeof params.chainId !== "string" || params.chainId.length === 0) {
+		throw dappAuthorizationErrors.invalidParams("wallet_switchChain requires a chainId string.");
+	}
+
+	return params.chainId;
 }
 
 function resolveGrantedMethods(
