@@ -2,6 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { accountsClient } from "@/core/accounts/application/accounts-rpc/client";
 import type {
+	EstimateMaxSendInput,
+	EstimateMaxSendResult,
 	SendTransferInput,
 	SendTransferResult,
 	TransferReview,
@@ -15,6 +17,17 @@ import type {
 export function useInspectTransfer() {
 	return useMutation<TransferReview, Error, SendTransferInput>({
 		mutationFn: (input) => accountsClient.inspectTransfer(input),
+	});
+}
+
+/**
+ * Estimate the max sendable amount (+ assumed L-BTC fee) for an asset on the selected account. The
+ * backend syncs first; native L-BTC drains to compute the fee, issued assets return the full balance.
+ * Drives the Send form's "Max" button; a rejection surfaces the backend's error message on the form.
+ */
+export function useEstimateMaxSend() {
+	return useMutation<EstimateMaxSendResult, Error, EstimateMaxSendInput>({
+		mutationFn: (input) => accountsClient.estimateMaxSend(input),
 	});
 }
 

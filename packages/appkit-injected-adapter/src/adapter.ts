@@ -8,7 +8,15 @@ import {
 import type UniversalProvider from "@walletconnect/universal-provider";
 
 import { createInjectedProvider, waitForProvider } from "./provider";
-import { createSession, getSession, invokeMethod, revokeSession } from "./rpc";
+import {
+	addChain as addChainRpc,
+	type AddChainParams,
+	createSession,
+	getSession,
+	invokeMethod,
+	revokeSession,
+	switchChain as switchChainRpc,
+} from "./rpc";
 import type {
 	Caip25Scopes,
 	InjectedCaipAdapterOptions,
@@ -276,6 +284,24 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		return {
 			methods: [...this.options.methods],
 		};
+	}
+
+	/**
+	 * Propose a new chain to the wallet (wallet_addChain). The wallet gates it behind a user approval
+	 * and mints its OWN id, returning it — pass that id to {@link switchChain} to use the new chain.
+	 * Not part of AppKit's AdapterBlueprint; exposed for dapps that manage chains directly.
+	 */
+	async addChain(params: AddChainParams): Promise<{ chainId: string }> {
+		return addChainRpc(this.injectedProvider, params);
+	}
+
+	/**
+	 * Ask the wallet to grant THIS connection a chain it already knows (wallet_switchChain, user-
+	 * approved per-connection scope expansion). Rejects with the wallet's unrecognized-chain error
+	 * (EVM 4902) when the chain is unknown — call {@link addChain} first in that case.
+	 */
+	async switchChain(chainId: string): Promise<{ chainId: string }> {
+		return switchChainRpc(this.injectedProvider, chainId);
 	}
 
 	async grantPermissions() {

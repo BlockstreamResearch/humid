@@ -5,6 +5,7 @@
 export const DAPP_AUTHORIZATION_ERROR_CODES = {
 	INVALID_PARAMS: -32602,
 	UNAUTHORIZED: 4100, // no / expired session for the requested method
+	UNRECOGNIZED_CHAIN: 4902, // wallet_switchChain to an unknown chain — call wallet_addChain first
 	UNSUPPORTED_SCOPES: 5100, // none of the requested CAIP-25 scopes are supported
 	USER_REJECTED: 4001,
 	WALLET_LOCKED: 4900, // EIP-1193 "disconnected"; used while the vault is locked
@@ -30,6 +31,8 @@ export const dappAuthorizationErrors = {
 		new DappAuthorizationError(DAPP_AUTHORIZATION_ERROR_CODES.INVALID_PARAMS, message, data),
 	unauthorized: (message: string, data?: unknown) =>
 		new DappAuthorizationError(DAPP_AUTHORIZATION_ERROR_CODES.UNAUTHORIZED, message, data),
+	unrecognizedChain: (message: string, data?: unknown) =>
+		new DappAuthorizationError(DAPP_AUTHORIZATION_ERROR_CODES.UNRECOGNIZED_CHAIN, message, data),
 	unsupportedScopes: (message: string, data?: unknown) =>
 		new DappAuthorizationError(DAPP_AUTHORIZATION_ERROR_CODES.UNSUPPORTED_SCOPES, message, data),
 	userRejected: (message: string, data?: unknown) =>

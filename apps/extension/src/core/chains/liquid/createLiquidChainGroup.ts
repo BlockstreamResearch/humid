@@ -20,6 +20,15 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 
 	return {
 		accountRuntime: {
+			async estimateMaxSend(input, estimate) {
+				const account = await walletBackend.resolveAccount(input);
+				const rawAssetId = estimate.rawAssetId ?? account.rawPolicyAssetId;
+				// Estimate MUST sync (inspectTransfer deliberately skips it): the drain selects real UTXOs
+				// and the LWK fee depends on them, and the issued-asset max is read off the synced balance.
+				await walletBackend.syncAccount(account);
+
+				return walletBackend.estimateMaxSend(account, estimate, rawAssetId);
+			},
 			async getActivity(input, rawAssetId, cursor) {
 				const account = await walletBackend.resolveAccount(input);
 

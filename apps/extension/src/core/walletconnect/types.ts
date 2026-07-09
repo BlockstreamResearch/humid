@@ -1,8 +1,20 @@
 import type { WalletKitTypes } from "@reown/walletkit";
 
+import type { PortfolioData } from "@/core/accounts/application/accounts-rpc/model/types";
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
 
 export type WalletConnectRelayStatus = "unknown" | "connected" | "disconnected";
+
+/**
+ * Serve-from-cache hook for WalletConnect read methods: reads the persisted portfolio snapshot for
+ * one account group + chain (null when none is cached). Mirrors the injected dapp path's
+ * `ReadPortfolioSnapshot` exactly, so WalletConnect `getBalance`/`getUTXOs` serve from the snapshot on
+ * a hit (working even while the vault is locked) and fall back to a live scan on a miss; never syncs.
+ */
+export type WalletConnectReadPortfolioSnapshot = (
+	accountGroupId: string,
+	chainId: string,
+) => Promise<{ data: PortfolioData } | null>;
 
 export type WalletConnectPeerMetadata = {
 	description?: string;
@@ -29,6 +41,8 @@ export type WalletConnectAdapterContext = {
 	approvedScope?: { accounts: readonly string[]; methods: readonly string[] };
 	confirm?: WalletConnectConfirmationHandler;
 	keyManagerState: KeyManagerState;
+	/** Optional serve-from-cache hook for read methods; absent → they fall back to a live scan. */
+	readPortfolioSnapshot?: WalletConnectReadPortfolioSnapshot;
 	updateKeyManagerState?: UpdateKeyManagerState;
 };
 

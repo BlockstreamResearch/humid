@@ -16,9 +16,12 @@ type SendFormProps = {
 	assets: SendableAsset[];
 	canContinue: boolean;
 	error: string | null;
+	isEstimatingMax: boolean;
 	isPreparing: boolean;
+	maxDisabled: boolean;
 	onAmountChange: (value: string) => void;
 	onContinue: () => void;
+	onMax: () => void;
 	onRecipientChange: (value: string) => void;
 	onSelectAsset: (rawAssetId: string) => void;
 	recipient: string;
@@ -35,9 +38,12 @@ export function SendForm({
 	assets,
 	canContinue,
 	error,
+	isEstimatingMax,
 	isPreparing,
+	maxDisabled,
 	onAmountChange,
 	onContinue,
+	onMax,
 	onRecipientChange,
 	onSelectAsset,
 	recipient,
@@ -96,10 +102,20 @@ export function SendForm({
 									Amount
 								</label>
 								{selectedAsset ? (
-									<span className="text-muted-foreground text-xs">
-										Balance: {formatUnits(selectedAsset.amount, selectedAsset.decimals)}{" "}
-										{selectedAsset.symbol}
-									</span>
+									<div className="flex items-center gap-2">
+										<span className="text-muted-foreground text-xs">
+											Balance: {formatUnits(selectedAsset.amount, selectedAsset.decimals)}{" "}
+											{selectedAsset.symbol}
+										</span>
+										<button
+											className="text-primary text-xs font-semibold uppercase transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+											disabled={maxDisabled}
+											onClick={onMax}
+											type="button"
+										>
+											{isEstimatingMax ? "Max…" : "Max"}
+										</button>
+									</div>
 								) : null}
 							</div>
 							<div className="relative">

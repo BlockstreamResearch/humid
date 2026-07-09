@@ -77,6 +77,7 @@ export const confirmedSent: PortfolioViewActivity = {
 	fee: 258n,
 	id: SENT_TXID,
 	status: "confirmed",
+	timestamp: new Date("2026-05-03T00:00:00Z").getTime(),
 };
 
 /** A confirmed incoming transfer. */
@@ -88,6 +89,7 @@ export const confirmedReceived: PortfolioViewActivity = {
 	fee: 191n,
 	id: RECEIVED_TXID,
 	status: "confirmed",
+	timestamp: new Date("2026-04-28T00:00:00Z").getTime(),
 };
 
 /** An optimistic, just-broadcast send: no block timestamp yet, unknown fee. */
@@ -99,6 +101,7 @@ export const pendingSent: PortfolioViewActivity = {
 	fee: null,
 	id: PENDING_TXID,
 	status: "pending",
+	timestamp: null,
 };
 
 /**
@@ -147,6 +150,7 @@ export function makeLongItems(count: number, start = 0): PortfolioViewActivity[]
 			fee: isSent ? 258n : 191n,
 			id,
 			status: "confirmed",
+			timestamp: LONG_LIST_BASE_MS - index * 86_400_000,
 		};
 	});
 }

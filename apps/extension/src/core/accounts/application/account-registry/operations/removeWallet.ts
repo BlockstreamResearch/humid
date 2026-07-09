@@ -1,6 +1,7 @@
 import type { AccountGroupRecord } from "../model/account-group";
 import type { AccountModelState } from "../model/account-model";
 import type { AccountGroupId, KeySourceId, WalletId } from "../model/identifiers";
+import { pruneDappSessionsForRemovedAccountGroup } from "./removeAccountGroup";
 import { removeAccountGroupEntities } from "./removeAccountGroupEntities";
 
 export type RemoveWalletInput = {
@@ -50,11 +51,16 @@ export function removeWallet(input: RemoveWalletInput): RemoveWalletResult {
 	const chainAccounts = { ...input.accountModel.chainAccounts };
 	const addresses = { ...input.accountModel.addresses };
 
+	// Thread the dapp-session prune across every removed group: each pass strips that group (and its
+	// chain accounts) from any session it was authorized in, deleting sessions left with no account.
+	let dappSessionsModel = input.accountModel;
+
 	for (const accountGroupId of removedAccountGroupIds) {
 		const group = input.accountModel.accountGroups[accountGroupId];
 
 		if (group) {
 			removeAccountGroupEntities({ accountGroups, addresses, chainAccounts }, group);
+			dappSessionsModel = pruneDappSessionsForRemovedAccountGroup(dappSessionsModel, group, now);
 		}
 	}
 
@@ -77,6 +83,7 @@ export function removeWallet(input: RemoveWalletInput): RemoveWalletResult {
 			accountGroups,
 			addresses,
 			chainAccounts,
+			dappSessions: dappSessionsModel.dappSessions,
 			keySources,
 			selectedAccountGroupId,
 			updatedAt: now,

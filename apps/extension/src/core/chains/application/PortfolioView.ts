@@ -27,6 +27,8 @@ export type PortfolioViewActivity = {
 	id: string;
 	/** "pending" until the tx confirms (no block timestamp yet), then "confirmed". */
 	status: "pending" | "confirmed";
+	/** Block time (epoch) once confirmed, or null while pending — used to group activity by day. */
+	timestamp: number | null;
 };
 
 /**

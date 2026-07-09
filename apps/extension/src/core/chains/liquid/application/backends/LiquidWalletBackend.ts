@@ -8,6 +8,8 @@ import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
 import type { LiquidAssetId, LiquidAssetMetadata } from "../../domain/LiquidAsset";
 import type { LiquidChainId } from "../../domain/LiquidChain";
 import type {
+	LiquidEstimateMaxSendParams,
+	LiquidEstimateMaxSendResult,
 	LiquidGetWalletDescriptorParams,
 	LiquidSendTransferParams,
 	LiquidSendTransferResult,
@@ -113,6 +115,11 @@ export type LiquidWalletSnapshot = {
 };
 
 export type LiquidWalletBackend = {
+	estimateMaxSend: (
+		account: LiquidWalletAccount,
+		params: LiquidEstimateMaxSendParams,
+		rawAssetId: string,
+	) => Promise<LiquidEstimateMaxSendResult>;
 	getActivity: (account: LiquidWalletAccount, rawAssetId: string) => LiquidActivityEntry[];
 	getBalance: (account: LiquidWalletAccount, rawAssetId: string) => string;
 	getReceiveAddress: (account: LiquidWalletAccount) => { address: string; index: number };

@@ -1,3 +1,4 @@
+import { addUnlockedChainRecord } from "@/core/chains/application/chain-store/addChainRecord";
 import {
 	getUnlockedChainStoreState,
 	removeUnlockedChainRecord,
@@ -84,17 +85,8 @@ export function createChainsInternalHandlers(
 		[chainsRpc.methods.addChain]: async (message) => {
 			const { chain } = message.data as AddChainInput;
 
-			if (!chainGroups.some((group) => group.id === chain.chainGroupId)) {
-				throw new Error(`Unknown chain group: ${chain.chainGroupId}`);
-			}
-
-			const known = await readChainsState(chainGroups);
-
-			if (known.chains.some((candidate) => candidate.id === chain.id)) {
-				throw new Error(`Chain already exists: ${chain.id}`);
-			}
-
-			await setUnlockedChainRecord(chain);
+			// Same guards the dapp-facing wallet_addChain reuses: known group + non-duplicate id.
+			await addUnlockedChainRecord(chain, chainGroups);
 
 			return readChainsState(chainGroups);
 		},

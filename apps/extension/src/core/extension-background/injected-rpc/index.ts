@@ -40,5 +40,15 @@ export function createInjectedRpcHandlers({
 				origin: await resolveSenderOrigin(sender),
 				params: paramsOf(message),
 			}),
+		[caip25Rpc.methods.addChain]: async (message, sender) =>
+			authorization.addChain({
+				origin: await resolveSenderOrigin(sender),
+				params: paramsOf(message),
+			}),
+		[caip25Rpc.methods.switchChain]: async (message, sender) =>
+			authorization.switchChain({
+				origin: await resolveSenderOrigin(sender),
+				params: paramsOf(message),
+			}),
 	};
 }

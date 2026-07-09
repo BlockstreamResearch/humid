@@ -1,5 +1,7 @@
 import type {
 	ActivityPage,
+	EstimateMaxSendInput,
+	EstimateMaxSendResult,
 	GetActivityInput,
 	PortfolioSnapshot,
 	ReceiveAddress,
@@ -22,11 +24,13 @@ export { syncWalletVaultAuthStore } from "./wallet-vault";
 export type CreateInternalRpcHandlersInput = {
 	chainGroups: readonly Pick<ChainGroup, "chains" | "id">[];
 	confirmations: ConfirmationResponder;
+	estimateMaxSend: (input: EstimateMaxSendInput) => Promise<EstimateMaxSendResult>;
 	getActivity: (input: GetActivityInput) => Promise<ActivityPage>;
 	getPortfolio: () => Promise<PortfolioSnapshot>;
 	getReceiveAddress: () => Promise<ReceiveAddress>;
 	inspectTransfer: (input: SendTransferInput) => Promise<TransferReview>;
 	purgeAccountPortfolio: (accountGroupId: string) => Promise<void>;
+	purgeAccountWalletConnectSessions: (accountGroupIds: readonly string[]) => Promise<void>;
 	refreshPortfolio: () => Promise<PortfolioSnapshot>;
 	sendTransfer: (input: SendTransferInput) => Promise<SendTransferResult>;
 };
@@ -38,11 +42,13 @@ export type CreateInternalRpcHandlersInput = {
 export function createInternalRpcHandlers({
 	chainGroups,
 	confirmations,
+	estimateMaxSend,
 	getActivity,
 	getPortfolio,
 	getReceiveAddress,
 	inspectTransfer,
 	purgeAccountPortfolio,
+	purgeAccountWalletConnectSessions,
 	refreshPortfolio,
 	sendTransfer,
 }: CreateInternalRpcHandlersInput): RequestHandlerMap {
@@ -68,11 +74,13 @@ export function createInternalRpcHandlers({
 		...walletConnectInternalHandlers,
 		...createChainsInternalHandlers(chainGroups),
 		...createAccountsInternalHandlers({
+			estimateMaxSend,
 			getActivity,
 			getPortfolio,
 			getReceiveAddress,
 			inspectTransfer,
 			purgeAccountPortfolio,
+			purgeAccountWalletConnectSessions,
 			refreshPortfolio,
 			sendTransfer,
 		}),
