@@ -39,7 +39,7 @@
         "es-toolkit": "^1.48.1",
         "i18next": "^26.3.1",
         "idb": "^8.0.2",
-        "lwk_wasm": "file:../../lwk/lwk_wasm/pkg",
+        "lwk_wasm": "file:lwk/lwk_wasm/pkg",
         "motion": "^12.40.0",
         "react": "^19.2.7",
         "react-day-picker": "^10.0.1",
@@ -2254,7 +2254,7 @@
 
     "lucide-react": ["lucide-react@0.544.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-t5tS44bqd825zAW45UQxpG2CvcC4urOwn2TrwSH8u+MjeE+1NnWl6QqeQ/6NdjMqdOygyiT9p3Ev0p1NJykxjw=="],
 
-    "lwk_wasm": ["lwk_wasm@file:../../lwk/lwk_wasm/pkg", {}],
+    "lwk_wasm": ["lwk_wasm@file:lwk/lwk_wasm/pkg", {}],
 
     "lz-string": ["lz-string@1.5.0", "", { "bin": { "lz-string": "bin/bin.js" } }, "sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ=="],
 

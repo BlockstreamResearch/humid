@@ -1,0 +1,12 @@
+name: Install dependencies
+description: >-
+  Install the workspace dependencies with the frozen lockfile. Requires Bun to be set
+  up first (see the setup-bun action) and the lwk_wasm/pkg to already be built (see the
+  build-lwk-wasm action) — the `lwk_wasm` package is a local `file:` dependency.
+
+runs:
+  using: composite
+  steps:
+    - name: bun install
+      shell: bash
+      run: bun install --frozen-lockfile

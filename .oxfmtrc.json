@@ -9,6 +9,7 @@
 	"sortImports": true,
 	"sortTailwindcss": true,
 	"ignorePatterns": [
+		"lwk/**",
 		"AGENTS.md",
 		"CLAUDE.md",
 		"README.md",

@@ -14,7 +14,7 @@
 		{
 			"files": [
 				"apps/extension/src/ui/**",
-				"apps/extension/src/routes/app/components/**",
+				"apps/extension/src/routes/App/components/**",
 				"apps/web/src/components/**"
 			],
 			"rules": {
@@ -36,6 +36,7 @@
 		}
 	},
 	"ignorePatterns": [
+		"lwk/**",
 		"dist/**",
 		"build/**",
 		"node_modules/**",

@@ -1,0 +1,82 @@
+name: Build Extension
+
+# Manual only. Trigger from the Actions tab → "Run workflow", and pick the branch or tag
+# to build from with the ref selector (the standard workflow_dispatch "Use workflow from"
+# dropdown). The chosen ref is what gets checked out and built.
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "lwk_wasm build profile (release = small optimized wasm; dev = faster build, large wasm)"
+        type: choice
+        options:
+          - release
+          - dev
+        default: release
+      publish_release:
+        description: "Also publish a GitHub Release with the built extension attached (only takes effect when run on a tag)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with the lwk submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Build lwk_wasm
+        uses: ./.github/actions/build-lwk-wasm
+        with:
+          profile: ${{ inputs.profile }}
+
+      - name: Install dependencies
+        uses: ./.github/actions/install
+
+      - name: Build extension
+        run: bun run build
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: humid-extension-${{ github.ref_name }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 14
+
+  # Optional, manual-only: attach the built extension to a GitHub Release for the tag.
+  # Runs only when `publish_release` is checked AND the workflow was dispatched on a tag
+  # (a Release must target a tag); otherwise this job is skipped. Published as a DRAFT so
+  # it can be reviewed before going public.
+  release:
+    needs: build
+    if: ${{ inputs.publish_release && github.ref_type == 'tag' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the built extension
+        uses: actions/download-artifact@v4
+        with:
+          name: humid-extension-${{ github.ref_name }}
+          path: dist
+
+      - name: Zip the extension
+        run: cd dist && zip -r "../humid-extension-${{ github.ref_name }}.zip" .
+
+      - name: Publish GitHub Release (draft)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: humid ${{ github.ref_name }}
+          draft: true
+          files: humid-extension-${{ github.ref_name }}.zip
+          fail_on_unmatched_files: true

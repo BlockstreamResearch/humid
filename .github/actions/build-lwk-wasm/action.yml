@@ -1,0 +1,57 @@
+name: Build lwk_wasm
+description: >-
+  Build the lwk_wasm WASM package from the vendored `lwk` git submodule so the
+  `file:lwk/lwk_wasm/pkg` dependency resolves. `lwk_wasm/pkg` is a wasm-pack build
+  artifact that is not committed, so it must be produced in CI. The output is cached by
+  the pinned submodule commit, so the Rust/wasm-pack build only runs when the submodule
+  bumps. Requires the repo to be checked out with `submodules: recursive`.
+
+inputs:
+  profile:
+    description: "wasm-pack profile: `release` (optimized, small wasm) or `dev` (fast, large wasm)."
+    default: release
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve pinned lwk commit
+      id: lwk
+      shell: bash
+      run: echo "sha=$(git rev-parse HEAD:lwk)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore built lwk_wasm/pkg
+      id: pkg-cache
+      uses: actions/cache@v4
+      with:
+        path: lwk/lwk_wasm/pkg
+        key: lwk-wasm-${{ runner.os }}-${{ steps.lwk.outputs.sha }}-${{ inputs.profile }}
+
+    - name: Install Rust toolchain (1.85.0 + wasm32)
+      if: steps.pkg-cache.outputs.cache-hit != 'true'
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: "1.85.0"
+        targets: wasm32-unknown-unknown
+
+    - name: Cache cargo registry + build
+      if: steps.pkg-cache.outputs.cache-hit != 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          lwk/target
+        key: cargo-${{ runner.os }}-${{ steps.lwk.outputs.sha }}
+        restore-keys: |
+          cargo-${{ runner.os }}-
+
+    - name: Install wasm-pack
+      if: steps.pkg-cache.outputs.cache-hit != 'true'
+      uses: jetli/wasm-pack-action@v0.4.0
+
+    - name: Build lwk_wasm (wasm-pack, target bundler)
+      if: steps.pkg-cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: lwk/lwk_wasm
+      run: wasm-pack build --${{ inputs.profile }}
