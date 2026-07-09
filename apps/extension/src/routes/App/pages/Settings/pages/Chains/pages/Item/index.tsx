@@ -2,6 +2,7 @@ import { Navigate, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import type { ChainRecord } from "@/core/chains/application/ChainRecord";
+import { showSuccess } from "@/core/feedback";
 import { chainGroupUis } from "@/routes/App/chainGroupUis";
 import { useChains } from "@/routes/App/pages/Home/HomeContext/hooks/useChains";
 import { useChainActions } from "@/routes/App/pages/Settings/hooks/useChainActions";
@@ -50,7 +51,17 @@ export function ChainItemPage() {
 			isRemoving={removeChain.isPending}
 			isSaving={updateChain.isPending}
 			onRemove={removable ? handleRemove : undefined}
-			onSave={(next) => updateChain.mutate({ chain: next })}
+			onSave={(next) =>
+				updateChain.mutate(
+					{ chain: next },
+					{
+						onSuccess: () => {
+							showSuccess(`${next.name} saved`);
+							navigate({ to: "/app/settings/chains" });
+						},
+					},
+				)
+			}
 		/>
 	);
 }

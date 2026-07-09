@@ -1,19 +1,12 @@
 "use client";
 
-import {
-	AlertCircleIcon,
-	CheckmarkCircle02Icon,
-	InformationCircleIcon,
-} from "@hugeicons/core-free-icons";
+import { CircleCheck, Info, Loader, OctagonXFreeIcons, Triangle } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { type ReactNode, useCallback, useEffect } from "react";
 import { type ExternalToast, toast, Toaster as Sonner } from "sonner";
 
 import { useTheme } from "@/contexts/ThemeProvider";
 import { emitter } from "@/core/event-bus";
-import { cn } from "@/theme/utils.ts";
-
-import { DefaultToast } from "./components/DefaultToast";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
@@ -42,76 +35,78 @@ export type DefaultToastPayload = {
 
 const DEFAULT_DURATION = 5_000;
 
+const isToastPayloadWithCustomChildren = (
+	payload: DefaultToastPayload,
+): payload is ToastPayloadWithCustomChildren & { opts?: ExternalToast } => {
+	return "children" in payload;
+};
+
 export const UiToaster = ({ ...props }: ToasterProps) => {
 	const { theme = "system" } = useTheme();
 
-	const showSuccessToast = useCallback((payload: Partial<DefaultToastPayload>) => {
-		toast(
-			<DefaultToast
-				payload={{
-					...payload,
-					icon: payload.icon || <HugeiconsIcon icon={CheckmarkCircle02Icon} size={24} />,
-				}}
-				className="bg-success"
-			/>,
-			{
-				...payload.opts,
-				duration: payload.opts?.duration ?? payload.duration ?? DEFAULT_DURATION,
-			},
-		);
+	const showSuccessToast = useCallback((payload: DefaultToastPayload) => {
+		if (isToastPayloadWithCustomChildren(payload)) {
+			toast(payload.children, payload.opts);
+
+			return;
+		}
+
+		toast.success(payload.title, {
+			...payload.opts,
+			description: payload.message,
+			icon: payload.icon,
+			duration: payload.opts?.duration ?? payload.duration ?? DEFAULT_DURATION,
+		});
 	}, []);
-	const showWarningToast = useCallback((payload: Partial<DefaultToastPayload>) => {
-		toast(
-			<DefaultToast
-				payload={{
-					...payload,
-					icon: payload.icon || <HugeiconsIcon icon={AlertCircleIcon} size={24} />,
-				}}
-				className="bg-orange-500"
-			/>,
-			{
-				...payload.opts,
-				duration: payload.opts?.duration ?? payload.duration ?? DEFAULT_DURATION,
-			},
-		);
+	const showWarningToast = useCallback((payload: DefaultToastPayload) => {
+		if (isToastPayloadWithCustomChildren(payload)) {
+			toast(payload.children, payload.opts);
+
+			return;
+		}
+
+		toast.warning(payload.title, {
+			...payload.opts,
+			description: payload.message,
+			icon: payload.icon,
+			duration: payload.opts?.duration ?? payload.duration ?? DEFAULT_DURATION,
+		});
 	}, []);
-	const showErrorToast = useCallback((payload: Partial<DefaultToastPayload>) => {
-		toast(
-			<DefaultToast
-				payload={{
-					...payload,
-					icon: payload.icon || <HugeiconsIcon icon={AlertCircleIcon} size={24} />,
-				}}
-				className="bg-red-500"
-			/>,
-			{
-				...payload.opts,
-				duration: payload.opts?.duration ?? payload.duration ?? DEFAULT_DURATION,
-			},
-		);
+	const showErrorToast = useCallback((payload: DefaultToastPayload) => {
+		if (isToastPayloadWithCustomChildren(payload)) {
+			toast(payload.children, payload.opts);
+
+			return;
+		}
+
+		toast.success(payload.title, {
+			...payload.opts,
+			description: payload.message,
+			icon: payload.icon,
+			duration: payload.opts?.duration ?? payload.duration ?? DEFAULT_DURATION,
+		});
 	}, []);
-	const showInfoToast = useCallback((payload: Partial<DefaultToastPayload>) => {
-		toast(
-			<DefaultToast
-				payload={{
-					...payload,
-					icon: payload.icon || <HugeiconsIcon icon={InformationCircleIcon} size={24} />,
-				}}
-				className="bg-blue-500"
-			/>,
-			{
-				...payload.opts,
-				duration: payload.opts?.duration ?? payload.duration ?? DEFAULT_DURATION,
-			},
-		);
+	const showInfoToast = useCallback((payload: DefaultToastPayload) => {
+		if (isToastPayloadWithCustomChildren(payload)) {
+			toast(payload.children, payload.opts);
+
+			return;
+		}
+
+		toast.info(payload.title, {
+			...payload.opts,
+			description: payload.message,
+			icon: payload.icon,
+			duration: payload.opts?.duration ?? payload.duration ?? DEFAULT_DURATION,
+		});
 	}, []);
 
 	useEffect(() => {
 		const unsubs = [
-			emitter.on("success", (payload) => showSuccessToast(payload)),
-			emitter.on("warning", (payload) => showWarningToast(payload)),
-			emitter.on("error", (payload) => showErrorToast(payload)),
-			emitter.on("info", (payload) => showInfoToast(payload)),
+			emitter.on("success", (event) => showSuccessToast(event)),
+			emitter.on("warning", (event) => showWarningToast(event)),
+			emitter.on("error", (event) => showErrorToast(event)),
+			emitter.on("info", (event) => showInfoToast(event)),
 		];
 
 		return () => {
@@ -123,17 +118,24 @@ export const UiToaster = ({ ...props }: ToasterProps) => {
 		<Sonner
 			theme={theme as ToasterProps["theme"]}
 			className="toaster group"
+			icons={{
+				success: <HugeiconsIcon icon={CircleCheck} className="size-4" />,
+				info: <HugeiconsIcon icon={Info} className="size-4" />,
+				warning: <HugeiconsIcon icon={Triangle} className="size-4" />,
+				error: <HugeiconsIcon icon={OctagonXFreeIcons} className="size-4" />,
+				loading: <HugeiconsIcon icon={Loader} className="size-4 animate-spin" />,
+			}}
+			style={
+				{
+					"--normal-bg": "var(--popover)",
+					"--normal-text": "var(--popover-foreground)",
+					"--normal-border": "var(--border)",
+					"--border-radius": "var(--radius)",
+				} as React.CSSProperties
+			}
 			toastOptions={{
-				unstyled: true,
 				classNames: {
-					toast: cn("p-0"),
-					// 'group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg',
-					description: cn(),
-					// 'group-[.toast]:text-muted-foreground'
-					actionButton: cn(),
-					// 'group-[.toast]:bg-primary group-[.toast]:text-primary-foreground',
-					cancelButton: cn(),
-					// 'group-[.toast]:bg-muted group-[.toast]:text-muted-foreground',
+					toast: "cn-toast",
 				},
 			}}
 			{...props}

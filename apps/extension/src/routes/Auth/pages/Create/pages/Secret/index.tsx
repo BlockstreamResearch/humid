@@ -21,7 +21,7 @@ export function AuthCreateSecretPage() {
 	};
 
 	return (
-		<main className="flex size-full flex-col gap-5 p-5">
+		<main className="flex size-full flex-col gap-5 overflow-y-auto p-5">
 			<div className="flex flex-col gap-2">
 				<p className="text-muted-foreground text-xs font-medium tracking-normal uppercase">
 					Create · Step 1 of 2
