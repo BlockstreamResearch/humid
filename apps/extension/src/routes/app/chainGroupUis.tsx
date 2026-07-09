@@ -10,6 +10,7 @@ import { LiquidChainCreate } from "@/core/chains/liquid/chains/LiquidChainCreate
 import { LIQUID_CHAIN_GROUP_ID } from "@/core/chains/liquid/chains/LiquidChainRecord";
 import { LiquidChainSettings } from "@/core/chains/liquid/chains/LiquidChainSettings";
 import { isBuiltInLiquidChainId } from "@/core/chains/liquid/domain/LiquidChain";
+import { LiquidAssetAbout } from "@/core/chains/liquid/presentation/LiquidAssetAbout";
 import { LiquidAssetView } from "@/core/chains/liquid/presentation/LiquidAssetView";
 import { LiquidBalanceHeadline } from "@/core/chains/liquid/presentation/LiquidBalanceHeadline";
 import { liquidExplorerTxUrl } from "@/core/chains/liquid/presentation/liquidExplorerTxUrl";
@@ -24,8 +25,12 @@ type TokenRowComponent = ComponentType<{ token: PortfolioViewAsset }>;
 type AssetViewComponent = ComponentType<{
 	actions: ReactNode;
 	activity: PortfolioViewActivityFeed;
+	chain: ChainRecord;
 	token: PortfolioViewAsset;
 }>;
+
+/** The asset "About" panel (identity/registry/decimals) — the asset header opens it in a drawer. */
+type AssetAboutComponent = ComponentType<{ chain: ChainRecord; token: PortfolioViewAsset }>;
 
 /** The native-asset balance headline (raw amount, formatted by the chain at render). */
 type BalanceHeadlineComponent = ComponentType<{
@@ -42,6 +47,7 @@ type BalanceHeadlineComponent = ComponentType<{
  * look a group up by `chainGroupId` and inject its parts.
  */
 export type ChainGroupUi = {
+	AssetAbout: AssetAboutComponent;
 	AssetView: AssetViewComponent;
 	BalanceHeadline: BalanceHeadlineComponent;
 	Create: ChainComponent;
@@ -58,6 +64,7 @@ export const chainGroupUis: Record<string, ChainGroupUi> = {
 	[LIQUID_CHAIN_GROUP_ID]: {
 		// The concrete chain is a LiquidChainRecord at runtime (its group id matches), and the
 		// asset metadata a LiquidAssetMetadata — the Liquid components cast to those.
+		AssetAbout: LiquidAssetAbout,
 		AssetView: LiquidAssetView,
 		BalanceHeadline: LiquidBalanceHeadline,
 		Create: LiquidChainCreate as ChainComponent,

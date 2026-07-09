@@ -53,11 +53,16 @@ function AssetContent({
 
 	return (
 		<div className="flex size-full min-h-0 flex-col">
-			<AssetHeader name={token.name} symbol={token.symbol} />
+			<AssetHeader chain={chain} token={token} />
 			<UiScrollArea className="min-h-0 flex-1">
 				<div className="flex flex-col gap-6 px-5 py-4">
 					{AssetView ? (
-						<AssetView actions={<QuickActions />} activity={activity} token={token} />
+						<AssetView
+							actions={<QuickActions assetId={token.id} />}
+							activity={activity}
+							chain={chain}
+							token={token}
+						/>
 					) : null}
 				</div>
 			</UiScrollArea>

@@ -57,6 +57,7 @@ export function readWalletActivityForAsset(
 			{
 				amountSats: (net < 0n ? -net : net).toString(),
 				direction: net < 0n ? "sent" : "received",
+				feeSats: walletTx.fee().toString(),
 				timestamp: typeof timestamp === "number" ? timestamp : null,
 				txid: walletTx.txid().toString(),
 			} satisfies LiquidActivityEntry,

@@ -1,12 +1,11 @@
 import { ArrowLeft01Icon, CheckmarkCircle02Icon, Copy01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
 import QRCode from "react-qr-code";
 
-import { UiButton } from "@/ui/UiButton/base";
-
-const COPIED_RESET_MS = 1500;
+import { cn } from "@/theme/utils.ts";
+import { UiButtonVariants } from "@/ui/UiButton/base";
+import { UiCopyButton } from "@/ui/UiCopyButton";
 
 /**
  * Presentational Receive screen: the account's receive address as a QR (always dark
@@ -21,14 +20,6 @@ export function ReceiveView({
 	accountName: string;
 	chainName: string;
 }) {
-	const [copied, setCopied] = useState(false);
-
-	const handleCopy = () => {
-		void navigator.clipboard?.writeText?.(address);
-		setCopied(true);
-		setTimeout(() => setCopied(false), COPIED_RESET_MS);
-	};
-
 	return (
 		<div className="flex size-full min-h-0 flex-col">
 			<header className="border-border/60 flex shrink-0 items-center gap-2 border-b px-2 py-2.5">
@@ -53,10 +44,17 @@ export function ReceiveView({
 
 				<p className="text-muted-foreground max-w-full font-mono text-xs break-all">{address}</p>
 
-				<UiButton type="button" variant="outline" size="lg" className="w-full" onClick={handleCopy}>
-					<HugeiconsIcon icon={copied ? CheckmarkCircle02Icon : Copy01Icon} size={18} />
-					{copied ? "Copied" : "Copy address"}
-				</UiButton>
+				<UiCopyButton
+					className={cn(UiButtonVariants({ variant: "outline", size: "lg" }), "w-full")}
+					value={address}
+				>
+					{(copied) => (
+						<>
+							<HugeiconsIcon icon={copied ? CheckmarkCircle02Icon : Copy01Icon} size={18} />
+							{copied ? "Copied" : "Copy address"}
+						</>
+					)}
+				</UiCopyButton>
 			</div>
 		</div>
 	);

@@ -125,6 +125,8 @@ export type PortfolioData = {
 export type ActivityEntry = {
 	amountSats: string;
 	direction: "received" | "sent";
+	/** Network fee in base-unit sats (L-BTC), as a string like `amountSats`. */
+	feeSats: string;
 	timestamp: number | null;
 	txid: string;
 };

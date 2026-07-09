@@ -62,6 +62,8 @@ export type ResolveLiquidWalletAccountInput = {
 export type LiquidActivityEntry = {
 	amountSats: string;
 	direction: "received" | "sent";
+	/** Network fee in base-unit sats (L-BTC), from the LWK WalletTx fee. */
+	feeSats: string;
 	timestamp: number | null;
 	txid: string;
 };

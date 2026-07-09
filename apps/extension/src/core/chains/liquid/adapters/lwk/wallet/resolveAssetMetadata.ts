@@ -4,7 +4,13 @@ import type { LwkWasmModule } from "../loadLwkWasm";
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
 
 /** Display metadata for an issued asset, resolved from LWK's registry. */
-export type AssetMetadata = { decimals: number; name: string; symbol: string };
+export type AssetMetadata = {
+	decimals: number;
+	/** The issuer's domain from the registry entry, or null when the entry carries none. */
+	issuerDomain: string | null;
+	name: string;
+	symbol: string;
+};
 
 // Resolved issued-asset metadata, cached across scans (it rarely changes). Keyed by raw asset id
 // — globally unique per network, so there are no cross-network collisions. The worker lives as
@@ -44,8 +50,10 @@ export async function resolveIssuedAssetMetadata(
 
 			if (!data) continue;
 
+			const domain = data.domain();
 			const metadata: AssetMetadata = {
 				decimals: data.precision(),
+				issuerDomain: domain.length > 0 ? domain : null,
 				name: data.name(),
 				symbol: data.ticker(),
 			};

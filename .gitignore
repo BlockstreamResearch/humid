@@ -23,6 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 tmp/
+storybook-static/
 
 # Config files
 .webextrc

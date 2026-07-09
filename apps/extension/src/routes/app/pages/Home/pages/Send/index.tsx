@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type { SendTransferInput } from "@/core/accounts/application/accounts-rpc/model/types";
+import { usePendingTransfers } from "@/core/accounts/application/pending-transfers/usePendingTransfers";
 import { parseUnits } from "@/helpers/formatters";
 import { chainGroupUis } from "@/routes/App/chainGroupUis";
 
@@ -9,6 +10,7 @@ import { SendForm } from "./components/SendForm";
 import { SendResult } from "./components/SendResult";
 import { SendReview } from "./components/SendReview";
 import { type SendableAsset, toSendableAssets } from "./model";
+import { Route } from "./route";
 import { useInspectTransfer, useSendTransfer } from "./useSendTransfer";
 
 type Step = "form" | "review" | "result";
@@ -27,13 +29,27 @@ type PreparedTransfer = {
  * The popup's review screen IS the confirmation, so the RPCs bypass the dapp confirm round-trip.
  */
 export function SendPage() {
-	const { chain, portfolio } = useHome();
+	const { accountGroup, chain, portfolio } = useHome();
 	const assets = useMemo(() => toSendableAssets(portfolio.tokens), [portfolio.tokens]);
+
+	// Optimistic pending tracking is keyed by the selected account + chain — the same axes the asset
+	// screen's activity feed reads. The native asset's raw id backs the fallback below when a send
+	// omits `rawAssetId` (native L-BTC): it's the sole `isNative` row, flattened from the portfolio.
+	const pending = usePendingTransfers(accountGroup.id, chain.id);
+	const nativeRawAssetId = assets.find((asset) => asset.isNative)?.rawAssetId ?? null;
+
+	// Deep-link from an asset's detail page: pre-select that asset if it's one we can send;
+	// an unknown/absent id keeps null, which falls back to the native asset below.
+	const { asset: initialRawAssetId } = Route.useSearch();
 
 	const [step, setStep] = useState<Step>("form");
 	const [recipient, setRecipient] = useState("");
 	const [amount, setAmount] = useState("");
-	const [selectedRawAssetId, setSelectedRawAssetId] = useState<string | null>(null);
+	const [selectedRawAssetId, setSelectedRawAssetId] = useState<string | null>(() =>
+		initialRawAssetId && assets.some((asset) => asset.rawAssetId === initialRawAssetId)
+			? initialRawAssetId
+			: null,
+	);
 	const [prepared, setPrepared] = useState<PreparedTransfer | null>(null);
 
 	const inspect = useInspectTransfer();
@@ -70,7 +86,26 @@ export function SendPage() {
 	const handleConfirm = () => {
 		if (!prepared) return;
 
-		send.mutate(prepared.input, { onSuccess: () => setStep("result") });
+		const { amount: amountSats, rawAssetId } = prepared.input;
+
+		send.mutate(prepared.input, {
+			onSuccess: (result) => {
+				// Record the broadcast so it shows as "Pending" atop this asset's activity immediately,
+				// before the next scan. Native L-BTC sends omit `rawAssetId`, so fall back to the native id.
+				const assetId = rawAssetId ?? nativeRawAssetId;
+
+				if (assetId) {
+					pending.add({
+						amountSats,
+						createdAt: Date.now(),
+						rawAssetId: assetId,
+						txid: result.txid,
+					});
+				}
+
+				setStep("result");
+			},
+		});
 	};
 
 	if (step === "review" && prepared && inspect.data) {

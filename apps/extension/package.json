@@ -4,6 +4,7 @@
 	"private": true,
 	"type": "module",
 	"dependencies": {
-		"@paper-design/shaders-react": "^0.0.77"
+		"@paper-design/shaders-react": "^0.0.77",
+		"@tanstack/react-virtual": "^3.14.5"
 	}
 }

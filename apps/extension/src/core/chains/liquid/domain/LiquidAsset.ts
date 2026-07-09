@@ -14,6 +14,10 @@ export const LIQUID_NATIVE_ASSET = {
  */
 export type LiquidAssetMetadata = {
 	isNative: boolean;
+	/** The issuer's domain from the asset registry (assets.blockstream.info), or null if none/unlisted. */
+	issuerDomain: string | null;
+	/** True when the asset resolved in the registry (or is the native policy asset) — an anti-scam signal. */
+	verified: boolean;
 };
 
 export type LiquidAssetId = `${LiquidChainId}/elip144:${string}`;

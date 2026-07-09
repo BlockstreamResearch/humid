@@ -1,26 +1,16 @@
 import { CheckmarkCircle02Icon, Copy01Icon, LinkSquare02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
 
 import { cn } from "@/theme/utils.ts";
 import { UiButtonVariants } from "@/ui/UiButton/base";
-
-const COPIED_RESET_MS = 1500;
+import { UiCopyButton } from "@/ui/UiCopyButton";
 
 /**
  * Step 3 of the Send flow: the broadcast succeeded. Shows the txid (copyable) and, when the chain
  * exposes an explorer URL, a "view on explorer" link. "Done" returns to the home overview.
  */
 export function SendResult({ explorerUrl, txid }: { explorerUrl: string | null; txid: string }) {
-	const [copied, setCopied] = useState(false);
-
-	const handleCopy = () => {
-		void navigator.clipboard?.writeText?.(txid);
-		setCopied(true);
-		setTimeout(() => setCopied(false), COPIED_RESET_MS);
-	};
-
 	return (
 		<div className="flex size-full min-h-0 flex-col">
 			<header className="border-border/60 flex shrink-0 items-center gap-2 border-b px-2 py-2.5">
@@ -43,18 +33,21 @@ export function SendResult({ explorerUrl, txid }: { explorerUrl: string | null; 
 					<span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
 						Transaction ID
 					</span>
-					<button
+					<UiCopyButton
 						className="hover:bg-accent flex items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors"
-						onClick={handleCopy}
-						type="button"
+						value={txid}
 					>
-						<span className="min-w-0 flex-1 font-mono text-xs break-all">{txid}</span>
-						<HugeiconsIcon
-							className="text-muted-foreground mt-0.5 shrink-0"
-							icon={copied ? CheckmarkCircle02Icon : Copy01Icon}
-							size={16}
-						/>
-					</button>
+						{(copied) => (
+							<>
+								<span className="min-w-0 flex-1 font-mono text-xs break-all">{txid}</span>
+								<HugeiconsIcon
+									className="text-muted-foreground mt-0.5 shrink-0"
+									icon={copied ? CheckmarkCircle02Icon : Copy01Icon}
+									size={16}
+								/>
+							</>
+						)}
+					</UiCopyButton>
 				</div>
 
 				<div className="mt-auto flex w-full flex-col gap-2">

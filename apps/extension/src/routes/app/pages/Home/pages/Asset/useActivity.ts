@@ -6,6 +6,8 @@ import type {
 	ActivityEntry,
 	ActivityPage,
 } from "@/core/accounts/application/accounts-rpc/model/types";
+import type { PendingTransfer } from "@/core/accounts/application/pending-transfers/pendingTransfersStore";
+import { usePendingTransfers } from "@/core/accounts/application/pending-transfers/usePendingTransfers";
 import type {
 	PortfolioViewActivity,
 	PortfolioViewActivityFeed,
@@ -49,10 +51,42 @@ export function useActivity(
 		if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
 	}, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
-	const items = useMemo(
+	const pending = usePendingTransfers(keys.accountGroupId, keys.chainId);
+
+	// The synced history: every loaded page mapped to display rows (a mempool tx already arrives here
+	// as "pending" via a null timestamp — see toActivity).
+	const synced = useMemo(
 		() => (query.data?.pages ?? []).flatMap((page) => page.items.map(toActivity)),
 		[query.data],
 	);
+
+	// Txids the scan has already surfaced (mempool or confirmed), used to de-dupe the optimistic rows.
+	const syncedTxids = useMemo(() => new Set(synced.map((item) => item.id)), [synced]);
+
+	// Optimistic "Pending" rows for THIS asset that no loaded page carries yet — newest first, on top.
+	// They bridge broadcast → first post-send scan; once the scan reports the tx it drops out here and
+	// the synced row takes over, so a tx is never shown twice.
+	const optimistic = useMemo(
+		() =>
+			pending.entries
+				.filter((entry) => entry.rawAssetId === token.id && !syncedTxids.has(entry.txid))
+				.map(toOptimisticActivity),
+		[pending.entries, syncedTxids, token.id],
+	);
+
+	// Reconcile GC: once a scan reports a tx we tracked optimistically, drop it from the store so it
+	// stops being merged. One per pass — each removal invalidates the store and re-runs this effect for
+	// the next — which serializes the read-modify-writes and sidesteps a lost-update race between them.
+	const { remove } = pending;
+	useEffect(() => {
+		const caught = pending.entries.find(
+			(entry) => entry.rawAssetId === token.id && syncedTxids.has(entry.txid),
+		);
+
+		if (caught) remove(caught.txid);
+	}, [pending.entries, remove, syncedTxids, token.id]);
+
+	const items = useMemo(() => [...optimistic, ...synced], [optimistic, synced]);
 
 	return {
 		error: query.isError,
@@ -71,6 +105,25 @@ function toActivity(entry: ActivityEntry): PortfolioViewActivity {
 		counterparty: truncateMiddle(entry.txid),
 		date: entry.timestamp ? handleTimestamp(entry.timestamp).format("MMM D, YYYY") : "Pending",
 		direction: entry.direction,
+		fee: parseBaseUnits(entry.feeSats),
 		id: entry.txid,
+		status: entry.timestamp === null ? "pending" : "confirmed",
+	};
+}
+
+/**
+ * Map one optimistic pending transfer (broadcast, not yet scanned) to a display row. Always a "sent"
+ * row with an unknown fee and a "Pending" date; the amount stays raw (formatted at render), and the
+ * full txid is the id so the reconcile can de-dupe it against the synced entry.
+ */
+function toOptimisticActivity(entry: PendingTransfer): PortfolioViewActivity {
+	return {
+		amount: parseBaseUnits(entry.amountSats),
+		counterparty: truncateMiddle(entry.txid),
+		date: "Pending",
+		direction: "sent",
+		fee: null,
+		id: entry.txid,
+		status: "pending",
 	};
 }

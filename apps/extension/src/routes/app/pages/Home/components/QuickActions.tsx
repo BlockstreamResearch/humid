@@ -6,7 +6,7 @@ import { cn } from "@/theme/utils.ts";
 import { UiButtonVariants } from "@/ui/UiButton/base";
 
 /** Primary money actions: Receive opens the receive screen; Send opens the send flow. */
-export function QuickActions() {
+export function QuickActions({ assetId }: { assetId?: string }) {
 	return (
 		<div className="flex gap-2">
 			<Link
@@ -18,6 +18,7 @@ export function QuickActions() {
 			</Link>
 			<Link
 				to="/app/send"
+				search={assetId ? { asset: assetId } : undefined}
 				className={cn(UiButtonVariants({ size: "lg", variant: "outline" }), "flex-1")}
 			>
 				<HugeiconsIcon icon={ArrowUpRight01Icon} size={18} />

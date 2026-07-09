@@ -22,7 +22,11 @@ export type PortfolioViewActivity = {
 	counterparty: string;
 	date: string;
 	direction: string;
+	/** Network fee in raw base units (L-BTC), or null when unknown (e.g. an optimistic pending entry). */
+	fee: bigint | null;
 	id: string;
+	/** "pending" until the tx confirms (no block timestamp yet), then "confirmed". */
+	status: "pending" | "confirmed";
 };
 
 /**
