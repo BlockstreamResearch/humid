@@ -14,7 +14,7 @@ export type CreateLiquidRpcRouterDependencies = {
 
 /**
  * Builds the Liquid dapp RPC registry from {@link LIQUID_RPC_METHODS}: the JSON-RPC
- * dispatcher plus the connect-time capabilities, both derived from that one list.
+ * dispatcher plus the advertised method names, both derived from that one list.
  * The wallet and identity backends are injected into each method's context here, so
  * dispatch callers only supply the chain and key-manager state
  * ({@link LiquidWalletRpcContext}).

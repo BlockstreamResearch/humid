@@ -1,10 +1,9 @@
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
-import { WALLET_CAPABILITY_GROUPS } from "@/core/wallet-methods/capability";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
-import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
+import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
-import { restrictedLiquidAssetId, type ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
+import type { ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
 import {
 	LIQUID_WALLET_RPC_METHODS,
 	type LiquidGetUTXOsParams,
@@ -16,9 +15,8 @@ import { mapLiquidUtxosForAsset } from "../../backends/mapLiquidUtxosForAsset";
 import { resolveDappAccount } from "../../dappAccountScope";
 import type { ReadPortfolioSnapshot } from "../../LiquidRpcContext";
 
-export type LiquidGetUTXOsContext = {
+export type LiquidGetUTXOsContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
-	confirm?: WalletRpcConfirmationHandler;
 	keyManagerState: KeyManagerState;
 	readPortfolioSnapshot?: ReadPortfolioSnapshot;
 	updateKeyManagerState?: UpdateKeyManagerState;
@@ -36,20 +34,6 @@ export const getLiquidUTXOs = createWalletMethod<
 	LiquidGetUTXOsReview,
 	LiquidGetUTXOsResult
 >({
-	capability: {
-		access: "read",
-		description: "See this account's individual coins (unspent outputs).",
-		group: WALLET_CAPABILITY_GROUPS.VIEW_BALANCES,
-		id: LIQUID_WALLET_RPC_METHODS.GET_UTXOS,
-		label: "View coins",
-		restricted: ({ context, params }) => ({
-			accountIdentifier: "",
-			assetId: params.assetId ?? restrictedLiquidAssetId(context.chain.id),
-			chainId: context.chain.id,
-			policyAssetId: restrictedLiquidAssetId(context.chain.id),
-			utxos: [],
-		}),
-	},
 	confirmation: ({ review }) => ({
 		data: {
 			accountIdentifier: review.account.accountIdentifier,
@@ -91,6 +75,7 @@ export const getLiquidUTXOs = createWalletMethod<
 			utxos: context.walletBackend.getUtxos(account, requestedAsset.rawAssetId),
 		};
 	},
+	id: LIQUID_WALLET_RPC_METHODS.GET_UTXOS,
 	parse: parseLiquidGetUTXOsParams,
 	review: async ({ context, params }) => {
 		const account = await resolveDappAccount(context);

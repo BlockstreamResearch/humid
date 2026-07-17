@@ -9,16 +9,22 @@ export type WalletRpcConfirmationHandler = (
 ) => Promise<boolean>;
 
 export type WalletRpcAuthorization = {
-	/** Whether the session granted the capability with this id (the RPC method name). */
-	isGranted: (capabilityId: string) => boolean;
+	/** Whether a standing permission lets this method run without a per-call confirmation. */
+	isGranted: (methodId: string) => boolean;
 };
+
+/**
+ * No standing permissions — every method confirms. The default for any caller we cannot
+ * attribute.
+ */
+export const DENY_ALL_AUTHORIZATION: WalletRpcAuthorization = { isGranted: () => false };
 
 export type WalletRpcBaseContext = {
 	/**
-	 * Permission surface for a dapp call: present when the call is scoped to a session's
-	 * granted capabilities. Absent for internal/trusted calls, which get full access.
+	 * Which methods this caller may run without asking the user. Every caller declares one:
+	 * attribute it to a session's permissions, or pass {@link DENY_ALL_AUTHORIZATION}.
 	 */
-	authorization?: WalletRpcAuthorization;
+	authorization: WalletRpcAuthorization;
 	confirm?: WalletRpcConfirmationHandler;
 };
 

@@ -1,7 +1,6 @@
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
-import { WALLET_CAPABILITY_GROUPS } from "@/core/wallet-methods/capability";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
-import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
+import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import type { ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
@@ -15,9 +14,8 @@ import { parseLiquidAssetId, parseLiquidSendTransferParams } from "../../../doma
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../../dappAccountScope";
 
-export type LiquidSendTransferContext = {
+export type LiquidSendTransferContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
-	confirm?: WalletRpcConfirmationHandler;
 	keyManagerState: KeyManagerState;
 	updateKeyManagerState?: UpdateKeyManagerState;
 	walletBackend: LiquidWalletBackend;
@@ -35,13 +33,6 @@ export const sendLiquidTransfer = createWalletMethod<
 	LiquidSendTransferMethodReview,
 	LiquidSendTransferResult
 >({
-	capability: {
-		access: "action",
-		description: "Send assets from this account, with your approval each time.",
-		group: WALLET_CAPABILITY_GROUPS.SEND_FUNDS,
-		id: LIQUID_WALLET_RPC_METHODS.SEND_TRANSFER,
-		label: "Send funds",
-	},
 	confirmation: ({ review }) => ({
 		data: {
 			...review.transfer,
@@ -54,6 +45,7 @@ export const sendLiquidTransfer = createWalletMethod<
 	}),
 	execute: ({ context, params, review }) =>
 		context.walletBackend.sendTransfer(review.account, params, review.requestedAsset.rawAssetId),
+	id: LIQUID_WALLET_RPC_METHODS.SEND_TRANSFER,
 	parse: parseLiquidSendTransferParams,
 	review: async ({ context, params }) => {
 		const account = await resolveDappAccount(context, params.account);

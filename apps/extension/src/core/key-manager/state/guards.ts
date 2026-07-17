@@ -112,7 +112,7 @@ const dappSessionRecordSchema = z.object({
 		chainAccountIds: z.array(chainAccountIdSchema),
 		chains: z.array(chainIdSchema),
 		events: z.array(z.string()),
-		methods: z.array(z.string()),
+		methods: z.record(z.string(), z.boolean()),
 	}),
 	topic: z.string().optional(),
 	transport: z.enum(["injected", "walletconnect"]),

@@ -56,8 +56,7 @@ export type LiquidDappAccountResolution = {
  * Resolve the account a dapp RPC method operates on, enforcing the session's per-account grant.
  * Internal calls (no `accountScope`) keep full access to the default account. For a dapp call the
  * target is the named account (must be authorized) or the session default; an unauthorized /
- * unknown account raises a 4100 error. Reads degrade to their capability stub in the wrapper
- * before reaching here, so this hard error is the action-path guard.
+ * unknown account raises a 4100 error.
  */
 export async function resolveDappAccount(
 	context: LiquidDappAccountResolution,

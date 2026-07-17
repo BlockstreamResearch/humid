@@ -1,5 +1,5 @@
 export { caip25Rpc } from "./methods";
-export { isMethodAuthorized, mergeRequestedScopes, toCaip25Scopes } from "./scope";
+export { mergeRequestedScopes, toCaip25Scopes } from "./scope";
 export type {
 	Caip25CreateSessionParams,
 	Caip25CreateSessionResult,

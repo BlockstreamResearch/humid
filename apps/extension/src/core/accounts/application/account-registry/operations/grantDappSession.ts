@@ -37,7 +37,7 @@ export function grantDappSession(input: GrantDappSessionInput): GrantDappSession
 			chainAccountIds: dedupe(input.scope.chainAccountIds),
 			chains: dedupe(input.scope.chains),
 			events: dedupe(input.scope.events),
-			methods: dedupe(input.scope.methods),
+			methods: { ...input.scope.methods },
 		},
 		topic: input.topic,
 		transport: input.transport,

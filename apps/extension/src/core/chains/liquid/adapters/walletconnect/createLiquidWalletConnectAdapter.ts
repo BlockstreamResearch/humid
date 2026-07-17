@@ -1,5 +1,6 @@
 import type { WalletKitTypes } from "@reown/walletkit";
 
+import { DENY_ALL_AUTHORIZATION } from "@/core/wallet-rpc/types";
 import type { WalletConnectNamespaceAdapter } from "@/core/walletconnect/types";
 
 import type { LiquidIdentityBackend } from "../../application/backends/LiquidIdentityBackend";
@@ -51,25 +52,22 @@ export function createLiquidWalletConnectAdapter({
 			const chain = await resolveUnlockedLiquidChain(chainId);
 			const { approvedScope } = context;
 
-			// Enforce the session's approved scope the same way the injected CAIP-25/27 path does:
-			// granted methods gate per-capability (via `authorization`), granted accounts bind
-			// execution to the authorized set (via `accountScope`). Absent scope → no enforcement.
-			const enforcement = approvedScope
-				? {
-						accountScope: buildLiquidDappAccountScope({
-							accountGroupIds: resolveAccountGroupIdsForIdentifiers(
-								context.keyManagerState.accountModel,
-								chainId,
-								approvedScope.accounts,
-							),
-							accountModel: context.keyManagerState.accountModel,
+			// A WalletConnect session approves a method surface, never a per-method "run without
+			// asking" — the proposal has no permission UI — so every request confirms with the user.
+			// The approved accounts still bind execution to the authorized set (via `accountScope`),
+			// as on the injected CAIP-25/27 path; an unresolvable scope leaves that binding on the
+			// default account, with the confirmation as the gate.
+			const accountScope = approvedScope
+				? buildLiquidDappAccountScope({
+						accountGroupIds: resolveAccountGroupIdsForIdentifiers(
+							context.keyManagerState.accountModel,
 							chainId,
-						}),
-						authorization: {
-							isGranted: (capabilityId: string) => approvedScope.methods.includes(capabilityId),
-						},
-					}
-				: {};
+							approvedScope.accounts,
+						),
+						accountModel: context.keyManagerState.accountModel,
+						chainId,
+					})
+				: undefined;
 
 			return dispatcher.dispatch(
 				{
@@ -78,7 +76,8 @@ export function createLiquidWalletConnectAdapter({
 				},
 				{
 					...context,
-					...enforcement,
+					accountScope,
+					authorization: DENY_ALL_AUTHORIZATION,
 					chain,
 				},
 			);

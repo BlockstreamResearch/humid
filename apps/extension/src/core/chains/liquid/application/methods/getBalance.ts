@@ -1,10 +1,9 @@
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
-import { WALLET_CAPABILITY_GROUPS } from "@/core/wallet-methods/capability";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
-import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
+import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
-import { restrictedLiquidAssetId, type ParsedLiquidAssetId } from "../../domain/LiquidAsset";
+import type { ParsedLiquidAssetId } from "../../domain/LiquidAsset";
 import {
 	LIQUID_WALLET_RPC_METHODS,
 	type LiquidGetBalanceParams,
@@ -15,9 +14,8 @@ import type { LiquidWalletAccount, LiquidWalletBackend } from "../backends/Liqui
 import { resolveDappAccount } from "../dappAccountScope";
 import type { ReadPortfolioSnapshot } from "../LiquidRpcContext";
 
-export type LiquidGetBalanceContext = {
+export type LiquidGetBalanceContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
-	confirm?: WalletRpcConfirmationHandler;
 	keyManagerState: KeyManagerState;
 	readPortfolioSnapshot?: ReadPortfolioSnapshot;
 	updateKeyManagerState?: UpdateKeyManagerState;
@@ -35,20 +33,6 @@ export const getLiquidBalance = createWalletMethod<
 	LiquidGetBalanceReview,
 	LiquidGetBalanceResult
 >({
-	capability: {
-		access: "read",
-		description: "See this account's asset balances.",
-		group: WALLET_CAPABILITY_GROUPS.VIEW_BALANCES,
-		id: LIQUID_WALLET_RPC_METHODS.GET_BALANCE,
-		label: "View balance",
-		restricted: ({ context, params }) => ({
-			accountIdentifier: "",
-			assetId: params.assetId ?? restrictedLiquidAssetId(context.chain.id),
-			balance: "RESTRICTED",
-			chainId: context.chain.id,
-			policyAssetId: restrictedLiquidAssetId(context.chain.id),
-		}),
-	},
 	confirmation: ({ review }) => ({
 		data: {
 			accountIdentifier: review.account.accountIdentifier,
@@ -94,6 +78,7 @@ export const getLiquidBalance = createWalletMethod<
 			policyAssetId: account.policyAssetId,
 		};
 	},
+	id: LIQUID_WALLET_RPC_METHODS.GET_BALANCE,
 	parse: parseLiquidGetBalanceParams,
 	review: async ({ context, params }) => {
 		const account = await resolveDappAccount(context);

@@ -117,7 +117,7 @@ function toInjectedView(session: DappSessionRecord): ConnectedDappView {
 		url: session.origin,
 		accountGroupIds: [...session.scope.accountGroupIds],
 		chains: [...session.scope.chains],
-		methods: [...session.scope.methods],
+		methods: Object.keys(session.scope.methods),
 		events: [...session.scope.events],
 		connectedAt: session.createdAt,
 	};

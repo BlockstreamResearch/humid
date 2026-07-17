@@ -31,8 +31,9 @@ export async function resolveSessionRequest(
 
 /**
  * The methods + accounts the session granted for this namespace, read from the live WalletConnect
- * session. Undefined when the session or its namespace can't be found, so the adapter falls back
- * to its pre-enforcement behavior rather than hard-failing a legitimate request.
+ * session. Undefined when the session or its namespace can't be found — the adapter then has no
+ * account binding to apply, and every request confirms with the user rather than hard-failing a
+ * legitimate one.
  */
 function resolveApprovedScope(
 	walletKit: WalletKitClient,

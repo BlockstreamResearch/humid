@@ -1,5 +1,3 @@
-import type { WalletCapabilityDescriptor } from "@/core/wallet-methods/capability";
-
 /** Discriminant marking a confirmation request as the dapp-connect (grant permissions) flow. */
 export const DAPP_CONNECT_CONFIRMATION_KIND = "dappConnect";
 
@@ -24,20 +22,25 @@ export type DappConnectAccount = {
 /**
  * `ConfirmationRequest.data` payload for the connect modal. Authorization is per
  * account (MetaMask-style): the user picks which accounts to expose (current one
- * checked by default) and which per-method capabilities to grant.
+ * checked by default) and which methods may run without a per-call confirmation.
  */
 export type DappConnectConfirmationData = {
 	/** Selectable accounts. Empty when `requiresUnlock` — the modal fetches them post-unlock. */
 	accounts: DappConnectAccount[];
-	capabilities: WalletCapabilityDescriptor[];
 	chains: string[];
 	kind: typeof DAPP_CONNECT_CONFIRMATION_KIND;
+	/** The session's whole method surface: every method it may call, on offer to pre-approve. */
+	methods: string[];
 	origin: string;
 	/** The wallet is locked: the modal shows an unlock step before the account list. */
 	requiresUnlock: boolean;
 };
 
-/** The connect modal's structured result: the account groups and capabilities the user granted. */
+/**
+ * The connect modal's structured result: the account groups the user exposed, and the subset of
+ * {@link DappConnectConfirmationData.methods} they let run without asking. Every offered method
+ * stays callable either way — an unticked one just confirms on every call.
+ */
 export type DappConnectConfirmationResult = {
 	grantedAccountGroupIds: string[];
 	grantedMethods: string[];

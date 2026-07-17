@@ -1,11 +1,6 @@
 import type { DappSessionScope } from "@/core/accounts/application/account-registry/model/dapp-session";
 
-import type {
-	Caip25CreateSessionParams,
-	Caip25ScopeObject,
-	Caip25Scopes,
-	Caip25ScopeString,
-} from "./types";
+import type { Caip25CreateSessionParams, Caip25ScopeObject, Caip25Scopes } from "./types";
 
 /** Merge `requiredScopes` and `optionalScopes` into a single requested map. */
 export function mergeRequestedScopes(params: Caip25CreateSessionParams): Caip25Scopes {
@@ -32,31 +27,25 @@ export function mergeRequestedScopes(params: Caip25CreateSessionParams): Caip25S
 /**
  * Present a stored flat session scope as per-chain CAIP-25 scope objects. `accountsByChain`
  * supplies the resolved CAIP-10 account ids per chain (empty when the caller can't resolve them).
+ * `methods` advertises the session's whole authorized surface — every method it may call, not just
+ * the pre-approved ones — so a dapp can feature-detect methods that confirm with the user.
  */
 export function toCaip25Scopes(
 	scope: DappSessionScope,
 	accountsByChain: Record<string, string[]> = {},
 ): Caip25Scopes {
 	const scopes: Caip25Scopes = {};
+	const methods = Object.keys(scope.methods).toSorted();
 
 	for (const scopeString of scope.chains) {
 		scopes[scopeString] = {
 			accounts: accountsByChain[scopeString] ?? [],
-			methods: [...scope.methods],
+			methods: [...methods],
 			notifications: [...scope.events],
 		};
 	}
 
 	return scopes;
-}
-
-/** Authorization check: is `method` permitted in `scopeString` by this session scope? */
-export function isMethodAuthorized(
-	scope: DappSessionScope,
-	scopeString: Caip25ScopeString,
-	method: string,
-): boolean {
-	return scope.chains.includes(scopeString) && scope.methods.includes(method);
 }
 
 function normalizeScopeObject(scope: Caip25ScopeObject): Caip25ScopeObject {

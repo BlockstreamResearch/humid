@@ -1,70 +1,20 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 
-import {
-	WALLET_CAPABILITY_GROUPS,
-	type WalletCapabilityDescriptor,
-} from "@/core/wallet-methods/capability";
-
 import { DappConnectConfirmation } from "./DappConnectConfirmation";
 
-const capabilities: WalletCapabilityDescriptor[] = [
-	{
-		access: "read",
-		description: "See this account's asset balances.",
-		group: WALLET_CAPABILITY_GROUPS.VIEW_BALANCES,
-		id: "getBalance",
-		label: "View balance",
-	},
-	{
-		access: "read",
-		description: "See this account's individual coins (unspent outputs).",
-		group: WALLET_CAPABILITY_GROUPS.VIEW_BALANCES,
-		id: "getUTXOs",
-		label: "View coins",
-	},
-	{
-		access: "read",
-		description: "See this account's public addresses (its wallet descriptor).",
-		group: WALLET_CAPABILITY_GROUPS.VIEW_ADDRESSES,
-		id: "getWalletDescriptor",
-		label: "View addresses",
-	},
-	{
-		access: "action",
-		description: "Sign arbitrary messages with this account.",
-		group: WALLET_CAPABILITY_GROUPS.SIGN_MESSAGES,
-		id: "signMessage",
-		label: "Sign messages",
-	},
-	{
-		access: "action",
-		description: "Sign Liquid transactions (PSETs) for this account.",
-		group: WALLET_CAPABILITY_GROUPS.SIGN_TRANSACTIONS,
-		id: "signPset",
-		label: "Sign transactions",
-	},
-	{
-		access: "action",
-		description: "Send assets from this account, with your approval each time.",
-		group: WALLET_CAPABILITY_GROUPS.SEND_FUNDS,
-		id: "sendTransfer",
-		label: "Send funds",
-	},
-	{
-		access: "read",
-		description: "See a public key derived from your identity.",
-		group: WALLET_CAPABILITY_GROUPS.IDENTITY,
-		id: "getIdentityPublicKey",
-		label: "View identity key",
-	},
-	{
-		access: "action",
-		description: "Sign identity challenges to prove who you are.",
-		group: WALLET_CAPABILITY_GROUPS.IDENTITY,
-		id: "signIdentity",
-		label: "Prove identity",
-	},
+// The session's whole authorized surface, as the background hands it to the modal: every method
+// here is callable once connected. Only the reads the modal knows about become checkboxes; the
+// signing/sending ones are offered but always confirm, so they get no checkbox.
+const methods = [
+	"getBalance",
+	"getUTXOs",
+	"getWalletDescriptor",
+	"getIdentityPublicKey",
+	"signMessage",
+	"signPset",
+	"sendTransfer",
+	"signIdentity",
 ];
 
 const meta = {
@@ -76,9 +26,9 @@ const meta = {
 				{ id: "account-group:1", isConnected: false, isCurrent: true, name: "Account 1" },
 				{ id: "account-group:2", isConnected: true, isCurrent: false, name: "Account 2" },
 			],
-			capabilities,
 			chains: ["bip122:1466275836220db2944ca059a3a10ef6"],
 			kind: "dappConnect",
+			methods,
 			origin: "https://app.example.org",
 			requiresUnlock: false,
 		},
@@ -91,7 +41,7 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** All requested permissions, checked by default; the user reviews and trims. */
+/** Every permission starts unticked: the user opts in to what may run without asking. */
 export const Default: Story = {};
 
 /** Locked wallet: the connect request opens on an unlock step before the account list. */
@@ -99,27 +49,43 @@ export const Locked: Story = {
 	args: {
 		data: {
 			accounts: [],
-			capabilities,
 			chains: ["bip122:1466275836220db2944ca059a3a10ef6"],
 			kind: "dappConnect",
+			methods,
 			origin: "https://app.example.org",
 			requiresUnlock: true,
 		},
 	},
 };
 
-/** Unchecking "Sign transactions" grants only the remaining capabilities. */
+/** Connecting without ticking anything pre-approves nothing — every call will confirm. */
+export const GrantNothing: Story = {
+	play: async ({ args, canvasElement }) => {
+		const canvas = within(canvasElement);
+
+		await userEvent.click(canvas.getByRole("button", { name: /^connect$/i }));
+
+		await expect(args.onConfirm).toHaveBeenCalledWith(
+			expect.objectContaining({ grantedMethods: [] }),
+		);
+	},
+};
+
+/**
+ * Ticking "View balance" pre-approves exactly that method. The session also offers signPset, but
+ * an always-confirm method has no checkbox, so it can never reach the granted set.
+ */
 export const GrantSubset: Story = {
 	play: async ({ args, canvasElement }) => {
 		const canvas = within(canvasElement);
 
-		await userEvent.click(canvas.getByRole("checkbox", { name: /sign transactions/i }));
+		expect(canvas.queryByRole("checkbox", { name: /sign/i })).not.toBeInTheDocument();
+
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view balance/i }));
 		await userEvent.click(canvas.getByRole("button", { name: /^connect$/i }));
 
 		await expect(args.onConfirm).toHaveBeenCalledWith(
-			expect.objectContaining({
-				grantedMethods: expect.not.arrayContaining(["signPset"]),
-			}),
+			expect.objectContaining({ grantedMethods: ["getBalance"] }),
 		);
 	},
 };

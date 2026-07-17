@@ -2,9 +2,8 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
 import type { KeyManagerState } from "@/core/key-manager/types";
-import { WALLET_CAPABILITY_GROUPS } from "@/core/wallet-methods/capability";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
-import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
+import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import {
@@ -15,9 +14,8 @@ import { parseLiquidSignIdentityParams } from "../../../domain/identity/validati
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type { LiquidIdentityBackend } from "../../backends/LiquidIdentityBackend";
 
-export type LiquidSignIdentityContext = {
+export type LiquidSignIdentityContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
-	confirm?: WalletRpcConfirmationHandler;
 	identityBackend: LiquidIdentityBackend;
 	keyManagerState: KeyManagerState;
 };
@@ -28,13 +26,6 @@ export const signLiquidIdentity = createWalletMethod<
 	null,
 	LiquidSignIdentityResult
 >({
-	capability: {
-		access: "action",
-		description: "Sign identity challenges to prove who you are.",
-		group: WALLET_CAPABILITY_GROUPS.IDENTITY,
-		id: LIQUID_WALLET_RPC_METHODS.SIGN_IDENTITY,
-		label: "Prove identity",
-	},
 	confirmation: ({ context, params }) => ({
 		data: {
 			chainId: context.chain.id,
@@ -52,6 +43,7 @@ export const signLiquidIdentity = createWalletMethod<
 			...params,
 			keyManagerState: context.keyManagerState,
 		}),
+	id: LIQUID_WALLET_RPC_METHODS.SIGN_IDENTITY,
 	parse: parseLiquidSignIdentityParams,
 	review: () => null,
 });

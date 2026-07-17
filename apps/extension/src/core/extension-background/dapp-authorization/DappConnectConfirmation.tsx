@@ -1,13 +1,9 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
 import type { ConfirmationRenderer } from "@/common/Confirmation";
+import { LIQUID_WALLET_RPC_METHODS } from "@/core/chains/liquid/domain/LiquidRpc";
 import { requestBackground } from "@/core/extension-rpc";
 import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/client";
-import {
-	WALLET_CAPABILITY_GROUPS,
-	type WalletCapabilityDescriptor,
-	type WalletCapabilityGroup,
-} from "@/core/wallet-methods/capability";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiCheckbox } from "@/ui/UiCheckbox";
 import { UiField, UiFieldError, UiFieldLabel } from "@/ui/UiField";
@@ -22,16 +18,34 @@ import {
 	isDappConnectConfirmationData,
 } from "./connectConfirmation";
 
-// Section order + headers for the permission groups (iOS-style grouping of the
-// per-method checkboxes). UI copy lives here; the ids come from the capability layer.
-const GROUP_SECTIONS: { group: WalletCapabilityGroup; title: string }[] = [
-	{ group: WALLET_CAPABILITY_GROUPS.VIEW_BALANCES, title: "View balances" },
-	{ group: WALLET_CAPABILITY_GROUPS.VIEW_ADDRESSES, title: "View addresses" },
-	{ group: WALLET_CAPABILITY_GROUPS.SIGN_MESSAGES, title: "Sign messages" },
-	{ group: WALLET_CAPABILITY_GROUPS.SIGN_TRANSACTIONS, title: "Sign transactions" },
-	{ group: WALLET_CAPABILITY_GROUPS.SEND_FUNDS, title: "Send funds" },
-	{ group: WALLET_CAPABILITY_GROUPS.IDENTITY, title: "Identity" },
-	{ group: WALLET_CAPABILITY_GROUPS.ADVANCED, title: "Advanced" },
+/**
+ * The methods offered as a "don't ask again" checkbox, in render order. Hand-written on purpose:
+ * this modal is the only place that draws the line between a read a user may let a dapp poll and
+ * an act it should weigh each time. Every other method a session carries (signing, sending) is
+ * deliberately absent — with no checkbox it can never be pre-approved, so it confirms on every
+ * call. Absence is the design, not an oversight.
+ */
+const PRE_APPROVABLE_METHODS: { description: string; id: string; label: string }[] = [
+	{
+		description: "See this account's asset balances.",
+		id: LIQUID_WALLET_RPC_METHODS.GET_BALANCE,
+		label: "View balance",
+	},
+	{
+		description: "See this account's individual coins (unspent outputs).",
+		id: LIQUID_WALLET_RPC_METHODS.GET_UTXOS,
+		label: "View coins",
+	},
+	{
+		description: "See this account's public addresses (its wallet descriptor).",
+		id: LIQUID_WALLET_RPC_METHODS.GET_WALLET_DESCRIPTOR,
+		label: "View addresses",
+	},
+	{
+		description: "See a public key derived from your identity.",
+		id: LIQUID_WALLET_RPC_METHODS.GET_IDENTITY_PUBLIC_KEY,
+		label: "View identity key",
+	},
 ];
 
 type Props = {
@@ -142,7 +156,9 @@ function UnlockStep({
 }
 
 function ConnectApproval({ data, onConfirm, onDecline }: Props) {
-	const sections = useMemo(() => groupCapabilities(data.capabilities), [data.capabilities]);
+	// A checkbox needs both sides: a method this modal knows how to describe, and one this session
+	// actually offers.
+	const preApprovable = PRE_APPROVABLE_METHODS.filter((method) => data.methods.includes(method.id));
 	// Accounts are passed in when the wallet was already unlocked; otherwise they are loaded here
 	// after unlocking (the account list only exists in memory while the vault is unlocked).
 	const [accounts, setAccounts] = useState<DappConnectAccount[]>(data.accounts);
@@ -152,10 +168,8 @@ function ConnectApproval({ data, onConfirm, onDecline }: Props) {
 	const [grantedAccounts, setGrantedAccounts] = useState<Set<string>>(() =>
 		defaultGrantedAccounts(data.accounts),
 	);
-	// Requested permissions start checked; the user reviews and unchecks what to withhold.
-	const [grantedMethods, setGrantedMethods] = useState<Set<string>>(
-		() => new Set(data.capabilities.map((capability) => capability.id)),
-	);
+	// Every permission starts off — nothing runs unasked until the user opts in.
+	const [grantedMethods, setGrantedMethods] = useState<Set<string>>(() => new Set());
 
 	useEffect(() => {
 		if (data.accounts.length > 0) return;
@@ -250,43 +264,30 @@ function ConnectApproval({ data, onConfirm, onDecline }: Props) {
 						Permissions
 					</h3>
 					<p className="text-muted-foreground mb-3 text-xs">
-						Choose what this dapp may access. Unselected permissions are withheld — reads return a
-						restricted response and actions are refused.
+						Select what this dapp may do without asking. Anything else it needs will ask for your
+						approval each time.
 					</p>
-					<div className="space-y-4">
-						{sections.map((section) => (
-							<div key={section.group}>
-								<h4 className="text-muted-foreground/80 mb-2 text-[0.7rem] font-medium tracking-wide uppercase">
-									{section.title}
-								</h4>
-								<ul className="space-y-3">
-									{section.capabilities.map((capability) => (
-										<li key={capability.id}>
-											<label
-												htmlFor={`connect-perm-${capability.id}`}
-												className="flex cursor-pointer items-start gap-3"
-											>
-												<UiCheckbox
-													id={`connect-perm-${capability.id}`}
-													className="mt-0.5"
-													checked={grantedMethods.has(capability.id)}
-													onCheckedChange={(checked) =>
-														toggleMethod(capability.id, checked === true)
-													}
-												/>
-												<span className="flex flex-col">
-													<span className="text-sm font-medium">{capability.label}</span>
-													<span className="text-muted-foreground text-xs">
-														{capability.description}
-													</span>
-												</span>
-											</label>
-										</li>
-									))}
-								</ul>
-							</div>
+					<ul className="space-y-3">
+						{preApprovable.map((method) => (
+							<li key={method.id}>
+								<label
+									htmlFor={`connect-perm-${method.id}`}
+									className="flex cursor-pointer items-start gap-3"
+								>
+									<UiCheckbox
+										id={`connect-perm-${method.id}`}
+										className="mt-0.5"
+										checked={grantedMethods.has(method.id)}
+										onCheckedChange={(checked) => toggleMethod(method.id, checked === true)}
+									/>
+									<span className="flex flex-col">
+										<span className="text-sm font-medium">{method.label}</span>
+										<span className="text-muted-foreground text-xs">{method.description}</span>
+									</span>
+								</label>
+							</li>
 						))}
-					</div>
+					</ul>
 				</section>
 			</div>
 
@@ -345,12 +346,4 @@ function withToggle(current: Set<string>, id: string, checked: boolean): Set<str
 	}
 
 	return next;
-}
-
-function groupCapabilities(capabilities: WalletCapabilityDescriptor[]) {
-	return GROUP_SECTIONS.map(({ group, title }) => ({
-		capabilities: capabilities.filter((capability) => capability.group === group),
-		group,
-		title,
-	})).filter((section) => section.capabilities.length > 0);
 }

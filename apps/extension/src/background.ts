@@ -154,7 +154,7 @@ const init = async () => {
 		return ids;
 	};
 
-	// Liquid capability glue: keep the requested CAIP-25 scopes the Liquid chain group can actually
+	// Liquid scope glue: keep the requested CAIP-25 scopes the Liquid chain group can actually
 	// serve — valid chain ids the wallet KNOWS (built-in ∪ stored) + dispatcher methods. Gating on
 	// known chains means a session can only be GRANTED chains the wallet can serve; an unknown or
 	// dapp-supplied chain id never enters a granted scope (the invoke-time hard gate and the
@@ -162,8 +162,7 @@ const init = async () => {
 	const resolveSupportedLiquidScope = async (
 		requested: Caip25Scopes,
 	): Promise<SupportedDappScope> => {
-		const dispatcher = liquidChainGroup.walletRpcDispatcher;
-		const supportedMethods = dispatcher.methods;
+		const supportedMethods = liquidChainGroup.walletRpcDispatcher.methods;
 		const knownChainIds = await readKnownLiquidChainIds();
 		const chains = new Set<string>();
 		const methods = new Set<string>();
@@ -188,7 +187,6 @@ const init = async () => {
 		}
 
 		return {
-			capabilities: dispatcher.capabilities.filter((capability) => methods.has(capability.id)),
 			chains: [...chains],
 			events: [...LIQUID_WALLETCONNECT_EVENTS],
 			methods: [...methods],
@@ -228,7 +226,6 @@ const init = async () => {
 	}) => {
 		const liquidChainId = parseLiquidChainId(chainId);
 		const chain = await resolveUnlockedLiquidChain(liquidChainId);
-		const grantedMethodSet = new Set(grantedMethods);
 		const keyManagerState = walletVaultBackground.keyManager.getState();
 
 		return liquidChainGroup.walletRpcDispatcher.dispatch(
@@ -239,7 +236,7 @@ const init = async () => {
 					accountModel: keyManagerState.accountModel,
 					chainId: liquidChainId,
 				}),
-				authorization: { isGranted: (capabilityId) => grantedMethodSet.has(capabilityId) },
+				authorization: { isGranted: (methodId) => grantedMethods[methodId] === true },
 				chain,
 				confirm: confirmApproved,
 				keyManagerState,

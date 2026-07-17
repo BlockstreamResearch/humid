@@ -1,7 +1,6 @@
 import type { KeyManagerState } from "@/core/key-manager/types";
-import { WALLET_CAPABILITY_GROUPS } from "@/core/wallet-methods/capability";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
-import type { WalletRpcConfirmationHandler } from "@/core/wallet-rpc/types";
+import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import type {
@@ -12,9 +11,8 @@ import { parseLiquidGetIdentityPublicKeyParams } from "../../../domain/identity/
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type { LiquidIdentityBackend } from "../../backends/LiquidIdentityBackend";
 
-export type LiquidGetIdentityPublicKeyContext = {
+export type LiquidGetIdentityPublicKeyContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
-	confirm?: WalletRpcConfirmationHandler;
 	identityBackend: LiquidIdentityBackend;
 	keyManagerState: KeyManagerState;
 };
@@ -25,13 +23,6 @@ export const getLiquidIdentityPublicKey = createWalletMethod<
 	null,
 	LiquidGetIdentityPublicKeyResult
 >({
-	capability: {
-		access: "read",
-		description: "See a public key derived from your identity.",
-		group: WALLET_CAPABILITY_GROUPS.IDENTITY,
-		id: LIQUID_WALLET_RPC_METHODS.GET_IDENTITY_PUBLIC_KEY,
-		label: "View identity key",
-	},
 	confirmation: ({ context, params }) => ({
 		data: {
 			chainId: context.chain.id,
@@ -48,6 +39,7 @@ export const getLiquidIdentityPublicKey = createWalletMethod<
 			...params,
 			keyManagerState: context.keyManagerState,
 		}),
+	id: LIQUID_WALLET_RPC_METHODS.GET_IDENTITY_PUBLIC_KEY,
 	parse: parseLiquidGetIdentityPublicKeyParams,
 	review: () => null,
 });

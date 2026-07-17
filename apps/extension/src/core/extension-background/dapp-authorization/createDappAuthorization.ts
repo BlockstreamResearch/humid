@@ -12,7 +12,6 @@ import {
 	mergeRequestedScopes,
 	toCaip25Scopes,
 } from "@/core/caip25";
-import type { WalletCapabilityDescriptor } from "@/core/wallet-methods/capability";
 import type { ConfirmationDecision, ConfirmationRequest } from "@/helpers/background";
 
 import { emitWalletEvent } from "../wallet-events";
@@ -45,7 +44,6 @@ export const DEFAULT_INJECTED_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Chain-derived part of a granted scope (chains + methods + notifications). */
 export type SupportedDappScope = {
-	capabilities: WalletCapabilityDescriptor[];
 	chains: string[];
 	events: string[];
 	methods: string[];
@@ -72,8 +70,11 @@ export type DappRequestDispatch = (request: {
 	/** Account groups the session authorized; the chain binds execution to this set. */
 	accountGroupIds: readonly string[];
 	chainId: string;
-	/** Methods the session granted; the method wrapper enforces them per-capability. */
-	grantedMethods: readonly string[];
+	/**
+	 * The session's authorized methods: `true` runs without asking, `false` confirms on every call.
+	 * A method outside the map is not part of the session's surface.
+	 */
+	grantedMethods: Record<string, boolean>;
 	method: string;
 	params: unknown;
 }) => Promise<unknown>;
@@ -183,9 +184,9 @@ export function createDappAuthorization(
 			accounts: initialModel
 				? buildDappConnectAccounts(initialModel, registry, connectedAccountGroupIds)
 				: [],
-			capabilities: supported.capabilities,
 			chains: supported.chains,
 			kind: DAPP_CONNECT_CONFIRMATION_KIND,
+			methods: supported.methods,
 			origin: requestingOrigin,
 			requiresUnlock: initialModel === null,
 		};
@@ -323,9 +324,9 @@ export function createDappAuthorization(
 			);
 		}
 
-		// Chain scope is a hard gate. Per-method grants are enforced inside the method
-		// wrapper (ungranted read → RESTRICTED, ungranted action → error), so hand the
-		// granted set down instead of rejecting every ungranted method here.
+		// Chain scope is a hard gate. The method surface is not: every method the session authorized
+		// is callable, and the method wrapper asks the user for the ones without a standing
+		// permission — so hand the map down instead of rejecting here.
 		if (!session.scope.chains.includes(invocation.scope)) {
 			throw dappAuthorizationErrors.unauthorized(
 				`Scope "${invocation.scope}" is not authorized for this session.`,
@@ -524,15 +525,16 @@ function parseSwitchChainParams(params: unknown): string {
 function resolveGrantedMethods(
 	supportedMethods: string[],
 	result: DappConnectConfirmationResult | undefined,
-): string[] {
+): Record<string, boolean> {
 	const selected = result?.grantedMethods;
 
-	// No structured result (e.g. an older popup that only returns approve/reject) → grant all
-	// supported. When the connect modal returns a selection, grant only the chosen subset,
-	// intersected with what is supported so a client can never widen its own grant.
-	if (!selected) return supportedMethods;
-
-	return supportedMethods.filter((method) => selected.includes(method));
+	// Every supported method is authorized and always callable — the selection only decides which of
+	// them run without a per-call confirmation. Keying off `supportedMethods` also means a client can
+	// never widen its own grant. No selection (a confirmation that only returns approve/reject) →
+	// every method confirms.
+	return Object.fromEntries(
+		supportedMethods.map((method) => [method, selected?.includes(method) ?? false]),
+	);
 }
 
 function requireOrigin(origin: string | null): string {
