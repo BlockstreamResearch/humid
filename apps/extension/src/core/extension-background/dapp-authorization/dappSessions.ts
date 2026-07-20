@@ -9,6 +9,7 @@ import {
 	dappSessionsRpc,
 	type ConnectedDappView,
 	type DappSessionRevokeInput,
+	type DappSessionSetPolicyInput,
 } from "@/core/dapp-sessions/model";
 import type { WalletConnectSessionSummary } from "@/core/walletconnect/types";
 
@@ -47,6 +48,11 @@ export function createDappSessionsInternalHandlers(
 		[dappSessionsRpc.methods.list]: () => buildConnectedDappViews(deps),
 		[dappSessionsRpc.methods.revoke]: async (message) => {
 			await applyRevoke(deps, parseRevokeInput(message.data));
+
+			return buildConnectedDappViews(deps);
+		},
+		[dappSessionsRpc.methods.setPolicy]: async (message) => {
+			await applySetPolicy(deps, parseSetPolicyInput(message.data));
 
 			return buildConnectedDappViews(deps);
 		},
@@ -109,6 +115,29 @@ async function applyRevoke(
 	if (outcome.sessionRemoved) emitWalletEvent("wallet_sessionChanged");
 }
 
+async function applySetPolicy(
+	deps: DappSessionsHandlersDependencies,
+	input: DappSessionSetPolicyInput,
+): Promise<void> {
+	let updated = false;
+
+	await deps.updateAccountModel((model) => {
+		const result = deps.registry.setDappSessionMethodPolicy({
+			accountModel: model,
+			methods: input.methods,
+			sessionId: input.sessionId as DappSessionId,
+		});
+
+		updated = result.updated;
+
+		return result.accountModel;
+	});
+
+	// The dapp's method policy changed; broadcast so each connected dapp re-reads its origin-scoped
+	// session (wallet_getSession) and picks up the new silent-vs-prompt set. Injected global broadcast.
+	if (updated) emitWalletEvent("wallet_sessionChanged");
+}
+
 function toInjectedView(session: DappSessionRecord): ConnectedDappView {
 	return {
 		transport: "injected",
@@ -118,6 +147,7 @@ function toInjectedView(session: DappSessionRecord): ConnectedDappView {
 		accountGroupIds: [...session.scope.accountGroupIds],
 		chains: [...session.scope.chains],
 		methods: Object.keys(session.scope.methods),
+		methodPolicy: { ...session.scope.methods },
 		events: [...session.scope.events],
 		connectedAt: session.createdAt,
 	};
@@ -147,6 +177,7 @@ function toWalletConnectView(
 		accountGroupIds,
 		chains: [...chains],
 		methods: [...methods],
+		methodPolicy: {},
 		events: [...events],
 	};
 }
@@ -179,6 +210,26 @@ function parseRevokeInput(data: unknown): DappSessionRevokeInput {
 	}
 
 	throw dappAuthorizationErrors.invalidParams("dappSessions.revoke has an unknown transport.");
+}
+
+function parseSetPolicyInput(data: unknown): DappSessionSetPolicyInput {
+	if (!isRecord(data) || typeof data.sessionId !== "string" || !isRecord(data.methods)) {
+		throw dappAuthorizationErrors.invalidParams(
+			"dappSessions.setPolicy requires a sessionId and a methods map.",
+		);
+	}
+
+	const methods: Record<string, boolean> = {};
+
+	for (const [method, silent] of Object.entries(data.methods)) {
+		if (typeof silent !== "boolean") {
+			throw dappAuthorizationErrors.invalidParams("Each method policy value must be a boolean.");
+		}
+
+		methods[method] = silent;
+	}
+
+	return { sessionId: data.sessionId, methods };
 }
 
 function hostOf(url: string | undefined): string | undefined {

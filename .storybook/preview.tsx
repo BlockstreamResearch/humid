@@ -18,6 +18,8 @@ const KNOWN_PATHS = [
 	"/app",
 	"/app/settings",
 	"/app/settings/account/$accountGroupId",
+	"/app/settings/account/$accountGroupId/connected-dapps",
+	"/app/settings/account/$accountGroupId/connected-dapps/$dappKey",
 	"/app/settings/account/$accountGroupId/recovery-phrase",
 	"/app/settings/add-account",
 	"/app/settings/chains",

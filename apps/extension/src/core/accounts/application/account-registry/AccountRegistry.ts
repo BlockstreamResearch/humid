@@ -35,6 +35,7 @@ import { removeWallet, type RemoveWalletInput } from "./operations/removeWallet"
 import { resolveChainAccount } from "./operations/resolveChainAccount";
 import { revokeAccountFromDappSession } from "./operations/revokeAccountFromDappSession";
 import { revokeDappSession } from "./operations/revokeDappSession";
+import { setDappSessionMethodPolicy } from "./operations/setDappSessionMethodPolicy";
 
 export type AccountRegistryInput = {
 	accountTypes?: RegisteredAccountTypeAdapter[];
@@ -118,5 +119,13 @@ export class AccountRegistry {
 
 	revokeDappSession(input: { accountModel: AccountModelState; sessionId: DappSessionId }) {
 		return revokeDappSession(input);
+	}
+
+	setDappSessionMethodPolicy(input: {
+		accountModel: AccountModelState;
+		methods: Record<string, boolean>;
+		sessionId: DappSessionId;
+	}) {
+		return setDappSessionMethodPolicy(input);
 	}
 }

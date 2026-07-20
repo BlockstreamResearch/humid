@@ -7,6 +7,7 @@ export const dappSessionsRpc = {
 	methods: {
 		list: "dappSessions.list",
 		revoke: "dappSessions.revoke",
+		setPolicy: "dappSessions.setPolicy",
 	},
 } as const;
 
@@ -30,6 +31,11 @@ export type ConnectedDappView = {
 	accountGroupIds: string[];
 	chains: string[];
 	methods: string[];
+	/**
+	 * Per-method run-without-confirmation flags (`true` runs silently, `false` prompts every call).
+	 * Injected only; empty for WalletConnect, which has no per-method policy and always confirms.
+	 */
+	methodPolicy: Record<string, boolean>;
 	events: string[];
 	/** When the session was granted (ms since epoch). Injected only. */
 	connectedAt?: number;
@@ -43,3 +49,13 @@ export type ConnectedDappView = {
 export type DappSessionRevokeInput =
 	| { transport: "injected"; sessionId: string; accountGroupId: string }
 	| { transport: "walletconnect"; topic: string };
+
+/**
+ * Edit an injected session's per-method policy: `methods` maps a method to whether it runs without a
+ * confirmation. Only methods already in the session's surface are applied — a settings edit can never
+ * widen the grant. Injected only; WalletConnect has no configurable per-method policy.
+ */
+export type DappSessionSetPolicyInput = {
+	sessionId: string;
+	methods: Record<string, boolean>;
+};

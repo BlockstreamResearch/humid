@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { dappSessionsClient } from "@/core/dapp-sessions/client";
-import type { ConnectedDappView, DappSessionRevokeInput } from "@/core/dapp-sessions/model";
+import type {
+	ConnectedDappView,
+	DappSessionRevokeInput,
+	DappSessionSetPolicyInput,
+} from "@/core/dapp-sessions/model";
 
 export const DAPP_SESSIONS_QUERY_KEY = ["dappSessions"] as const;
 
@@ -30,6 +34,13 @@ export function useConnectedDapps(accountGroupId?: string) {
 		},
 	});
 
+	const setPolicyMutation = useMutation({
+		mutationFn: dappSessionsClient.setPolicy,
+		onSuccess: (next) => {
+			queryClient.setQueryData(DAPP_SESSIONS_QUERY_KEY, next);
+		},
+	});
+
 	const all = query.data ?? [];
 	const dapps = accountGroupId
 		? all.filter((dapp) => dapp.accountGroupIds.includes(accountGroupId))
@@ -48,6 +59,14 @@ export function useConnectedDapps(accountGroupId?: string) {
 		}
 	};
 
+	// Toggle whether an injected method runs without a confirmation. The policy is stored per session
+	// (shared across the accounts the dapp is connected to), so this changes it for the dapp globally.
+	const setMethodSilent = (dapp: ConnectedDappView, method: string, silent: boolean) => {
+		if (dapp.transport !== "injected" || !dapp.sessionId) return;
+
+		setPolicyMutation.mutate({ methods: { [method]: silent }, sessionId: dapp.sessionId });
+	};
+
 	return {
 		dapps,
 		isError: query.isError,
@@ -55,6 +74,11 @@ export function useConnectedDapps(accountGroupId?: string) {
 		revoke,
 		/** Key of the dapp currently being revoked, for a per-row pending state. */
 		revokingKey: revokeMutation.isPending ? revokeTargetKey(revokeMutation.variables) : null,
+		setMethodSilent,
+		/** Method whose policy is currently being written, for a per-toggle pending state. */
+		settingMethod: setPolicyMutation.isPending
+			? setPolicyTargetMethod(setPolicyMutation.variables)
+			: null,
 	};
 }
 
@@ -62,4 +86,10 @@ function revokeTargetKey(variables: DappSessionRevokeInput | undefined): string 
 	if (!variables) return null;
 
 	return variables.transport === "injected" ? variables.sessionId : variables.topic;
+}
+
+function setPolicyTargetMethod(variables: DappSessionSetPolicyInput | undefined): string | null {
+	if (!variables) return null;
+
+	return Object.keys(variables.methods)[0] ?? null;
 }

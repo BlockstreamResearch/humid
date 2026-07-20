@@ -1,7 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 
 import type { ConfirmationRenderer } from "@/common/Confirmation";
-import { LIQUID_WALLET_RPC_METHODS } from "@/core/chains/liquid/domain/LiquidRpc";
 import { requestBackground } from "@/core/extension-rpc";
 import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/client";
 import { UiButton } from "@/ui/UiButton/base";
@@ -17,36 +16,7 @@ import {
 	type DappConnectConfirmationResult,
 	isDappConnectConfirmationData,
 } from "./connectConfirmation";
-
-/**
- * The methods offered as a "don't ask again" checkbox, in render order. Hand-written on purpose:
- * this modal is the only place that draws the line between a read a user may let a dapp poll and
- * an act it should weigh each time. Every other method a session carries (signing, sending) is
- * deliberately absent — with no checkbox it can never be pre-approved, so it confirms on every
- * call. Absence is the design, not an oversight.
- */
-const PRE_APPROVABLE_METHODS: { description: string; id: string; label: string }[] = [
-	{
-		description: "See this account's asset balances.",
-		id: LIQUID_WALLET_RPC_METHODS.GET_BALANCE,
-		label: "View balance",
-	},
-	{
-		description: "See this account's individual coins (unspent outputs).",
-		id: LIQUID_WALLET_RPC_METHODS.GET_UTXOS,
-		label: "View coins",
-	},
-	{
-		description: "See this account's public addresses (its wallet descriptor).",
-		id: LIQUID_WALLET_RPC_METHODS.GET_WALLET_DESCRIPTOR,
-		label: "View addresses",
-	},
-	{
-		description: "See a public key derived from your identity.",
-		id: LIQUID_WALLET_RPC_METHODS.GET_IDENTITY_PUBLIC_KEY,
-		label: "View identity key",
-	},
-];
+import { PRE_APPROVABLE_METHODS } from "./methodPolicyPresentation";
 
 type Props = {
 	data: DappConnectConfirmationData;

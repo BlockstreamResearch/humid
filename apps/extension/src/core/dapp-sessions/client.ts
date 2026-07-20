@@ -1,6 +1,11 @@
 import { requestBackground } from "@/core/extension-rpc";
 
-import { dappSessionsRpc, type ConnectedDappView, type DappSessionRevokeInput } from "./model";
+import {
+	dappSessionsRpc,
+	type ConnectedDappView,
+	type DappSessionRevokeInput,
+	type DappSessionSetPolicyInput,
+} from "./model";
 
 /** Every dapp connected to the wallet (injected + WalletConnect), unfiltered — the UI scopes by account. */
 function list(): Promise<ConnectedDappView[]> {
@@ -12,7 +17,13 @@ function revoke(input: DappSessionRevokeInput): Promise<ConnectedDappView[]> {
 	return requestBackground<ConnectedDappView[]>(dappSessionsRpc.methods.revoke, input);
 }
 
+/** Edit an injected session's per-method policy; returns the refreshed list, like revoke. */
+function setPolicy(input: DappSessionSetPolicyInput): Promise<ConnectedDappView[]> {
+	return requestBackground<ConnectedDappView[]>(dappSessionsRpc.methods.setPolicy, input);
+}
+
 export const dappSessionsClient = {
 	list,
 	revoke,
+	setPolicy,
 };
