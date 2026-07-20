@@ -8,6 +8,9 @@ export const DEFAULT_IDENTITY_URI = "ssh://humid@localhost";
 export const DEFAULT_IDENTITY_CHALLENGE =
 	"4c69717569642057616c6c6574205250432050726f66696c65206964656e74697479206368616c6c656e6765";
 
+/** A stable hex KDF info for the shared-secret derivation (mirrors the debug card default). */
+export const DEFAULT_KDF_INFO = "68756d69642d7765622d74657374";
+
 /** Insert thousands separators into a run of digits: "1234567" → "1,234,567". */
 function groupThousands(digits: string): string {
 	return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");

@@ -1,11 +1,24 @@
-import { ArrowUpRightIcon, FingerprintIcon, PenLineIcon, type LucideIcon } from "lucide-react";
+import {
+	ArrowUpRightIcon,
+	CoinsIcon,
+	FileSignatureIcon,
+	FingerprintIcon,
+	KeyRoundIcon,
+	PenLineIcon,
+	WalletIcon,
+	type LucideIcon,
+} from "lucide-react";
 import { Fragment, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 
+import { DeriveSharedSecretDialog } from "./DeriveSharedSecretDialog";
 import { ProveIdentityDialog } from "./ProveIdentityDialog";
 import { SignMessageDialog } from "./SignMessageDialog";
+import { SignPsetSheet } from "./SignPsetSheet";
 import { TransferSheet } from "./TransferSheet";
+import { ViewAddressesSheet } from "./ViewAddressesSheet";
+import { ViewCoinsSheet } from "./ViewCoinsSheet";
 
 type OverlayProps = { open: boolean; onOpenChange: (open: boolean) => void };
 
@@ -16,8 +29,20 @@ type HomeAction = {
 	render: (props: OverlayProps) => ReactNode;
 };
 
-// Extensible action set: add read actions (View coins / Addresses) here in a later phase.
+// Reads first (View coins / addresses), then the transfer and signing/identity actions.
 const actions: HomeAction[] = [
+	{
+		id: "coins",
+		label: "View coins",
+		icon: CoinsIcon,
+		render: (props) => <ViewCoinsSheet {...props} />,
+	},
+	{
+		id: "addresses",
+		label: "View addresses",
+		icon: WalletIcon,
+		render: (props) => <ViewAddressesSheet {...props} />,
+	},
 	{
 		id: "transfer",
 		label: "Transfer",
@@ -31,10 +56,22 @@ const actions: HomeAction[] = [
 		render: (props) => <SignMessageDialog {...props} />,
 	},
 	{
+		id: "sign-pset",
+		label: "Sign PSET",
+		icon: FileSignatureIcon,
+		render: (props) => <SignPsetSheet {...props} />,
+	},
+	{
 		id: "prove",
 		label: "Prove identity",
 		icon: FingerprintIcon,
 		render: (props) => <ProveIdentityDialog {...props} />,
+	},
+	{
+		id: "shared-secret",
+		label: "Derive secret",
+		icon: KeyRoundIcon,
+		render: (props) => <DeriveSharedSecretDialog {...props} />,
 	},
 ];
 
