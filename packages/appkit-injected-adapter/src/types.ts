@@ -37,8 +37,22 @@ export type Caip25ScopeObject = {
 /** CAIP-25 scopes keyed by CAIP-2 chain id. */
 export type Caip25Scopes = Record<string, Caip25ScopeObject>;
 
+/**
+ * Per-scope free-form metadata (CAIP-25 `scopedProperties`), keyed by CAIP-2 chain id. The sanctioned
+ * place for data the fixed scope object can't carry; HUMID rides {@link HUMID_METHOD_POLICY_PROPERTY}
+ * in here (see `./policy`).
+ */
+export type Caip25ScopedProperties = Record<string, Record<string, unknown>>;
+
 export type Caip25CreateSessionResult = {
+	scopedProperties?: Caip25ScopedProperties;
 	sessionProperties?: Record<string, unknown>;
+	sessionScopes: Caip25Scopes;
+};
+
+/** Result of `wallet_getSession`: the current scopes plus the wallet's per-scope properties. */
+export type Caip25GetSessionResult = {
+	scopedProperties?: Caip25ScopedProperties;
 	sessionScopes: Caip25Scopes;
 };
 

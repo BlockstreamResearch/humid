@@ -1,4 +1,9 @@
-import type { Caip25CreateSessionResult, Caip25Scopes, CaipRpcProvider } from "./types";
+import type {
+	Caip25CreateSessionResult,
+	Caip25GetSessionResult,
+	Caip25Scopes,
+	CaipRpcProvider,
+} from "./types";
 
 /**
  * CAIP-25 (session authorization) + CAIP-27 (method invocation) envelope an injected wallet expects.
@@ -40,9 +45,13 @@ export function createSession(
 	});
 }
 
-/** Read the current session's granted scopes (empty when there is none). */
-export function getSession(provider: CaipRpcProvider): Promise<{ sessionScopes: Caip25Scopes }> {
-	return provider.request<{ sessionScopes: Caip25Scopes }>({
+/**
+ * Read the current session's authorized scopes and per-scope properties (empty scopes when there is
+ * none). `sessionScopes[chainId].methods` is the full callable surface; `scopedProperties` carries
+ * the wallet's method policy (see `readMethodPolicy`).
+ */
+export function getSession(provider: CaipRpcProvider): Promise<Caip25GetSessionResult> {
+	return provider.request<Caip25GetSessionResult>({
 		method: CAIP25_METHODS.getSession,
 	});
 }

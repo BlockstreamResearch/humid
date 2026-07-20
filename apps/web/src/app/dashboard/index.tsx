@@ -8,9 +8,12 @@ import {
 	LIQUID_TESTNET_CHAIN_ID,
 	liquidNetworks,
 	liquidWalletRpcMethods,
+	readMethodPolicy,
 	revokeSession,
+	type Caip25GetSessionResult,
 	type Caip25Scopes,
 	type CaipRpcProvider,
+	type MethodPolicy,
 } from "@humid/appkit-injected-adapter";
 import { useAppKit, useAppKitAccount, useDisconnect } from "@reown/appkit/react";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -178,14 +181,17 @@ function DebugDashboard() {
 	const { disconnect } = useDisconnect();
 
 	const [chainId, setChainId] = useState<string>(LIQUID_TESTNET_CHAIN_ID);
-	const [session, setSession] = useState<Caip25Scopes | null>(null);
+	const [sessionResult, setSessionResult] = useState<Caip25GetSessionResult | null>(null);
 	const [knownAddress, setKnownAddress] = useState("");
+
+	// The authorized scopes, split out from the full result for the many places that only need them.
+	const session = sessionResult?.sessionScopes ?? null;
 
 	const loadSession = () => {
 		if (!provider) return;
 		getSession(provider)
-			.then((result) => setSession(result.sessionScopes))
-			.catch(() => setSession(null));
+			.then(setSessionResult)
+			.catch(() => setSessionResult(null));
 	};
 
 	// Poll the session so the permission badges / status stay live after connect or disconnect
@@ -198,10 +204,10 @@ function DebugDashboard() {
 		const load = () => {
 			getSession(provider)
 				.then((result) => {
-					if (!cancelled) setSession(result.sessionScopes);
+					if (!cancelled) setSessionResult(result);
 				})
 				.catch(() => {
-					if (!cancelled) setSession(null);
+					if (!cancelled) setSessionResult(null);
 				});
 		};
 
@@ -237,8 +243,14 @@ function DebugDashboard() {
 
 	const invoke: Invoke = (method, params) => invokeMethod(provider, chainId, method, params);
 
-	const grantedMethods = new Set(session?.[chainId]?.methods ?? []);
-	const isGranted = (method: string) => grantedMethods.has(method);
+	// The full authorized surface for the active chain, plus the wallet's silent-vs-prompt policy.
+	// A method is unsupported when absent from the surface; otherwise silent (policy true) or
+	// needs-approval (policy false / unset — the wallet confirms it on every call).
+	const supportedMethods = new Set(session?.[chainId]?.methods ?? []);
+	const methodPolicy = sessionResult ? readMethodPolicy(sessionResult, chainId) : {};
+	const policyFor = (method: string): MethodState =>
+		methodState(method, supportedMethods, methodPolicy);
+	const hasSession = Boolean(session && Object.keys(session).length);
 
 	return (
 		<div className="flex max-w-4xl flex-col gap-6">
@@ -255,29 +267,94 @@ function DebugDashboard() {
 				session={session}
 			/>
 
-			<SessionCard chainId={chainId} onRefresh={loadSession} session={session} />
+			<SessionCard
+				chainId={chainId}
+				onRefresh={loadSession}
+				policyFor={policyFor}
+				sessionResult={sessionResult}
+			/>
+
+			<AutoLoadCard
+				chainId={chainId}
+				hasSession={hasSession}
+				invoke={invoke}
+				policyFor={policyFor}
+			/>
 
 			<EventLogCard log={eventLog} onClear={clearEvents} />
 
-			<GetBalanceCard chainId={chainId} granted={isGranted("getBalance")} invoke={invoke} />
+			<GetBalanceCard chainId={chainId} invoke={invoke} policy={policyFor("getBalance")} />
 			<GetUtxosCard
 				chainId={chainId}
-				granted={isGranted("getUTXOs")}
 				invoke={invoke}
 				onAddress={setKnownAddress}
+				policy={policyFor("getUTXOs")}
 			/>
-			<GetWalletDescriptorCard granted={isGranted("getWalletDescriptor")} invoke={invoke} />
-			<SendTransferCard chainId={chainId} granted={isGranted("sendTransfer")} invoke={invoke} />
+			<GetWalletDescriptorCard invoke={invoke} policy={policyFor("getWalletDescriptor")} />
+			<SendTransferCard chainId={chainId} invoke={invoke} policy={policyFor("sendTransfer")} />
 			<SignMessageCard
-				granted={isGranted("signMessage")}
 				invoke={invoke}
 				knownAddress={knownAddress}
+				policy={policyFor("signMessage")}
 			/>
-			<SignPsetCard granted={isGranted("signPset")} invoke={invoke} />
-			<GetIdentityPublicKeyCard granted={isGranted("getIdentityPublicKey")} invoke={invoke} />
-			<GetIdentitySharedKeyCard granted={isGranted("getIdentitySharedKey")} invoke={invoke} />
-			<SignIdentityCard granted={isGranted("signIdentity")} invoke={invoke} />
-			<ProcessCtCard granted={isGranted("processConfidentialTransaction")} invoke={invoke} />
+			<SignPsetCard invoke={invoke} policy={policyFor("signPset")} />
+			<GetIdentityPublicKeyCard invoke={invoke} policy={policyFor("getIdentityPublicKey")} />
+			<GetIdentitySharedKeyCard invoke={invoke} policy={policyFor("getIdentitySharedKey")} />
+			<SignIdentityCard invoke={invoke} policy={policyFor("signIdentity")} />
+			<ProcessCtCard invoke={invoke} policy={policyFor("processConfidentialTransaction")} />
+		</div>
+	);
+}
+
+/* ---------- method policy (silent vs prompt vs unsupported) ---------- */
+
+type MethodState = "silent" | "needs-approval" | "unsupported";
+
+/**
+ * Fold the session surface and `humid_methodPolicy` into one of three states a card can render.
+ * Supported-but-not-silent means the wallet prompts on every call; declining yields a 4001 error.
+ */
+function methodState(method: string, supported: Set<string>, policy: MethodPolicy): MethodState {
+	if (!supported.has(method)) return "unsupported";
+	return policy[method] === true ? "silent" : "needs-approval";
+}
+
+const METHOD_STATE_META: Record<MethodState, { className: string; label: string }> = {
+	silent: {
+		className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+		label: "silent",
+	},
+	"needs-approval": {
+		className: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+		label: "needs approval",
+	},
+	unsupported: {
+		className: "text-muted-foreground",
+		label: "unsupported",
+	},
+};
+
+function PolicyBadge({ state }: { state: MethodState }) {
+	const meta = METHOD_STATE_META[state];
+	return (
+		<Badge variant="outline" className={meta.className}>
+			{meta.label}
+		</Badge>
+	);
+}
+
+function PolicyLegend() {
+	return (
+		<div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+			<span className="flex items-center gap-1.5">
+				<PolicyBadge state="silent" /> runs without a prompt
+			</span>
+			<span className="flex items-center gap-1.5">
+				<PolicyBadge state="needs-approval" /> prompts on every call
+			</span>
+			<span className="flex items-center gap-1.5">
+				<PolicyBadge state="unsupported" /> not in this session
+			</span>
 		</div>
 	);
 }
@@ -360,8 +437,9 @@ function ConnectionCard({
 			<CardHeader>
 				<CardTitle>HUMID Liquid Wallet RPC — debug dashboard</CardTitle>
 				<CardDescription>
-					Injected window.humid, CAIP-25/27. Every method has its own card below and prints the raw
-					result or error, including RESTRICTED responses.
+					Injected window.humid, CAIP-25/27. Every authorized method is callable — the wallet runs
+					it silently or prompts for confirmation per humid_methodPolicy (decline yields JSON-RPC
+					4001). Each method has its own card below that prints the raw result or error.
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="flex flex-col gap-4">
@@ -418,31 +496,36 @@ function ConnectionCard({
 function SessionCard({
 	chainId,
 	onRefresh,
-	session,
+	policyFor,
+	sessionResult,
 }: {
 	chainId: string;
 	onRefresh: () => void;
-	session: Caip25Scopes | null;
+	policyFor: (method: string) => MethodState;
+	sessionResult: Caip25GetSessionResult | null;
 }) {
+	const session = sessionResult?.sessionScopes ?? null;
 	const scope = session?.[chainId];
-	const granted = new Set(scope?.methods ?? []);
+	const hasSession = Boolean(session && Object.keys(session).length);
 
 	return (
 		<Card>
 			<CardHeader>
 				<CardTitle>Session &amp; permissions</CardTitle>
 				<CardDescription>
-					wallet_getSession for the active chain. Withheld reads return RESTRICTED; withheld actions
-					are refused.
+					wallet_getSession for the active chain. Every listed method is callable;
+					humid_methodPolicy marks which run silently and which prompt for confirmation on every
+					call (decline yields a 4001 error).
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="flex flex-col gap-4">
-				{!session || !Object.keys(session).length ? (
+				{!hasSession ? (
 					<p className="text-muted-foreground text-sm">
 						No active session. Connect or create a session above.
 					</p>
 				) : (
 					<>
+						<PolicyLegend />
 						<div className="grid gap-2 md:grid-cols-2">
 							{liquidWalletRpcMethods.map((method) => (
 								<div
@@ -450,20 +533,20 @@ function SessionCard({
 									className="flex items-center justify-between rounded-md border p-2"
 								>
 									<code className="text-xs">{method}</code>
-									<Badge variant={granted.has(method) ? "default" : "secondary"}>
-										{granted.has(method) ? "granted" : "withheld"}
-									</Badge>
+									<PolicyBadge state={policyFor(method)} />
 								</div>
 							))}
 						</div>
 						<div className="text-muted-foreground flex flex-col gap-1 text-xs">
-							<span>Authorized chains: {Object.keys(session).join(", ") || "none"}</span>
+							<span>
+								Authorized chains: {session ? Object.keys(session).join(", ") || "none" : "none"}
+							</span>
 							<span>
 								Accounts:{" "}
 								{scope?.accounts?.length ? scope.accounts.join(", ") : "(wallet returns none yet)"}
 							</span>
 						</div>
-						<ResultPanel result={{ ok: true, text: formatResult(session) }} />
+						<ResultPanel result={{ ok: true, text: formatResult(sessionResult) }} />
 					</>
 				)}
 				<Button variant="outline" onClick={onRefresh} className="w-fit">
@@ -474,14 +557,113 @@ function SessionCard({
 	);
 }
 
-function GetBalanceCard({
+/**
+ * What a real dapp does on connect: auto-invoke only the methods `humid_methodPolicy` marks silent,
+ * so balances load without a prompt storm. Needs-approval methods are deliberately skipped here —
+ * their own Call buttons trigger the wallet confirmation on demand.
+ */
+const AUTO_LOAD_READS = ["getBalance", "getUTXOs", "getWalletDescriptor"] as const;
+
+type AutoLoadEntry = { method: string; ok: boolean; outcome: string; state: MethodState };
+
+function AutoLoadCard({
 	chainId,
-	granted,
+	hasSession,
 	invoke,
+	policyFor,
 }: {
 	chainId: string;
-	granted: boolean;
+	hasSession: boolean;
 	invoke: Invoke;
+	policyFor: (method: string) => MethodState;
+}) {
+	const [entries, setEntries] = useState<AutoLoadEntry[] | null>(null);
+	const [pending, setPending] = useState(false);
+
+	const run = async () => {
+		setPending(true);
+
+		// Fire the silent reads together, exactly as a real dapp would on connect; the skipped
+		// (needs-approval / unsupported) ones resolve immediately, so order is preserved.
+		const collected = await Promise.all(
+			AUTO_LOAD_READS.map(async (method): Promise<AutoLoadEntry> => {
+				const state = policyFor(method);
+				if (state !== "silent") {
+					return {
+						method,
+						ok: false,
+						outcome:
+							state === "needs-approval"
+								? "skipped — would prompt; use its Call button"
+								: "skipped — not in this session's surface",
+						state,
+					};
+				}
+
+				try {
+					const value = await invoke(method, autoLoadParams(method, chainId));
+					return { method, ok: true, outcome: summarizeResult(value), state };
+				} catch (error) {
+					return { method, ok: false, outcome: formatError(error), state };
+				}
+			}),
+		);
+
+		setEntries(collected);
+		setPending(false);
+	};
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle>Simulate dapp auto-load</CardTitle>
+				<CardDescription>
+					Fires only the silent read methods (no prompt) exactly as a real dapp would on connect,
+					and leaves needs-approval methods for an explicit user action. Reads humid_methodPolicy to
+					decide.
+				</CardDescription>
+			</CardHeader>
+			<CardContent className="flex flex-col gap-3">
+				<Button className="w-fit" disabled={!hasSession || pending} onClick={run}>
+					{pending ? "Loading…" : "Run auto-load"}
+				</Button>
+				{hasSession ? null : (
+					<p className="text-muted-foreground text-sm">Create a session above to try this.</p>
+				)}
+				{entries?.length ? (
+					<ul className="flex flex-col gap-1">
+						{entries.map((entry) => (
+							<li key={entry.method} className="rounded-md border p-2 text-xs">
+								<div className="flex items-center justify-between gap-2">
+									<code>{entry.method}</code>
+									<PolicyBadge state={entry.state} />
+								</div>
+								<p
+									className={
+										entry.ok
+											? "text-muted-foreground mt-1 break-all"
+											: "mt-1 break-all text-amber-600 dark:text-amber-400"
+									}
+								>
+									{entry.outcome}
+								</p>
+							</li>
+						))}
+					</ul>
+				) : null}
+			</CardContent>
+		</Card>
+	);
+}
+
+function GetBalanceCard({
+	chainId,
+	invoke,
+	policy,
+}: {
+	chainId: string;
+	invoke: Invoke;
+	policy: MethodState;
 }) {
 	const [assetId, setAssetId] = useState(policyAssetIdForChain(chainId));
 	const { call, pending, result } = useRpcCall();
@@ -489,7 +671,7 @@ function GetBalanceCard({
 	return (
 		<RpcCard
 			description="Wallet-computed balance for the policy asset or a supplied ELIP-0144 asset id."
-			granted={granted}
+			policy={policy}
 			title="getBalance"
 		>
 			<TextField label="Asset id (optional)" onChange={setAssetId} value={assetId} />
@@ -504,14 +686,14 @@ function GetBalanceCard({
 
 function GetUtxosCard({
 	chainId,
-	granted,
 	invoke,
 	onAddress,
+	policy,
 }: {
 	chainId: string;
-	granted: boolean;
 	invoke: Invoke;
 	onAddress: (address: string) => void;
+	policy: MethodState;
 }) {
 	const [assetId, setAssetId] = useState(policyAssetIdForChain(chainId));
 	const { call, pending, result } = useRpcCall();
@@ -519,7 +701,7 @@ function GetUtxosCard({
 	return (
 		<RpcCard
 			description="Wallet UTXOs with safe txOut data. Feeds the first address into signMessage."
-			granted={granted}
+			policy={policy}
 			title="getUTXOs"
 		>
 			<TextField label="Asset id (optional)" onChange={setAssetId} value={assetId} />
@@ -539,7 +721,7 @@ function GetUtxosCard({
 	);
 }
 
-function GetWalletDescriptorCard({ granted, invoke }: { granted: boolean; invoke: Invoke }) {
+function GetWalletDescriptorCard({ invoke, policy }: { invoke: Invoke; policy: MethodState }) {
 	const [descriptorType, setDescriptorType] = useState("publicWalletDescriptor");
 	const [descriptorFormat, setDescriptorFormat] = useState("bip380-bip389-multipath");
 	const { call, pending, result } = useRpcCall();
@@ -547,7 +729,7 @@ function GetWalletDescriptorCard({ granted, invoke }: { granted: boolean; invoke
 	return (
 		<RpcCard
 			description="Approved public wallet descriptor. Confidential descriptors return an extension-side error."
-			granted={granted}
+			policy={policy}
 			title="getWalletDescriptor"
 		>
 			<div className="grid gap-3 md:grid-cols-2">
@@ -587,12 +769,12 @@ function GetWalletDescriptorCard({ granted, invoke }: { granted: boolean; invoke
 
 function SendTransferCard({
 	chainId,
-	granted,
 	invoke,
+	policy,
 }: {
 	chainId: string;
-	granted: boolean;
 	invoke: Invoke;
+	policy: MethodState;
 }) {
 	const [recipientAddress, setRecipientAddress] = useState("");
 	const [amount, setAmount] = useState("1000");
@@ -602,8 +784,8 @@ function SendTransferCard({
 
 	return (
 		<RpcCard
-			description="Wallet-built transfer. Requires an approval each time; withheld → 4100."
-			granted={granted}
+			description="Wallet-built transfer. Prompts for confirmation on every call unless humid_methodPolicy marks it silent; decline → 4001."
+			policy={policy}
 			title="sendTransfer"
 		>
 			<TextField
@@ -630,13 +812,13 @@ function SendTransferCard({
 }
 
 function SignMessageCard({
-	granted,
 	invoke,
 	knownAddress,
+	policy,
 }: {
-	granted: boolean;
 	invoke: Invoke;
 	knownAddress: string;
+	policy: MethodState;
 }) {
 	const [address, setAddress] = useState("");
 	const [message, setMessage] = useState("Authorize HUMID test dapp");
@@ -647,7 +829,7 @@ function SignMessageCard({
 	return (
 		<RpcCard
 			description="Signs with the spend key for a wallet-owned address. Use an address from getUTXOs."
-			granted={granted}
+			policy={policy}
 			title="signMessage"
 		>
 			<TextField
@@ -680,7 +862,7 @@ function SignMessageCard({
 	);
 }
 
-function SignPsetCard({ granted, invoke }: { granted: boolean; invoke: Invoke }) {
+function SignPsetCard({ invoke, policy }: { invoke: Invoke; policy: MethodState }) {
 	const [pset, setPset] = useState("");
 	const [signInputs, setSignInputs] = useState('[{"index":0,"address":"","sighashTypes":[1]}]');
 	const [broadcast, setBroadcast] = useState(false);
@@ -688,8 +870,8 @@ function SignPsetCard({ granted, invoke }: { granted: boolean; invoke: Invoke })
 
 	return (
 		<RpcCard
-			description="Signs the listed PSET inputs. Over-signing is rejected; withheld → 4100."
-			granted={granted}
+			description="Signs the listed PSET inputs. Over-signing is rejected. Prompts for confirmation unless marked silent; decline → 4001."
+			policy={policy}
 			title="signPset"
 		>
 			<TextAreaField
@@ -717,7 +899,7 @@ function SignPsetCard({ granted, invoke }: { granted: boolean; invoke: Invoke })
 	);
 }
 
-function GetIdentityPublicKeyCard({ granted, invoke }: { granted: boolean; invoke: Invoke }) {
+function GetIdentityPublicKeyCard({ invoke, policy }: { invoke: Invoke; policy: MethodState }) {
 	const [identity, setIdentity] = useState(DEFAULT_IDENTITY);
 	const [index, setIndex] = useState("0");
 	const { call, pending, result } = useRpcCall();
@@ -725,7 +907,7 @@ function GetIdentityPublicKeyCard({ granted, invoke }: { granted: boolean; invok
 	return (
 		<RpcCard
 			description="Deterministic SLIP-0013 identity public key (nist256p1)."
-			granted={granted}
+			policy={policy}
 			title="getIdentityPublicKey"
 		>
 			<div className="grid gap-3 md:grid-cols-2">
@@ -749,7 +931,7 @@ function GetIdentityPublicKeyCard({ granted, invoke }: { granted: boolean; invok
 	);
 }
 
-function GetIdentitySharedKeyCard({ granted, invoke }: { granted: boolean; invoke: Invoke }) {
+function GetIdentitySharedKeyCard({ invoke, policy }: { invoke: Invoke; policy: MethodState }) {
 	const [identity, setIdentity] = useState(DEFAULT_IDENTITY);
 	const [index, setIndex] = useState("0");
 	const [theirPublicKey, setTheirPublicKey] = useState("");
@@ -760,7 +942,7 @@ function GetIdentitySharedKeyCard({ granted, invoke }: { granted: boolean; invok
 	return (
 		<RpcCard
 			description="SLIP-0017 shared key (ECDH → HKDF-SHA256) with a peer nist256p1 public key."
-			granted={granted}
+			policy={policy}
 			title="getIdentitySharedKey"
 		>
 			<div className="grid gap-3 md:grid-cols-2">
@@ -797,7 +979,7 @@ function GetIdentitySharedKeyCard({ granted, invoke }: { granted: boolean; invok
 	);
 }
 
-function SignIdentityCard({ granted, invoke }: { granted: boolean; invoke: Invoke }) {
+function SignIdentityCard({ invoke, policy }: { invoke: Invoke; policy: MethodState }) {
 	const [identity, setIdentity] = useState(DEFAULT_IDENTITY);
 	const [index, setIndex] = useState("0");
 	const [challenge, setChallenge] = useState(DEFAULT_IDENTITY_CHALLENGE);
@@ -806,7 +988,7 @@ function SignIdentityCard({ granted, invoke }: { granted: boolean; invoke: Invok
 	return (
 		<RpcCard
 			description="Signs a hex identity challenge with the SLIP-0013 identity key."
-			granted={granted}
+			policy={policy}
 			title="signIdentity"
 		>
 			<div className="grid gap-3 md:grid-cols-2">
@@ -832,14 +1014,14 @@ function SignIdentityCard({ granted, invoke }: { granted: boolean; invoke: Invok
 	);
 }
 
-function ProcessCtCard({ granted, invoke }: { granted: boolean; invoke: Invoke }) {
+function ProcessCtCard({ invoke, policy }: { invoke: Invoke; policy: MethodState }) {
 	const [payload, setPayload] = useState("{}");
 	const { call, pending, result } = useRpcCall();
 
 	return (
 		<RpcCard
 			description="Wallet ABI method. The extension returns a structured not_implemented error."
-			granted={granted}
+			policy={policy}
 			title="processConfidentialTransaction"
 		>
 			<TextAreaField label="Wallet ABI request JSON" onChange={setPayload} value={payload} />
@@ -880,12 +1062,12 @@ function useRpcCall() {
 function RpcCard({
 	children,
 	description,
-	granted,
+	policy,
 	title,
 }: {
 	children: ReactNode;
 	description: string;
-	granted?: boolean;
+	policy?: MethodState;
 	title: string;
 }) {
 	return (
@@ -893,11 +1075,7 @@ function RpcCard({
 			<CardHeader>
 				<div className="flex items-center justify-between gap-2">
 					<CardTitle className="font-mono text-base">{title}</CardTitle>
-					{granted !== undefined && (
-						<Badge variant={granted ? "default" : "secondary"}>
-							{granted ? "granted" : "withheld"}
-						</Badge>
-					)}
+					{policy !== undefined && <PolicyBadge state={policy} />}
 				</div>
 				<CardDescription>{description}</CardDescription>
 			</CardHeader>
@@ -1077,6 +1255,28 @@ function policyAssetIdForChain(chainId: string): string {
 	if (chainId === LIQUID_TESTNET_CHAIN_ID) return LIQUID_TESTNET_LBTC_ASSET_ID;
 
 	return "";
+}
+
+/** Default params for the auto-load reads, matching each method's own card defaults. */
+function autoLoadParams(method: string, chainId: string): unknown {
+	switch (method) {
+		case "getBalance":
+		case "getUTXOs":
+			return optionalParams({ assetId: policyAssetIdForChain(chainId) });
+		case "getWalletDescriptor":
+			return {
+				descriptorFormat: [{ format: "bip380-bip389-multipath" }],
+				descriptorType: "publicWalletDescriptor",
+			};
+		default:
+			return undefined;
+	}
+}
+
+/** Keep the auto-load report compact — the per-method cards show the full payload. */
+function summarizeResult(value: unknown): string {
+	const text = formatResult(value);
+	return text.length > 200 ? `${text.slice(0, 200)}…` : text;
 }
 
 function optionalParams(

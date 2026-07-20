@@ -16,6 +16,12 @@ export type Caip25ScopeObject = {
 
 export type Caip25Scopes = Record<Caip25ScopeString, Caip25ScopeObject>;
 
+/**
+ * Per-scope free-form metadata (CAIP-25 `scopedProperties`), keyed by scope string. The sanctioned
+ * place for data the fixed scope object can't carry; HUMID uses it for {@link HUMID_METHOD_POLICY_PROPERTY}.
+ */
+export type Caip25ScopedProperties = Record<Caip25ScopeString, Record<string, unknown>>;
+
 export type Caip25CreateSessionParams = {
 	optionalScopes?: Caip25Scopes;
 	requiredScopes?: Caip25Scopes;
@@ -24,11 +30,13 @@ export type Caip25CreateSessionParams = {
 };
 
 export type Caip25CreateSessionResult = {
+	scopedProperties?: Caip25ScopedProperties;
 	sessionProperties?: Record<string, unknown>;
 	sessionScopes: Caip25Scopes;
 };
 
 export type Caip25GetSessionResult = {
+	scopedProperties?: Caip25ScopedProperties;
 	sessionScopes: Caip25Scopes;
 };
 

@@ -1,6 +1,19 @@
 import type { DappSessionScope } from "@/core/accounts/application/account-registry/model/dapp-session";
 
-import type { Caip25CreateSessionParams, Caip25ScopeObject, Caip25Scopes } from "./types";
+import type {
+	Caip25CreateSessionParams,
+	Caip25ScopedProperties,
+	Caip25ScopeObject,
+	Caip25Scopes,
+} from "./types";
+
+/**
+ * HUMID-specific `scopedProperties` key. Maps each authorized method to whether it runs without a
+ * confirmation (`true`) or prompts the user on every call (`false`). Standard CAIP-25 has no field
+ * for this, so it rides the sanctioned per-scope property bag under a namespaced key. A dapp reads
+ * it to auto-call only the silent methods and avoid a confirmation storm on load.
+ */
+export const HUMID_METHOD_POLICY_PROPERTY = "humid_methodPolicy";
 
 /** Merge `requiredScopes` and `optionalScopes` into a single requested map. */
 export function mergeRequestedScopes(params: Caip25CreateSessionParams): Caip25Scopes {
@@ -46,6 +59,23 @@ export function toCaip25Scopes(
 	}
 
 	return scopes;
+}
+
+/**
+ * Project the stored method policy onto CAIP-25 `scopedProperties`, one entry per authorized chain
+ * (mirroring {@link toCaip25Scopes}), each carrying {@link HUMID_METHOD_POLICY_PROPERTY}: the full
+ * method→silent map. Lets a dapp distinguish "call freely" from "will prompt" without a probe call.
+ */
+export function toCaip25ScopedProperties(scope: DappSessionScope): Caip25ScopedProperties {
+	const scopedProperties: Caip25ScopedProperties = {};
+
+	for (const scopeString of scope.chains) {
+		scopedProperties[scopeString] = {
+			[HUMID_METHOD_POLICY_PROPERTY]: { ...scope.methods },
+		};
+	}
+
+	return scopedProperties;
 }
 
 function normalizeScopeObject(scope: Caip25ScopeObject): Caip25ScopeObject {

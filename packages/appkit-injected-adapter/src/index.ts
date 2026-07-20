@@ -13,6 +13,7 @@ export {
 	LIQUID_TESTNET_CHAIN_REFERENCE,
 	liquidWalletRpcMethods,
 } from "./liquid";
+export { HUMID_METHOD_POLICY_PROPERTY, type MethodPolicy, readMethodPolicy } from "./policy";
 export { createInjectedProvider, waitForProvider } from "./provider";
 export {
 	addChain,
@@ -26,6 +27,8 @@ export {
 } from "./rpc";
 export type {
 	Caip25CreateSessionResult,
+	Caip25GetSessionResult,
+	Caip25ScopedProperties,
 	Caip25ScopeObject,
 	Caip25Scopes,
 	CaipRpcProvider,

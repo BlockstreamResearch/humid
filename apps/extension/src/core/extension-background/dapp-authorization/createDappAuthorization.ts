@@ -10,6 +10,7 @@ import {
 	type Caip25RevokeSessionResult,
 	type Caip27InvokeMethodParams,
 	mergeRequestedScopes,
+	toCaip25ScopedProperties,
 	toCaip25Scopes,
 } from "@/core/caip25";
 import type { ConfirmationDecision, ConfirmationRequest } from "@/helpers/background";
@@ -235,6 +236,7 @@ export function createDappAuthorization(
 		}
 
 		const sessionScopes = toCaip25Scopes(scope, accountsByChain);
+		const scopedProperties = toCaip25ScopedProperties(scope);
 
 		const createdAt = now();
 		const expiresAt =
@@ -253,7 +255,7 @@ export function createDappAuthorization(
 			}).accountModel;
 		});
 
-		return { sessionScopes };
+		return { scopedProperties, sessionScopes };
 	};
 
 	const getSession = ({ origin }: { origin: string | null }): Caip25GetSessionResult => {
@@ -272,7 +274,9 @@ export function createDappAuthorization(
 		// Advertise the session's authorized CAIP-10 accounts per chain (read from the already
 		// materialized chain accounts) so wallet_getSession is CAIP-25 complete: AppKit's
 		// restore-on-load reads accounts[0] from here, and dapps list them without a follow-up call.
+		// scopedProperties carries the method policy so a dapp knows which methods it may call silently.
 		return {
+			scopedProperties: toCaip25ScopedProperties(session.scope),
 			sessionScopes: toCaip25Scopes(
 				session.scope,
 				resolveSessionAccountsByChain(accountModel, session.scope),

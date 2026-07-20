@@ -1,10 +1,16 @@
 export { caip25Rpc } from "./methods";
-export { mergeRequestedScopes, toCaip25Scopes } from "./scope";
+export {
+	HUMID_METHOD_POLICY_PROPERTY,
+	mergeRequestedScopes,
+	toCaip25ScopedProperties,
+	toCaip25Scopes,
+} from "./scope";
 export type {
 	Caip25CreateSessionParams,
 	Caip25CreateSessionResult,
 	Caip25GetSessionResult,
 	Caip25RevokeSessionResult,
+	Caip25ScopedProperties,
 	Caip25ScopeObject,
 	Caip25Scopes,
 	Caip25ScopeString,
