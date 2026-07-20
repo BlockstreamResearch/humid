@@ -2,6 +2,12 @@
 	"version": "0.0.1",
 	"configurations": [
 		{
+			"name": "web",
+			"runtimeExecutable": "bun",
+			"runtimeArgs": ["--filter=./apps/web", "run", "dev", "--", "--port", "5199", "--strictPort"],
+			"port": 5199
+		},
+		{
 			"name": "storybook",
 			"runtimeExecutable": "bunx",
 			"runtimeArgs": ["storybook", "dev", "-p", "6007", "--ci", "--quiet", "--no-open"],
