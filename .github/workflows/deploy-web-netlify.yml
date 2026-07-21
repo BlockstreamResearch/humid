@@ -1,0 +1,50 @@
+name: Deploy Web to Netlify
+
+on:
+  push:
+    tags:
+      - "[0-9]*.[0-9]*.[0-9]*"
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      # The root workspace has `lwk_wasm` as a local file dependency, but the web app does
+      # not import it. Create the package path so Bun can link the workspace without
+      # checking out/building the lwk submodule.
+      - name: Prepare unused lwk_wasm dependency
+        run: |
+          mkdir -p lwk/lwk_wasm/pkg
+          printf '{"name":"lwk_wasm","version":"0.0.0","type":"module"}\n' > lwk/lwk_wasm/pkg/package.json
+
+      - name: Install dependencies
+        uses: ./.github/actions/install
+
+      - name: Build web app
+        run: bun run web:build
+
+      - name: Deploy to Netlify
+        uses: nwtgck/actions-netlify@v3.0
+        timeout-minutes: 1
+        with:
+          publish-dir: ./apps/web/dist
+          production-branch: master
+          production-deploy: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Deploy from GitHub Actions"
+          enable-pull-request-comment: false
+          enable-commit-comment: true
+          overwrites-pull-request-comment: true
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
