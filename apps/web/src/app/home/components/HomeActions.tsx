@@ -1,0 +1,116 @@
+import {
+	ArrowUpRightIcon,
+	CoinsIcon,
+	CombineIcon,
+	FileSignatureIcon,
+	FingerprintIcon,
+	KeyRoundIcon,
+	PenLineIcon,
+	WalletIcon,
+	type LucideIcon,
+} from "lucide-react";
+import { Fragment, useState, type ReactNode } from "react";
+
+import { Button } from "@/components/ui/button";
+
+import { DeriveSharedSecretDialog } from "./DeriveSharedSecretDialog";
+import { ManageCoinsSheet } from "./ManageCoinsSheet";
+import { ProveIdentityDialog } from "./ProveIdentityDialog";
+import { SignMessageDialog } from "./SignMessageDialog";
+import { SignPsetSheet } from "./SignPsetSheet";
+import { TransferSheet } from "./TransferSheet";
+import { ViewAddressesSheet } from "./ViewAddressesSheet";
+import { ViewCoinsSheet } from "./ViewCoinsSheet";
+
+type OverlayProps = { open: boolean; onOpenChange: (open: boolean) => void };
+
+type HomeAction = {
+	id: string;
+	label: string;
+	icon: LucideIcon;
+	render: (props: OverlayProps) => ReactNode;
+};
+
+// Reads first (View coins / addresses), then the transfer and signing/identity actions.
+const actions: HomeAction[] = [
+	{
+		id: "coins",
+		label: "View coins",
+		icon: CoinsIcon,
+		render: (props) => <ViewCoinsSheet {...props} />,
+	},
+	{
+		id: "addresses",
+		label: "View addresses",
+		icon: WalletIcon,
+		render: (props) => <ViewAddressesSheet {...props} />,
+	},
+	{
+		id: "manage-coins",
+		label: "Manage coins",
+		icon: CombineIcon,
+		render: (props) => <ManageCoinsSheet {...props} />,
+	},
+	{
+		id: "transfer",
+		label: "Transfer",
+		icon: ArrowUpRightIcon,
+		render: (props) => <TransferSheet {...props} />,
+	},
+	{
+		id: "sign",
+		label: "Sign message",
+		icon: PenLineIcon,
+		render: (props) => <SignMessageDialog {...props} />,
+	},
+	{
+		id: "sign-pset",
+		label: "Sign PSET",
+		icon: FileSignatureIcon,
+		render: (props) => <SignPsetSheet {...props} />,
+	},
+	{
+		id: "prove",
+		label: "Prove identity",
+		icon: FingerprintIcon,
+		render: (props) => <ProveIdentityDialog {...props} />,
+	},
+	{
+		id: "shared-secret",
+		label: "Derive secret",
+		icon: KeyRoundIcon,
+		render: (props) => <DeriveSharedSecretDialog {...props} />,
+	},
+];
+
+/** The row of primary actions under the hero; each opens its overlay (Sheet or Dialog). */
+export function HomeActions() {
+	const [openId, setOpenId] = useState<string | null>(null);
+
+	return (
+		<>
+			<div className="grid grid-cols-3 gap-2">
+				{actions.map((action) => (
+					<Button
+						key={action.id}
+						variant="outline"
+						className="h-auto flex-col gap-2 py-4"
+						onClick={() => setOpenId(action.id)}
+					>
+						<action.icon className="text-muted-foreground size-5" />
+						<span className="text-xs font-medium">{action.label}</span>
+					</Button>
+				))}
+			</div>
+
+			{actions.map((action) => (
+				<Fragment key={action.id}>
+					{action.render({
+						open: openId === action.id,
+						onOpenChange: (open) => setOpenId(open ? action.id : null),
+					})}
+				</Fragment>
+			))}
+		</>
+	);
+}

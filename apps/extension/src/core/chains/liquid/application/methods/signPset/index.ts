@@ -45,7 +45,12 @@ export const signLiquidPset = createWalletMethod<
 	execute: ({ context, params, review }) => context.walletBackend.signPset(review.account, params),
 	id: LIQUID_WALLET_RPC_METHODS.SIGN_PSET,
 	parse: parseLiquidSignPsetParams,
-	review: async ({ context }) => ({
-		account: await resolveDappAccount(context),
-	}),
+	review: async ({ context }) => {
+		const account = await resolveDappAccount(context);
+		// signPset blinds wallet-side (Wollet.blind reads the account's UTXO set + prev txs), so the
+		// account must be scanned first — exactly like sendTransfer/getUTXOs. Without this the freshly
+		// derived wollet is empty and blind fails with MissingWalletUtxo.
+		await context.walletBackend.syncAccount(account);
+		return { account };
+	},
 });
