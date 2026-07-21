@@ -8,6 +8,7 @@ import type {
 	LiquidWalletBackend,
 } from "../../../application/backends/LiquidWalletBackend";
 import { loadLwkWasm } from "../loadLwkWasm";
+import { getSyncWorkerClient } from "../sync-worker/createSyncWorkerClient";
 import { getLwkImplementation } from "./getLwkImplementation";
 
 export async function signPset(
@@ -74,7 +75,14 @@ export async function signPset(
 
 		if (params.broadcast) {
 			signedPset = implementation.wollet.finalize(signedPset);
-			txid = (await implementation.blockchainClient.broadcast(signedPset)).toString();
+			// Broadcast from the offscreen document (which has a `window`), exactly like sendTransfer:
+			// LWK's Esplora client needs `window` for its async retry/sleep, so it cannot run in the
+			// service worker. Only the finalized PSET crosses over.
+			const broadcast = await getSyncWorkerClient().broadcast({
+				chain: account.chain,
+				psetBase64: signedPset.toString(),
+			});
+			txid = broadcast.txid;
 		}
 
 		return {
@@ -86,7 +94,11 @@ export async function signPset(
 			throw error;
 		}
 
-		throw new WalletRpcResourceUnavailableError(
+		console.error("[liquid] signPset failed", error);
+
+		// Attach the underlying failure as the cause so the real error (blind, sign, broadcast) stays
+		// diagnosable instead of collapsing into an opaque message.
+		const failure = new WalletRpcResourceUnavailableError(
 			params.broadcast
 				? "Could not sign and broadcast the Liquid PSET."
 				: "Could not sign the Liquid PSET.",
@@ -95,6 +107,8 @@ export async function signPset(
 				? WALLET_RPC_ERROR_REASONS.WALLET_PSET_BROADCAST_FAILED
 				: WALLET_RPC_ERROR_REASONS.WALLET_PSET_SIGNING_FAILED,
 		);
+		failure.cause = error;
+		throw failure;
 	}
 }
 
