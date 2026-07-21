@@ -91,6 +91,14 @@ export function buildCoinControlPset(plan: CoinControlPlan): {
 
 	const pset = Creator.newPset({ inputs, outputs: [...valueOutputs, feeOutput] });
 
+	// liquidjs-lib defaults every input's required height/time locktime to 0, but elements-rs (lwk's
+	// PSET parser) rejects a required locktime of 0 as a BadLockTime — an absent locktime already means
+	// 0, so the field must simply not be present. Clear them so `lwk.Pset` can deserialize the PSET.
+	for (const input of pset.inputs) {
+		input.requiredHeightLocktime = undefined;
+		input.requiredTimeLocktime = undefined;
+	}
+
 	const signInputs: LiquidSignPsetInput[] = plan.inputs.map((utxo, index) => ({
 		address: utxo.address,
 		index,
