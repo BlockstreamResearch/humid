@@ -34,14 +34,24 @@ export async function signPset(
 			}
 		}
 
+		// A dapp hands an UNBLINDED wallet-spend PSET: its inputs reference the wallet's confidential
+		// UTXOs and its outputs carry explicit asset/amount. It cannot blind them itself — balancing
+		// the Pedersen commitments needs the input blinding secrets that only the wallet holds — so we
+		// blind wallet-side here. `blind` rebuilds the input side from wallet state (proofs + secrets),
+		// blinds the outputs so the commitments balance, and fills in the descriptor signing metadata
+		// (bip32 derivations) the dapp could not know. Without it the signer has no keys to sign with.
+		const blindedPset = implementation.wollet.blind(pset);
+
 		// The LWK signer signs every wallet-owned input, but ELIP-1 forbids signing inputs the dapp
 		// did not list. Until lwk_wasm exposes per-input signing, fail closed: sign, then reject if
 		// the wallet signed any input that was not requested (the PSET is never returned/broadcast).
 		// TODO: Replace with requested-input-only signing once lwk_wasm exposes an input allowlist.
 		const requestedIndexes = new Set(params.signInputs.map((requested) => requested.index));
-		const signaturesBefore = countSignaturesPerInput(implementation.wollet.psetDetails(pset));
+		const signaturesBefore = countSignaturesPerInput(
+			implementation.wollet.psetDetails(blindedPset),
+		);
 
-		let signedPset = implementation.signer.sign(pset);
+		let signedPset = implementation.signer.sign(blindedPset);
 
 		const overSignedIndex = countSignaturesPerInput(
 			implementation.wollet.psetDetails(signedPset),
