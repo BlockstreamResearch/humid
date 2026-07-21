@@ -1,6 +1,7 @@
 import {
 	ArrowUpRightIcon,
 	CoinsIcon,
+	CombineIcon,
 	FileSignatureIcon,
 	FingerprintIcon,
 	KeyRoundIcon,
@@ -13,6 +14,7 @@ import { Fragment, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 
 import { DeriveSharedSecretDialog } from "./DeriveSharedSecretDialog";
+import { ManageCoinsSheet } from "./ManageCoinsSheet";
 import { ProveIdentityDialog } from "./ProveIdentityDialog";
 import { SignMessageDialog } from "./SignMessageDialog";
 import { SignPsetSheet } from "./SignPsetSheet";
@@ -42,6 +44,12 @@ const actions: HomeAction[] = [
 		label: "View addresses",
 		icon: WalletIcon,
 		render: (props) => <ViewAddressesSheet {...props} />,
+	},
+	{
+		id: "manage-coins",
+		label: "Manage coins",
+		icon: CombineIcon,
+		render: (props) => <ManageCoinsSheet {...props} />,
 	},
 	{
 		id: "transfer",
