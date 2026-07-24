@@ -35,8 +35,29 @@ createAppKit({
 	themeMode: "dark",
 });
 
+// A wallet decline surfaces as a JSON-RPC error carrying `data.reason === "user_rejected"` (code
+// -32000, not the EVM 4001). It is a terminal decision, so react-query must NOT retry it — otherwise
+// a single "Show balance" / "Reveal identity" click re-opens the confirmation prompt up to 3 more
+// times (react-query's default `retry: 3`).
+function isUserRejected(error: unknown): boolean {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		"data" in error &&
+		typeof (error as { data?: unknown }).data === "object" &&
+		(error as { data?: { reason?: unknown } }).data?.reason === "user_rejected"
+	);
+}
+
 // One QueryClient for the whole app; every HumidProvider hook (session / balance / identity) reads it.
-const queryClient = new QueryClient();
+// Retry transient failures (the library default of 3) but never a user rejection — see above.
+const queryClient = new QueryClient({
+	defaultOptions: {
+		queries: {
+			retry: (failureCount, error) => !isUserRejected(error) && failureCount < 3,
+		},
+	},
+});
 
 type Web3ContextValue = {
 	isInitialized: boolean;

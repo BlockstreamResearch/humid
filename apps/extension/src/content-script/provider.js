@@ -29,10 +29,12 @@ const init = async () => {
 		if (!entry) return;
 
 		if (response.error) {
+			const error = toError(response.error);
+
 			if (entry.streamController) {
-				entry.streamController.error(response.error);
+				entry.streamController.error(error);
 			} else {
-				entry.reject(response.error);
+				entry.reject(error);
 			}
 
 			pending.delete(response.id);
@@ -96,9 +98,30 @@ const handleStreamMessage = (streamMessage, controller, removeRequestListener) =
 	}
 
 	if (streamMessage.type === "error") {
-		controller.error(new Error(streamMessage.error));
+		controller.error(toError(streamMessage.error));
 		removeRequestListener();
 	}
+};
+
+/**
+ * Rebuild a real Error from the wire payload. The background now serializes structured RPC errors as
+ * `{ message, code, data }` (see transport `serializeError`); restore `code`/`data` onto the Error so
+ * a dapp can classify the failure — e.g. read `data.reason === "user_rejected"` to avoid retrying a
+ * declined confirmation. Falls back gracefully for the legacy string form ("No handler for method").
+ */
+const toError = (payload) => {
+	if (payload instanceof Error) return payload;
+
+	if (payload && typeof payload === "object") {
+		const error = new Error(payload.message ?? "Request failed");
+
+		if (payload.code !== undefined) error.code = payload.code;
+		if (payload.data !== undefined) error.data = payload.data;
+
+		return error;
+	}
+
+	return new Error(typeof payload === "string" ? payload : "Request failed");
 };
 
 void init();
