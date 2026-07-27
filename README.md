@@ -1,63 +1,29 @@
 # Humid
 
-Browser extension template for Humid.
+Simplicity-first browser extension wallet for Liquid.
 
-## Development
+## Overview
 
-```bash
-bun install
-bun run dev
-```
+Humid is a PoC wallet that acts as a playground for various user-facing Simplicity experiments. It may never become a standalone product as its main focus is to showcase what Simplicity UX may look like.
 
-## Build
+> [!WARNING]
+> This is experimental software, use at your own risk.
 
-```bash
-bun run build
-```
+## Goals
 
-The extension uses Vite and `vite-plugin-web-extension`. Build output is emitted to `dist/`.
+Here are the core goals the Humid wallet pursues:
 
-## WalletConnect
+- Neat, fast, and minimalistic browser extension.
+- Privacy-oriented functionality limiting what dApps can see without explicit user approvals.
+- Generic dApp <> wallet communication interface via [Wallet RPC ELIP](https://github.com/ElementsProject/ELIPs/pull/36).
+- Building and signing of Simplicity transactions via [Tx Manifest ELIP](https://github.com/ElementsProject/ELIPs/pull/41).
+- Display exactly what transcations are doing via [Simplicity Clear Signing ELIP](https://github.com/ElementsProject/ELIPs/pull/40).
+- Wallet Connect infrastructure for establishing a dApp <> wallet connection.
 
-Humid uses WalletConnect Wallet SDK through `@reown/walletkit`.
+## Contributing
 
-Create a WalletConnect project ID in the WalletConnect Dashboard and add it to your local env:
+We are open to any contributions that drive these goals forward! Please take a look at our [contributing guidelines](CONTRIBUTING.md) to get involved.
 
-```bash
-VITE_WALLETCONNECT_PROJECT_ID=your_project_id
-```
+## License
 
-`VITE_WALLETCONNECT_RELAY_URL` is optional. If it is not set, WalletKit uses its default relay.
-
-WalletConnect runtime is initialized in the extension background, not in the popup or content script. Chain support is intentionally registry-based and empty in this template. Until a concrete CAIP namespace adapter is registered, session proposals are rejected with a standard WalletConnect unsupported-namespace error instead of pretending to support a default chain.
-
-## Routes
-
-- `#/auth/intro` - unauthenticated intro page
-- `#/auth/create` - local vault creation flow
-- `#/local-auth` - local vault unlock page
-- `#/app` - authenticated app area
-
-Authentication is based on the local encrypted vault status. Users without a vault go to Auth, locked vaults go to LocalAuth, and unlocked vaults can enter App.
-
-## Page Provider
-
-The content script injects a page provider at `window.humid`.
-
-```js
-const response = await window.humid.request({
-  method: "ping",
-  data: { hello: "world" },
-});
-
-console.log(response);
-```
-
-WalletConnect session state is controlled from the extension popup through background RPC methods:
-
-```ts
-import { getWalletConnectStatus, pairWalletConnectUri } from "@/core/walletconnect";
-
-const status = await getWalletConnectStatus();
-await pairWalletConnectUri({ uri: "wc:..." });
-```
+The framework is released under the MIT License.
