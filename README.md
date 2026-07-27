@@ -26,4 +26,4 @@ We are open to any contributions that drive these goals forward! Please take a l
 
 ## License
 
-The framework is released under the MIT License.
+The wallet is released under the MIT License.
