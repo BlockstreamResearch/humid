@@ -173,7 +173,7 @@ export function AuthCreatePasswordPage() {
 
 				<div className="flex flex-col gap-2">
 					<UiButton type="submit" size="lg" disabled={!canSubmit}>
-						{createVaultMutation.isPending ? "Creating..." : "Create vault"}
+						{createVaultMutation.isPending ? "Creating..." : "Create wallet"}
 					</UiButton>
 					<UiButton
 						type="button"

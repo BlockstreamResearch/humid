@@ -110,7 +110,7 @@ export function AddAccountView({
 								value={mnemonic}
 							/>
 							<span className="text-muted-foreground text-xs">
-								The imported wallet is stored in this vault.
+								The imported account is stored in this wallet.
 							</span>
 						</div>
 					) : (

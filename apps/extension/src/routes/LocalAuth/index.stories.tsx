@@ -69,11 +69,11 @@ export const ResetCancelled: Story = {
 		const canvas = within(canvasElement);
 		const documentBody = within(canvasElement.ownerDocument.body);
 
-		await userEvent.click(canvas.getByRole("button", { name: /reset local vault/i }));
+		await userEvent.click(canvas.getByRole("button", { name: /reset local wallet/i }));
 		await userEvent.click(documentBody.getByRole("button", { name: /^decline$/i }));
 		await waitFor(() =>
 			expect(
-				canvas.getByText("Reset cancelled. Your encrypted vault is still on this device."),
+				canvas.getByText("Reset cancelled. Your encrypted wallet is still on this device."),
 			).toBeInTheDocument(),
 		);
 	},

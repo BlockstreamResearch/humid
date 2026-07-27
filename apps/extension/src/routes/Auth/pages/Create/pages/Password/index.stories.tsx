@@ -44,7 +44,7 @@ export const Valid: Story = {
 		await fillPasswords(canvasElement, "super-secret-pass", "super-secret-pass");
 
 		const canvas = within(canvasElement);
-		await expect(canvas.getByRole("button", { name: /create vault/i })).toBeEnabled();
+		await expect(canvas.getByRole("button", { name: /create wallet/i })).toBeEnabled();
 	},
 };
 
@@ -77,7 +77,7 @@ export const Submitting: Story = {
 		await fillPasswords(canvasElement, "super-secret-pass", "super-secret-pass");
 
 		const canvas = within(canvasElement);
-		await userEvent.click(canvas.getByRole("button", { name: /create vault/i }));
+		await userEvent.click(canvas.getByRole("button", { name: /create wallet/i }));
 		await expect(await canvas.findByRole("button", { name: /creating/i })).toBeDisabled();
 	},
 };
@@ -89,7 +89,7 @@ export const SubmitError: Story = {
 		await fillPasswords(canvasElement, "super-secret-pass", "super-secret-pass");
 
 		const canvas = within(canvasElement);
-		await userEvent.click(canvas.getByRole("button", { name: /create vault/i }));
+		await userEvent.click(canvas.getByRole("button", { name: /create wallet/i }));
 		await waitFor(() => expect(canvas.getByText(CREATE_ERROR)).toBeInTheDocument());
 	},
 };

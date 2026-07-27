@@ -8,7 +8,7 @@ const meta = {
 	args: {
 		accountGroupId: "account-group:1",
 		phrase:
-			"vault mirror speed deposit cinnamon agree basic husband festival march federal supreme",
+			"wallet mirror speed deposit cinnamon agree basic husband festival march federal supreme",
 	},
 } satisfies Meta<typeof RecoveryPhraseView>;
 

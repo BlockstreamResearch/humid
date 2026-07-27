@@ -88,12 +88,12 @@ export function LocalAuthPage() {
 		clearFeedback();
 
 		const { approved } = await confirm({
-			title: "Reset local vault?",
-			message: "This will remove the encrypted vault from this browser profile.",
+			title: "Reset wallet?",
+			message: "This will remove the encrypted wallet from this browser profile.",
 		});
 
 		if (!approved) {
-			setResetNotice("Reset cancelled. Your encrypted vault is still on this device.");
+			setResetNotice("Reset cancelled. Your encrypted wallet is still on this device.");
 			return;
 		}
 
@@ -110,7 +110,7 @@ export function LocalAuthPage() {
 						</p>
 						<h1 className="cn-font-heading text-2xl leading-tight font-semibold">Unlock Humid</h1>
 						<p className="text-muted-foreground text-sm leading-6">
-							A local vault exists. Unlock it to continue to the app area.
+							A local wallet exists. Unlock it to continue to the app area.
 						</p>
 					</div>
 
@@ -166,7 +166,7 @@ export function LocalAuthPage() {
 				</form>
 
 				<UiButton type="button" variant="outline" disabled={isMutating} onClick={handleReset}>
-					{resetVaultMutation.isPending ? "Resetting..." : "Reset local vault"}
+					{resetVaultMutation.isPending ? "Resetting..." : "Reset wallet"}
 				</UiButton>
 			</main>
 		</UiPageBackgroundWrp>
