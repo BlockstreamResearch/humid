@@ -1,6 +1,11 @@
+![](https://github.com/user-attachments/assets/02f2aa4c-53ce-4f72-aaf8-c911150b8153)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Community](https://img.shields.io/endpoint?color=neon&logo=telegram&label=Chat&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fsimplicity_community)](https://t.me/simplicity_community)
+
 # Humid
 
-Simplicity-first browser extension wallet for Liquid.
+**Simplicity-first browser extension wallet for Liquid.**
 
 ## Overview
 
