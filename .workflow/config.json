@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "profile": "leaf",
+  "installedVersion": "0.8.0",
+  "skills": {
+    "scope": "project",
+    "agents": [
+      "codex",
+      "claude"
+    ]
+  },
+  "knowledge": {
+    "path": "../knowledge-humid"
+  }
+}

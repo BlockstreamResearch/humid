@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR/.workflow/runtime/guard-background-bash.mjs\" ] && node \"$CLAUDE_PROJECT_DIR/.workflow/runtime/guard-background-bash.mjs\" || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR/.workflow/runtime/guard-stop.mjs\" ] && node \"$CLAUDE_PROJECT_DIR/.workflow/runtime/guard-stop.mjs\" || true"
+          }
+        ]
+      }
+    ]
+  }
+}

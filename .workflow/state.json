@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "installedVersion": "0.8.0",
+  "profile": "leaf",
+  "files": {
+    ".claude/rules/evidence-first.md": {
+      "sha256": "4adf35cd60692e32728b5de325fc40637cee634a8b013ff434650ebe5b78c07c"
+    },
+    ".claude/rules/execution-continuity.md": {
+      "sha256": "746dc5804137757f058e2e04d097fcad7c4a2277eb2f073045b9ab5e14917842"
+    },
+    ".claude/rules/maintainer-review.md": {
+      "sha256": "429a3a7556703b51f06c36f81ef6fa96c147b80e3f616f086f9904c39a2d7499"
+    },
+    ".claude/rules/project-work-bundles.md": {
+      "sha256": "ea5088c79442f080c0f03a4fffd46672806e869dec6433757d8f8641254da680"
+    },
+    ".claude/rules/project-work-lifecycle.md": {
+      "sha256": "ac5212a9f8453175007b5bdb0b587e6aca47648d6273ae2cdb0b014d9365ea14"
+    },
+    ".claude/rules/workflow-routing.md": {
+      "sha256": "98f929de44907dcafb3e460e6ef2912b1e812397020ea8738364117fb7b5b23c"
+    },
+    ".workflow/.gitignore": {
+      "sha256": "61bff3ecb1270f462919509a371a296d1dc155a9e7306931191cdb8584053532"
+    },
+    ".workflow/rules/evidence-first.md": {
+      "sha256": "4adf35cd60692e32728b5de325fc40637cee634a8b013ff434650ebe5b78c07c"
+    },
+    ".workflow/rules/execution-continuity.md": {
+      "sha256": "746dc5804137757f058e2e04d097fcad7c4a2277eb2f073045b9ab5e14917842"
+    },
+    ".workflow/rules/maintainer-review.md": {
+      "sha256": "429a3a7556703b51f06c36f81ef6fa96c147b80e3f616f086f9904c39a2d7499"
+    },
+    ".workflow/rules/project-work-bundles.md": {
+      "sha256": "ea5088c79442f080c0f03a4fffd46672806e869dec6433757d8f8641254da680"
+    },
+    ".workflow/rules/project-work-lifecycle.md": {
+      "sha256": "ac5212a9f8453175007b5bdb0b587e6aca47648d6273ae2cdb0b014d9365ea14"
+    },
+    ".workflow/rules/workflow-routing.md": {
+      "sha256": "98f929de44907dcafb3e460e6ef2912b1e812397020ea8738364117fb7b5b23c"
+    },
+    ".workflow/runtime/guard-background-bash.mjs": {
+      "sha256": "0bb95f5bc34cb2ee9c3c453a171cd36f60d8c7d4eeb283ea07e8ad91d5b3ef93"
+    },
+    ".workflow/runtime/guard-stop.mjs": {
+      "sha256": "118f46237d670e61cacf7aa44d50d8ce8d43acdab26dc52b6dfefdf7f257d27f"
+    },
+    ".workflow/runtime/idle-guard.sh": {
+      "sha256": "8a132664ff43cc732e4da14b33e7b72f89e5facbb26169b3135eac2c64390da2"
+    }
+  }
+}

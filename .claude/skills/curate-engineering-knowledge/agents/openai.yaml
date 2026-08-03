@@ -1,0 +1,4 @@
+interface:
+  display_name: "Curate Engineering Knowledge"
+  short_description: "Write verified technical realization knowledge"
+  default_prompt: "Use $curate-engineering-knowledge to document verified implementation and architecture without duplicating product meaning."

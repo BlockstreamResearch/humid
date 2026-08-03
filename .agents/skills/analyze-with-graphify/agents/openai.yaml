@@ -1,0 +1,4 @@
+interface:
+  display_name: "Require Graphify First"
+  short_description: "Mandatory Graphify gate for source code"
+  default_prompt: "Use $analyze-with-graphify before any source-code-dependent analysis or change, confirm the native Graphify skills are active, invoke them first, and verify results in the actual source."

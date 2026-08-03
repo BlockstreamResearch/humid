@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manage Project Work"
+  short_description: "Route work and preserve resumable context"
+  default_prompt: "Use $manage-project-work to classify or resume this request, preserve consequential discoveries in their semantic owner, and refresh the owning checkpoint last."

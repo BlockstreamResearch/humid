@@ -1,0 +1,4 @@
+interface:
+  display_name: "Curate Project Knowledge"
+  short_description: "Route verified claims into separate knowledge views"
+  default_prompt: "Use $curate-project-knowledge to route verified claims into product, engineering, and decision knowledge with quality review."

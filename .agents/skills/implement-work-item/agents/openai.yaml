@@ -1,0 +1,6 @@
+interface:
+  display_name: "Implement Work Item"
+  short_description: "Implement one issue with durable discoveries"
+  default_prompt: "Use $implement-work-item to claim or resume one frontier issue in the exact bound checkout, preserve consequential discoveries in the issue, verify it, and refresh its checkpoint last."
+policy:
+  allow_implicit_invocation: false

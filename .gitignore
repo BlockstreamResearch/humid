@@ -28,3 +28,7 @@ storybook-static/
 # Config files
 .webextrc
 .webextrc.*
+
+# wfctl:begin
+graphify-out/
+# wfctl:end

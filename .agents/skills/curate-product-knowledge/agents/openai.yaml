@@ -1,0 +1,4 @@
+interface:
+  display_name: "Curate Product Knowledge"
+  short_description: "Write verified stakeholder-facing product knowledge"
+  default_prompt: "Use $curate-product-knowledge to author verified current product behavior and canonical domain language for nontechnical stakeholders."
