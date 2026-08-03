@@ -51,6 +51,7 @@
         "react-qr-code": "^2.2.0",
         "recharts": "^3.8.1",
         "shadcn": "^4.10.0",
+        "smplx-wasm": "file:smplx/crates/wasm/pkg",
         "sonner": "^2.0.7",
         "tailwind-merge": "^3.6.0",
         "tailwind-variants": "^3.2.2",
@@ -2944,6 +2945,8 @@
     "slip77": ["slip77@0.2.0", "", { "dependencies": { "@types/node": "^13.9.1", "create-hmac": "^1.1.7", "typeforce": "^1.18.0" } }, "sha512-LQaxb1Hef10kU36qvk71tlSt5BWph7GM0j+t2n5zs169X4QfnNbb6xqKZ38X3ETzGmCQaVdBwr925HDagHra/Q=="],
 
     "slow-redact": ["slow-redact@0.3.2", "", {}, "sha512-MseHyi2+E/hBRqdOi5COy6wZ7j7DxXRz9NkseavNYSvvWC06D8a5cidVZX3tcG5eCW3NIyVU4zT63hw0Q486jw=="],
+
+    "smplx-wasm": ["smplx-wasm@file:smplx/crates/wasm/pkg", {}],
 
     "snapdragon": ["snapdragon@0.8.2", "", { "dependencies": { "base": "^0.11.1", "debug": "^2.2.0", "define-property": "^0.2.5", "extend-shallow": "^2.0.1", "map-cache": "^0.2.2", "source-map": "^0.5.6", "source-map-resolve": "^0.5.0", "use": "^3.1.0" } }, "sha512-FtyOnWN/wCHTVXOMwvSv26d+ko5vWlIDD6zoUJ7LW8vh+ZBC8QdljveRP+crNrtBwioEUWy/4dMtbBjA4ioNlg=="],
 
