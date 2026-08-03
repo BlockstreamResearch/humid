@@ -11,6 +11,7 @@
 	"ignorePatterns": [
 		"lwk/**",
 		"smplx/**",
+		"**/__fixtures__/**",
 		"AGENTS.md",
 		"CLAUDE.md",
 		"PROJECT_WORKFLOW.md",
