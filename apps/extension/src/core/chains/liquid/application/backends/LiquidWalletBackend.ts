@@ -32,6 +32,13 @@ export type LiquidWalletAccount = {
 	 * group (the default account) leave it undefined, and the snapshot lookup is simply skipped.
 	 */
 	accountGroupId?: AccountGroupId;
+	/**
+	 * The BIP-85 index this account's keys derive at, threaded from the resolve input.
+	 * Group 0 is the master seed's own account; group N derives a child mnemonic at N.
+	 * Carried out of resolution so a caller that needs the account's own key material can
+	 * derive it without re-deciding which group it is looking at.
+	 */
+	accountGroupIndex?: number;
 	accountIdentifier: string;
 	chain: LiquidChainRecord;
 	chainId: LiquidChainId;
