@@ -22,6 +22,10 @@ export type ResolveCompileParamsResult =
  * `liquid.asset_id` and `address` — arrive with the slices that need them.
  */
 const PARAM_TYPES: Record<string, string> = {
+	// The deployed lending contracts take these: `asset_auth` a burn flag, `asset_auth_vault`
+	// three of them. A manifest wiring a value into one is refused without an encoding for it,
+	// so the corpus's own contracts are what say this is needed.
+	bool: "bool",
 	// A covenant script hash is thirty-two bytes. `u256` rather than one of the compiler's
 	// aliases because they are the same type: `Pubkey`, `Message`, `Scalar`, `Fe`,
 	// `ExplicitAsset` and `ExplicitNonce` all resolve to `U256` in simplicityhl 0.6.0
@@ -80,7 +84,12 @@ export function resolveCompileParams(
 			};
 		}
 
-		resolved[name] = { type: compilerType, value: withHexPrefix(found.value) };
+		// A boolean is written as itself rather than as bytes: the compiler reads `true` and
+		// `false`, and a hex-prefixed one is not an expression of that type.
+		resolved[name] =
+			compilerType === "bool"
+				? { type: compilerType, value: booleanLiteral(found.value) }
+				: { type: compilerType, value: withHexPrefix(found.value) };
 	}
 
 	return { arguments: resolved, ok: true };
@@ -100,6 +109,17 @@ function declaredTypeOf(
 	const name = /^\$?(?:params\.)?(?<name>[A-Za-z_][A-Za-z0-9_]*)$/.exec(reference)?.groups?.name;
 
 	return name === undefined ? undefined : declaredTypes[name];
+}
+
+/**
+ * A boolean as the compiler writes it.
+ *
+ * Anything other than the two words it reads is passed through unchanged, so a manifest
+ * carrying something else is refused by the compiler naming the type rather than being
+ * quietly turned into `false` — which is a different covenant.
+ */
+function booleanLiteral(value: string): string {
+	return value === "1" ? "true" : value === "0" ? "false" : value;
 }
 
 function withHexPrefix(value: string): string {
