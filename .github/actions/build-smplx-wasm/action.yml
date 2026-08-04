@@ -1,0 +1,67 @@
+name: Build smplx_wasm
+description: >-
+  Build the smplx_wasm WASM package from the vendored `smplx` git submodule so the
+  `file:smplx/crates/wasm/pkg` dependency resolves. Like `lwk_wasm/pkg`, it is a wasm-pack
+  build artifact that is not committed, so it must be produced in CI. The output is cached
+  by the pinned submodule commit, so the Rust build only runs when the submodule bumps.
+  Requires the repo to be checked out with `submodules: recursive`.
+
+  The fork's build script needs a C compiler with a WebAssembly backend — Apple's system
+  clang has none, and neither does a bare ubuntu runner without LLVM's clang on PATH, which
+  is why one is installed rather than assumed. Without it the build fails inside
+  `secp256k1-sys` and `simplicity-sys` with "unable to create target", which points at the
+  crates and misleads.
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve pinned smplx commit
+      id: smplx
+      shell: bash
+      run: echo "sha=$(git rev-parse HEAD:smplx)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore built smplx pkg
+      id: pkg-cache
+      uses: actions/cache@v4
+      with:
+        path: smplx/crates/wasm/pkg
+        key: smplx-wasm-${{ runner.os }}-${{ steps.smplx.outputs.sha }}
+
+    - name: Install Rust toolchain (1.85.0 + wasm32)
+      if: steps.pkg-cache.outputs.cache-hit != 'true'
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: "1.85.0"
+        targets: wasm32-unknown-unknown
+
+    - name: Cache cargo registry + build
+      if: steps.pkg-cache.outputs.cache-hit != 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          smplx/target
+        key: cargo-smplx-${{ runner.os }}-${{ steps.smplx.outputs.sha }}
+        restore-keys: |
+          cargo-smplx-${{ runner.os }}-
+
+    - name: Install wasm-pack
+      if: steps.pkg-cache.outputs.cache-hit != 'true'
+      uses: jetli/wasm-pack-action@v0.4.0
+
+    # Installed rather than exported: the fork's build script already searches for a clang
+    # with a WebAssembly backend and fails with a clear message when there is none, so
+    # putting one on PATH keeps that guard rather than bypassing it.
+    - name: Install a C compiler with a WebAssembly backend
+      if: steps.pkg-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install --no-install-recommends -y clang llvm
+
+    - name: Build smplx_wasm
+      if: steps.pkg-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: smplx/crates/wasm/build.sh

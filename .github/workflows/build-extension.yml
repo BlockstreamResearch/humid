@@ -25,7 +25,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (with the lwk submodule)
+      - name: Checkout (with the lwk and smplx submodules)
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -37,6 +37,11 @@ jobs:
         uses: ./.github/actions/build-lwk-wasm
         with:
           profile: ${{ inputs.profile }}
+
+      # The manifest runtime compiles Simplicity contracts and signs with them, so the
+      # extension does not build without this package either.
+      - name: Build smplx_wasm
+        uses: ./.github/actions/build-smplx-wasm
 
       - name: Install dependencies
         uses: ./.github/actions/install
