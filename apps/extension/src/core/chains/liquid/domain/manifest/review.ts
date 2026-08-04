@@ -90,6 +90,8 @@ export async function reviewManifestAction(
 
 	const declaredTypes = declaredParamTypes(action);
 	const covenants: CovenantFinding[] = [];
+	/** What each covenant input actually holds, read from the chain rather than told. */
+	const inputAmounts: Record<string, bigint> = {};
 
 	for (const site of covenantSites(action)) {
 		const derived = await deriveCovenantAddress(request, {
@@ -141,6 +143,10 @@ export async function reviewManifestAction(
 			return { reason: matched.reason, refused: true };
 		}
 
+		if (onChain.amountSats !== undefined && site.id) {
+			inputAmounts[site.id] = BigInt(onChain.amountSats);
+		}
+
 		covenants.push({
 			address: derived.derivation.address,
 			role: "spent",
@@ -149,7 +155,7 @@ export async function reviewManifestAction(
 		});
 	}
 
-	const plan = planAction(request, action);
+	const plan = planAction(request, action, inputAmounts);
 
 	if (!plan.ok) {
 		return { reason: plan.reason, refused: true };
@@ -215,6 +221,8 @@ export async function reviewManifestAction(
 const FEE_TARGET_BLOCKS = 6;
 
 type CovenantSite = {
+	/** The manifest's id for this input or output, which its amounts refer to it by. */
+	id: string;
 	role: "created" | "spent";
 	utxoType: string;
 	wiring: Record<string, unknown>;
@@ -229,23 +237,29 @@ type CovenantSite = {
 function covenantSites(action: Record<string, unknown>): CovenantSite[] {
 	const sites: CovenantSite[] = [];
 
-	for (const input of asArray(action.inputs)) {
-		const site = covenantReference(asRecord(input)?.utxo_source);
+	for (const entry of asArray(action.inputs)) {
+		const site = covenantReference(asRecord(entry)?.utxo_source);
 
 		if (site) {
-			sites.push({ ...site, role: "spent" });
+			sites.push({ ...site, id: identifierOf(entry), role: "spent" });
 		}
 	}
 
-	for (const output of asArray(action.outputs)) {
-		const site = covenantReference(asRecord(output)?.destination);
+	for (const entry of asArray(action.outputs)) {
+		const site = covenantReference(asRecord(entry)?.destination);
 
 		if (site) {
-			sites.push({ ...site, role: "created" });
+			sites.push({ ...site, id: identifierOf(entry), role: "created" });
 		}
 	}
 
 	return sites;
+}
+
+function identifierOf(entry: unknown): string {
+	const id = asRecord(entry)?.id;
+
+	return typeof id === "string" ? id : "";
 }
 
 function covenantReference(

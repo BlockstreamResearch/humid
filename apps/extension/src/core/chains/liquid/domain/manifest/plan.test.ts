@@ -96,3 +96,29 @@ describe("planAction", () => {
 		expect(result).toMatchObject({ ok: false });
 	});
 });
+
+describe("planAction with resolved inputs", () => {
+	const RECEIVE = (MANIFEST.actions as Record<string, Record<string, unknown>>).Receive;
+
+	// Receive pays out what the covenant input holds, which the wallet reads from the chain
+	// rather than being told.
+	test("resolves an output amount from what an input actually holds", () => {
+		const result = planAction(request({ pubkey: PUBKEY }), RECEIVE, { p2pk_in: 42_000n });
+
+		expect(result).toMatchObject({ ok: true });
+
+		if (result.ok) {
+			expect(result.plan.outputs).toContainEqual({
+				id: "received_out",
+				sats: 42_000n,
+				target: { kind: "wallet" },
+			});
+		}
+	});
+
+	test("refuses when the referenced input was not resolved", () => {
+		const result = planAction(request({ pubkey: PUBKEY }), RECEIVE, {});
+
+		expect(result).toMatchObject({ ok: false });
+	});
+});

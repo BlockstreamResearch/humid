@@ -39,10 +39,13 @@ const deps = {
 	readFeeRate,
 	walletScriptPubKeyHex: WALLET_SCRIPT,
 };
-const readTxOut = (address: string) => async () => ({
-	scriptPubKeyAddress: address,
-	scriptPubKeyHex: "5120aabb",
-});
+const readTxOut =
+	(address: string, amountSats = "42000") =>
+	async () => ({
+		amountSats,
+		scriptPubKeyAddress: address,
+		scriptPubKeyHex: "5120aabb",
+	});
 
 const spendRequest = (state: unknown) =>
 	request({
@@ -98,20 +101,38 @@ describe("reviewManifestAction", () => {
 	// Receive spends the covenant. This is where the wallet's derivation is checked against
 	// something it did not get from the requester.
 	describe("spending a covenant", () => {
-		// Receive verifies but cannot yet be built: its output amount references another
-		// input, which the planner does not evaluate. Asserting that the refusal is about the
-		// amount rather than the covenant is what shows verification got past.
-		test("gets past verification when the rebuilt contract lands where the funds are", async () => {
+		test("passes when the rebuilt contract lands where the funds are", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
 				...deps,
 				readTxOut: readTxOut(DERIVED),
 			});
 
-			expect(isRefusal(result)).toBe(true);
+			expect(isRefusal(result)).toBe(false);
 
-			if (isRefusal(result)) {
-				expect(result.reason).toContain("amount");
-				expect(result.reason).not.toContain("rebuilds to");
+			if (!isRefusal(result)) {
+				expect(result.covenants[0]).toMatchObject({
+					role: "spent",
+					verified: "matches-chain",
+				});
+			}
+		});
+
+		// The output pays out what the covenant holds, and what it holds is read from the
+		// chain — so a request understating the balance cannot make the wallet pay less.
+		test("pays out the amount the chain reports, not one the request supplied", async () => {
+			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
+				...deps,
+				readTxOut: readTxOut(DERIVED, "77000"),
+			});
+
+			expect(isRefusal(result)).toBe(false);
+
+			if (!isRefusal(result)) {
+				expect(result.outputs).toContainEqual({
+					id: "received_out",
+					sats: 77_000n,
+					scriptPubKeyHex: WALLET_SCRIPT,
+				});
 			}
 		});
 

@@ -35,6 +35,13 @@ export type PlanResult = { ok: false; reason: string } | { ok: true; plan: Plann
 export function planAction(
 	request: ParsedLiquidProcessCtParams,
 	action: Record<string, unknown>,
+	/**
+	 * Base units at each input the wallet already resolved, keyed by the manifest's id for
+	 * it. These come from the chain read the covenant check already performs, so an output
+	 * saying "as much as that input holds" resolves against what is actually there rather
+	 * than against a figure the requester supplied.
+	 */
+	inputAmounts: Record<string, bigint> = {},
 ): PlanResult {
 	const outputs: PlannedOutput[] = [];
 	let fundingSats = 0n;
@@ -62,7 +69,7 @@ export function planAction(
 			continue;
 		}
 
-		const amount = resolveAmount(request, output.amount_sat);
+		const amount = resolveAmount(request, output.amount_sat, inputAmounts);
 
 		if (amount === undefined) {
 			return {
@@ -100,8 +107,18 @@ function resolveTarget(destination: unknown): PlannedOutput["target"] | undefine
 	return typeof utxoType === "string" ? { kind: "covenant", utxoType } : undefined;
 }
 
-/** A literal, or a `params.` reference to one. Anything else is refused by the caller. */
-function resolveAmount(request: ParsedLiquidProcessCtParams, amount: unknown): bigint | undefined {
+/**
+ * A literal, a `params.` reference to one, or `<input_id>.amount_sat`.
+ *
+ * The third form is what an action spending a covenant needs — "pay out what that input
+ * holds" — and it resolves against the chain, not the request. Anything else is refused
+ * by the caller.
+ */
+function resolveAmount(
+	request: ParsedLiquidProcessCtParams,
+	amount: unknown,
+	inputAmounts: Record<string, bigint>,
+): bigint | undefined {
 	if (typeof amount === "number" && Number.isSafeInteger(amount)) {
 		return BigInt(amount);
 	}
@@ -115,9 +132,13 @@ function resolveAmount(request: ParsedLiquidProcessCtParams, amount: unknown): b
 
 		const referenced = /^\$?params\.(?<name>[A-Za-z0-9_]+)$/.exec(amount)?.groups?.name;
 
-		return referenced === undefined
-			? undefined
-			: resolveAmount(request, request.params[referenced]);
+		if (referenced !== undefined) {
+			return resolveAmount(request, request.params[referenced], inputAmounts);
+		}
+
+		const input = /^(?<id>[A-Za-z0-9_]+)\.amount_sat$/.exec(amount)?.groups?.id;
+
+		return input === undefined ? undefined : inputAmounts[input];
 	}
 
 	return undefined;
