@@ -22,6 +22,12 @@ export type ResolveCompileParamsResult =
  * `liquid.asset_id` and `address` — arrive with the slices that need them.
  */
 const PARAM_TYPES: Record<string, string> = {
+	// A covenant script hash is thirty-two bytes. `u256` rather than one of the compiler's
+	// aliases because they are the same type: `Pubkey`, `Message`, `Scalar`, `Fe`,
+	// `ExplicitAsset` and `ExplicitNonce` all resolve to `U256` in simplicityhl 0.6.0
+	// (`src/types.rs` L863-865), so the encoded value does not depend on which name a
+	// contract happens to use for it.
+	bytes32: "u256",
 	pubkey: "Pubkey",
 };
 
