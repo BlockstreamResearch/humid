@@ -306,3 +306,89 @@ describe("finalising a transaction", () => {
 		signer.free();
 	});
 });
+
+// A covenant input is an output locked by a Simplicity program. The dry-run is what tells
+// the wallet the program actually runs against this transaction before anyone approves it.
+describe("covenant inputs and the dry-run", () => {
+	const TXID = "2".repeat(64);
+	const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+	const P2PK_SOURCE =
+		"fn main() { jet::bip_0340_verify((param::PUB_KEY, jet::sig_all_hash()), witness::SIGNATURE) }";
+	const ALICE = "0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+	const ARGS = JSON.stringify({ PUB_KEY: { type: "Pubkey", value: ALICE } });
+
+	/** The covenant's own output, so the program is spending exactly what it locks. */
+	function covenantTxOut(sats: bigint): string {
+		const contract = new bindings.Contract(P2PK_SOURCE, ARGS);
+		const script = contract.scriptPubKeyHex("liquid-testnet");
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const value = sats.toString(16).padStart(16, "0");
+		const scriptLen = (script.length / 2).toString(16).padStart(2, "0");
+
+		return `01${assetLe}01${value}00${scriptLen}${script}`;
+	}
+
+	test("takes a covenant input", () => {
+		const builder = new bindings.TransactionBuilder();
+
+		builder.addCovenantInput(TXID, 0, covenantTxOut(100_000n), P2PK_SOURCE, ARGS);
+
+		expect(builder.inputCount()).toBe(1);
+		builder.free();
+	});
+
+	test("refuses a witness set it cannot parse", () => {
+		const builder = new bindings.TransactionBuilder();
+
+		expect(() =>
+			builder.addCovenantInput(TXID, 0, covenantTxOut(1n), P2PK_SOURCE, ARGS, "{ not json"),
+		).toThrow();
+		expect(builder.inputCount()).toBe(0);
+		builder.free();
+	});
+
+	// The decisive question for a pre-approval dry-run: does a signature-checking covenant
+	// execute when its signature witness has not been produced yet?
+	test("records what a zero-witness dry-run of a signature covenant actually does", () => {
+		const builder = new bindings.TransactionBuilder();
+		const contract = new bindings.Contract(P2PK_SOURCE, ARGS);
+
+		builder.addCovenantInput(TXID, 0, covenantTxOut(100_000n), P2PK_SOURCE, ARGS);
+		builder.addOutput(contract.scriptPubKeyHex("liquid-testnet"), 90_000n, POLICY_ASSET);
+
+		let outcome = "ran";
+
+		try {
+			builder.dryRunCovenantInput(0, "liquid-testnet");
+		} catch (error) {
+			outcome = String(error);
+		}
+
+		// Asserting the observed behaviour rather than a hoped-for one: a program that
+		// asserts a signature cannot pass before the signature exists.
+		expect(outcome).not.toBe("ran");
+
+		builder.free();
+	});
+
+	test("refuses to dry-run an input that is not a covenant", () => {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+		const builder = new bindings.TransactionBuilder();
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const walletTxOut = `01${assetLe}0100000000000186a000${"16"}${signer.scriptPubKeyHex()}`;
+
+		builder.addWalletInput(TXID, 0, walletTxOut);
+
+		expect(() => builder.dryRunCovenantInput(0, "liquid-testnet")).toThrow();
+
+		builder.free();
+		signer.free();
+	});
+
+	test("refuses to dry-run an input that does not exist", () => {
+		const builder = new bindings.TransactionBuilder();
+
+		expect(() => builder.dryRunCovenantInput(4, "liquid-testnet")).toThrow();
+		builder.free();
+	});
+});
