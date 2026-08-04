@@ -2,6 +2,16 @@
 export type SelectableUtxo = {
 	amount: string;
 	/**
+	 * Whether this output's amount and asset are hidden on chain.
+	 *
+	 * A confidential one cannot fund a contract action: unblinding it needs the secrets
+	 * that go with it, and the signing module is handed an outpoint and its bytes and
+	 * nothing else. Selecting one produces a transaction that fails inside the module,
+	 * far from the output that caused it. Optional because a caller assembling a list by
+	 * hand has nothing to hide.
+	 */
+	confidential?: boolean;
+	/**
 	 * Where this output pays, when the wallet knows it.
 	 *
 	 * Only needed by an action that pins an input to one address. Optional because the
@@ -40,10 +50,15 @@ export function selectCoins(
 	}
 
 	const needed = targetSats + headroomSats;
-	const spendable = available
-		.filter((utxo) => utxo.spendable)
-		.slice()
-		.sort((a, b) => (toSats(b.amount) > toSats(a.amount) ? 1 : -1));
+	const usable = available.filter((utxo) => utxo.spendable && !utxo.confidential);
+	const spendable = usable.slice().sort((a, b) => (toSats(b.amount) > toSats(a.amount) ? 1 : -1));
+
+	// What is there and cannot be used, so a refusal can say so. A person looking at a
+	// balance that covers the amount needs to be told why it does not count, rather than
+	// being told they are short of money they can see.
+	const withheld = available
+		.filter((utxo) => utxo.spendable && utxo.confidential)
+		.reduce((sum, utxo) => sum + toSats(utxo.amount), 0n);
 
 	const selected: SelectableUtxo[] = [];
 	let totalSats = 0n;
@@ -60,7 +75,11 @@ export function selectCoins(
 	if (totalSats < needed) {
 		return {
 			ok: false,
-			reason: `This account holds ${totalSats} of the ${needed} needed to perform the action and pay its fee.`,
+			reason:
+				`This account holds ${totalSats} of the ${needed} needed to perform the action and pay its fee.` +
+				(withheld > 0n
+					? ` A further ${withheld} is in confidential outputs, which a contract action cannot spend — send it to this account's unblinded address to use it.`
+					: ""),
 		};
 	}
 

@@ -66,3 +66,46 @@ describe("selectCoins", () => {
 		}
 	});
 });
+
+// The wallet receives to confidential addresses by default, so most of what it holds is
+// blinded. A contract action cannot spend one: unblinding needs the secrets that go with
+// it, and the signing module gets an outpoint and its bytes and nothing else. Selecting
+// one builds a transaction that fails inside the module, far from the output that caused
+// it — and largest-first would reach for the biggest, which is exactly the blinded one
+// (DISC-139).
+describe("confidential outputs", () => {
+	const explicit = { amount: "1000", spendable: true, txOut: "00", txid: "a", vout: 0 };
+	const blinded = {
+		amount: "9000",
+		confidential: true,
+		spendable: true,
+		txOut: "00",
+		txid: "b",
+		vout: 0,
+	};
+
+	test("are never selected, however much they hold", () => {
+		const result = selectCoins([blinded, explicit], 500n, 0n);
+
+		expect(result.ok && result.selected.map((utxo) => utxo.txid)).toEqual(["a"]);
+	});
+
+	test("and when they are why the account falls short, the refusal says so", () => {
+		const result = selectCoins([blinded, explicit], 5000n, 0n);
+
+		expect(result.ok ? "" : result.reason).toContain("9000");
+		expect(result.ok ? "" : result.reason).toContain("unblinded address");
+	});
+
+	test("an account holding only blinded outputs is short of all of it", () => {
+		const result = selectCoins([blinded], 100n, 0n);
+
+		expect(result.ok).toBe(false);
+	});
+
+	test("nothing withheld leaves the refusal as it was", () => {
+		const result = selectCoins([explicit], 5000n, 0n);
+
+		expect(result.ok ? "" : result.reason).not.toContain("confidential");
+	});
+});
