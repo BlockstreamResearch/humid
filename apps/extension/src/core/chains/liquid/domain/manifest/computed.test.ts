@@ -235,3 +235,50 @@ describe("resolveComputedParams", () => {
 		});
 	});
 });
+
+// AC-08's other half, pinned. Convergence producing *a* stable value is not enough: it has
+// to produce the same one every time, because the value is a covenant's script hash and a
+// different one is a different address. The hash function here is the real SHA256 of a real
+// compiled scriptPubKey, so what is pinned is the whole path.
+describe("a settled hash is the same hash every time", () => {
+	const CHAIN = {
+		// B consumes nothing, so the apparent cycle auto-populate would create is a chain.
+		A_COV_HASH: { compute: "tapleaf", params: { PUB_KEY: "params.B_COV_HASH" }, simf: "./a.simf" },
+		B_COV_HASH: { compute: "tapleaf", depends_on: [], simf: "./b.simf" },
+	};
+
+	function settle() {
+		const manifest = normaliseManifest({
+			actions: { Open: { params: { ...CHAIN, PUB_KEY: { type: "pubkey" } } } },
+		}).manifest;
+
+		return resolveComputedParams(manifest.actions[0]!, {
+			contractSources: SOURCES,
+			// A stand-in that is a real function of its arguments, which is the only property
+			// convergence needs; the address path itself is pinned against the real module.
+			hashCovenant: ({ argumentsJson, source }) => {
+				let hash = 0n;
+
+				for (const code of `${source}${argumentsJson}`) {
+					hash = (hash * 1_000_003n + BigInt(code.codePointAt(0) ?? 0)) % 2n ** 256n;
+				}
+
+				return hash.toString(16).padStart(64, "0").slice(-64);
+			},
+			scope: { params: {} },
+		});
+	}
+
+	test("settles on the same values on every run", () => {
+		const first = settle();
+		const second = settle();
+
+		expect(first.ok && first.values).toEqual(second.ok ? second.values : {});
+	});
+
+	test("and on the same number of rounds", () => {
+		const result = settle();
+
+		expect(result.ok ? result.rounds : 0).toBe(3);
+	});
+});

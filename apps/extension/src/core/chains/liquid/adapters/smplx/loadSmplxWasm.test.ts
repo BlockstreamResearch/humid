@@ -614,3 +614,77 @@ describe("what a signed transaction says it spends", () => {
 		expect(result.ok).toBe(false);
 	});
 });
+
+// Golden vectors: the exact addresses this module derives, pinned. They exist because the
+// failure mode of every encoding, ordering and convergence decision in the runtime is a
+// well-formed address for the wrong contract, which no test that recomputes the expectation
+// alongside the value can catch. These are the compiler's own p2pk contract, authored
+// upstream, so what they pin is not our own consistency with ourselves.
+describe("golden covenant addresses", () => {
+	// simplicityhl-0.6.0/examples/p2pk.simf, with its parameter renamed to the one the
+	// published manifest uses. Two identifiers differ from upstream and nothing else.
+	const UPSTREAM_P2PK =
+		"fn main() { jet::bip_0340_verify((param::PUB_KEY, jet::sig_all_hash()), witness::SIGNATURE) }";
+	// simplicityhl-0.6.0/examples/p2pk.args, verbatim.
+	const ALICE = "0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+
+	function address(input: {
+		debug?: boolean;
+		leaves?: string[];
+		network?: string;
+		pubkey?: string;
+	}): string {
+		const args = JSON.stringify({ PUB_KEY: { type: "Pubkey", value: input.pubkey ?? ALICE } });
+		const contract = new bindings.Contract(
+			UPSTREAM_P2PK,
+			args,
+			input.leaves ? JSON.stringify(input.leaves) : undefined,
+			input.debug,
+		);
+
+		return contract.covenantAddress(input.network ?? "liquid-testnet");
+	}
+
+	test("the parameterised contract, on testnet", () => {
+		expect(address({})).toBe("tex1peavhc0s5wcm0ans49jxg445enyh6uuwl8radea7expf2syt5rkzqjre6vm");
+	});
+
+	test("the same contract on mainnet is a different address, and a fixed one", () => {
+		expect(address({ network: "liquid" })).toBe(
+			"ex1peavhc0s5wcm0ans49jxg445enyh6uuwl8radea7expf2syt5rkzqn6taa5",
+		);
+	});
+
+	// Debug symbols change the CMR and therefore the address. The wallet builds each contract
+	// the way its protocol declares, so both are values a real protocol could sit at.
+	test("built with debug symbols it is a different address again", () => {
+		expect(address({ debug: true })).not.toBe(address({ debug: false }));
+	});
+
+	test("and that address is fixed too", () => {
+		expect(address({ debug: true })).toBe(
+			"tex1p8vjx8uana9z0k8670v9aqgys02we6yy0sndhjkapwhd76k2ux9vqv8rzsv",
+		);
+	});
+
+	// Extra leaves are appended in declaration order, and the tree is folded left. Three of
+	// them is where a balanced tree would diverge, so it is the count worth pinning.
+	test("with three extra leaves, where a balanced tree would differ", () => {
+		const leaves = [`0x${"11".repeat(32)}`, `0x${"22".repeat(32)}`, `0x${"33".repeat(32)}`];
+
+		expect(address({ leaves })).toBe(
+			"tex1p70jezh2969ew3w29h2hvpwtl9eh4mzyuv8srpn9rfa8t4uputp7schqmqt",
+		);
+	});
+
+	test("their order is part of the address", () => {
+		const forward = address({ leaves: [`0x${"11".repeat(32)}`, `0x${"22".repeat(32)}`] });
+		const reversed = address({ leaves: [`0x${"22".repeat(32)}`, `0x${"11".repeat(32)}`] });
+
+		expect(forward).not.toBe(reversed);
+	});
+
+	test("a different parameter is a different covenant", () => {
+		expect(address({ pubkey: `0x${"01".repeat(32)}` })).not.toBe(address({}));
+	});
+});
