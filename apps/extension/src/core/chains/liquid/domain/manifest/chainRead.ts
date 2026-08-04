@@ -23,6 +23,29 @@ export type TxOutAtOutPoint = {
 	scriptPubKeyHex: string;
 };
 
+/**
+ * Re-encodes an explicit output so it can be handed to something that spends it.
+ *
+ * Only valid for an explicit output, which for this purpose is not a limitation: a
+ * covenant output is always unblinded, because Simplicity's introspection jets cannot read
+ * a confidential commitment. A confidential one returns undefined rather than a plausible
+ * encoding, since guessing here would produce a transaction that fails far away from the
+ * cause.
+ */
+export function encodeExplicitTxOut(txOut: TxOutAtOutPoint): string | undefined {
+	if (txOut.amountSats === undefined || txOut.rawAssetId === undefined) {
+		return undefined;
+	}
+
+	// Elements consensus encoding: explicit asset (0x01 + 32 bytes, reversed), explicit
+	// value (0x01 + 8 bytes big-endian), null nonce, then the script with its length.
+	const assetLittleEndian = (txOut.rawAssetId.match(/../g) ?? []).reverse().join("");
+	const value = BigInt(txOut.amountSats).toString(16).padStart(16, "0");
+	const scriptLength = (txOut.scriptPubKeyHex.length / 2).toString(16).padStart(2, "0");
+
+	return `01${assetLittleEndian}01${value}00${scriptLength}${txOut.scriptPubKeyHex}`;
+}
+
 export type ReadTxOut = (outpoint: OutPoint) => Promise<TxOutAtOutPoint>;
 
 export type EsploraEndpoint = {

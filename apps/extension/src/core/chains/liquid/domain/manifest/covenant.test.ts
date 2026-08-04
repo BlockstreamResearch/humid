@@ -100,7 +100,12 @@ describe("deriveCovenantAddress", () => {
 });
 
 describe("covenantMatchesChain", () => {
-	const derivation = { address: "tex1p_derived", utxoType: "p2pk_output" };
+	const derivation = {
+		address: "tex1p_derived",
+		argumentsJson: "{}",
+		source: SOURCE,
+		utxoType: "p2pk_output",
+	};
 
 	test("matches when the rebuilt contract lands where the funds are", () => {
 		expect(covenantMatchesChain(derivation, "tex1p_derived")).toEqual({ matched: true });

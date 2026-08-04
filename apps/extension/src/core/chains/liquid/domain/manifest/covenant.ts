@@ -16,6 +16,15 @@ export type CompileCovenant = (input: {
 export type CovenantDerivation = {
 	/** The address the wallet derived by rebuilding the contract itself. */
 	address: string;
+	/**
+	 * The parameters it was built with, in the compiler's own shape.
+	 *
+	 * Carried out so anything spending this covenant rebuilds it from exactly what was
+	 * verified, rather than resolving the request a second time and hoping the two agree.
+	 */
+	argumentsJson: string;
+	/** The contract source it was built from. */
+	source: string;
 	/** The manifest's name for the kind of UTXO this is. */
 	utxoType: string;
 };
@@ -67,14 +76,19 @@ export async function deriveCovenantAddress(
 		return params;
 	}
 
+	const argumentsJson = JSON.stringify(params.arguments);
+
 	try {
 		const address = await input.compile({
-			argumentsJson: JSON.stringify(params.arguments),
+			argumentsJson,
 			network: input.network,
 			source,
 		});
 
-		return { derivation: { address, utxoType: input.utxoType }, ok: true };
+		return {
+			derivation: { address, argumentsJson, source, utxoType: input.utxoType },
+			ok: true,
+		};
 	} catch (error) {
 		return {
 			ok: false,

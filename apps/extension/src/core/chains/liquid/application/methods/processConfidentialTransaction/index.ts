@@ -97,6 +97,18 @@ export const processLiquidConfidentialTransaction = createWalletMethod<
 				const builder = new smplx.TransactionBuilder();
 
 				try {
+					// Covenant inputs first: the manifest's own input order is what a covenant
+					// introspects, and wallet inputs are the wallet's addition to it.
+					for (const covenant of review.covenantInputs) {
+						builder.addCovenantInput(
+							covenant.txid,
+							covenant.vout,
+							covenant.txOutHex,
+							covenant.source,
+							covenant.argumentsJson,
+						);
+					}
+
 					for (const utxo of review.selected) {
 						builder.addWalletInput(utxo.txid, utxo.vout, utxo.txOut);
 					}

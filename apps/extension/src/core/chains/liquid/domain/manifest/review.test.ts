@@ -39,10 +39,12 @@ const deps = {
 	readFeeRate,
 	walletScriptPubKeyHex: WALLET_SCRIPT,
 };
+const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 const readTxOut =
 	(address: string, amountSats = "42000") =>
 	async () => ({
 		amountSats,
+		rawAssetId: POLICY_ASSET,
 		scriptPubKeyAddress: address,
 		scriptPubKeyHex: "5120aabb",
 	});
@@ -115,6 +117,39 @@ describe("reviewManifestAction", () => {
 					verified: "matches-chain",
 				});
 			}
+		});
+
+		// A transaction that verified a covenant and then did not spend it would be a
+		// silently different transaction from the one reviewed.
+		test("carries the covenant it verified, ready to be spent", async () => {
+			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
+				...deps,
+				readTxOut: readTxOut(DERIVED),
+			});
+
+			expect(isRefusal(result)).toBe(false);
+
+			if (!isRefusal(result)) {
+				expect(result.covenantInputs).toHaveLength(1);
+				expect(result.covenantInputs[0]).toMatchObject({ txid: TXID, vout: 0 });
+				// The source it carries is the one that was verified, not a second read.
+				expect(result.covenantInputs[0]?.source).toBe(SOURCE);
+			}
+		});
+
+		// A covenant output cannot be confidential — Simplicity cannot read a confidential
+		// commitment — so one that comes back without an explicit amount is a refusal rather
+		// than something to encode a guess for.
+		test("refuses a covenant output the chain reports as confidential", async () => {
+			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
+				...deps,
+				readTxOut: async () => ({
+					scriptPubKeyAddress: DERIVED,
+					scriptPubKeyHex: "5120aabb",
+				}),
+			});
+
+			expect(isRefusal(result)).toBe(true);
 		});
 
 		// The output pays out what the covenant holds, and what it holds is read from the

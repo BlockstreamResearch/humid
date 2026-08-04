@@ -1,4 +1,4 @@
-import type { ReadFeeRate, ReadTxOut } from "./chainRead";
+import { encodeExplicitTxOut, type ReadFeeRate, type ReadTxOut } from "./chainRead";
 import { type CoinSelection, type SelectableUtxo, selectCoins } from "./coinSelection";
 import { type CompileCovenant, covenantMatchesChain, deriveCovenantAddress } from "./covenant";
 import { planAction } from "./plan";
@@ -19,6 +19,20 @@ export type CovenantFinding = {
 	verified: "matches-chain" | "not-yet-on-chain";
 };
 
+/**
+ * One covenant the transaction spends, with everything needed to spend it.
+ *
+ * The source and arguments are the ones the wallet verified against the chain, not a
+ * second copy read out of the request again.
+ */
+export type ReviewedCovenantInput = {
+	argumentsJson: string;
+	source: string;
+	txOutHex: string;
+	txid: string;
+	vout: number;
+};
+
 /** One output of the transaction the wallet worked out, ready to be shown and then built. */
 export type ReviewedOutput = {
 	id: string;
@@ -37,6 +51,8 @@ export type ReviewedOutput = {
 export type ManifestReview = {
 	action: string;
 	covenants: CovenantFinding[];
+	/** The covenant outputs this action spends, ready to be added as inputs. */
+	covenantInputs: ReviewedCovenantInput[];
 	/** What the wallet will pay, established from the chain rather than from the request. */
 	feeRateSatsPerKvb: number;
 	outputs: ReviewedOutput[];
@@ -92,6 +108,7 @@ export async function reviewManifestAction(
 	const covenants: CovenantFinding[] = [];
 	/** What each covenant input actually holds, read from the chain rather than told. */
 	const inputAmounts: Record<string, bigint> = {};
+	const covenantInputs: ReviewedCovenantInput[] = [];
 
 	for (const site of covenantSites(action)) {
 		const derived = await deriveCovenantAddress(request, {
@@ -146,6 +163,25 @@ export async function reviewManifestAction(
 		if (onChain.amountSats !== undefined && site.id) {
 			inputAmounts[site.id] = BigInt(onChain.amountSats);
 		}
+
+		const txOutHex = encodeExplicitTxOut(onChain);
+
+		if (!txOutHex) {
+			return {
+				reason:
+					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} is confidential. ` +
+					"A covenant output cannot be, because Simplicity cannot read a confidential commitment.",
+				refused: true,
+			};
+		}
+
+		covenantInputs.push({
+			argumentsJson: derived.derivation.argumentsJson,
+			source: derived.derivation.source,
+			txOutHex,
+			txid: outpoint.txid,
+			vout: outpoint.vout,
+		});
 
 		covenants.push({
 			address: derived.derivation.address,
@@ -209,6 +245,7 @@ export async function reviewManifestAction(
 
 	return {
 		action: request.action,
+		covenantInputs,
 		covenants,
 		feeRateSatsPerKvb,
 		outputs,
