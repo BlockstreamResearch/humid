@@ -237,3 +237,72 @@ describe("transaction assembly", () => {
 		builder.free();
 	});
 });
+
+// The whole Pay shape in one place: a wallet output funds a transaction, an output pays
+// somewhere, and the module blinds, signs and finalises it. This is what the manifest
+// runtime will drive; asserting it here means a break shows up as a failing test rather
+// than as a transaction the network rejects.
+describe("finalising a transaction", () => {
+	const TXID = "1".repeat(64);
+	// L-BTC on Liquid testnet, the policy asset the fee is paid in.
+	const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+	const FEE_RATE = 100;
+
+	/** An explicit Elements output of `sats` of the policy asset, paying to `scriptHex`. */
+	function encodeTxOut(sats: bigint, scriptHex: string): string {
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const value = sats.toString(16).padStart(16, "0");
+		const scriptLen = (scriptHex.length / 2).toString(16).padStart(2, "0");
+
+		return `01${assetLe}01${value}00${scriptLen}${scriptHex}`;
+	}
+
+	function fundedBuilder(signer: InstanceType<SmplxBindings["WalletSigner"]>, sats: bigint) {
+		const builder = new bindings.TransactionBuilder();
+
+		builder.addWalletInput(TXID, 0, encodeTxOut(sats, signer.scriptPubKeyHex()));
+
+		return builder;
+	}
+
+	test("blinds, signs and finalises, returning a transaction and its fee", () => {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+		const builder = fundedBuilder(signer, 100_000n);
+
+		builder.addOutput(signer.scriptPubKeyHex(), 50_000n, POLICY_ASSET);
+
+		const signed = signer.finalizeTransaction(builder, FEE_RATE, signer.scriptPubKeyHex());
+
+		expect(signed.hex).toMatch(/^[0-9a-f]+$/);
+		expect(signed.txid).toMatch(/^[0-9a-f]{64}$/);
+		expect(signed.feeSats > 0n).toBe(true);
+
+		signed.free();
+		builder.free();
+		signer.free();
+	});
+
+	test("refuses when the inputs cannot cover the outputs and the fee", () => {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+		const builder = fundedBuilder(signer, 1_000n);
+
+		builder.addOutput(signer.scriptPubKeyHex(), 999_999n, POLICY_ASSET);
+
+		expect(() => signer.finalizeTransaction(builder, FEE_RATE, signer.scriptPubKeyHex())).toThrow();
+
+		builder.free();
+		signer.free();
+	});
+
+	test("refuses a change script it cannot parse, rather than sending change nowhere", () => {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+		const builder = fundedBuilder(signer, 100_000n);
+
+		builder.addOutput(signer.scriptPubKeyHex(), 50_000n, POLICY_ASSET);
+
+		expect(() => signer.finalizeTransaction(builder, FEE_RATE, "not-hex")).toThrow();
+
+		builder.free();
+		signer.free();
+	});
+});
