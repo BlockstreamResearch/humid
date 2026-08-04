@@ -20,6 +20,16 @@ import { RpcCard } from "../RpcCard";
  */
 const ACTIONS = ["Pay", "Receive"];
 
+/**
+ * An x-only public key, which is what the p2pk contract's PUB_KEY parameter is.
+ *
+ * Checked here rather than left to the wallet because the mistake this catches is the
+ * obvious one — pasting an address, which is the other thing the wallet shows you — and
+ * a request that leaves this page is answered by the contract compiler complaining about
+ * a character position.
+ */
+const X_ONLY_KEY = /^(?:0x)?[0-9a-fA-F]{64}$/;
+
 export function ProcessCtCard() {
 	const { wallet } = useHumidContext();
 	const state = useMethodState("processConfidentialTransaction");
@@ -32,6 +42,16 @@ export function ProcessCtCard() {
 	const [stateFile, setStateFile] = useState("");
 
 	const spending = action === "Receive";
+	const keyProblem = X_ONLY_KEY.test(pubkey.trim())
+		? undefined
+		: pubkey.trim() === ""
+			? "Needed: 32 bytes as 64 hexadecimal characters."
+			: pubkey.trim().startsWith("tlq1") ||
+				  pubkey.trim().startsWith("tex1") ||
+				  pubkey.trim().startsWith("lq1") ||
+				  pubkey.trim().startsWith("ex1")
+				? "That is an address, not a key. The contract identity screen shows both — this field wants the second one."
+				: `Not an x-only public key: ${pubkey.trim().length} characters, and 64 hexadecimal ones are needed.`;
 
 	// The six parts of the request, assembled here rather than typed by hand. The wallet
 	// rebuilds the contract from `contractSources` and checks it against the chain, so what
@@ -41,7 +61,9 @@ export function ProcessCtCard() {
 		broadcast,
 		contractSources: { "./p2pk.simf": P2PK_SOURCE },
 		manifest: p2pkManifest,
-		params: spending ? { pubkey } : { amount_sat: Number(amount) || 0, pubkey },
+		params: spending
+			? { pubkey: pubkey.trim() }
+			: { amount_sat: Number(amount) || 0, pubkey: pubkey.trim() },
 		...(spending ? { state: parseJsonInput(stateFile) ?? {} } : {}),
 	};
 
@@ -72,6 +94,10 @@ export function ProcessCtCard() {
 				value={pubkey}
 			/>
 
+			{keyProblem === undefined ? null : (
+				<p className="text-xs text-amber-600 dark:text-amber-500">{keyProblem}</p>
+			)}
+
 			{spending ? (
 				<TextAreaField
 					label='State file — which covenant outputs exist: {"utxos":[{"utxo_type":"p2pk_output","txid":"…","vout":0}]}'
@@ -89,7 +115,7 @@ export function ProcessCtCard() {
 			/>
 
 			<CallButton
-				disabled={pending}
+				disabled={pending || keyProblem !== undefined}
 				onClick={() =>
 					call(() =>
 						wallet.processConfidentialTransaction(

@@ -1,0 +1,35 @@
+name: Check
+
+# Runs the same gate a commit runs locally, on every push and pull request. Until this
+# existed nothing in CI ran the tests at all: the only workflows were manual builds and
+# deploys, so 451 tests protected nothing that could block a merge.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Not recursive. The wasm submodules take minutes to build and nothing here
+      # imports them: the tests that touch the SDK load a prebuilt package and skip
+      # themselves when it is absent, and typechecking reads its .d.ts from the
+      # workspace link. A gate that needs a Rust toolchain is a gate people turn off.
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Install dependencies
+        uses: ./.github/actions/install
+
+      # typecheck across apps/extension, packages/ and apps/web, then lint, format and
+      # the test suite. The three projects are separate deliberately — see the comment
+      # in lefthook.yml for why one `tsc --noEmit` never covered them.
+      - name: Check
+        run: bun run check

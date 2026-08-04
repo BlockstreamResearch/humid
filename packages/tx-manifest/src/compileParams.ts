@@ -36,6 +36,27 @@ const PARAM_TYPES: Record<string, string> = {
 };
 
 /**
+ * How many bytes a declared type occupies, for the types that have a fixed width.
+ *
+ * A value of the wrong width does not fail here without this — it is hex-prefixed and
+ * handed to the compiler, which rejects it somewhere inside its own parser with a
+ * message about the parse position. That is a true error about the wrong thing: the
+ * fault is in the request, not the contract, and a person reading "expected end of
+ * input at line 1 column 143" has to work backwards to find out that they pasted an
+ * address where a key belongs.
+ */
+const PARAM_BYTES: Record<string, number> = {
+	bytes32: 32,
+	pubkey: 32,
+};
+
+/** What a type of fixed width should look like, for a refusal that can be acted on. */
+const SHAPES: Record<string, string> = {
+	bytes32: "32 bytes as 64 hexadecimal characters",
+	pubkey: "an x-only public key: 32 bytes as 64 hexadecimal characters, no prefix and no address",
+};
+
+/**
  * Resolves the compile-time parameters a contract is built with, from the manifest's
  * wiring and what the request and the deployment supply.
  *
@@ -84,6 +105,16 @@ export function resolveCompileParams(
 			};
 		}
 
+		const width = PARAM_BYTES[declaredType ?? ""];
+
+		if (width !== undefined) {
+			const malformed = wrongWidth(found.value, width, declaredType ?? "", name, reference);
+
+			if (malformed) {
+				return { ok: false, reason: malformed };
+			}
+		}
+
 		// A boolean is written as itself rather than as bytes: the compiler reads `true` and
 		// `false`, and a hex-prefixed one is not an expression of that type.
 		resolved[name] =
@@ -124,4 +155,31 @@ function booleanLiteral(value: string): string {
 
 function withHexPrefix(value: string): string {
 	return value.startsWith("0x") ? value : `0x${value}`;
+}
+
+/**
+ * Whether a value can be what its declared type says, by shape alone.
+ *
+ * It says which compile parameter, which reference, what arrived and what was needed,
+ * because all four are things the person filling the request can act on and none of
+ * them survives into the compiler's own message.
+ */
+function wrongWidth(
+	value: string,
+	bytes: number,
+	declaredType: string,
+	name: string,
+	reference: string,
+): string | undefined {
+	const digits = value.startsWith("0x") ? value.slice(2) : value;
+
+	if (digits.length === bytes * 2 && /^[0-9a-fA-F]+$/.test(digits)) {
+		return undefined;
+	}
+
+	const found = /^[0-9a-fA-F]*$/.test(digits)
+		? `${digits.length} hexadecimal characters`
+		: `"${value.length > 24 ? `${value.slice(0, 24)}…` : value}"`;
+
+	return `${name} is wired to ${reference}, declared ${declaredType}, which is ${SHAPES[declaredType] ?? `${bytes} bytes`}. Got ${found}.`;
 }

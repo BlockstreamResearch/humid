@@ -139,3 +139,44 @@ describe("boolean compile parameters", () => {
 		).toMatchObject({ arguments: { B: { value: "maybe" } } });
 	});
 });
+
+// What a person actually does wrong: paste the address the wallet showed them into the
+// field that wants a key. Without a width check the value is hex-prefixed and handed to
+// the compiler, which fails inside its own parser at a character position — a true error
+// about the wrong thing (DISC-134).
+describe("a value that cannot be its declared type", () => {
+	const wiring = { PUB_KEY: "params.pubkey" };
+	const types = { pubkey: "pubkey" };
+
+	function resolve(pubkey: string) {
+		return resolveCompileParams(wiring, types, scope({ pubkey }));
+	}
+
+	test("a confidential address where a key belongs is refused, saying what was wanted", () => {
+		const result = resolve(
+			"tlq1qqd54s2q2d7fqv2nv8y6pnfh2w0sjr2tvu43tpsjvlm8fshffwrfy8lc2n9t96aqxtz5zv9mdhlp3hzklkfppg852dg7urtnyu",
+		);
+
+		expect(result.ok ? "" : result.reason).toContain("x-only public key");
+	});
+
+	test("and names the compile parameter and the reference, which the compiler's own error cannot", () => {
+		const result = resolve("nonsense");
+
+		expect(result.ok ? "" : result.reason).toContain("PUB_KEY");
+		expect(result.ok ? "" : result.reason).toContain("params.pubkey");
+	});
+
+	test("a key of the wrong length is refused by length, not by looking wrong", () => {
+		const result = resolve("79be667e");
+
+		expect(result.ok ? "" : result.reason).toContain("8 hexadecimal characters");
+	});
+
+	test("a real x-only key passes, with or without the prefix", () => {
+		const key = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+
+		expect(resolve(key).ok).toBe(true);
+		expect(resolve(`0x${key}`).ok).toBe(true);
+	});
+});
