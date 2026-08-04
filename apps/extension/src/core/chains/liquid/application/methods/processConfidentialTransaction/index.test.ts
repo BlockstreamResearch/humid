@@ -20,7 +20,20 @@ import {
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const SOURCE_PATH = "./p2pk.simf";
 const SOURCE = "fn main() { }";
-const DERIVED_SCRIPT = "5120" + "aa".repeat(32);
+const DERIVED_SCRIPT = `5120${"aa".repeat(32)}`;
+
+/** What the real module does with a hex argument, so a substitute cannot be laxer. */
+function requireHex(what: string, value: string): void {
+	if (!/^(?:[0-9a-fA-F]{2})+$/.test(value)) {
+		throw new Error(`Invalid ${what}: Odd number of digits`);
+	}
+}
+
+function requireTxid(txid: string): void {
+	if (!/^[0-9a-fA-F]{64}$/.test(txid)) {
+		throw new Error(`Invalid txid: ${txid}`);
+	}
+}
 const DERIVED = "tex1p_derived";
 const WALLET_ADDRESS = "tex1q_wallet";
 const WALLET_SCRIPT = "0014" + "11".repeat(20);
@@ -104,24 +117,36 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 						return DERIVED_SCRIPT;
 					}
 				},
+				// Every argument the real builder parses is parsed here too. A substitute that
+				// accepts whatever it is given is how a bech32 address reached `addOutput`
+				// through a green suite (DISC-138), so the rule is now the module's own: what
+				// it decodes, this decodes.
 				TransactionBuilder: class {
 					spends: { txid: string; vout: number }[] = [];
-					addCovenantInput(txid: string, vout: number) {
+					addCovenantInput(txid: string, vout: number, txOutHex: string) {
+						requireHex("covenant input's previous output", txOutHex);
+						requireTxid(txid);
 						this.spends.push({ txid, vout });
 					}
-					// Records what it was handed rather than ignoring it. The real builder
-					// hex-decodes this, so a substitute that accepts anything is how an output
-					// paid to a bech32 address reached the module (DISC-138).
 					addOutput(scriptPubKeyHex: string) {
+						requireHex("output script", scriptPubKeyHex);
 						recorded.paid.push(scriptPubKeyHex);
 					}
-					addWalletInput(txid: string, vout: number) {
+					addWalletInput(txid: string, vout: number, txOut: string) {
+						requireHex("wallet input's previous output", txOut);
+						requireTxid(txid);
 						this.spends.push({ txid, vout });
 					}
 					free() {}
 				},
 				WalletSigner: class {
-					finalizeTransaction(builder: { spends: { txid: string; vout: number }[] }) {
+					finalizeTransaction(
+						builder: { spends: { txid: string; vout: number }[] },
+						_feeRateSatsPerKvb: number,
+						changeScriptPubKeyHex: string,
+					) {
+						requireHex("change script", changeScriptPubKeyHex);
+
 						return {
 							feeSats: 500n,
 							free: () => undefined,
