@@ -8,6 +8,10 @@ import {
 	type LiquidProcessCtContext,
 	type LiquidProcessCtDependencies,
 } from "./index";
+import {
+	isProcessCtConfirmationData,
+	type ProcessCtConfirmationData,
+} from "./ProcessCtConfirmation";
 
 // Drives the whole seam — parse, verify, plan, sign, broadcast — with substituted
 // dependencies. What is asserted is the method's own behaviour: what it refuses, what it
@@ -314,5 +318,51 @@ describe("processLiquidConfidentialTransaction on a restored wallet", () => {
 			"keyManagerState",
 			"walletBackend",
 		]);
+	});
+});
+
+// The confirmation screen was never driven from the method, only from data a test wrote
+// by hand — so a payload that no renderer could read shipped, and a person calling the
+// method got a black window that timed out into "User rejected the request" (DISC-137).
+// Both halves of that are asserted here against the real payload.
+describe("what the person is actually shown", () => {
+	async function shownRequest() {
+		let captured: { data?: unknown } | undefined;
+
+		await subject().method(params(), {
+			...context(),
+			authorization: { isGranted: () => false },
+			confirm: async (request: { data?: unknown }) => {
+				captured = request;
+
+				return true;
+			},
+		} as unknown as LiquidProcessCtContext);
+
+		return captured;
+	}
+
+	test("the payload is one the confirmation surface recognises", async () => {
+		const request = await shownRequest();
+
+		expect(isProcessCtConfirmationData(request?.data)).toBe(true);
+	});
+
+	test("and survives the message bus, which serializes as JSON and cannot carry a bigint", async () => {
+		const request = await shownRequest();
+
+		expect(() => JSON.stringify(request?.data)).not.toThrow();
+	});
+
+	test("carrying the wallet's own figures, not the site's claims", async () => {
+		const request = await shownRequest();
+		const data = request?.data as ProcessCtConfirmationData;
+
+		expect(data.shown.netEffect.length).toBeGreaterThan(0);
+		// `computed` rather than `verified`: the balance change is arithmetic over chain
+		// reads, and combining takes the weaker origin so the sum cannot claim more than its
+		// parts. What matters on this screen is that it is not the site's word.
+		expect(data.shown.netEffect[0]?.sats.origin).toBe("computed");
+		expect(data.shown.protocol.origin).toBe("site");
 	});
 });

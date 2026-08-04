@@ -15,7 +15,13 @@ export {
 	createEsploraTxOutReader,
 	encodeExplicitTxOut,
 } from "./chainRead";
-export { type ConfirmationModel, confirmationModel, describeOrigin } from "./confirmation";
+export {
+	type ConfirmationModel,
+	type ShownConfirmation,
+	confirmationModel,
+	describeOrigin,
+	toShownConfirmation,
+} from "./confirmation";
 export { estimateFeeSats, estimateVsize } from "./fee";
 export { guardSpentInputs } from "./inputGuard";
 export { findAction, normaliseManifest } from "./normalise";

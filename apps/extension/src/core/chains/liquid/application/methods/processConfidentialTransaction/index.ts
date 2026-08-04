@@ -9,6 +9,7 @@ import {
 	type ReadFeeRate,
 	type ReadTxOut,
 	reviewManifestAction,
+	toShownConfirmation,
 } from "@humid/tx-manifest";
 
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
@@ -130,14 +131,15 @@ export const createProcessLiquidConfidentialTransaction = (
 	>({
 		confirmation: ({ params, review }) => ({
 			data: {
-				action: review.action,
 				broadcast: params.broadcast,
-				// Every covenant the wallet rebuilt, with what it established about each.
-				// `not-yet-on-chain` marks one being created, which there is nothing to compare
-				// against — it is a different fact, not a weaker form of verified.
-				covenants: review.covenants,
 				kind: PROCESS_CT_CONFIRMATION_KIND,
-				protocol: review.protocol,
+				// The whole model the person is shown, amounts as strings: this crosses the
+				// message bus, which serializes as JSON, and JSON.stringify throws on a bigint
+				// rather than rounding it. Every covenant the wallet rebuilt is inside it, with
+				// what it established about each — `not-yet-on-chain` marks one being created,
+				// which there is nothing to compare against and is a different fact rather than
+				// a weaker form of verified.
+				shown: toShownConfirmation(review.confirmation),
 			},
 			message: `A site wants to perform "${review.action}" on the ${review.protocol} protocol.`,
 			title: "Perform a contract action?",

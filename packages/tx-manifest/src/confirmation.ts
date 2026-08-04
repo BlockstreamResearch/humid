@@ -1,6 +1,6 @@
 import { asRecord } from "./json";
 import type { NormalisedAction, NormalisedManifest } from "./normalise";
-import { computed, fromSite, type Provenanced, type Origin, verified } from "./provenance";
+import { computed, fromSite, map, type Origin, type Provenanced, verified } from "./provenance";
 import type { ManifestReview } from "./review";
 
 /** One asset's movement in or out of the wallet, as a person would read it. */
@@ -121,4 +121,30 @@ function actionSummary(action: NormalisedAction): string | undefined {
 	const declared = asRecord(action.node.ui)?.action ?? action.node.description;
 
 	return typeof declared === "string" ? declared : undefined;
+}
+
+/**
+ * The same model with every amount as a decimal string.
+ *
+ * It exists because the confirmation crosses the extension's message bus, which
+ * serializes as JSON, and JSON has no bigint — `JSON.stringify` throws on one rather
+ * than losing it. Amounts stay bigint everywhere they are computed and become strings
+ * only at that boundary, which is the one place the loss is a formatting concern rather
+ * than an arithmetic one.
+ */
+export type ShownConfirmation = Omit<ConfirmationModel, "feeSats" | "netEffect"> & {
+	feeSats: Provenanced<string>;
+	netEffect: { asset: Provenanced<string>; sats: Provenanced<string> }[];
+};
+
+/** Prepares the model to cross a boundary that cannot carry a bigint. */
+export function toShownConfirmation(model: ConfirmationModel): ShownConfirmation {
+	return {
+		...model,
+		feeSats: map(model.feeSats, (sats) => sats.toString()),
+		netEffect: model.netEffect.map((effect) => ({
+			asset: effect.asset,
+			sats: map(effect.sats, (sats) => sats.toString()),
+		})),
+	};
 }

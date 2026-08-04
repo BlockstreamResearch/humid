@@ -1,4 +1,4 @@
-import { type ConfirmationModel, describeOrigin } from "@humid/tx-manifest";
+import { describeOrigin, type ShownConfirmation } from "@humid/tx-manifest";
 import type { Provenanced } from "@humid/tx-manifest";
 
 import type { ConfirmationRenderer } from "@/common/Confirmation";
@@ -10,7 +10,7 @@ export const PROCESS_CT_CONFIRMATION_KIND = "liquid.processConfidentialTransacti
 export type ProcessCtConfirmationData = {
 	broadcast: boolean;
 	kind: typeof PROCESS_CT_CONFIRMATION_KIND;
-	shown: ConfirmationModel;
+	shown: ShownConfirmation;
 };
 
 export function isProcessCtConfirmationData(value: unknown): value is ProcessCtConfirmationData {
@@ -43,8 +43,14 @@ function Shown({ label, value }: { label: string; value: Provenanced<string> }) 
 	);
 }
 
-/** Base units as a person reads them, keeping the sign that says which way the money goes. */
-function amount(sats: bigint): string {
+/**
+ * Base units as a person reads them, keeping the sign that says which way the money goes.
+ *
+ * Takes the decimal string the wire form carries rather than a bigint: the model crosses
+ * a JSON boundary to get here, and JSON cannot carry one.
+ */
+function amount(value: string): string {
+	const sats = BigInt(value);
 	const negative = sats < 0n;
 	const whole = (negative ? -sats : sats).toString().padStart(9, "0");
 	const point = `${whole.slice(0, -8)}.${whole.slice(-8)}`.replace(/\.?0+$/, "");
