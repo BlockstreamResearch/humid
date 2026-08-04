@@ -12,6 +12,11 @@ const SOURCE =
 	"fn main() { jet::bip_0340_verify((param::PUB_KEY, jet::sig_all_hash()), witness::SIGNATURE) }";
 const TXID = "b".repeat(64);
 const DERIVED = "tex1p_derived";
+// A compile yields both spellings of where the covenant is. They are distinct on purpose:
+// the address is what a person is shown and what an on-chain output is compared against,
+// the scriptPubKey is what an output pays to, and only one of them is hex.
+const DERIVED_SCRIPT = "5120" + "11".repeat(32);
+const COMPILED = { address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT };
 
 function request(
 	overrides: Partial<ParsedLiquidProcessCtParams> = {},
@@ -26,7 +31,7 @@ function request(
 	};
 }
 
-const compile = () => DERIVED;
+const compile = () => COMPILED;
 const WALLET_SCRIPT = "0014" + "11".repeat(20);
 const readFeeRate = async () => 1000;
 const fundingUtxos = [
@@ -85,6 +90,7 @@ describe("reviewManifestAction", () => {
 					{
 						address: DERIVED,
 						role: "created",
+						scriptPubKeyHex: DERIVED_SCRIPT,
 						utxoType: "p2pk_output",
 						verified: "not-yet-on-chain",
 					},
@@ -503,7 +509,7 @@ describe("the mode a protocol declares reaches the compiler", () => {
 			compile: (input) => {
 				seen.push(input.includeDebugSymbols);
 
-				return DERIVED;
+				return COMPILED;
 			},
 			readTxOut: readTxOut("unused"),
 		}).then((result) => ({ result, seen }));

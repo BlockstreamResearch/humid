@@ -31,6 +31,8 @@ import { checkValidations } from "./validate";
  */
 export type CovenantFinding = {
 	address: string;
+	/** What an output pays to, which is not the address and is not interchangeable with it. */
+	scriptPubKeyHex: string;
 	role: "created" | "spent";
 	utxoType: string;
 	verified: "matches-chain" | "not-yet-on-chain";
@@ -237,6 +239,7 @@ export async function reviewManifestAction(
 			covenants.push({
 				address: derived.derivation.address,
 				role: "created",
+				scriptPubKeyHex: derived.derivation.scriptPubKeyHex,
 				utxoType: site.utxoType,
 				verified: "not-yet-on-chain",
 			});
@@ -298,6 +301,7 @@ export async function reviewManifestAction(
 		covenants.push({
 			address: derived.derivation.address,
 			role: "spent",
+			scriptPubKeyHex: derived.derivation.scriptPubKeyHex,
 			utxoType: site.utxoType,
 			verified: "matches-chain",
 		});
@@ -361,7 +365,9 @@ export async function reviewManifestAction(
 		return { reason: failed.reason, refused: true };
 	}
 
-	const covenantScripts = new Map(covenants.map((found) => [found.utxoType, found.address]));
+	const covenantScripts = new Map(
+		covenants.map((found) => [found.utxoType, found.scriptPubKeyHex]),
+	);
 	const outputs: ReviewedOutput[] = [];
 
 	for (const planned of plan.plan.outputs) {

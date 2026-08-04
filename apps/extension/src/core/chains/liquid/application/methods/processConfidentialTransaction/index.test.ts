@@ -20,6 +20,7 @@ import {
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const SOURCE_PATH = "./p2pk.simf";
 const SOURCE = "fn main() { }";
+const DERIVED_SCRIPT = "5120" + "aa".repeat(32);
 const DERIVED = "tex1p_derived";
 const WALLET_ADDRESS = "tex1q_wallet";
 const WALLET_SCRIPT = "0014" + "11".repeat(20);
@@ -80,7 +81,7 @@ function context(): LiquidProcessCtContext {
 	} as unknown as LiquidProcessCtContext;
 }
 
-type Recorded = { broadcasts: { txHex: string }[]; mnemonicCalls: number };
+type Recorded = { broadcasts: { txHex: string }[]; mnemonicCalls: number; paid: string[] };
 
 function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 	return {
@@ -96,8 +97,11 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 					covenantAddress() {
 						return DERIVED;
 					}
+					// Held across the wasm boundary, so the method releases it. A substitute
+					// without this passes only because nothing checked that it was released.
+					free() {}
 					scriptPubKeyHex() {
-						return "5120aabb";
+						return DERIVED_SCRIPT;
 					}
 				},
 				TransactionBuilder: class {
@@ -105,7 +109,12 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 					addCovenantInput(txid: string, vout: number) {
 						this.spends.push({ txid, vout });
 					}
-					addOutput() {}
+					// Records what it was handed rather than ignoring it. The real builder
+					// hex-decodes this, so a substitute that accepts anything is how an output
+					// paid to a bech32 address reached the module (DISC-138).
+					addOutput(scriptPubKeyHex: string) {
+						recorded.paid.push(scriptPubKeyHex);
+					}
 					addWalletInput(txid: string, vout: number) {
 						this.spends.push({ txid, vout });
 					}
@@ -145,7 +154,7 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 }
 
 function subject() {
-	const recorded: Recorded = { broadcasts: [], mnemonicCalls: 0 };
+	const recorded: Recorded = { broadcasts: [], mnemonicCalls: 0, paid: [] };
 
 	return { method: createProcessLiquidConfidentialTransaction(dependencies(recorded)), recorded };
 }
@@ -232,7 +241,7 @@ describe("processLiquidConfidentialTransaction across declaration shapes", () =>
 // other part of the request was well formed.
 describe("processLiquidConfidentialTransaction guards what it signs", () => {
 	function subjectSpending(extra: { txid: string; vout: number }) {
-		const recorded: Recorded = { broadcasts: [], mnemonicCalls: 0 };
+		const recorded: Recorded = { broadcasts: [], mnemonicCalls: 0, paid: [] };
 		const dependency = dependencies(recorded);
 
 		return {
@@ -364,5 +373,33 @@ describe("what the person is actually shown", () => {
 		// parts. What matters on this screen is that it is not the site's word.
 		expect(data.shown.netEffect[0]?.sats.origin).toBe("computed");
 		expect(data.shown.protocol.origin).toBe("site");
+	});
+});
+
+// The transaction builder hex-decodes every output script it is given, so a value that is
+// not hex fails inside the module with "Invalid script: Odd number of digits" — an error
+// that names neither the output nor what was wrong with it. A covenant output was paid to
+// the bech32 address the wallet derived, because the address and the scriptPubKey were two
+// spellings of one fact reached by two different calls (DISC-138).
+describe("what the outputs actually pay to", () => {
+	test("every output script is hex the builder can decode", async () => {
+		const { method, recorded } = subject();
+
+		await method(params(), context());
+
+		expect(recorded.paid.length).toBeGreaterThan(0);
+
+		for (const script of recorded.paid) {
+			expect(script).toMatch(/^(?:[0-9a-fA-F]{2})+$/);
+		}
+	});
+
+	test("and the covenant output pays the script, not the address it is shown as", async () => {
+		const { method, recorded } = subject();
+
+		await method(params(), context());
+
+		expect(recorded.paid).toContain(DERIVED_SCRIPT);
+		expect(recorded.paid).not.toContain(DERIVED);
 	});
 });

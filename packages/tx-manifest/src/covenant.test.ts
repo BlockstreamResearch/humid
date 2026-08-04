@@ -30,6 +30,8 @@ function request(overrides: Record<string, unknown> = {}) {
 }
 
 /** Stands in for the wasm module, recording what it was asked to compile. */
+const SCRIPT = `5120${"11".repeat(32)}`;
+
 function compiler(address = "tex1p_derived") {
 	const calls: {
 		argumentsJson: string;
@@ -49,7 +51,10 @@ function compiler(address = "tex1p_derived") {
 		}) => {
 			calls.push(input);
 
-			return address;
+			// Both spellings from one compile: the address a person is shown, and the script
+			// an output pays to. Only the second is hex, and confusing them is how a bech32
+			// string reached the transaction builder.
+			return { address, scriptPubKeyHex: SCRIPT };
 		},
 	};
 }
@@ -103,6 +108,7 @@ describe("covenantMatchesChain", () => {
 		address: "tex1p_derived",
 		argumentsJson: "{}",
 		extraLeavesJson: "[]",
+		scriptPubKeyHex: SCRIPT,
 		source: SOURCE,
 		utxoType: "p2pk_output",
 	};

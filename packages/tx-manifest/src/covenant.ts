@@ -18,11 +18,28 @@ export type CompileCovenant = (input: {
 	includeDebugSymbols: boolean;
 	network: string;
 	source: string;
-}) => Promise<string> | string;
+}) => Promise<CompiledCovenant> | CompiledCovenant;
+
+/**
+ * What one compile yields: where the covenant is, in both forms a transaction needs.
+ *
+ * Both come from the same compiled contract rather than from two calls, because they are
+ * two spellings of one fact. Deriving them separately is how an output came to be paid
+ * to a bech32 string — the transaction builder takes a scriptPubKey and hex-decodes it,
+ * and an address is not hex.
+ */
+export type CompiledCovenant = {
+	/** What a person is shown, and what an on-chain output is compared against. */
+	address: string;
+	/** What an output actually pays to. */
+	scriptPubKeyHex: string;
+};
 
 export type CovenantDerivation = {
 	/** The address the wallet derived by rebuilding the contract itself. */
 	address: string;
+	/** The same covenant as an output pays it, from the same compile. */
+	scriptPubKeyHex: string;
 	/** The extra taproot leaves it was built with, encoded. */
 	extraLeavesJson: string;
 	/**
@@ -106,7 +123,7 @@ export async function deriveCovenantAddress(
 	const extraLeavesJson = JSON.stringify(leaves.hex);
 
 	try {
-		const address = await input.compile({
+		const compiled = await input.compile({
 			argumentsJson,
 			extraLeavesJson,
 			includeDebugSymbols: input.includeDebugSymbols,
@@ -115,7 +132,14 @@ export async function deriveCovenantAddress(
 		});
 
 		return {
-			derivation: { address, argumentsJson, extraLeavesJson, source, utxoType: input.utxoType },
+			derivation: {
+				address: compiled.address,
+				argumentsJson,
+				extraLeavesJson,
+				scriptPubKeyHex: compiled.scriptPubKeyHex,
+				source,
+				utxoType: input.utxoType,
+			},
 			ok: true,
 		};
 	} catch (error) {

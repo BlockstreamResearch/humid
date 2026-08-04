@@ -251,19 +251,32 @@ export const createProcessLiquidConfidentialTransaction = (
 			await context.walletBackend.syncAccount(account);
 
 			const result = await reviewManifestAction(params, {
+				// One compiled contract, two spellings of where the covenant is. Deriving them
+				// from separate compiles is how an output came to be paid to a bech32 string:
+				// the builder hex-decodes what it is given, and an address is not hex.
 				compile: ({
 					argumentsJson,
 					extraLeavesJson,
 					includeDebugSymbols,
 					network: target,
 					source,
-				}) =>
-					new smplx.Contract(
+				}) => {
+					const contract = new smplx.Contract(
 						source,
 						argumentsJson,
 						extraLeavesJson,
 						includeDebugSymbols,
-					).covenantAddress(target),
+					);
+
+					try {
+						return {
+							address: contract.covenantAddress(target),
+							scriptPubKeyHex: contract.scriptPubKeyHex(target),
+						};
+					} finally {
+						contract.free();
+					}
+				},
 				compilerVersion: smplx.compilerVersion(),
 				policyAsset: account.rawPolicyAssetId,
 				scriptPubKeyOf: ({ argumentsJson, source }) =>
