@@ -688,3 +688,105 @@ describe("golden covenant addresses", () => {
 		expect(address({ pubkey: `0x${"01".repeat(32)}` })).not.toBe(address({}));
 	});
 });
+
+// The deployed protocol's own contracts. These are the sources `lending`, `lending_v2` and
+// `lending_v3` reference, and until they were vendored nothing could check that this wallet
+// compiles what a real protocol deployed rather than only what we wrote to suit it.
+describe("the simplicity-lending contracts", () => {
+	const CONTRACTS = "../../domain/manifest/__fixtures__/contracts";
+
+	async function source(name: string): Promise<string> {
+		const { readFile: read } = await import("node:fs/promises");
+		const { dirname, join } = await import("node:path");
+		const { fileURLToPath } = await import("node:url");
+
+		return read(join(dirname(fileURLToPath(import.meta.url)), CONTRACTS, `${name}.simf`), "utf8");
+	}
+
+	const U256 = `0x${"11".repeat(32)}`;
+	const ARGUMENTS: Record<string, Record<string, { type: string; value: string }>> = {
+		asset_auth: {
+			ASSET_AMOUNT: { type: "u64", value: "0x0000000000000001" },
+			ASSET_ID: { type: "u256", value: U256 },
+			WITH_ASSET_BURN: { type: "bool", value: "true" },
+		},
+		asset_auth_vault: {
+			FINALIZED_VAULT_COV_HASH: { type: "u256", value: U256 },
+			IS_ACTIVE: { type: "bool", value: "true" },
+			KEEPER_AUTH_ASSET_AMOUNT: { type: "u64", value: "0x0000000000000001" },
+			KEEPER_AUTH_ASSET_ID: { type: "u256", value: U256 },
+			SUPPLIER_AUTH_ASSET_ID: { type: "u256", value: U256 },
+			VAULT_ASSET_ID: { type: "u256", value: U256 },
+			WITH_KEEPER_ASSET_BURN: { type: "bool", value: "true" },
+			WITH_SUPPLIER_ASSET_BURN: { type: "bool", value: "true" },
+		},
+		issuance_factory: {
+			ISSUING_UTXOS_COUNT: { type: "u8", value: "0x01" },
+			REISSUANCE_FLAGS: { type: "u64", value: "0x0000000000000001" },
+		},
+		lending: {
+			BORROWER_NFT_ASSET_ID: { type: "u256", value: U256 },
+			COLLATERAL_AMOUNT: { type: "u64", value: "0x0000000000000001" },
+			COLLATERAL_ASSET_ID: { type: "u256", value: U256 },
+			FINALIZED_LENDER_VAULT_COV_HASH: { type: "u256", value: U256 },
+			FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH: { type: "u256", value: U256 },
+			LENDER_NFT_ASSET_ID: { type: "u256", value: U256 },
+			LENDER_VAULT_COV_HASH: { type: "u256", value: U256 },
+			LOAN_EXPIRATION_TIME: { type: "u32", value: "0x00000001" },
+			PRINCIPAL_AMOUNT: { type: "u64", value: "0x0000000000000001" },
+			PRINCIPAL_ASSET_ID: { type: "u256", value: U256 },
+			PRINCIPAL_INTEREST_RATE: { type: "u64", value: "0x0000000000000001" },
+			PRINCIPAL_OUTPUT_SCRIPT_HASH: { type: "u256", value: U256 },
+			PROTOCOL_FEE_VAULT_COV_HASH: { type: "u256", value: U256 },
+		},
+		script_auth: { SCRIPT_HASH: { type: "u256", value: U256 } },
+	};
+
+	// The commitment merkle root is what the covenant address is built from, so pinning it
+	// pins compilation itself: a compiler change, a parameter-encoding change or a debug-mode
+	// change all move it, and each of those would otherwise move an address silently.
+	const GOLDEN: Record<string, string> = {
+		asset_auth: "20fd155233a87fcc910a66f0395dc511ad08c5d7a8a9d774881de5520ac0ebf1",
+		asset_auth_vault: "8233cab286b79ac63ccac8f2fc67722cfb1ee9a5ca3e1d4179d09f5a9e1610de",
+		issuance_factory: "f610387190b1bc269d980bb391063fae96ea123dfce9a078936a1945d8675504",
+		lending: "34019215b7a6edffbf69e47d3795cc951f9962b723ecb3cf72f1f551669afe5c",
+		script_auth: "9c89c4aa4a20603c4e21b073d71238c37a6285b8e17b5bf19af1c74519781c18",
+	};
+
+	for (const [name, cmr] of Object.entries(GOLDEN)) {
+		test(`${name} compiles to a fixed commitment merkle root`, async () => {
+			const contract = new bindings.Contract(
+				await source(name),
+				JSON.stringify(ARGUMENTS[name]),
+				undefined,
+				undefined,
+			);
+
+			expect(contract.commitmentMerkleRoot()).toBe(cmr);
+		});
+	}
+
+	// lending.simf is the reason the bounded fixed point exists: four of its thirteen
+	// parameters are other covenants' script hashes, two of them the finalised form of the
+	// same vaults. A different hash going in is a different address coming out.
+	test("lending's address follows the covenant hashes compiled into it", async () => {
+		const text = await source("lending");
+		const other = {
+			...ARGUMENTS.lending,
+			LENDER_VAULT_COV_HASH: { type: "u256", value: `0x${"22".repeat(32)}` },
+		};
+
+		expect(
+			new bindings.Contract(text, JSON.stringify(other), undefined, undefined).covenantAddress(
+				"liquid-testnet",
+			),
+		).not.toBe(
+			new bindings.Contract(
+				text,
+				JSON.stringify(ARGUMENTS.lending),
+				undefined,
+				undefined,
+			).covenantAddress("liquid-testnet"),
+		);
+	});
+});
