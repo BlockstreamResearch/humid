@@ -1,6 +1,13 @@
 /** One wallet output the selector may spend, as the wallet already describes it. */
 export type SelectableUtxo = {
 	amount: string;
+	/**
+	 * Where this output pays, when the wallet knows it.
+	 *
+	 * Only needed by an action that pins an input to one address. Optional because the
+	 * wallet's own snapshot carries it and a caller assembling one by hand should not have to.
+	 */
+	scriptPubKeyHex?: string;
 	spendable: boolean;
 	txOut: string;
 	txid: string;

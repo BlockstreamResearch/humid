@@ -5,6 +5,7 @@ import { type ConfirmationModel, confirmationModel } from "./confirmation";
 import { type CompileCovenant, covenantMatchesChain, deriveCovenantAddress } from "./covenant";
 import { type CompileScriptPubKey, covenantHashFrom } from "./covenantHash";
 import { estimateFeeSats } from "./fee";
+import { type InputRule, resolveInputRules } from "./inputRules";
 import { asArray, asRecord } from "./json";
 import {
 	findAction,
@@ -43,6 +44,8 @@ export type CovenantFinding = {
  */
 export type ReviewedCovenantInput = {
 	argumentsJson: string;
+	/** The manifest's id for the input, so what the action requires of it can be found. */
+	id: string;
 	/**
 	 * The witness the signer must fill with a signature over this transaction.
 	 *
@@ -108,6 +111,8 @@ export type ManifestReview = {
 	normalisation: NormalisationNote[];
 	outputs: ReviewedOutput[];
 	protocol: string;
+	/** What each input must carry beyond its source, when the action says so. */
+	inputRules: InputRule[];
 	/** The wallet's own outputs that fund this, chosen by the wallet. */
 	selected: SelectableUtxo[];
 };
@@ -282,6 +287,7 @@ export async function reviewManifestAction(
 
 		covenantInputs.push({
 			argumentsJson: derived.derivation.argumentsJson,
+			id: site.id,
 			...(site.signatureWitness === undefined ? {} : { signatureWitness: site.signatureWitness }),
 			source: derived.derivation.source,
 			txOutHex,
@@ -339,6 +345,14 @@ export async function reviewManifestAction(
 		return { reason: plan.reason, refused: true };
 	}
 
+	// What the action requires of each input beyond where the money comes from: a relative
+	// timelock a covenant may depend on, and an address it may pin funding to.
+	const inputRules = resolveInputRules(action, { ...scope, fee: estimatedFee }, notes);
+
+	if (!inputRules.ok) {
+		return { reason: inputRules.reason, refused: true };
+	}
+
 	// The protocol's own rules about this action, checked once its amounts are known — a rule
 	// comparing an amount cannot be checked before there is one.
 	const failed = checkValidations(action, { ...scope, fee: estimatedFee }, notes);
@@ -372,8 +386,24 @@ export async function reviewManifestAction(
 		outputs.push({ id: planned.id, sats: planned.sats, scriptPubKeyHex });
 	}
 
+	// An action pinning an input to one address restricts what the wallet may fund it from.
+	// A protocol requiring a specific address is usually requiring a specific key, and funding
+	// it from whatever the wallet happens to hold builds a transaction it did not ask for.
+	const pinned = inputRules.rules.find((rule) => rule.fromAddress !== undefined)?.fromAddress;
+	const fundable =
+		pinned === undefined
+			? input.fundingUtxos
+			: input.fundingUtxos.filter((utxo) => utxo.scriptPubKeyHex === pinned);
+
+	if (pinned !== undefined && fundable.length === 0) {
+		return {
+			reason: `This action must be funded from ${pinned}, and this wallet holds nothing there.`,
+			refused: true,
+		};
+	}
+
 	const selection: CoinSelection = selectCoins(
-		input.fundingUtxos,
+		fundable,
 		plan.plan.fundingSats,
 		BigInt(Math.ceil(feeRateSatsPerKvb)),
 	);
@@ -392,6 +422,7 @@ export async function reviewManifestAction(
 		ignoredConstructs: ignored(inspectConstructs(manifest)),
 		normalisation: notes,
 		outputs,
+		inputRules: inputRules.rules,
 		protocol: manifest.protocol ?? "",
 		selected: selection.selected,
 	};

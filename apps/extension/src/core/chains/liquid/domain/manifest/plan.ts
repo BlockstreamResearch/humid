@@ -1,7 +1,8 @@
+import { encodeDataParts } from "./encode";
 import { evaluateExpression } from "./evaluate";
 import { asArray, asRecord } from "./json";
 import type { NormalisationNote, NormalisedAction } from "./normalise";
-import type { ReferenceScope } from "./references";
+import { type ReferenceScope, resolveReference } from "./references";
 
 /**
  * A concrete amount the wallet worked out for one of the action's outputs.
@@ -14,8 +15,12 @@ export type PlannedOutput = {
 	id: string;
 	/** Absent for change, whose amount is whatever is left after the fee. */
 	sats?: bigint;
-	/** Where it pays: a covenant type the wallet derived, the wallet, or change. */
-	target: { kind: "change" } | { kind: "covenant"; utxoType: string } | { kind: "wallet" };
+	/** Where it pays: a covenant type the wallet derived, the wallet, change, or nowhere. */
+	target:
+		| { kind: "change" }
+		| { kind: "covenant"; utxoType: string }
+		| { kind: "data"; hex: string }
+		| { kind: "wallet" };
 };
 
 export type PlannedSpend = {
@@ -51,17 +56,22 @@ export function planAction(
 		}
 
 		const id = typeof output.id === "string" ? output.id : "";
-		const target = resolveTarget(output.destination);
+		const target = resolveTarget(output.destination, output.data, scope, notes);
 
-		if (!target) {
-			return {
-				ok: false,
-				reason: `Output ${id || "(unnamed)"} pays somewhere this runtime does not resolve yet.`,
-			};
+		if (!target.ok) {
+			return { ok: false, reason: `Output ${id || "(unnamed)"} ${target.reason}` };
 		}
 
-		if (target.kind === "change") {
-			outputs.push({ id, target });
+		if (target.target.kind === "change") {
+			outputs.push({ id, target: target.target });
+
+			continue;
+		}
+
+		// An op_return output carries bytes rather than value. It is provably unspendable, so
+		// it pays nothing and nothing needs to fund it.
+		if (target.target.kind === "data") {
+			outputs.push({ id, sats: 0n, target: target.target });
 
 			continue;
 		}
@@ -83,7 +93,7 @@ export function planAction(
 		}
 
 		fundingSats += amount.sats;
-		outputs.push({ id, sats: amount.sats, target });
+		outputs.push({ id, sats: amount.sats, target: target.target });
 	}
 
 	if (outputs.length === 0) {
@@ -99,18 +109,61 @@ export function planAction(
  * and the site accepts nothing else bare precisely so it cannot mean a parameter by
  * accident.
  */
-function resolveTarget(destination: unknown): PlannedOutput["target"] | undefined {
+function resolveTarget(
+	destination: unknown,
+	data: unknown,
+	scope: ReferenceScope,
+	notes?: NormalisationNote[],
+): { ok: false; reason: string } | { ok: true; target: PlannedOutput["target"] } {
 	if (destination === "change") {
-		return { kind: "change" };
+		return { ok: true, target: { kind: "change" } };
 	}
 
 	if (destination === "wallet") {
-		return { kind: "wallet" };
+		return { ok: true, target: { kind: "wallet" } };
 	}
 
-	const utxoType = asRecord(destination)?.utxo_type;
+	const record = asRecord(destination);
+	const utxoType = record?.utxo_type;
 
-	return typeof utxoType === "string" ? { kind: "covenant", utxoType } : undefined;
+	if (typeof utxoType === "string") {
+		return { ok: true, target: { kind: "covenant", utxoType } };
+	}
+
+	if (record?.type !== "op_return") {
+		return { ok: false, reason: "pays somewhere this runtime does not resolve yet." };
+	}
+
+	// The payload is the output. An op_return with nothing in it says nothing, and a layout
+	// the runtime could not encode is one the protocol's own reader will not recognise.
+	const encoded = encodeDataParts(data, (reference) => {
+		const found = resolveReference(reference, "expression", scope, notes);
+
+		return found.ok ? { ok: true, value: found.value } : { ok: false, reason: found.reason };
+	});
+
+	if (!encoded.ok) {
+		return { ok: false, reason: `carries data this runtime cannot encode: ${encoded.reason}` };
+	}
+
+	return { ok: true, target: { hex: opReturnScript(encoded.hex), kind: "data" } };
+}
+
+/**
+ * An OP_RETURN script carrying these bytes.
+ *
+ * `6a` then a push of the payload — a direct push below 76 bytes, `4c` and a length byte up
+ * to 255. Longer than that is refused rather than encoded with a wider push, because nothing
+ * in the corpus needs one and a push nobody has exercised is a script nobody has checked.
+ */
+function opReturnScript(payloadHex: string): string {
+	const length = payloadHex.length / 2;
+
+	if (length < 0x4c) {
+		return `6a${length.toString(16).padStart(2, "0")}${payloadHex}`;
+	}
+
+	return `6a4c${length.toString(16).padStart(2, "0")}${payloadHex}`;
 }
 
 /** A literal, or an expression evaluated at the amount site. */

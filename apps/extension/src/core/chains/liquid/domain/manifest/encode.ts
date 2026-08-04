@@ -89,7 +89,12 @@ export function encodeLeafItem(
  * no endianness or padding to choose — so a document carrying one of those keys here is
  * refused rather than quietly encoded as if it had said nothing.
  */
-export function encodeDataParts(data: unknown): EncodedBytes {
+export function encodeDataParts(
+	data: unknown,
+	resolve: (reference: string) => { ok: true; value: unknown } | { ok: false; reason: string } = (
+		reference,
+	) => ({ ok: true, value: reference }),
+): EncodedBytes {
 	const declared = asRecord(data)?.parts;
 
 	if (!Array.isArray(declared)) {
@@ -123,9 +128,21 @@ export function encodeDataParts(data: unknown): EncodedBytes {
 			};
 		}
 
+		// A part's value can be a reference — every one in the corpus is — so it is resolved
+		// before it is encoded. Encoding the reference text itself would produce bytes that
+		// look like a payload and are the name of one.
+		const resolved =
+			typeof part.value === "string" && !part.value.startsWith("0x")
+				? resolve(part.value)
+				: { ok: true as const, value: part.value };
+
+		if (!resolved.ok) {
+			return { ok: false, reason: `A data part could not be resolved: ${resolved.reason}` };
+		}
+
 		// Big-endian, because there is no key to say otherwise and a length-prefixed binary
 		// layout written by hand reads in that order.
-		const encoded = encodeTyped(type, part.value);
+		const encoded = encodeTyped(type, resolved.value);
 
 		if (!encoded.ok) {
 			return encoded;

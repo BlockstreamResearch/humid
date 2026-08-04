@@ -155,6 +155,7 @@ export const createProcessLiquidConfidentialTransaction = (
 								// naming it is what asks for one.
 								undefined,
 								covenant.signatureWitness,
+								sequenceFor(review, covenant.id),
 							);
 						}
 
@@ -268,6 +269,17 @@ export const createProcessLiquidConfidentialTransaction = (
 	});
 
 export const processLiquidConfidentialTransaction = createProcessLiquidConfidentialTransaction();
+
+/**
+ * The relative timelock this covenant input must carry, when its action declared one.
+ *
+ * A covenant can require the timelock rather than merely permit it, and the chain rejects a
+ * transaction built without one — so a declaration dropped here fails on broadcast, far from
+ * anything that explains it.
+ */
+function sequenceFor(review: ManifestReview, id: string): number | undefined {
+	return review.inputRules.find((rule) => rule.id === id)?.sequence;
+}
 
 function requireNetwork(context: LiquidProcessCtContext): string {
 	const network = SMPLX_NETWORKS[context.chain.settings.network];

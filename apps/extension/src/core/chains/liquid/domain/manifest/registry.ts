@@ -103,7 +103,7 @@ const SITES = {
 			amount_sat: READ,
 			asset: READ,
 			description: SHOWN,
-			from_address: UNIMPLEMENTED,
+			from_address: READ,
 			id: READ,
 			issuance: UNIMPLEMENTED,
 			on_resolved: UNIMPLEMENTED,
@@ -114,7 +114,7 @@ const SITES = {
 			// this, so a manifest asking for index 0 and getting 1 builds a transaction the
 			// covenant rejects on chain.
 			required_index: UNIMPLEMENTED,
-			sequence: UNIMPLEMENTED,
+			sequence: READ,
 			ui: SHOWN,
 			utxo_source: READ,
 			// Read for the one thing the runtime can act on — which witness the signer must
@@ -152,7 +152,7 @@ const SITES = {
 			asset: READ,
 			condition: UNIMPLEMENTED,
 			confidential: UNIMPLEMENTED,
-			data: UNIMPLEMENTED,
+			data: READ,
 			description: SHOWN,
 			destination: READ,
 			id: READ,
