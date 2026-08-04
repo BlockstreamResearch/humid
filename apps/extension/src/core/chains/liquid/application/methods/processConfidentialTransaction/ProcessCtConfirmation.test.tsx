@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { computed, fromSite, verified } from "../../../domain/manifest/provenance";
+import { computed, fromSite, verified } from "@humid/tx-manifest";
+
 import {
 	isProcessCtConfirmationData,
 	PROCESS_CT_CONFIRMATION_KIND,

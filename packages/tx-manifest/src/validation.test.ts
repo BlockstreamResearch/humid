@@ -16,20 +16,34 @@ const base = {
 
 describe("parseLiquidProcessCtParams", () => {
 	test("accepts the six-part request", () => {
-		expect(parseLiquidProcessCtParams(base).action).toBe("Pay");
+		const parsed = parseLiquidProcessCtParams(base);
+
+		expect(parsed.ok && parsed.request.action).toBe("Pay");
 	});
 
 	test("defaults broadcast to off, so nothing reaches the network unasked", () => {
-		expect(parseLiquidProcessCtParams(base).broadcast).toBe(false);
+		const parsed = parseLiquidProcessCtParams(base);
+
+		expect(parsed.ok && parsed.request.broadcast).toBe(false);
 	});
 
 	for (const supplied of ["fee", "feeSats", "feeRate", "feeRateSatsPerKvb"]) {
 		test(`refuses a request carrying ${supplied}`, () => {
-			expect(() => parseLiquidProcessCtParams({ ...base, [supplied]: 500 })).toThrow();
+			expect(parseLiquidProcessCtParams({ ...base, [supplied]: 500 }).ok).toBe(false);
 		});
 	}
 
 	test("refuses a request with no manifest", () => {
-		expect(() => parseLiquidProcessCtParams({ ...base, manifest: undefined })).toThrow();
+		expect(parseLiquidProcessCtParams({ ...base, manifest: undefined }).ok).toBe(false);
+	});
+
+	// The caller needs to know which field was wrong, not only that something was. It is a
+	// value rather than a thrown transport error because this package has no transport.
+	test("and says which field, so the caller can name it", () => {
+		const parsed = parseLiquidProcessCtParams({ ...base, manifest: undefined });
+
+		expect(parsed.ok ? [] : Object.keys(parsed.malformed.details.fieldErrors)).toContain(
+			"manifest",
+		);
 	});
 });

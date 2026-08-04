@@ -54,10 +54,10 @@ describe("the runtime reads nothing it remembered", () => {
 			}
 		}
 
-		// One import reaches outside: the wallet RPC error the request validator throws. It
-		// carries no state and reads nothing, and is listed rather than excluded by pattern so
-		// that a second one has to be added here deliberately.
-		expect(offenders).toEqual(["validation.ts → @/core/wallet-rpc/errors"]);
+		// Nothing reaches outside the package. This was one import — the wallet RPC error the
+		// request validator threw — until the runtime moved out of the extension. Now a malformed
+		// request comes back as a value and the caller that has a transport owns the refusal.
+		expect(offenders).toEqual([]);
 	});
 });
 

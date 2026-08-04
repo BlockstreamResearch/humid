@@ -1,8 +1,8 @@
+import { type ConfirmationModel, describeOrigin } from "@humid/tx-manifest";
+import type { Provenanced } from "@humid/tx-manifest";
+
 import type { ConfirmationRenderer } from "@/common/Confirmation";
 import { UiButton } from "@/ui/UiButton/base";
-
-import { type ConfirmationModel, describeOrigin } from "../../../domain/manifest/confirmation";
-import type { Provenanced } from "../../../domain/manifest/provenance";
 
 /** What the method puts on the confirmation payload, and how this surface recognises it. */
 export const PROCESS_CT_CONFIRMATION_KIND = "liquid.processConfidentialTransaction";

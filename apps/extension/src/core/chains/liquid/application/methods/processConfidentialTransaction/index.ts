@@ -1,3 +1,16 @@
+import {
+	createEsploraFeeRateReader,
+	createEsploraTxOutReader,
+	guardSpentInputs,
+	isRefusal,
+	type ManifestReview,
+	type ParsedLiquidProcessCtParams,
+	parseLiquidProcessCtParams,
+	type ReadFeeRate,
+	type ReadTxOut,
+	reviewManifestAction,
+} from "@humid/tx-manifest";
+
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
@@ -8,20 +21,6 @@ import { withAccountMnemonic } from "../../../adapters/lwk/wallet/withAccountMne
 import { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
-import {
-	createEsploraFeeRateReader,
-	createEsploraTxOutReader,
-	type ReadFeeRate,
-	type ReadTxOut,
-} from "../../../domain/manifest/chainRead";
-import { guardSpentInputs } from "../../../domain/manifest/inputGuard";
-import {
-	isRefusal,
-	type ManifestReview,
-	reviewManifestAction,
-} from "../../../domain/manifest/review";
-import type { ParsedLiquidProcessCtParams } from "../../../domain/manifest/types";
-import { parseLiquidProcessCtParams } from "../../../domain/manifest/validation";
 import type { LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../../dappAccountScope";
 import { PROCESS_CT_CONFIRMATION_KIND } from "./ProcessCtConfirmation";
@@ -99,6 +98,26 @@ export const liquidProcessCtDependencies: LiquidProcessCtDependencies = {
 	scriptPubKeyHexOf: toScriptPubKeyHex,
 	withMnemonic: withAccountMnemonic,
 };
+
+/**
+ * Turns the runtime's malformed-request answer into the wire error a caller sees.
+ *
+ * The runtime returns a value rather than throwing because it has no transport; this
+ * method has one, and owns how a refusal reaches whoever asked.
+ */
+function parseRequest(params: unknown): ParsedLiquidProcessCtParams {
+	const parsed = parseLiquidProcessCtParams(params);
+
+	if (!parsed.ok) {
+		throw new WalletRpcInvalidParamsError(
+			parsed.malformed.message,
+			parsed.malformed.details,
+			WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
+		);
+	}
+
+	return parsed.request;
+}
 
 export const createProcessLiquidConfidentialTransaction = (
 	dependencies: LiquidProcessCtDependencies = liquidProcessCtDependencies,
@@ -221,7 +240,7 @@ export const createProcessLiquidConfidentialTransaction = (
 			return { broadcast: true, ...signed, txid: sent.txid };
 		},
 		id: LIQUID_WALLET_RPC_METHODS.PROCESS_CONFIDENTIAL_TRANSACTION,
-		parse: parseLiquidProcessCtParams,
+		parse: parseRequest,
 		review: async ({ context, params }) => {
 			const network = requireNetwork(context);
 			const account = await dependencies.resolveAccount(context);

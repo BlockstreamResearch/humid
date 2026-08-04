@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import groupedManifest from "../../../domain/manifest/__fixtures__/p2pk-grouped.manifest.json";
-import p2pkManifest from "../../../domain/manifest/__fixtures__/p2pk.manifest.json";
+import groupedManifest from "@humid/tx-manifest/fixtures/p2pk-grouped.manifest.json";
+import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk.manifest.json";
+
 import {
 	createProcessLiquidConfidentialTransaction,
 	type LiquidProcessCtContext,

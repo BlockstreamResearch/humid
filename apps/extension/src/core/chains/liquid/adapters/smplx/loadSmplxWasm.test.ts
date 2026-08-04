@@ -2,11 +2,10 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 
+import { estimateFeeSats } from "@humid/tx-manifest";
+import { guardSpentInputs } from "@humid/tx-manifest";
+import { spentInputs } from "@humid/tx-manifest";
 import * as smplxWasmBindings from "smplx-wasm/smplx_wasm_bg.js";
-
-import { estimateFeeSats } from "../../domain/manifest/fee";
-import { guardSpentInputs } from "../../domain/manifest/inputGuard";
-import { spentInputs } from "../../domain/manifest/spentInputs";
 
 // Exercises the exact bindings `loadSmplxWasm` consumes. The only difference is where
 // the module bytes come from: the extension fetches them through a Vite asset URL, this
@@ -694,7 +693,7 @@ describe("golden covenant addresses", () => {
 // `lending_v3` reference, and until they were vendored nothing could check that this wallet
 // compiles what a real protocol deployed rather than only what we wrote to suit it.
 describe("the simplicity-lending contracts", () => {
-	const CONTRACTS = "../../domain/manifest/__fixtures__/contracts";
+	const CONTRACTS = "../../../../../../../../packages/tx-manifest/src/__fixtures__/contracts";
 
 	async function source(name: string): Promise<string> {
 		const { readFile: read } = await import("node:fs/promises");

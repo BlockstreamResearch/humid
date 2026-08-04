@@ -1,0 +1,16 @@
+{
+	"name": "@humid/tx-manifest",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Reads a txManifest protocol document and resolves one of its actions into the exact transaction a wallet must sign. Wallet-agnostic: it holds no keys, reaches no network and remembers nothing between calls.",
+	"type": "module",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./fixtures/*": "./src/__fixtures__/*"
+	},
+	"dependencies": {
+		"@noble/hashes": "^1.7.1",
+		"zod": "^4.0.0"
+	}
+}
