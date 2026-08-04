@@ -80,3 +80,47 @@ describe("the contract signing identity", () => {
 		await expect(read).rejects.toThrow("signet");
 	});
 });
+
+// The screen this serves is per-account, and the account it shows is not necessarily the
+// selected one. Reading the selected account's identity there would put one account's
+// address and key on another account's screen with nothing to say so — and those are the
+// values someone then funds and locks a covenant to.
+describe("which account it reads", () => {
+	test("follows the group index it is given, so two accounts do not answer alike", async () => {
+		const seen: number[] = [];
+		const spy = {
+			loadSmplx: async () => ({
+				WalletSigner: class {
+					constructor(
+						readonly mnemonic: string,
+						readonly network: string,
+					) {}
+					address() {
+						return ADDRESS;
+					}
+					free() {}
+					schnorrPublicKey() {
+						return KEY;
+					}
+				},
+			}),
+			withMnemonic: async (
+				request: { accountGroupIndex: number },
+				use: (mnemonic: string) => unknown,
+			): Promise<unknown> => {
+				seen.push(request.accountGroupIndex);
+
+				return use(`mnemonic for ${request.accountGroupIndex}`);
+			},
+		} as never;
+
+		for (const accountGroupIndex of [0, 3]) {
+			await readLiquidContractIdentity(
+				{ accountGroupIndex, chain: chain("testnet"), keyManagerState: {} as never },
+				spy,
+			);
+		}
+
+		expect(seen).toEqual([0, 3]);
+	});
+});

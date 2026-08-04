@@ -2,6 +2,7 @@ import browser from "webextension-polyfill";
 
 import { createAccountRegistry } from "@/core/accounts/application/account-registry";
 import type { AccountModelState } from "@/core/accounts/application/account-registry/model/account-model";
+import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
 import type {
 	ActivityPage,
 	EstimateMaxSendInput,
@@ -283,11 +284,26 @@ const init = async () => {
 	// the same as the receive address above: the contract SDK signs with one key at a fixed
 	// path and returns change to that key's own unblinded address, so a covenant action can
 	// only spend what sits there. Reading it is what makes that limit visible.
-	const readContractIdentity = async (): Promise<LiquidContractIdentity> => {
+	const readContractIdentity = async (
+		accountGroupId?: AccountGroupId,
+	): Promise<LiquidContractIdentity> => {
 		const { input } = await resolveSelectedLiquidAccount();
 
+		// The settings page is per-account, and the account it shows is not necessarily the
+		// selected one. Reading the selected account's identity there would put one
+		// account's address and key on another account's screen, with nothing to say so —
+		// and the values are what someone then funds and locks a covenant to.
+		const group =
+			accountGroupId === undefined
+				? undefined
+				: input.keyManagerState.accountModel.accountGroups[accountGroupId];
+
+		if (accountGroupId !== undefined && !group) {
+			throw new Error(`No account group ${accountGroupId}.`);
+		}
+
 		return readLiquidContractIdentity({
-			accountGroupIndex: input.accountGroupIndex,
+			accountGroupIndex: group ? (group.groupIndex ?? 0) : input.accountGroupIndex,
 			chain: input.chain,
 			keyManagerState: input.keyManagerState,
 		});

@@ -113,7 +113,7 @@ export function AccountDetailView({
 					>
 						<SettingsRowContent icon={PlugSocketIcon} label="Connected dapps" />
 					</Link>
-					<ContractIdentityRow />
+					<ContractIdentityRow accountGroupId={accountGroupId} />
 					<button
 						className={cn(settingsRowClass, "text-destructive hover:bg-destructive/10")}
 						onClick={() => setRemoveOpen(true)}

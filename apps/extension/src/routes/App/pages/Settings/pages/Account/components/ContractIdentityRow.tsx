@@ -1,6 +1,7 @@
 import { CodeIcon } from "@hugeicons/core-free-icons";
 import { useState } from "react";
 
+import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
 import type { LiquidContractIdentity } from "@/core/chains/liquid/application/contractIdentity";
 import { readLiquidContractIdentity } from "@/core/chains/liquid/contractIdentityClient";
 import {
@@ -40,7 +41,7 @@ function Value({ hint, label, value }: { hint: string; label: string; value: str
  * is read on demand rather than with the page because reading it loads the contract
  * module, which is several megabytes.
  */
-export function ContractIdentityRow() {
+export function ContractIdentityRow({ accountGroupId }: { accountGroupId: AccountGroupId }) {
 	const [identity, setIdentity] = useState<LiquidContractIdentity>();
 	const [error, setError] = useState<string>();
 	const [loading, setLoading] = useState(false);
@@ -50,7 +51,7 @@ export function ContractIdentityRow() {
 		setError(undefined);
 
 		try {
-			setIdentity(await readLiquidContractIdentity());
+			setIdentity(await readLiquidContractIdentity(accountGroupId));
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : "Could not read the contract identity.");
 		} finally {
