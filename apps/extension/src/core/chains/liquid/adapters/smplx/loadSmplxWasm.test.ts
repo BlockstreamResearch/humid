@@ -118,3 +118,56 @@ describe("contract parameters", () => {
 		expect(() => contract.commitmentMerkleRoot()).toThrow();
 	});
 });
+
+// A BIP39 test vector, not a wallet mnemonic. Its derived values are stable, which is
+// what makes them assertable.
+const TEST_MNEMONIC =
+	"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+describe("wallet signer", () => {
+	test("derives an address for the network it was built for", () => {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+
+		expect(signer.address()).toMatch(/^tex1/);
+		signer.free();
+	});
+
+	test("derives a different address on a different network from the same mnemonic", () => {
+		const testnet = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+		const mainnet = new bindings.WalletSigner(TEST_MNEMONIC, "liquid");
+
+		expect(testnet.address()).not.toBe(mainnet.address());
+		testnet.free();
+		mainnet.free();
+	});
+
+	test("derives the same values twice from the same mnemonic", () => {
+		const first = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+		const second = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+
+		expect(first.schnorrPublicKey()).toBe(second.schnorrPublicKey());
+		expect(first.address()).toBe(second.address());
+		first.free();
+		second.free();
+	});
+
+	test("exposes an x-only key of the right shape for a covenant parameter", () => {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+
+		expect(signer.schnorrPublicKey()).toMatch(/^[0-9a-f]{64}$/);
+		signer.free();
+	});
+
+	// The confidential address is what a blinded output pays to; it must differ from the
+	// unblinded one or blinding is not happening.
+	test("the confidential address differs from the plain one", () => {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+
+		expect(signer.confidentialAddress()).not.toBe(signer.address());
+		signer.free();
+	});
+
+	test("refuses an unknown network", () => {
+		expect(() => new bindings.WalletSigner(TEST_MNEMONIC, "not-a-network")).toThrow();
+	});
+});
