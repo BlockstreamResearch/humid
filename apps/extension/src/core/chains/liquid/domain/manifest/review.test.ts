@@ -25,6 +25,20 @@ function request(
 }
 
 const compile = () => DERIVED;
+const WALLET_SCRIPT = "0014" + "11".repeat(20);
+const readFeeRate = async () => 1000;
+const fundingUtxos = [
+	{ amount: "1000000", spendable: true, txid: "c".repeat(64), txOut: "00", vout: 0 },
+];
+
+/** The three dependencies every case shares; individual tests override what they exercise. */
+const deps = {
+	compile,
+	fundingUtxos,
+	network: "liquid",
+	readFeeRate,
+	walletScriptPubKeyHex: WALLET_SCRIPT,
+};
 const readTxOut = (address: string) => async () => ({
 	scriptPubKeyAddress: address,
 	scriptPubKeyHex: "5120aabb",
@@ -47,8 +61,7 @@ describe("reviewManifestAction", () => {
 	describe("creating a covenant", () => {
 		test("reports the derived address as not yet on chain", async () => {
 			const result = await reviewManifestAction(request(), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: readTxOut("unused"),
 			});
 
@@ -70,8 +83,7 @@ describe("reviewManifestAction", () => {
 			let asked = 0;
 
 			await reviewManifestAction(request(), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: async () => {
 					asked += 1;
 
@@ -86,27 +98,26 @@ describe("reviewManifestAction", () => {
 	// Receive spends the covenant. This is where the wallet's derivation is checked against
 	// something it did not get from the requester.
 	describe("spending a covenant", () => {
-		test("passes when the rebuilt contract lands where the funds are", async () => {
+		// Receive verifies but cannot yet be built: its output amount references another
+		// input, which the planner does not evaluate. Asserting that the refusal is about the
+		// amount rather than the covenant is what shows verification got past.
+		test("gets past verification when the rebuilt contract lands where the funds are", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: readTxOut(DERIVED),
 			});
 
-			expect(isRefusal(result)).toBe(false);
+			expect(isRefusal(result)).toBe(true);
 
-			if (!isRefusal(result)) {
-				expect(result.covenants[0]).toMatchObject({
-					role: "spent",
-					verified: "matches-chain",
-				});
+			if (isRefusal(result)) {
+				expect(result.reason).toContain("amount");
+				expect(result.reason).not.toContain("rebuilds to");
 			}
 		});
 
 		test("refuses when the funds are somewhere else", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: readTxOut("tex1p_somewhere_else"),
 			});
 
@@ -115,8 +126,7 @@ describe("reviewManifestAction", () => {
 
 		test("refuses when the state file lists no such covenant", async () => {
 			const result = await reviewManifestAction(spendRequest({ utxos: [] }), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: readTxOut(DERIVED),
 			});
 
@@ -125,8 +135,7 @@ describe("reviewManifestAction", () => {
 
 		test("refuses when the chain cannot be read, rather than proceeding unchecked", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: async () => {
 					throw new Error("offline");
 				},
@@ -138,7 +147,7 @@ describe("reviewManifestAction", () => {
 		test("refuses before reading anything when the state file is absent", async () => {
 			const result = await reviewManifestAction(
 				request({ action: "Receive", params: { pubkey: PUBKEY } }),
-				{ compile, network: "liquid", readTxOut: readTxOut(DERIVED) },
+				{ ...deps, readTxOut: readTxOut(DERIVED) },
 			);
 
 			expect(isRefusal(result)).toBe(true);
@@ -147,8 +156,7 @@ describe("reviewManifestAction", () => {
 
 	test("refuses a request missing a part the action needs, naming it", async () => {
 		const result = await reviewManifestAction(request({ contractSources: {} }), {
-			compile,
-			network: "liquid",
+			...deps,
 			readTxOut: readTxOut(DERIVED),
 		});
 
@@ -161,10 +169,10 @@ describe("reviewManifestAction", () => {
 
 	test("refuses when the contract does not compile", async () => {
 		const result = await reviewManifestAction(request(), {
+			...deps,
 			compile: () => {
 				throw new Error("parse error");
 			},
-			network: "liquid",
 			readTxOut: readTxOut(DERIVED),
 		});
 

@@ -1,5 +1,7 @@
-import type { ReadTxOut } from "./chainRead";
+import type { ReadFeeRate, ReadTxOut } from "./chainRead";
+import { type CoinSelection, type SelectableUtxo, selectCoins } from "./coinSelection";
 import { type CompileCovenant, covenantMatchesChain, deriveCovenantAddress } from "./covenant";
+import { planAction } from "./plan";
 import { resolveActionRequirements } from "./requirements";
 import type { ParsedLiquidProcessCtParams } from "./types";
 
@@ -17,10 +19,30 @@ export type CovenantFinding = {
 	verified: "matches-chain" | "not-yet-on-chain";
 };
 
+/** One output of the transaction the wallet worked out, ready to be shown and then built. */
+export type ReviewedOutput = {
+	id: string;
+	sats: bigint;
+	scriptPubKeyHex: string;
+};
+
+/**
+ * Everything the wallet established, worked out and decided — before anyone approves it.
+ *
+ * The transaction is settled here rather than after the confirmation deliberately: what a
+ * person is asked to approve should be the transaction that gets signed, not a description
+ * of one that will be assembled afterwards from the same inputs and might not match.
+ * Signing is the only thing left for `execute`.
+ */
 export type ManifestReview = {
 	action: string;
 	covenants: CovenantFinding[];
+	/** What the wallet will pay, established from the chain rather than from the request. */
+	feeRateSatsPerKvb: number;
+	outputs: ReviewedOutput[];
 	protocol: string;
+	/** The wallet's own outputs that fund this, chosen by the wallet. */
+	selected: SelectableUtxo[];
 };
 
 export type ReviewRefusal = { reason: string; refused: true };
@@ -42,8 +64,12 @@ export async function reviewManifestAction(
 	request: ParsedLiquidProcessCtParams,
 	input: {
 		compile: CompileCovenant;
+		/** The wallet's spendable outputs, and where its own change and payments go. */
+		fundingUtxos: SelectableUtxo[];
 		network: string;
+		readFeeRate: ReadFeeRate;
 		readTxOut: ReadTxOut;
+		walletScriptPubKeyHex: string;
 	},
 ): Promise<ReviewManifestActionResult> {
 	const requirements = resolveActionRequirements(request);
@@ -123,12 +149,70 @@ export async function reviewManifestAction(
 		});
 	}
 
+	const plan = planAction(request, action);
+
+	if (!plan.ok) {
+		return { reason: plan.reason, refused: true };
+	}
+
+	const covenantScripts = new Map(covenants.map((found) => [found.utxoType, found.address]));
+	const outputs: ReviewedOutput[] = [];
+
+	for (const planned of plan.plan.outputs) {
+		if (planned.target.kind === "change" || planned.sats === undefined) {
+			continue;
+		}
+
+		// A covenant output pays the address the wallet derived, never one the request
+		// supplied. There is no path from a site-supplied address to a transaction output.
+		const scriptPubKeyHex =
+			planned.target.kind === "covenant"
+				? covenantScripts.get(planned.target.utxoType)
+				: input.walletScriptPubKeyHex;
+
+		if (!scriptPubKeyHex) {
+			return {
+				reason: `Output ${planned.id} pays a covenant the wallet did not verify.`,
+				refused: true,
+			};
+		}
+
+		outputs.push({ id: planned.id, sats: planned.sats, scriptPubKeyHex });
+	}
+
+	let feeRateSatsPerKvb: number;
+
+	try {
+		feeRateSatsPerKvb = await input.readFeeRate(FEE_TARGET_BLOCKS);
+	} catch (error) {
+		return {
+			reason: `The wallet could not establish a fee rate, so it will not build this: ${String(error)}`,
+			refused: true,
+		};
+	}
+
+	const selection: CoinSelection = selectCoins(
+		input.fundingUtxos,
+		plan.plan.fundingSats,
+		BigInt(Math.ceil(feeRateSatsPerKvb)),
+	);
+
+	if (!selection.ok) {
+		return { reason: selection.reason, refused: true };
+	}
+
 	return {
 		action: request.action,
 		covenants,
+		feeRateSatsPerKvb,
+		outputs,
 		protocol: typeof request.manifest.protocol === "string" ? request.manifest.protocol : "",
+		selected: selection.selected,
 	};
 }
+
+/** Confirmation target for the fee estimate, in blocks. */
+const FEE_TARGET_BLOCKS = 6;
 
 type CovenantSite = {
 	role: "created" | "spent";
