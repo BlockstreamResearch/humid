@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import groupedManifest from "../../../domain/manifest/__fixtures__/p2pk-grouped.manifest.json";
 import p2pkManifest from "../../../domain/manifest/__fixtures__/p2pk.manifest.json";
 import {
 	createProcessLiquidConfidentialTransaction,
@@ -164,5 +165,32 @@ describe("processLiquidConfidentialTransaction", () => {
 		const { method } = subject();
 
 		await expect(method(params({ action: "Withdraw" }), context())).rejects.toThrow(/Withdraw/);
+	});
+});
+
+// AC-10 end to end: the same protocol written in the grouped shape with the older
+// top-level spelling goes through the whole method and produces the same transaction.
+describe("processLiquidConfidentialTransaction across declaration shapes", () => {
+	test("builds and signs a grouped manifest exactly as it does a flat one", async () => {
+		const flat = await subject().method(params(), context());
+		const grouped = await subject().method(params({ manifest: groupedManifest }), context());
+
+		expect(grouped).toEqual(flat);
+	});
+
+	test("finds a method declared inside a class by its own name", async () => {
+		const { method, recorded } = subject();
+
+		await method(
+			params({
+				action: "Receive",
+				manifest: groupedManifest,
+				params: { pubkey: PUBKEY },
+				state: { utxos: [{ txid: "a".repeat(64), utxo_type: "p2pk_output", vout: 0 }] },
+			}),
+			context(),
+		);
+
+		expect(recorded.mnemonicCalls).toBe(1);
 	});
 });
