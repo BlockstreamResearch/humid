@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 
 import * as smplxWasmBindings from "smplx-wasm/smplx_wasm_bg.js";
 
+import { estimateFeeSats } from "../../domain/manifest/fee";
 import { guardSpentInputs } from "../../domain/manifest/inputGuard";
 import { spentInputs } from "../../domain/manifest/spentInputs";
 
@@ -788,5 +789,70 @@ describe("the simplicity-lending contracts", () => {
 				undefined,
 			).covenantAddress("liquid-testnet"),
 		);
+	});
+});
+
+// AC-09's second clause, measured rather than reasoned about. The wallet's estimate and the
+// fee the module charges are different numbers — one is a model of an unsigned shape and the
+// other the weight of a signed transaction — so what has to hold is that the transaction
+// balances against whichever one is charged, whatever the estimate said.
+describe("a transaction balances against the fee that is charged", () => {
+	const TXID = "5".repeat(64);
+	const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+
+	function txOut(sats: bigint, scriptHex: string): string {
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const value = sats.toString(16).padStart(16, "0");
+		const len = (scriptHex.length / 2).toString(16).padStart(2, "0");
+
+		return `01${assetLe}01${value}00${len}${scriptHex}`;
+	}
+
+	/** Funds `funded`, pays `paid`, and reports what the module charged for it. */
+	function build(funded: bigint, paid: bigint, rate: number) {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+		const builder = new bindings.TransactionBuilder();
+
+		try {
+			builder.addWalletInput(TXID, 0, txOut(funded, signer.scriptPubKeyHex()), undefined);
+			builder.addOutput(signer.scriptPubKeyHex(), paid, POLICY_ASSET);
+
+			const signed = signer.finalizeTransaction(builder, rate, signer.scriptPubKeyHex());
+			const fee = signed.feeSats;
+
+			signed.free();
+
+			return fee;
+		} finally {
+			builder.free();
+			signer.free();
+		}
+	}
+
+	// The wallet plans an output as "what this input holds, less the fee", using its own
+	// estimate. Whatever that estimate was, the module charges its own figure and makes the
+	// transaction balance — which is why an estimate that is merely close is safe.
+	test("the charged fee covers the difference the wallet did not pay out", () => {
+		const funded = 100_000n;
+		const estimated = estimateFeeSats({ covenantInputs: 0, outputs: 1, walletInputs: 1 }, 1000);
+		const charged = build(funded, funded - estimated, 1000);
+
+		expect(charged > 0n).toBe(true);
+		expect(charged <= estimated).toBe(true);
+	});
+
+	// Over-estimating is the safe direction: the surplus returns as change rather than
+	// leaving the transaction short.
+	test("an over-estimate leaves the transaction payable rather than short", () => {
+		const funded = 100_000n;
+		const generous = estimateFeeSats({ covenantInputs: 2, outputs: 3, walletInputs: 3 }, 1000);
+
+		expect(() => build(funded, funded - generous, 1000)).not.toThrow();
+	});
+
+	// Under-paying the fee is what the wallet must never do, and the module refuses it rather
+	// than producing a transaction the network would drop.
+	test("paying out everything leaves nothing for the fee, and is refused", () => {
+		expect(() => build(100_000n, 100_000n, 1000)).toThrow();
 	});
 });

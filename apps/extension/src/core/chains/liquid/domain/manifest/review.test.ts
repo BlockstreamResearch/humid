@@ -487,3 +487,48 @@ describe("what the person is shown", () => {
 		expect((await shown()).covenants[0]?.utxoType.origin).toBe("site");
 	});
 });
+
+// AC-15 through the whole path: the wallet builds each contract the way its own protocol
+// declares, and the declaration reaches the compiler rather than stopping at a flag.
+describe("the mode a protocol declares reaches the compiler", () => {
+	function withMode(compile_debug_symbols?: boolean) {
+		const seen: boolean[] = [];
+		const manifest = {
+			...(p2pkManifest as unknown as Record<string, unknown>),
+			...(compile_debug_symbols === undefined ? {} : { compile_debug_symbols }),
+		};
+
+		return reviewManifestAction(request({ manifest }), {
+			...deps,
+			compile: (input) => {
+				seen.push(input.includeDebugSymbols);
+
+				return DERIVED;
+			},
+			readTxOut: readTxOut("unused"),
+		}).then((result) => ({ result, seen }));
+	}
+
+	test("a protocol declaring debug symbols is built with them", async () => {
+		const { result, seen } = await withMode(true);
+
+		expect(isRefusal(result)).toBe(false);
+		expect(seen).toEqual([true]);
+	});
+
+	test("one declaring them off is built without them", async () => {
+		expect((await withMode(false)).seen).toEqual([false]);
+	});
+
+	test("one declaring nothing is built plainly", async () => {
+		expect((await withMode()).seen).toEqual([false]);
+	});
+
+	// No setting governs this and none exists: the only thing that decides is the document.
+	test("nothing in the request or the wallet can change it", async () => {
+		const declared = await withMode(true);
+		const plain = await withMode();
+
+		expect(declared.seen).not.toEqual(plain.seen);
+	});
+});
