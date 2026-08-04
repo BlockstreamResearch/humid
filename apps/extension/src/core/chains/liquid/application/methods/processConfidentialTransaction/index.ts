@@ -247,6 +247,7 @@ export const createProcessLiquidConfidentialTransaction = (
 					new smplx.Contract(source, argumentsJson).scriptPubKeyHex(network),
 				fundingUtxos: context.walletBackend.getUtxos(account, account.rawPolicyAssetId),
 				network,
+				accountLabel: `${account.chain?.id ?? context.chain.id} account ${account.accountGroupIndex}`,
 				readFeeRate: dependencies.readFeeRate(context.chain),
 				readTxOut: dependencies.readTxOut(context.chain),
 				walletScriptPubKeyHex: await dependencies.scriptPubKeyHexOf(

@@ -1,6 +1,7 @@
 import { encodeExplicitTxOut, type ReadFeeRate, type ReadTxOut } from "./chainRead";
 import { type CoinSelection, type SelectableUtxo, selectCoins } from "./coinSelection";
 import { resolveComputedParams } from "./computed";
+import { type ConfirmationModel, confirmationModel } from "./confirmation";
 import { type CompileCovenant, covenantMatchesChain, deriveCovenantAddress } from "./covenant";
 import { type CompileScriptPubKey, covenantHashFrom } from "./covenantHash";
 import { estimateFeeSats } from "./fee";
@@ -95,6 +96,14 @@ export type ManifestReview = {
 	 * silently is indistinguishable from one that missed it.
 	 */
 	ignoredConstructs: ConstructFinding[];
+	/**
+	 * Everything the person is shown, with every value's origin attached.
+	 *
+	 * Built here rather than at the surface because this is where what the wallet established
+	 * is known — a surface handed plain values would have to guess which of them were the
+	 * site's word, and guessing is the failure the provenance exists to prevent.
+	 */
+	confirmation: ConfirmationModel;
 	/** Legacy spellings the document used, so the generation it came from can be reported. */
 	normalisation: NormalisationNote[];
 	outputs: ReviewedOutput[];
@@ -134,6 +143,8 @@ export async function reviewManifestAction(
 		readTxOut: ReadTxOut;
 		/** The SimplicityHL version compiled into this wallet, which is the only one it has. */
 		compilerVersion: string;
+		/** How this account is named to the person, since the wallet chose it implicitly. */
+		accountLabel: string;
 		/** The asset this wallet pays fees in and is the only one it moves. */
 		policyAsset: string;
 		/** Compiles a contract to the scriptPubKey it locks to, for the hashes a manifest computes. */
@@ -371,8 +382,9 @@ export async function reviewManifestAction(
 		return { reason: selection.reason, refused: true };
 	}
 
-	return {
+	const review: ManifestReview = {
 		action: request.action,
+		confirmation: {} as ConfirmationModel,
 		covenantInputs,
 		covenants,
 		estimatedFeeSats: estimatedFee,
@@ -382,6 +394,14 @@ export async function reviewManifestAction(
 		outputs,
 		protocol: manifest.protocol ?? "",
 		selected: selection.selected,
+	};
+
+	return {
+		...review,
+		confirmation: confirmationModel(review, manifest, action, {
+			accountLabel: input.accountLabel,
+			policyAsset: input.policyAsset,
+		}),
 	};
 }
 

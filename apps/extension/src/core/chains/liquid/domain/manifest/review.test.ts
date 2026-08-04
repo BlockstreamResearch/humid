@@ -35,6 +35,7 @@ const fundingUtxos = [
 
 /** The three dependencies every case shares; individual tests override what they exercise. */
 const deps = {
+	accountLabel: "liquid:testnet account 0",
 	compile,
 	compilerVersion: "0.6.0",
 	policyAsset: "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49",
@@ -410,5 +411,79 @@ describe("an amount that depends on the fee", () => {
 		if (!isRefusal(result)) {
 			expect(result.covenantInputs[0]?.signatureWitness).toBe("SIGNATURE");
 		}
+	});
+});
+
+// AC-06 and AC-07 at the seam. What the person is shown is built where what the wallet
+// established is known, so nothing downstream has to guess which values were the site's word.
+describe("what the person is shown", () => {
+	const shown = async () => {
+		const result = await reviewManifestAction(request(), {
+			...deps,
+			readTxOut: readTxOut("unused"),
+		});
+
+		if (isRefusal(result)) {
+			throw new Error(result.reason);
+		}
+
+		return result.confirmation;
+	};
+
+	// AC-06: the four wallet-established facts.
+	test("names which account is acting, because the wallet chose it implicitly", async () => {
+		expect((await shown()).account).toMatchObject({
+			origin: "computed",
+			value: "liquid:testnet account 0",
+		});
+	});
+
+	test("shows what the wallet worked the fee out to be", async () => {
+		const model = await shown();
+
+		expect(model.feeSats.value > 0n).toBe(true);
+		expect(model.feeSats.origin).toBe("computed");
+	});
+
+	test("shows the net effect on this wallet, as an outgoing figure", async () => {
+		const [effect] = (await shown()).netEffect;
+
+		expect(effect?.sats.value).toBeLessThan(0n);
+		expect(effect?.asset.origin).toBe("computed");
+	});
+
+	test("says whether the wallet checked each covenant against the network", async () => {
+		const [covenant] = (await shown()).covenants;
+
+		expect(covenant?.verified).toMatchObject({ origin: "computed", value: false });
+	});
+
+	test("and marks a covenant it did check as checked", async () => {
+		const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
+			...deps,
+			readTxOut: readTxOut(DERIVED),
+		});
+
+		if (!isRefusal(result)) {
+			expect(result.confirmation.covenants[0]?.verified.value).toBe(true);
+			expect(result.confirmation.covenants[0]?.address.origin).toBe("verified");
+		}
+	});
+
+	// AC-07: the site's text is the site's, and says so.
+	test("attributes the protocol's name to the site", async () => {
+		expect((await shown()).protocol.origin).toBe("site");
+	});
+
+	test("attributes the action's name to the site", async () => {
+		expect((await shown()).action.origin).toBe("site");
+	});
+
+	test("attributes the protocol's own summary to the site", async () => {
+		expect((await shown()).summary?.origin).toBe("site");
+	});
+
+	test("the utxo type is the protocol's own word for it, and is marked so", async () => {
+		expect((await shown()).covenants[0]?.utxoType.origin).toBe("site");
 	});
 });
