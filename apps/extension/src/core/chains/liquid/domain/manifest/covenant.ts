@@ -1,0 +1,136 @@
+import { resolveCompileParams } from "./compileParams";
+import type { ParsedLiquidProcessCtParams } from "./types";
+
+/**
+ * Compiles a covenant and reports the address it derives.
+ *
+ * The caller supplies the compile step, so this can be exercised without a wasm module
+ * and so the module's lifecycle stays where it belongs.
+ */
+export type CompileCovenant = (input: {
+	argumentsJson: string;
+	network: string;
+	source: string;
+}) => Promise<string> | string;
+
+export type CovenantDerivation = {
+	/** The address the wallet derived by rebuilding the contract itself. */
+	address: string;
+	/** The manifest's name for the kind of UTXO this is. */
+	utxoType: string;
+};
+
+export type DeriveCovenantResult =
+	| { derivation: CovenantDerivation; ok: true }
+	| { ok: false; reason: string };
+
+/**
+ * Derives the address of one covenant UTXO type, from the contract source the request
+ * supplied and the parameters the manifest wires into it.
+ *
+ * This is the wallet establishing a fact for itself. Nothing the site says about where
+ * the funds are is consulted; the site's contribution is the source text and the
+ * parameter values, and both change what is derived rather than what it is checked
+ * against.
+ */
+export async function deriveCovenantAddress(
+	request: ParsedLiquidProcessCtParams,
+	input: {
+		compile: CompileCovenant;
+		declaredTypes: Record<string, string>;
+		network: string;
+		utxoType: string;
+		wiring: Record<string, unknown>;
+	},
+): Promise<DeriveCovenantResult> {
+	const declared = utxoTypeDeclaration(request.manifest, input.utxoType);
+
+	if (!declared) {
+		return { ok: false, reason: `The manifest declares no utxo type named "${input.utxoType}".` };
+	}
+
+	const sourcePath = declared.sourcePath;
+
+	if (!sourcePath) {
+		return { ok: false, reason: `Utxo type "${input.utxoType}" names no contract source.` };
+	}
+
+	const source = request.contractSources[sourcePath];
+
+	if (source === undefined) {
+		return { ok: false, reason: `The source of ${sourcePath} was not supplied.` };
+	}
+
+	const params = resolveCompileParams(request, input.wiring, input.declaredTypes);
+
+	if (!params.ok) {
+		return params;
+	}
+
+	try {
+		const address = await input.compile({
+			argumentsJson: JSON.stringify(params.arguments),
+			network: input.network,
+			source,
+		});
+
+		return { derivation: { address, utxoType: input.utxoType }, ok: true };
+	} catch (error) {
+		return {
+			ok: false,
+			reason: `The contract at ${sourcePath} did not compile: ${String(error)}`,
+		};
+	}
+}
+
+/**
+ * Whether a covenant UTXO is what the manifest claims: does the address the wallet
+ * derived match the one the funds are actually sitting at?
+ *
+ * `onChainAddress` must come from the chain, never from the request. Comparing two
+ * values the same site supplied would pass for any pair it chose to make consistent.
+ * The state file carries an outpoint and no address precisely because the address has
+ * to be read rather than told.
+ *
+ * A mismatch is a refusal. There is no shape of this function that returns a warning.
+ */
+export function covenantMatchesChain(
+	derivation: CovenantDerivation,
+	onChainAddress: string,
+): { matched: true } | { matched: false; reason: string } {
+	if (derivation.address === onChainAddress) {
+		return { matched: true };
+	}
+
+	return {
+		matched: false,
+		reason:
+			`The ${derivation.utxoType} contract rebuilds to ${derivation.address}, ` +
+			`but the funds are at ${onChainAddress}. This is not the contract the site described.`,
+	};
+}
+
+function utxoTypeDeclaration(
+	manifest: Record<string, unknown>,
+	name: string,
+): { sourcePath: string | undefined } | undefined {
+	const utxoTypes = manifest.utxo_types;
+
+	if (typeof utxoTypes !== "object" || utxoTypes === null) {
+		return undefined;
+	}
+
+	const declared = (utxoTypes as Record<string, unknown>)[name];
+
+	if (typeof declared !== "object" || declared === null) {
+		return undefined;
+	}
+
+	const script = (declared as Record<string, unknown>).script;
+	const source =
+		typeof script === "object" && script !== null
+			? (script as Record<string, unknown>).source
+			: undefined;
+
+	return { sourcePath: typeof source === "string" ? source : undefined };
+}
