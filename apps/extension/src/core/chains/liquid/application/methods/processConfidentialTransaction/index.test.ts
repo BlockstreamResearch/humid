@@ -267,3 +267,51 @@ describe("processLiquidConfidentialTransaction guards what it signs", () => {
 		expect(recorded.broadcasts).toHaveLength(0);
 	});
 });
+
+// AC-14 and D7: a person who wipes the wallet and restores from the recovery phrase must be
+// able to perform the same action. There is nothing to restore *to* — so what is shown is
+// that the method is a function of the request, the phrase and the chain, and that a second
+// run on a context built from nothing else reaches the same transaction.
+describe("processLiquidConfidentialTransaction on a restored wallet", () => {
+	test("the same request twice, on contexts sharing nothing, reaches the same transaction", async () => {
+		const first = await subject().method(params(), context());
+		const restored = await subject().method(params(), context());
+
+		expect(restored).toEqual(first);
+	});
+
+	test("and reaches the same transaction whether or not one ran before it", async () => {
+		const alone = await subject().method(params(), context());
+		const { method } = subject();
+
+		await method(params({ broadcast: true }), context());
+
+		expect(await method(params(), context())).toEqual(alone);
+	});
+
+	// What it reads from the wallet is the point: the account, its own outputs and an address,
+	// all of which a restored wallet derives from the phrase by scanning. Anything else would
+	// be something a previous run left behind.
+	test("reads nothing from the wallet a restored one could not derive", async () => {
+		const read: string[] = [];
+		const base = context();
+		const watched = new Proxy(base, {
+			get(target, property) {
+				if (typeof property === "string") {
+					read.push(property);
+				}
+
+				return target[property as keyof typeof target];
+			},
+		});
+
+		await subject().method(params(), watched);
+
+		expect([...new Set(read)].sort()).toEqual([
+			"authorization",
+			"chain",
+			"keyManagerState",
+			"walletBackend",
+		]);
+	});
+});
