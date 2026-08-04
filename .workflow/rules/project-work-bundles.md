@@ -41,3 +41,8 @@ Before completed closure, enumerate the entire bundle with `wfctl work context
 --stage review`, re-read every file, refresh stale receipts, reconcile every
 stable acceptance ID against direct evidence, promote durable truth separately,
 and obtain explicit maintainer completion approval.
+
+A capture is not automatically a chore. When it holds something only the
+maintainer can settle, create it with `--awaits maintainer` so it appears in
+their queue rather than in agent triage, and say so when reporting. A question
+filed as triage is a question nobody knows they were asked.

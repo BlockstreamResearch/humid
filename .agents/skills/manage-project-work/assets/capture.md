@@ -5,6 +5,7 @@ id: "{{CAPTURE_ID}}"
 title: "{{TITLE}}"
 status: pending
 created_at: "{{CREATED_AT}}"
+awaits: agent
 source: {}
 claim_refs: []
 resolution: null
@@ -20,6 +21,14 @@ verified facts, maintainer intent, and inference.
 Record exact source paths, revisions, commands, outputs, and known limits. For
 intake or reconstruction material, retain fully qualified claim references in
 `claim_refs`; never cite raw files as authority.
+
+# Who answers this
+
+State `awaits: maintainer` when the capture holds something only they can
+settle — intent nobody recorded, a decision to confirm or revoke, a route
+between materially different options. State `awaits: agent` when it is material
+someone still has to place. A question filed as triage is a question nobody
+knows they were asked.
 
 # Why retained
 

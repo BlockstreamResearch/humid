@@ -32,3 +32,8 @@ storybook-static/
 # wfctl:begin
 graphify-out/
 # wfctl:end
+
+# The stop guard's own state, which is per-session runtime bookkeeping rather than
+# configuration. It lives beside the hook because `.workflow/current/` is where wfctl
+# looks for work bindings and it parsed this as a malformed one.
+.workflow/runtime/stop-guard.json

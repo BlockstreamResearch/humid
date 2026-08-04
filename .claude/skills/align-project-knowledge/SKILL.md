@@ -15,7 +15,11 @@ Do not design from code and memory alone. Establish the project's current intent
    invoke `setup-workflow-environment` to repair or reinstall the selected
    project/user skills, then ask only for the unavoidable agent-session
    restart. An on-disk file alone does not prove the running agent loaded it.
-3. Run QMD from that knowledge root. Require `qmd status`; if QMD or the
+3. Run QMD from that knowledge root. Require `qmd status`; if it reports
+   documents pending embedding, run `qmd embed` before relying on vector or
+   hybrid retrieval — indexing and embedding are separate, `qmd update` only
+   marks what needs vectors, and searching without them silently degrades to
+   lexical BM25 over exactly the material most recently written. If QMD or the
    project-local `.qmd/index.yml` is missing, stop and report the broken
    workflow environment.
 4. Run `wfctl knowledge build --target <knowledge-root>`. Stop alignment if

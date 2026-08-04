@@ -57,4 +57,11 @@ Compare consumed CPU time against elapsed time, read what the job has written,
 and only then decide. Do not agree that something is broken because it was
 reported, and do not restart healthy work; that costs more than waiting.
 
-Do not turn mocks, fixtures, fakes, placeholders, disabled checks, or partial wiring into production completion claims. Name missing evidence and unfinished work directly.
+Do not turn mocks, fixtures, fakes, stories, showcase pages, benchmark
+harnesses, placeholders, disabled checks, or partial wiring into production
+completion claims. Behavior that exists only inside a demonstration surface is
+not delivered, and behavior whose only caller is a test is implemented but not
+verified — a green suite proves the test passed. Which of the two holds is a
+question about what reaches the code, so it takes graph traversal and a recorded
+query rather than a file listing. Name missing evidence and unfinished work
+directly.

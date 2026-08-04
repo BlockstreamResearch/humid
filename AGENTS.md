@@ -29,15 +29,18 @@ This block is managed by `wfctl`. Read `.workflow/config.json` and all files und
   Outside bootstrap or explicit troubleshooting, never require them to know a
   subcommand, record ID, generated path, QMD query, Graphify invocation, or
   structured-file schema. Resolve those mechanics yourself.
-- When internal state offers one safe valid continuation, announce it and
-  continue in the same turn. Ending a turn on a stated next action is the
-  announcement without the continuation: take the action, or record why it
-  cannot be taken. A written report is progress and never the finish line;
-  completion is the terminal status of the required records. This holds while
-  executing accepted work and not while shaping or specifying, where asking is
-  the work. When several materially different choices remain, present their
-  human meaning, evidence, and recommendation; after the maintainer chooses,
-  execute the corresponding commands yourself.
+- End a turn only when you are waiting on the maintainer. Ending one hands
+  control to them, so the test is not whether you announced anything: a turn
+  that closes with "the work continues" or "the rest can wait" parks just as
+  completely as one that names a next step and abandons it. If you are not
+  waiting on them, take the next action you can take alone, in the same turn.
+  When you are waiting, say in one line what you need. A written report is
+  progress and never the finish line; completion is the terminal status of the
+  required records. This holds while executing accepted work and not while
+  shaping or specifying, where asking is the work. When several materially
+  different choices remain, present their human meaning, evidence, and
+  recommendation; after the maintainer chooses, execute the corresponding
+  commands yourself.
 - For significant multi-turn work, create the central bundle early. After every
   material maintainer turn or agent investigation cycle, preserve
   consequential new understanding in the owning record's broad `Discovery
@@ -62,7 +65,11 @@ This block is managed by `wfctl`. Read `.workflow/config.json` and all files und
   memory.
 - Use `changes/inbox/` only for pending captures that have no active or curated
   owner. Resolve each capture to existing destinations or discard it with a
-  reason; never duplicate active progress there.
+  reason; never duplicate active progress there. The brief names every pending
+  capture, so an unresolved one is not unknown to you — a queue that grows
+  without anyone opening it is the same as no queue. A capture only the
+  maintainer can settle is created with `--awaits maintainer` and presented to
+  them as one decision at a time, not listed as a backlog.
 - Do not create a competing leaf-local spec or issue tracker. Claim one central
   frontier issue from the exact bound checkout before implementation. Before
   completion, account for every bundle file at its current hash; a receipt

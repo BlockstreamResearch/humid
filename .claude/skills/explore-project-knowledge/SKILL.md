@@ -16,7 +16,9 @@ first broad discovery request in a session.
 1. If the current repository has the `knowledge` profile, work from it.
 2. If the current repository is a leaf, read `.workflow/config.json`, resolve
    its configured knowledge repository, and answer from that repository.
-3. Require and invoke the native QMD skill. Check `qmd status`, then search only
+3. Require and invoke the native QMD skill. Check `qmd status`, and when it
+   reports documents pending embedding run `qmd embed` first: without vectors
+   the search degrades to lexical BM25 over the newest material. Then search only
    the `knowledge` collection. If the native skill, CLI, or project index is
    unavailable, invoke `setup-workflow-environment`; do not substitute grep or
    pretend discovery was complete.

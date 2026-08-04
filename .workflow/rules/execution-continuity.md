@@ -18,8 +18,15 @@ to ask; it is evidence the search was not done.
 **A report is not the finish line.** Completion is defined by the issue's
 acceptance criteria and proven by its terminal status. A finished plan item, a
 written summary, a passing subtask, and a refreshed checkpoint are progress.
-Never announce the next action and then stop: either take it, or record why it
-cannot be taken.
+
+**End a turn only when you are waiting on the maintainer.** Ending one hands
+control to them, so the test is what you are waiting for and not what you
+wrote. Announcing a next action and stopping is the visible half of this; the
+larger half announces nothing — "the work continues by itself", "the rest can
+wait for the next boundary", a status report that names no blocker — and parks
+just as completely, because nothing continues once the turn is over. If you are
+not waiting on the maintainer, take the next action you can take alone. If you
+are, name in one line what you need from them.
 
 **A discovery is not a stop.** Material that contradicts what was accepted is an
 entry in the discovery ledger, and the work continues. Stop only when the
