@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { createEsploraTxOutReader } from "./chainRead";
+import { createEsploraFeeRateReader, createEsploraTxOutReader } from "./chainRead";
 
 // Response shapes are Esplora's documented ones: /tx/:txid returns a transaction whose
 // vout entries carry scriptpubkey and scriptpubkey_address.
@@ -107,5 +107,49 @@ describe("createEsploraTxOutReader", () => {
 		const read = createEsploraTxOutReader({ url: "https://esplora.example" }, fetchImpl);
 
 		await expect(read({ txid: TXID, vout: 0 })).rejects.toThrow();
+	});
+});
+
+describe("createEsploraFeeRateReader", () => {
+	// Esplora keys fee estimates by confirmation target, in sats per vbyte.
+	const ESTIMATES = { "1": 2.5, "144": 0.1, "6": 1 };
+
+	test("returns the requested target, converted to sats per kvb", async () => {
+		const { fetchImpl } = respondWith(ESTIMATES);
+		const read = createEsploraFeeRateReader({ url: "https://esplora.example" }, fetchImpl);
+
+		await expect(read(6)).resolves.toBe(1000);
+	});
+
+	// Being wrong towards a longer wait is the safe direction; being wrong towards a
+	// shorter one silently overpays.
+	test("falls back to the nearest slower target when the exact one is absent", async () => {
+		const { fetchImpl } = respondWith(ESTIMATES);
+		const read = createEsploraFeeRateReader({ url: "https://esplora.example" }, fetchImpl);
+
+		await expect(read(3)).resolves.toBe(1000);
+	});
+
+	test("asks the configured endpoint", async () => {
+		const { calls, fetchImpl } = respondWith(ESTIMATES);
+		const read = createEsploraFeeRateReader({ url: "https://esplora.example/" }, fetchImpl);
+
+		await read(1);
+
+		expect(calls[0]?.url).toBe("https://esplora.example/fee-estimates");
+	});
+
+	test("fails rather than guessing when the endpoint does not answer", async () => {
+		const { fetchImpl } = respondWith({}, false, 503);
+		const read = createEsploraFeeRateReader({ url: "https://esplora.example" }, fetchImpl);
+
+		await expect(read(1)).rejects.toThrow();
+	});
+
+	test("fails rather than guessing when no usable estimate comes back", async () => {
+		const { fetchImpl } = respondWith({ "1": 0 });
+		const read = createEsploraFeeRateReader({ url: "https://esplora.example" }, fetchImpl);
+
+		await expect(read(1)).rejects.toThrow();
 	});
 });

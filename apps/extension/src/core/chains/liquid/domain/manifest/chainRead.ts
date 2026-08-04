@@ -88,6 +88,55 @@ export function createEsploraTxOutReader(
 	};
 }
 
+/**
+ * Reads a fee rate the wallet is willing to pay, in satoshis per kilo-vbyte.
+ *
+ * The fee is the wallet's business, not the requester's: a fee or fee rate arriving in a
+ * request is ignored, and an action is refused rather than built when no rate can be
+ * established. Guessing a default here would quietly convert "we do not know" into "we
+ * are sure", which is the failure this refusal exists to prevent.
+ */
+export type ReadFeeRate = (targetBlocks: number) => Promise<number>;
+
+export function createEsploraFeeRateReader(
+	endpoint: EsploraEndpoint,
+	fetchImpl: typeof fetch = fetch,
+): ReadFeeRate {
+	const base = endpoint.url.replace(/\/+$/, "");
+
+	return async (targetBlocks) => {
+		const response = await fetchImpl(`${base}/fee-estimates`, {
+			headers: Object.fromEntries((endpoint.headers ?? []).map(({ name, value }) => [name, value])),
+		});
+
+		if (!response.ok) {
+			throw new Error(`Could not read fee estimates: ${response.status}`);
+		}
+
+		const body: unknown = await response.json();
+
+		if (!isRecord(body)) {
+			throw new Error("Fee estimates came back in a shape this wallet does not understand.");
+		}
+
+		// Esplora keys estimates by confirmation target. Take the requested target, else the
+		// nearest slower one, since paying for a longer wait than asked is the safe direction
+		// to be wrong in.
+		const targets = Object.keys(body)
+			.map(Number)
+			.filter((value) => Number.isFinite(value))
+			.sort((a, b) => a - b);
+		const chosen = targets.find((value) => value >= targetBlocks) ?? targets.at(-1);
+		const satsPerVbyte = chosen === undefined ? undefined : body[String(chosen)];
+
+		if (typeof satsPerVbyte !== "number" || !(satsPerVbyte > 0)) {
+			throw new Error("No usable fee estimate was returned.");
+		}
+
+		return satsPerVbyte * 1000;
+	};
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
