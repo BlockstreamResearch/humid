@@ -18,10 +18,7 @@ import { RpcCard } from "../RpcCard";
  * single kind of holding. `Pay` locks funds into it; `Receive` spends one back out, which is
  * the half that exercises the address check against the network.
  */
-const ACTIONS = [
-	{ label: "Pay — lock funds into a p2pk output", value: "Pay" },
-	{ label: "Receive — spend a p2pk output back to your wallet", value: "Receive" },
-];
+const ACTIONS = ["Pay", "Receive"];
 
 export function ProcessCtCard() {
 	const { wallet } = useHumidContext();
@@ -54,7 +51,16 @@ export function ProcessCtCard() {
 			policy={state}
 			title="processConfidentialTransaction"
 		>
-			<SelectField label="Action" onChange={setAction} options={ACTIONS} value={action} />
+			<SelectField
+				label={
+					spending
+						? "Action — Receive spends a p2pk output back to your wallet"
+						: "Action — Pay locks funds into a p2pk output"
+				}
+				onValueChange={setAction}
+				options={ACTIONS}
+				value={action}
+			/>
 
 			{/* One key signs every contract action, and it is not one the wallet's normal
 			    screens show. To spend what Pay locks, this must be the wallet's own contract
@@ -77,9 +83,9 @@ export function ProcessCtCard() {
 			)}
 
 			<CheckboxField
+				checked={broadcast}
 				label="Broadcast — leave off to get the signed transaction back without sending it"
 				onChange={setBroadcast}
-				value={broadcast}
 			/>
 
 			<CallButton
