@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import groupedManifest from "./__fixtures__/p2pk-grouped.manifest.json";
 import p2pkManifest from "./__fixtures__/p2pk.manifest.json";
+import { estimateFeeSats } from "./fee";
 import { isRefusal, reviewManifestAction } from "./review";
 import type { ParsedLiquidProcessCtParams } from "./types";
 
@@ -38,6 +39,9 @@ const deps = {
 	fundingUtxos,
 	network: "liquid",
 	readFeeRate,
+	// The p2pk manifest computes nothing, so this is never reached on these cases; a
+	// covenant hash the manifest works out for itself is covered where it is built.
+	scriptPubKeyOf: () => "5120aabb",
 	walletScriptPubKeyHex: WALLET_SCRIPT,
 };
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
@@ -303,6 +307,106 @@ describe("reviewManifestAction reads through the runtime core", () => {
 
 		if (!isRefusal(result)) {
 			expect(result.ignoredConstructs.map((finding) => finding.key)).not.toContain("validations");
+		}
+	});
+});
+
+// AC-13: the fee and the fee rate are the wallet's alone.
+describe("who decides the fee", () => {
+	test("the rate comes from the chain, not from the request", async () => {
+		const result = await reviewManifestAction(request(), {
+			...deps,
+			readFeeRate: async () => 1234,
+			readTxOut: readTxOut("unused"),
+		});
+
+		expect(isRefusal(result)).toBe(false);
+
+		if (!isRefusal(result)) {
+			expect(result.feeRateSatsPerKvb).toBe(1234);
+		}
+	});
+
+	test("refuses rather than defaulting when no rate can be established", async () => {
+		const result = await reviewManifestAction(request(), {
+			...deps,
+			readFeeRate: async () => {
+				throw new Error("no estimate");
+			},
+			readTxOut: readTxOut("unused"),
+		});
+
+		expect(isRefusal(result)).toBe(true);
+		expect(isRefusal(result) ? result.reason : "").toContain("fee rate");
+	});
+});
+
+// AC-09: an amount that is a function of the fee is worked out against the fee the wallet
+// established, and the transaction it produces is the one the person is shown.
+describe("an amount that depends on the fee", () => {
+	// A one-input, one-output spend of the covenant, paying out what it holds less the fee.
+	const feeAware = {
+		actions: {
+			Sweep: {
+				inputs: [
+					{
+						id: "cov_in",
+						utxo_source: { compile_params: { PUB_KEY: "params.pubkey" }, utxo_type: "p2pk_output" },
+						witnesses: {
+							SIGNATURE: { source: { key: "params.pubkey", type: "wallet" }, type: "Signature" },
+						},
+					},
+				],
+				outputs: [{ amount_sat: "cov_in.amount_sat - fee", destination: "wallet", id: "swept" }],
+				params: { pubkey: { type: "pubkey" } },
+			},
+		},
+		protocol: "p2pk-simplicity",
+		utxo_types: {
+			p2pk_output: { script: { source: SOURCE_PATH, type: "simplicity" } },
+		},
+	};
+
+	const sweep = () =>
+		reviewManifestAction(
+			request({
+				action: "Sweep",
+				manifest: feeAware,
+				params: { pubkey: PUBKEY },
+				state: oneCovenantUtxo as Record<string, unknown>,
+			}),
+			{ ...deps, readTxOut: readTxOut(DERIVED, "42000") },
+		);
+
+	test("pays out what the covenant holds, less what the wallet worked the fee out to be", async () => {
+		const result = await sweep();
+
+		expect(isRefusal(result)).toBe(false);
+
+		if (!isRefusal(result)) {
+			expect(result.outputs[0]?.sats).toBe(42_000n - result.estimatedFeeSats);
+		}
+	});
+
+	test("the fee it used is the one its own shape costs at the rate it read", async () => {
+		const result = await sweep();
+
+		if (!isRefusal(result)) {
+			// One covenant input, one output, and the wallet input the estimate assumes.
+			expect(result.estimatedFeeSats).toBe(
+				estimateFeeSats(
+					{ covenantInputs: 1, outputs: 1, walletInputs: 1 },
+					result.feeRateSatsPerKvb,
+				),
+			);
+		}
+	});
+
+	test("carries the witness the covenant needs a signature for", async () => {
+		const result = await sweep();
+
+		if (!isRefusal(result)) {
+			expect(result.covenantInputs[0]?.signatureWitness).toBe("SIGNATURE");
 		}
 	});
 });

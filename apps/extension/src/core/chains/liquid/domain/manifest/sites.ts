@@ -13,6 +13,15 @@ export type CovenantSite = {
 	/** The manifest's id for this input or output, which its amounts refer to it by. */
 	id: string;
 	role: "created" | "spent";
+	/**
+	 * The witness this covenant's program needs a signature for, when it has one.
+	 *
+	 * A covenant that authenticates whoever spends it declares a `Signature` witness sourced
+	 * from a wallet key, and the signer is the only thing that can fill it — nothing in the
+	 * request could, because the signature is over a transaction that does not exist yet.
+	 * Absent for a covenant that needs no signature, and for one being created.
+	 */
+	signatureWitness?: string;
 	utxoType: string;
 	/** The compile parameters wired in at this site, unresolved. */
 	wiring: Record<string, unknown>;
@@ -25,7 +34,14 @@ export function covenantSites(action: NormalisedAction): CovenantSite[] {
 		const site = covenantReference(asRecord(entry)?.utxo_source);
 
 		if (site) {
-			sites.push({ ...site, id: identifierOf(entry), role: "spent" });
+			const signatureWitness = walletSignatureWitness(asRecord(entry)?.witnesses);
+
+			sites.push({
+				...site,
+				id: identifierOf(entry),
+				role: "spent",
+				...(signatureWitness === undefined ? {} : { signatureWitness }),
+			});
 		}
 	}
 
@@ -62,4 +78,23 @@ function covenantReference(
 	}
 
 	return { utxoType, wiring: asRecord(record?.compile_params) ?? {} };
+}
+
+/**
+ * The witness a wallet key must sign, from an input's witness declarations.
+ *
+ * Only a `Signature` witness sourced from the wallet qualifies. One with a literal value is
+ * already supplied, and one sourced from a formula is worked out rather than signed — asking
+ * the signer for either would produce a signature nothing checks.
+ */
+function walletSignatureWitness(declared: unknown): string | undefined {
+	for (const [name, entry] of Object.entries(asRecord(declared) ?? {})) {
+		const witness = asRecord(entry);
+
+		if (witness?.type === "Signature" && asRecord(witness.source)?.type === "wallet") {
+			return name;
+		}
+	}
+
+	return undefined;
 }

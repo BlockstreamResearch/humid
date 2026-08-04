@@ -1,6 +1,9 @@
 import { encodeExplicitTxOut, type ReadFeeRate, type ReadTxOut } from "./chainRead";
 import { type CoinSelection, type SelectableUtxo, selectCoins } from "./coinSelection";
+import { resolveComputedParams } from "./computed";
 import { type CompileCovenant, covenantMatchesChain, deriveCovenantAddress } from "./covenant";
+import { type CompileScriptPubKey, covenantHashFrom } from "./covenantHash";
+import { estimateFeeSats } from "./fee";
 import { asArray, asRecord } from "./json";
 import {
 	findAction,
@@ -37,6 +40,15 @@ export type CovenantFinding = {
  */
 export type ReviewedCovenantInput = {
 	argumentsJson: string;
+	/**
+	 * The witness the signer must fill with a signature over this transaction.
+	 *
+	 * Carried through from the manifest's own declaration because the alternative is not
+	 * signing it: a covenant whose program asserts a signature cannot be satisfied by anything
+	 * the request supplies, and leaving this unset makes the spend fail at signing rather than
+	 * anywhere a person could act on.
+	 */
+	signatureWitness?: string;
 	source: string;
 	txOutHex: string;
 	txid: string;
@@ -63,7 +75,15 @@ export type ManifestReview = {
 	covenants: CovenantFinding[];
 	/** The covenant outputs this action spends, ready to be added as inputs. */
 	covenantInputs: ReviewedCovenantInput[];
-	/** What the wallet will pay, established from the chain rather than from the request. */
+	/**
+	 * What the wallet worked out this will cost, from the shape of the transaction it built.
+	 *
+	 * An estimate rather than the charged figure, and the two differ: the fee that is charged
+	 * comes from the weight of the signed transaction, which does not exist until after the
+	 * person agrees. The difference returns to them as change.
+	 */
+	estimatedFeeSats: bigint;
+	/** What the wallet will pay per kilo-vbyte, established from the chain rather than from the request. */
 	feeRateSatsPerKvb: number;
 	/**
 	 * Constructs the manifest carries that this runtime did not act on and did not need to.
@@ -110,6 +130,8 @@ export async function reviewManifestAction(
 		network: string;
 		readFeeRate: ReadFeeRate;
 		readTxOut: ReadTxOut;
+		/** Compiles a contract to the scriptPubKey it locks to, for the hashes a manifest computes. */
+		scriptPubKeyOf: CompileScriptPubKey;
 		walletScriptPubKeyHex: string;
 	},
 ): Promise<ReviewManifestActionResult> {
@@ -140,10 +162,24 @@ export async function reviewManifestAction(
 	/** What each covenant input actually holds, read from the chain rather than told. */
 	const inputs: Record<string, Record<string, unknown>> = {};
 
+	// The parameters a manifest works out for itself come first: a covenant compiled with
+	// another covenant's hash needs that hash before its own address can be derived, and a
+	// hash cannot depend on what the chain reports at an address that does not exist yet.
+	const computed = resolveComputedParams(action, {
+		contractSources: request.contractSources,
+		hashCovenant: covenantHashFrom(input.scriptPubKeyOf),
+		notes,
+		scope: { instance: deployment.instance.fields, params: request.params },
+	});
+
+	if (!computed.ok) {
+		return { reason: computed.reason, refused: true };
+	}
+
 	const scope: ReferenceScope = {
 		inputs,
 		instance: deployment.instance.fields,
-		params: request.params,
+		params: { ...request.params, ...computed.values },
 	};
 
 	for (const site of covenantSites(action)) {
@@ -216,6 +252,7 @@ export async function reviewManifestAction(
 
 		covenantInputs.push({
 			argumentsJson: derived.derivation.argumentsJson,
+			...(site.signatureWitness === undefined ? {} : { signatureWitness: site.signatureWitness }),
 			source: derived.derivation.source,
 			txOutHex,
 			txid: outpoint.txid,
@@ -230,7 +267,43 @@ export async function reviewManifestAction(
 		});
 	}
 
-	const plan = planAction(action, scope, notes);
+	let feeRateSatsPerKvb: number;
+
+	try {
+		feeRateSatsPerKvb = await input.readFeeRate(FEE_TARGET_BLOCKS);
+	} catch (error) {
+		return {
+			reason: `The wallet could not establish a fee rate, so it will not build this: ${String(error)}`,
+			refused: true,
+		};
+	}
+
+	// The fee is planned for twice. An amount can be a function of the fee — "pay out what
+	// this input holds, less what the network takes" — and the fee depends on the shape of
+	// the transaction those amounts appear in, so a draft is planned against a fee of zero
+	// purely to learn the shape, and the real pass runs against the figure that shape costs.
+	//
+	// One pass is enough because an amount does not change what a transaction weighs: in
+	// Elements a value occupies a fixed size whatever its magnitude. Without that property
+	// this would not converge.
+	const draft = planAction(action, { ...scope, fee: 0n }, notes);
+
+	if (!draft.ok) {
+		return { reason: draft.reason, refused: true };
+	}
+
+	const estimatedFee = estimateFeeSats(
+		{
+			covenantInputs: covenantInputs.length,
+			outputs: draft.plan.outputs.length,
+			// The wallet has not chosen its inputs yet, and one is the common case; a
+			// selection that takes more is priced below, before anything is committed to.
+			walletInputs: 1,
+		},
+		feeRateSatsPerKvb,
+	);
+
+	const plan = planAction(action, { ...scope, fee: estimatedFee }, notes);
 
 	if (!plan.ok) {
 		return { reason: plan.reason, refused: true };
@@ -261,17 +334,6 @@ export async function reviewManifestAction(
 		outputs.push({ id: planned.id, sats: planned.sats, scriptPubKeyHex });
 	}
 
-	let feeRateSatsPerKvb: number;
-
-	try {
-		feeRateSatsPerKvb = await input.readFeeRate(FEE_TARGET_BLOCKS);
-	} catch (error) {
-		return {
-			reason: `The wallet could not establish a fee rate, so it will not build this: ${String(error)}`,
-			refused: true,
-		};
-	}
-
 	const selection: CoinSelection = selectCoins(
 		input.fundingUtxos,
 		plan.plan.fundingSats,
@@ -286,6 +348,7 @@ export async function reviewManifestAction(
 		action: request.action,
 		covenantInputs,
 		covenants,
+		estimatedFeeSats: estimatedFee,
 		feeRateSatsPerKvb,
 		ignoredConstructs: ignored(inspectConstructs(manifest)),
 		normalisation: notes,

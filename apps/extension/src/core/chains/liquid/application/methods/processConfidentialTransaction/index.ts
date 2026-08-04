@@ -149,6 +149,11 @@ export const createProcessLiquidConfidentialTransaction = (
 								covenant.txOutHex,
 								covenant.source,
 								covenant.argumentsJson,
+								// No witness values: a covenant that authenticates its spender needs a
+								// signature over this transaction, which only the signer can make, and
+								// naming it is what asks for one.
+								undefined,
+								covenant.signatureWitness,
 							);
 						}
 
@@ -207,6 +212,8 @@ export const createProcessLiquidConfidentialTransaction = (
 			const result = await reviewManifestAction(params, {
 				compile: ({ argumentsJson, network: target, source }) =>
 					new smplx.Contract(source, argumentsJson).covenantAddress(target),
+				scriptPubKeyOf: ({ argumentsJson, source }) =>
+					new smplx.Contract(source, argumentsJson).scriptPubKeyHex(network),
 				fundingUtxos: context.walletBackend.getUtxos(account, account.rawPolicyAssetId),
 				network,
 				readFeeRate: dependencies.readFeeRate(context.chain),

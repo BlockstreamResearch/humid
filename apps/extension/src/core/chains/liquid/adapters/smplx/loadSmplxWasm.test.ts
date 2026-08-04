@@ -392,3 +392,100 @@ describe("covenant inputs and the dry-run", () => {
 		builder.free();
 	});
 });
+
+// Spending a covenant that authenticates whoever spends it needs a signature over the
+// transaction being built, which only the signer can make. Naming the witness is how it is
+// asked for; without that name the spend fails at signing with "missing witness", which is
+// what this wallet did until it was measured.
+describe("signing a covenant that authenticates its spender", () => {
+	const TXID = "3".repeat(64);
+	const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+	const P2PK_SOURCE =
+		"fn main() { jet::bip_0340_verify((param::PUB_KEY, jet::sig_all_hash()), witness::SIGNATURE) }";
+	const RATE = 1000;
+
+	function txOut(sats: bigint, scriptHex: string): string {
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const value = sats.toString(16).padStart(16, "0");
+		const len = (scriptHex.length / 2).toString(16).padStart(2, "0");
+
+		return `01${assetLe}01${value}00${len}${scriptHex}`;
+	}
+
+	/** A transaction of the given shape, signed, returning the fee it was charged. */
+	function feeFor(walletInputs: number, covenantInputs: number, outputs: number, name?: string) {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+		const builder = new bindings.TransactionBuilder();
+		const args = JSON.stringify({
+			PUB_KEY: { type: "Pubkey", value: `0x${signer.schnorrPublicKey()}` },
+		});
+		const covenantScript = new bindings.Contract(P2PK_SOURCE, args).scriptPubKeyHex(
+			"liquid-testnet",
+		);
+
+		try {
+			for (let i = 0; i < covenantInputs; i += 1) {
+				builder.addCovenantInput(
+					TXID,
+					i,
+					txOut(200_000n, covenantScript),
+					P2PK_SOURCE,
+					args,
+					undefined,
+					name,
+				);
+			}
+
+			for (let i = 0; i < walletInputs; i += 1) {
+				builder.addWalletInput(TXID, 50 + i, txOut(200_000n, signer.scriptPubKeyHex()));
+			}
+
+			for (let i = 0; i < outputs; i += 1) {
+				builder.addOutput(signer.scriptPubKeyHex(), 10_000n, POLICY_ASSET);
+			}
+
+			const signed = signer.finalizeTransaction(builder, RATE, signer.scriptPubKeyHex());
+			const fee = signed.feeSats;
+
+			signed.free();
+
+			return fee;
+		} finally {
+			builder.free();
+			signer.free();
+		}
+	}
+
+	test("signs the covenant when the witness needing a signature is named", () => {
+		expect(feeFor(1, 1, 1, "SIGNATURE") > 0n).toBe(true);
+	});
+
+	// The regression: this is exactly what the wallet did before the witness was named.
+	test("fails to satisfy the program when it is not", () => {
+		expect(() => feeFor(1, 1, 1)).toThrow(/missing witness for SIGNATURE/);
+	});
+
+	// At a rate of 1000 sat/kvb the fee in satoshis is the vsize, so these are sizes. They
+	// are what a fee estimate has to be built from, and a toolchain change that moves them
+	// moves every fee with them — which is why they are asserted rather than noted.
+	describe("what a transaction of each shape weighs", () => {
+		test("one wallet input and one output, plus the change and fee smplx adds", () => {
+			expect(feeFor(1, 0, 1)).toBe(257n);
+		});
+
+		test("a further wallet input costs 69", () => {
+			expect(feeFor(2, 0, 1) - feeFor(1, 0, 1)).toBe(69n);
+		});
+
+		test("a further output costs 67", () => {
+			expect(feeFor(1, 0, 2) - feeFor(1, 0, 1)).toBe(67n);
+		});
+
+		// A covenant input's witness is the Simplicity witness, so its size belongs to the
+		// program rather than to the shape. This is p2pk's, the smallest real one there is.
+		test("a p2pk covenant input costs 87, and a second 86", () => {
+			expect(feeFor(1, 1, 1, "SIGNATURE") - feeFor(1, 0, 1)).toBe(87n);
+			expect(feeFor(1, 2, 1, "SIGNATURE") - feeFor(1, 1, 1, "SIGNATURE")).toBe(86n);
+		});
+	});
+});
