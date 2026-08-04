@@ -157,8 +157,19 @@ function stateFingerprint(report) {
     .digest("hex");
 }
 
+/**
+ * Under `.workflow/current/`, which is gitignored, but one level down: in a leaf
+ * repository wfctl reads every `*.json` at the top of that directory as an
+ * active-work binding, so a state file left there broke every `wfctl work`
+ * command with "Unsupported or malformed active work binding". A subdirectory
+ * is invisible to that scan.
+ *
+ * `.workflow/runtime/` looks like the obvious home and is the wrong one: it
+ * holds installed assets that upgrades own and Git tracks, so mutable state
+ * there both dirties the tree and turns every upgrade into a conflict.
+ */
 function memoryPath(cwd) {
-  return join(cwd, ".workflow/runtime/stop-guard.json");
+  return join(cwd, ".workflow/current/hooks/stop-guard.json");
 }
 
 function readMemory(cwd) {
