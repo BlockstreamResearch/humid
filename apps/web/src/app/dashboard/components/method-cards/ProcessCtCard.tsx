@@ -56,8 +56,11 @@ export function ProcessCtCard() {
 		>
 			<SelectField label="Action" onChange={setAction} options={ACTIONS} value={action} />
 
+			{/* One key signs every contract action, and it is not one the wallet's normal
+			    screens show. To spend what Pay locks, this must be the wallet's own contract
+			    key — HUMID → Settings → the account → Contract signing identity. */}
 			<TextField
-				label="Recipient x-only public key (32 bytes, hex)"
+				label="Recipient x-only public key — for a spendable output, the wallet's own contract key"
 				onChange={setPubkey}
 				placeholder="79be667e…"
 				value={pubkey}

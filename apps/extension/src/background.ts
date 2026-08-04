@@ -17,6 +17,10 @@ import type { Caip25Scopes } from "@/core/caip25";
 import { addUnlockedChainRecord } from "@/core/chains/application/chain-store/addChainRecord";
 import { getUnlockedChainStoreState } from "@/core/chains/application/chain-store/secureChainStore";
 import {
+	type LiquidContractIdentity,
+	readLiquidContractIdentity,
+} from "@/core/chains/liquid/application/contractIdentity";
+import {
 	buildLiquidDappAccountScope,
 	resolveAccountGroupIdsForIdentifiers,
 } from "@/core/chains/liquid/application/dappAccountScope";
@@ -274,6 +278,20 @@ const init = async () => {
 
 	const getReceiveAddress = async (): Promise<ReceiveAddress> =>
 		liquidChainGroup.accountRuntime.getReceiveAddress((await resolveSelectedLiquidAccount()).input);
+
+	// The address and key contract actions are signed with, for the selected account. Not
+	// the same as the receive address above: the contract SDK signs with one key at a fixed
+	// path and returns change to that key's own unblinded address, so a covenant action can
+	// only spend what sits there. Reading it is what makes that limit visible.
+	const readContractIdentity = async (): Promise<LiquidContractIdentity> => {
+		const { input } = await resolveSelectedLiquidAccount();
+
+		return readLiquidContractIdentity({
+			accountGroupIndex: input.accountGroupIndex,
+			chain: input.chain,
+			keyManagerState: input.keyManagerState,
+		});
+	};
 
 	// In-extension send: preview then execute against the SELECTED account (resolved exactly like
 	// getReceiveAddress). Both call the chain group's runtime, which calls the same backend fns the
@@ -580,6 +598,7 @@ const init = async () => {
 				getActivity,
 				getPortfolio,
 				getReceiveAddress,
+				readContractIdentity,
 				inspectTransfer,
 				purgeAccountPortfolio,
 				purgeAccountWalletConnectSessions,
