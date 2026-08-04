@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import p2pkManifest from "./__fixtures__/p2pk.manifest.json";
 import { covenantMatchesChain, deriveCovenantAddress } from "./covenant";
-import type { ParsedLiquidProcessCtParams } from "./types";
+import { normaliseManifest } from "./normalise";
 
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const SOURCE_PATH = "./p2pk.simf";
@@ -13,15 +13,17 @@ const SOURCE =
 const WIRING = { PUB_KEY: "params.pubkey" };
 const DECLARED_TYPES = { pubkey: "pubkey" };
 
-function request(
-	overrides: Partial<ParsedLiquidProcessCtParams> = {},
-): ParsedLiquidProcessCtParams {
+const MANIFEST = normaliseManifest(p2pkManifest as unknown as Record<string, unknown>).manifest;
+
+/** What a covenant derivation needs beyond the manifest, with the published wiring. */
+function request(overrides: Record<string, unknown> = {}) {
 	return {
-		action: "Receive",
-		broadcast: false,
 		contractSources: { [SOURCE_PATH]: SOURCE },
-		manifest: p2pkManifest as unknown as Record<string, unknown>,
-		params: { pubkey: PUBKEY },
+		declaredTypes: DECLARED_TYPES,
+		network: "liquid",
+		scope: { params: { pubkey: PUBKEY } },
+		utxoType: "p2pk_output",
+		wiring: WIRING,
 		...overrides,
 	};
 }
@@ -44,13 +46,7 @@ describe("deriveCovenantAddress", () => {
 	test("compiles the source the request supplied, with the parameters the manifest wires", async () => {
 		const { calls, compile } = compiler();
 
-		const result = await deriveCovenantAddress(request(), {
-			compile,
-			declaredTypes: DECLARED_TYPES,
-			network: "liquid",
-			utxoType: "p2pk_output",
-			wiring: WIRING,
-		});
+		const result = await deriveCovenantAddress(MANIFEST, { ...request(), compile });
 
 		expect(result).toMatchObject({ derivation: { utxoType: "p2pk_output" }, ok: true });
 		expect(calls).toHaveLength(1);
@@ -61,38 +57,29 @@ describe("deriveCovenantAddress", () => {
 	});
 
 	test("refuses a utxo type the manifest does not declare", async () => {
-		const result = await deriveCovenantAddress(request(), {
+		const result = await deriveCovenantAddress(MANIFEST, {
+			...request({ utxoType: "vault" }),
 			compile: compiler().compile,
-			declaredTypes: DECLARED_TYPES,
-			network: "liquid",
-			utxoType: "vault",
-			wiring: WIRING,
 		});
 
 		expect(result).toMatchObject({ ok: false });
 	});
 
 	test("refuses when the contract source was not supplied", async () => {
-		const result = await deriveCovenantAddress(request({ contractSources: {} }), {
+		const result = await deriveCovenantAddress(MANIFEST, {
+			...request({ contractSources: {} }),
 			compile: compiler().compile,
-			declaredTypes: DECLARED_TYPES,
-			network: "liquid",
-			utxoType: "p2pk_output",
-			wiring: WIRING,
 		});
 
 		expect(result).toMatchObject({ ok: false });
 	});
 
 	test("refuses when the source does not compile, rather than throwing", async () => {
-		const result = await deriveCovenantAddress(request(), {
+		const result = await deriveCovenantAddress(MANIFEST, {
+			...request(),
 			compile: () => {
 				throw new Error("parse error");
 			},
-			declaredTypes: DECLARED_TYPES,
-			network: "liquid",
-			utxoType: "p2pk_output",
-			wiring: WIRING,
 		});
 
 		expect(result).toMatchObject({ ok: false });

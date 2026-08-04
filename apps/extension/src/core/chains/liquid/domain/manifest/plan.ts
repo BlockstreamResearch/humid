@@ -1,4 +1,6 @@
-import type { ParsedLiquidProcessCtParams } from "./types";
+import { asArray, asRecord } from "./json";
+import type { NormalisationNote, NormalisedAction } from "./normalise";
+import { type ReferenceScope, resolveReference } from "./references";
 
 /**
  * A concrete amount the wallet worked out for one of the action's outputs.
@@ -26,27 +28,22 @@ export type PlanResult = { ok: false; reason: string } | { ok: true; plan: Plann
 /**
  * Turns the action's declared outputs into concrete amounts.
  *
- * Knowingly minimal: it resolves a literal and a `params.` reference and refuses
- * everything else. The format's amounts can be arithmetic over other outputs, the fee and
- * chain state, and evaluating those is a dependency graph with a fee re-pass — a later
- * slice's whole subject. This exists so the thinnest real action can be built end to end,
- * and it should be deleted when that slice lands rather than extended one form at a time.
+ * Each amount is one reference or one literal, resolved at the amount site — which accepts
+ * the fee, the deployment's fields, the request's parameters and arguments, a bare name and
+ * an attribute of a resolved input. What it still cannot do is arithmetic: the format's
+ * amounts can be expressions over other outputs, the fee and chain state, and evaluating
+ * those is a dependency graph with a fee re-pass, which is the phased-evaluation slice's
+ * whole subject. An expression is refused here by name rather than half-resolved.
  */
 export function planAction(
-	request: ParsedLiquidProcessCtParams,
-	action: Record<string, unknown>,
-	/**
-	 * Base units at each input the wallet already resolved, keyed by the manifest's id for
-	 * it. These come from the chain read the covenant check already performs, so an output
-	 * saying "as much as that input holds" resolves against what is actually there rather
-	 * than against a figure the requester supplied.
-	 */
-	inputAmounts: Record<string, bigint> = {},
+	action: NormalisedAction,
+	scope: ReferenceScope,
+	notes?: NormalisationNote[],
 ): PlanResult {
 	const outputs: PlannedOutput[] = [];
 	let fundingSats = 0n;
 
-	for (const declared of asArray(action.outputs)) {
+	for (const declared of asArray(action.node.outputs)) {
 		const output = asRecord(declared);
 
 		if (!output) {
@@ -69,7 +66,7 @@ export function planAction(
 			continue;
 		}
 
-		const amount = resolveAmount(request, output.amount_sat, inputAmounts);
+		const amount = resolveAmount(output.amount_sat, scope, notes);
 
 		if (amount === undefined) {
 			return {
@@ -93,6 +90,12 @@ export function planAction(
 	return { ok: true, plan: { fundingSats, outputs } };
 }
 
+/**
+ * `change` and `wallet` are keywords rather than references, so they are read before the
+ * resolver is asked anything — a bare word at a destination site means one of these two,
+ * and the site accepts nothing else bare precisely so it cannot mean a parameter by
+ * accident.
+ */
 function resolveTarget(destination: unknown): PlannedOutput["target"] | undefined {
 	if (destination === "change") {
 		return { kind: "change" };
@@ -107,49 +110,35 @@ function resolveTarget(destination: unknown): PlannedOutput["target"] | undefine
 	return typeof utxoType === "string" ? { kind: "covenant", utxoType } : undefined;
 }
 
-/**
- * A literal, a `params.` reference to one, or `<input_id>.amount_sat`.
- *
- * The third form is what an action spending a covenant needs — "pay out what that input
- * holds" — and it resolves against the chain, not the request. Anything else is refused
- * by the caller.
- */
+/** A literal, or one reference resolved at the amount site and required to be a count. */
 function resolveAmount(
-	request: ParsedLiquidProcessCtParams,
 	amount: unknown,
-	inputAmounts: Record<string, bigint>,
+	scope: ReferenceScope,
+	notes?: NormalisationNote[],
 ): bigint | undefined {
-	if (typeof amount === "number" && Number.isSafeInteger(amount)) {
-		return BigInt(amount);
+	const literal = asCount(amount);
+
+	if (literal !== undefined) {
+		return literal;
 	}
 
-	if (typeof amount === "string") {
-		const literal = /^\d+$/.test(amount) ? BigInt(amount) : undefined;
-
-		if (literal !== undefined) {
-			return literal;
-		}
-
-		const referenced = /^\$?params\.(?<name>[A-Za-z0-9_]+)$/.exec(amount)?.groups?.name;
-
-		if (referenced !== undefined) {
-			return resolveAmount(request, request.params[referenced], inputAmounts);
-		}
-
-		const input = /^(?<id>[A-Za-z0-9_]+)\.amount_sat$/.exec(amount)?.groups?.id;
-
-		return input === undefined ? undefined : inputAmounts[input];
+	if (typeof amount !== "string") {
+		return undefined;
 	}
 
-	return undefined;
+	const found = resolveReference(amount, "amount", scope, notes);
+
+	return found.ok ? asCount(found.value) : undefined;
 }
 
-function asArray(value: unknown): unknown[] {
-	return Array.isArray(value) ? value : [];
-}
+function asCount(value: unknown): bigint | undefined {
+	if (typeof value === "bigint") {
+		return value;
+	}
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-	return typeof value === "object" && value !== null && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: undefined;
+	if (typeof value === "number") {
+		return Number.isSafeInteger(value) ? BigInt(value) : undefined;
+	}
+
+	return typeof value === "string" && /^\d+$/.test(value) ? BigInt(value) : undefined;
 }

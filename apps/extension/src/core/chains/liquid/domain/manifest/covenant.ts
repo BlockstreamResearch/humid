@@ -1,5 +1,7 @@
 import { resolveCompileParams } from "./compileParams";
-import type { ParsedLiquidProcessCtParams } from "./types";
+import { asRecord } from "./json";
+import type { NormalisationNote, NormalisedManifest } from "./normalise";
+import type { ReferenceScope } from "./references";
 
 /**
  * Compiles a covenant and reports the address it derives.
@@ -43,34 +45,44 @@ export type DeriveCovenantResult =
  * against.
  */
 export async function deriveCovenantAddress(
-	request: ParsedLiquidProcessCtParams,
+	manifest: NormalisedManifest,
 	input: {
 		compile: CompileCovenant;
+		contractSources: Record<string, string>;
 		declaredTypes: Record<string, string>;
 		network: string;
+		notes?: NormalisationNote[];
+		scope: ReferenceScope;
 		utxoType: string;
 		wiring: Record<string, unknown>;
 	},
 ): Promise<DeriveCovenantResult> {
-	const declared = utxoTypeDeclaration(request.manifest, input.utxoType);
+	const declared = asRecord(manifest.utxoTypes[input.utxoType]);
 
 	if (!declared) {
 		return { ok: false, reason: `The manifest declares no utxo type named "${input.utxoType}".` };
 	}
 
-	const sourcePath = declared.sourcePath;
+	const sourcePath = asRecord(declared.script)?.source;
 
-	if (!sourcePath) {
+	if (typeof sourcePath !== "string") {
 		return { ok: false, reason: `Utxo type "${input.utxoType}" names no contract source.` };
 	}
 
-	const source = request.contractSources[sourcePath];
+	const source = input.contractSources[sourcePath];
 
 	if (source === undefined) {
 		return { ok: false, reason: `The source of ${sourcePath} was not supplied.` };
 	}
 
-	const params = resolveCompileParams(request, input.wiring, input.declaredTypes);
+	// The wiring at the site the covenant is named from, layered over the wiring the utxo
+	// type declares for itself — the site is more specific, so it wins.
+	const wiring = {
+		...asRecord(asRecord(declared.script)?.compile_params),
+		...input.wiring,
+	};
+
+	const params = resolveCompileParams(wiring, input.declaredTypes, input.scope, input.notes);
 
 	if (!params.ok) {
 		return params;
@@ -122,29 +134,4 @@ export function covenantMatchesChain(
 			`The ${derivation.utxoType} contract rebuilds to ${derivation.address}, ` +
 			`but the funds are at ${onChainAddress}. This is not the contract the site described.`,
 	};
-}
-
-function utxoTypeDeclaration(
-	manifest: Record<string, unknown>,
-	name: string,
-): { sourcePath: string | undefined } | undefined {
-	const utxoTypes = manifest.utxo_types;
-
-	if (typeof utxoTypes !== "object" || utxoTypes === null) {
-		return undefined;
-	}
-
-	const declared = (utxoTypes as Record<string, unknown>)[name];
-
-	if (typeof declared !== "object" || declared === null) {
-		return undefined;
-	}
-
-	const script = (declared as Record<string, unknown>).script;
-	const source =
-		typeof script === "object" && script !== null
-			? (script as Record<string, unknown>).source
-			: undefined;
-
-	return { sourcePath: typeof source === "string" ? source : undefined };
 }

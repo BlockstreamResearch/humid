@@ -1,4 +1,5 @@
-import type { ParsedLiquidProcessCtParams } from "./types";
+import type { NormalisationNote } from "./normalise";
+import { type ReferenceScope, resolveReference } from "./references";
 
 /**
  * A contract's compile-time parameters, in SimplicityHL's own argument JSON shape.
@@ -26,20 +27,20 @@ const PARAM_TYPES: Record<string, string> = {
 
 /**
  * Resolves the compile-time parameters a contract is built with, from the manifest's
- * wiring and the parameters the request filled.
+ * wiring and what the request and the deployment supply.
  *
  * The wiring lives in `compile_params`, a map of the contract's parameter name to a
  * reference — `{"PUB_KEY": "params.pubkey"}`. Note the collision the format carries:
  * `compile_params` is both this wiring map and a deprecated namespace prefix for
- * references. This reads the wiring; the namespace is a later slice's problem.
- *
- * Scope: resolves `params.` references only. Instance references and formulas belong to
- * the slices that own them, and are refused here rather than silently mishandled.
+ * references. This map is read as wiring; a reference inside it is resolved at the
+ * compile-parameter site, which is what decides that `instance.`, `params.`, `args.` and a
+ * bare name are meaningful here and the fee is not.
  */
 export function resolveCompileParams(
-	request: ParsedLiquidProcessCtParams,
 	wiring: Record<string, unknown>,
 	declaredTypes: Record<string, string>,
+	scope: ReferenceScope,
+	notes?: NormalisationNote[],
 ): ResolveCompileParamsResult {
 	const resolved: ContractArguments = {};
 
@@ -48,50 +49,51 @@ export function resolveCompileParams(
 			return { ok: false, reason: `Compile parameter ${name} is not a reference.` };
 		}
 
-		const paramName = referencedParam(reference);
+		const found = resolveReference(reference, "compileParam", scope, notes);
 
-		if (!paramName) {
+		if (!found.ok) {
+			return { ok: false, reason: `Compile parameter ${name}: ${found.reason}` };
+		}
+
+		if (typeof found.value !== "string") {
 			return {
 				ok: false,
-				reason: `Compile parameter ${name} references ${reference}, which this runtime does not resolve yet.`,
+				reason: `Compile parameter ${name} resolves to ${reference}, which is not a value this runtime can encode yet.`,
 			};
 		}
 
-		const value = request.params[paramName];
-
-		if (typeof value !== "string") {
-			return {
-				ok: false,
-				reason: `Compile parameter ${name} needs parameter ${paramName}, which the request did not supply as a value.`,
-			};
-		}
-
-		const declaredType = declaredTypes[paramName];
+		// A compile parameter's type comes from the parameter the manifest declares, so a
+		// reference to something with no declared type has nothing to encode against.
+		const declaredType = declaredTypeOf(reference, declaredTypes);
 		const compilerType = declaredType ? PARAM_TYPES[declaredType] : undefined;
 
 		if (!compilerType) {
 			return {
 				ok: false,
-				reason: `Parameter ${paramName} is declared as ${declaredType ?? "an unstated type"}, which this runtime does not encode yet.`,
+				reason: `${reference} is declared as ${declaredType ?? "an unstated type"}, which this runtime does not encode yet.`,
 			};
 		}
 
-		resolved[name] = { type: compilerType, value: withHexPrefix(value) };
+		resolved[name] = { type: compilerType, value: withHexPrefix(found.value) };
 	}
 
 	return { arguments: resolved, ok: true };
 }
 
 /**
- * The action parameter a reference points at, or undefined when it points elsewhere.
+ * The declared type of whatever a reference points at.
  *
- * Accepts the `$`-prefixed spelling alongside the bare one: the corpus carries both, and
- * `lending` uses one where `lending_v2` uses the other.
+ * Only the action's own parameters carry declared types today. An instance field or an
+ * argument has none, which is why a reference to one is refused here rather than encoded
+ * on a guess — encoding a value at the wrong width changes the address silently.
  */
-function referencedParam(reference: string): string | undefined {
-	const match = /^\$?params\.(?<name>[A-Za-z0-9_]+)$/.exec(reference);
+function declaredTypeOf(
+	reference: string,
+	declaredTypes: Record<string, string>,
+): string | undefined {
+	const name = /^\$?(?:params\.)?(?<name>[A-Za-z_][A-Za-z0-9_]*)$/.exec(reference)?.groups?.name;
 
-	return match?.groups?.name;
+	return name === undefined ? undefined : declaredTypes[name];
 }
 
 function withHexPrefix(value: string): string {

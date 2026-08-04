@@ -1,3 +1,7 @@
+import { asRecord } from "./json";
+import { findAction, type NormalisedManifest } from "./normalise";
+import { instanceReferences } from "./references";
+import { covenantSites, namedUtxoTypes } from "./sites";
 import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./types";
 
 /**
@@ -9,15 +13,16 @@ import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } fro
  * rather than spends reads nothing from state. Requiring all six parts of every request
  * would refuse valid ones; requiring none would fail later and less legibly.
  *
- * Scope note: this walks the action looking for four things — referenced contract sources,
- * `instance.` references, state-file lookups, and declared parameters. It is deliberately
- * not a general construct registry; that is a later slice's job, and this should be
- * replaced by it rather than grown.
+ * Every question it asks now goes through the runtime core — the action comes from the
+ * normalised document, the covenant sites from one enumeration, and whether the instance
+ * file is read from the reference sites rather than from a search for reference-shaped
+ * text anywhere in the action.
  */
 export function resolveActionRequirements(
 	request: ParsedLiquidProcessCtParams,
+	manifest: NormalisedManifest,
 ): ActionRequirements {
-	const action = findAction(request.manifest, request.action);
+	const action = findAction(manifest, request.action);
 
 	if (!action) {
 		return {
@@ -34,7 +39,7 @@ export function resolveActionRequirements(
 	const required: ActionRequirements["required"] = [];
 	const missing: MissingPart[] = [];
 
-	const sources = referencedContractSources(request.manifest, action);
+	const sources = referencedContractSources(manifest, action);
 
 	if (sources.length > 0) {
 		required.push("contractSources");
@@ -50,7 +55,7 @@ export function resolveActionRequirements(
 		}
 	}
 
-	const params = declaredParams(action);
+	const params = promptedParams(action.node);
 	const unfilled = params.filter((name) => !(name in request.params));
 
 	if (params.length > 0) {
@@ -65,10 +70,24 @@ export function resolveActionRequirements(
 		});
 	}
 
-	if (referencesInstance(action)) {
+	const readsDeployment = instanceReferences(manifest, action);
+
+	if (readsDeployment.length > 0) {
 		required.push("instance");
 
-		if (!request.instance) {
+		// A deployment's field values belong to a class, so an action declared outside one
+		// has none to read. No instance file the request could send would satisfy it, which
+		// makes this a fault in the document rather than a part the request left out — and
+		// saying so beats asking for a file that cannot help.
+		if (!action.boundTo) {
+			missing.push({
+				keys: readsDeployment.map((occurrence) => occurrence.at),
+				part: "instance",
+				reason:
+					`"${request.action}" is not declared inside a class, so it has no deployment, ` +
+					"yet it reads one's field values.",
+			});
+		} else if (!request.instance) {
 			missing.push({
 				part: "instance",
 				reason: "The action reads this deployment's field values.",
@@ -76,7 +95,7 @@ export function resolveActionRequirements(
 		}
 	}
 
-	if (readsState(action)) {
+	if (spendsCovenant(action)) {
 		required.push("state");
 
 		if (!request.state) {
@@ -90,49 +109,15 @@ export function resolveActionRequirements(
 	return { missing, required };
 }
 
-/**
- * Finds an action by name. Manifests declare them either flat under `actions` or grouped
- * as `methods` inside a class, and a file may carry both; the two are structurally
- * identical, so either spelling resolves here.
- */
-function findAction(
-	manifest: Record<string, unknown>,
-	name: string,
-): Record<string, unknown> | undefined {
-	const flat = asRecord(manifest.actions)?.[name];
-
-	if (isRecord(flat)) {
-		return flat;
-	}
-
-	const classes = asRecord(manifest.classes);
-
-	for (const declared of Object.values(classes ?? {})) {
-		const method = asRecord(asRecord(declared)?.methods)?.[name];
-
-		if (isRecord(method)) {
-			return method;
-		}
-	}
-
-	return undefined;
-}
-
 /** Contract source paths the action reaches, through the utxo types it names. */
 function referencedContractSources(
-	manifest: Record<string, unknown>,
-	action: Record<string, unknown>,
+	manifest: NormalisedManifest,
+	action: Parameters<typeof namedUtxoTypes>[0],
 ): string[] {
-	const utxoTypes = asRecord(manifest.utxo_types) ?? {};
-	const named = new Set(collectStrings(action, "utxo_type"));
 	const paths = new Set<string>();
 
-	for (const [name, declared] of Object.entries(utxoTypes)) {
-		if (!named.has(name)) {
-			continue;
-		}
-
-		const source = asRecord(asRecord(declared)?.script)?.source;
+	for (const name of namedUtxoTypes(action)) {
+		const source = asRecord(asRecord(manifest.utxoTypes[name])?.script)?.source;
 
 		if (typeof source === "string") {
 			paths.add(source);
@@ -142,92 +127,29 @@ function referencedContractSources(
 	return [...paths];
 }
 
-/** Parameter names the action declares and therefore expects the request to fill. */
-function declaredParams(action: Record<string, unknown>): string[] {
+/**
+ * Parameter names the request has to fill.
+ *
+ * A parameter the wallet or the protocol supplies is not prompted for: `source` names
+ * where the value comes from, and `compute` and `derived` say it is worked out rather than
+ * entered. `formula` is **not** one of these — the reference implementation's own comment
+ * calls it informational only for display and never evaluates it, so a parameter carrying
+ * one is still a parameter the request must fill. Treating it as derived accepts a request
+ * that is short a value and fails later, further from the cause.
+ */
+function promptedParams(action: Record<string, unknown>): string[] {
 	const params = asRecord(action.params) ?? {};
 
-	// A param carrying a `source` or a `formula` is derived rather than prompted for.
 	return Object.entries(params)
 		.filter(([, declared]) => {
 			const record = asRecord(declared);
 
-			return !record || (!("source" in record) && !("formula" in record));
+			return !record || !("source" in record || "compute" in record || "derived" in record);
 		})
 		.map(([name]) => name);
 }
 
-/** Whether the action reads this deployment's field values under either spelling. */
-function referencesInstance(action: Record<string, unknown>): boolean {
-	return collectStringValues(action).some(
-		(value) => /(^|\$)instance\./.test(value) || /(^|\$)compile_params\./.test(value),
-	);
-}
-
 /** Whether the action spends a covenant UTXO, which is a lookup into the state file. */
-function readsState(action: Record<string, unknown>): boolean {
-	const inputs = Array.isArray(action.inputs) ? action.inputs : [];
-
-	return inputs.some((input) => {
-		const source = asRecord(input)?.utxo_source;
-
-		return isRecord(source) && "utxo_type" in source;
-	});
-}
-
-/** Every string value under `key`, at any depth. */
-function collectStrings(value: unknown, key: string): string[] {
-	const found: string[] = [];
-
-	walk(value, (node) => {
-		const candidate = node[key];
-
-		if (typeof candidate === "string") {
-			found.push(candidate);
-		}
-	});
-
-	return found;
-}
-
-/** Every string value at any depth, used to spot reference-shaped text. */
-function collectStringValues(value: unknown): string[] {
-	const found: string[] = [];
-
-	walk(value, (node) => {
-		for (const entry of Object.values(node)) {
-			if (typeof entry === "string") {
-				found.push(entry);
-			}
-		}
-	});
-
-	return found;
-}
-
-function walk(value: unknown, visit: (node: Record<string, unknown>) => void): void {
-	if (Array.isArray(value)) {
-		for (const entry of value) {
-			walk(entry, visit);
-		}
-
-		return;
-	}
-
-	if (!isRecord(value)) {
-		return;
-	}
-
-	visit(value);
-
-	for (const entry of Object.values(value)) {
-		walk(entry, visit);
-	}
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-	return isRecord(value) ? value : undefined;
+function spendsCovenant(action: Parameters<typeof covenantSites>[0]): boolean {
+	return covenantSites(action).some((site) => site.role === "spent");
 }

@@ -1,8 +1,18 @@
 import { encodeExplicitTxOut, type ReadFeeRate, type ReadTxOut } from "./chainRead";
 import { type CoinSelection, type SelectableUtxo, selectCoins } from "./coinSelection";
 import { type CompileCovenant, covenantMatchesChain, deriveCovenantAddress } from "./covenant";
+import { asArray, asRecord } from "./json";
+import {
+	findAction,
+	type NormalisationNote,
+	normaliseInstance,
+	normaliseManifest,
+} from "./normalise";
 import { planAction } from "./plan";
+import type { ReferenceScope } from "./references";
+import { type ConstructFinding, ignored, inspectConstructs } from "./registry";
 import { resolveActionRequirements } from "./requirements";
+import { covenantSites } from "./sites";
 import type { ParsedLiquidProcessCtParams } from "./types";
 
 /**
@@ -55,6 +65,16 @@ export type ManifestReview = {
 	covenantInputs: ReviewedCovenantInput[];
 	/** What the wallet will pay, established from the chain rather than from the request. */
 	feeRateSatsPerKvb: number;
+	/**
+	 * Constructs the manifest carries that this runtime did not act on and did not need to.
+	 *
+	 * Recorded rather than dropped: a construct that changes nothing still tells a reader
+	 * which parts of a document the wallet did not read, and a wallet that ignores something
+	 * silently is indistinguishable from one that missed it.
+	 */
+	ignoredConstructs: ConstructFinding[];
+	/** Legacy spellings the document used, so the generation it came from can be reported. */
+	normalisation: NormalisationNote[];
 	outputs: ReviewedOutput[];
 	protocol: string;
 	/** The wallet's own outputs that fund this, chosen by the wallet. */
@@ -75,6 +95,11 @@ export function isRefusal(result: ReviewManifestActionResult): result is ReviewR
  * Runs before the permission gate deliberately: a standing permission skips the prompt,
  * so this is the only thing between a request and a signature. Everything it cannot
  * establish is a refusal — there is no return value that means "probably fine".
+ *
+ * The document is normalised once, here, and everything downstream reads that rather than
+ * the request's raw JSON. That is what makes the two declaration shapes and the two
+ * reference namespaces indistinguishable to the rest of the wallet instead of a condition
+ * each reader has to remember.
  */
 export async function reviewManifestAction(
 	request: ParsedLiquidProcessCtParams,
@@ -88,7 +113,12 @@ export async function reviewManifestAction(
 		walletScriptPubKeyHex: string;
 	},
 ): Promise<ReviewManifestActionResult> {
-	const requirements = resolveActionRequirements(request);
+	const normalised = normaliseManifest(request.manifest);
+	const manifest = normalised.manifest;
+	const deployment = normaliseInstance(request.instance);
+	const notes: NormalisationNote[] = [...normalised.notes, ...deployment.notes];
+
+	const requirements = resolveActionRequirements(request, manifest);
 
 	if (requirements.missing.length > 0) {
 		const named = requirements.missing
@@ -98,23 +128,32 @@ export async function reviewManifestAction(
 		return { reason: `This request cannot be built. ${named}`, refused: true };
 	}
 
-	const action = findAction(request);
+	const action = findAction(manifest, request.action);
 
 	if (!action) {
 		return { reason: `The manifest declares no action named "${request.action}".`, refused: true };
 	}
 
-	const declaredTypes = declaredParamTypes(action);
+	const declaredTypes = declaredParamTypes(action.node);
 	const covenants: CovenantFinding[] = [];
-	/** What each covenant input actually holds, read from the chain rather than told. */
-	const inputAmounts: Record<string, bigint> = {};
 	const covenantInputs: ReviewedCovenantInput[] = [];
+	/** What each covenant input actually holds, read from the chain rather than told. */
+	const inputs: Record<string, Record<string, unknown>> = {};
+
+	const scope: ReferenceScope = {
+		inputs,
+		instance: deployment.instance.fields,
+		params: request.params,
+	};
 
 	for (const site of covenantSites(action)) {
-		const derived = await deriveCovenantAddress(request, {
+		const derived = await deriveCovenantAddress(manifest, {
 			compile: input.compile,
+			contractSources: request.contractSources,
 			declaredTypes,
 			network: input.network,
+			notes,
+			scope,
 			utxoType: site.utxoType,
 			wiring: site.wiring,
 		});
@@ -161,7 +200,7 @@ export async function reviewManifestAction(
 		}
 
 		if (onChain.amountSats !== undefined && site.id) {
-			inputAmounts[site.id] = BigInt(onChain.amountSats);
+			inputs[site.id] = { amount_sat: BigInt(onChain.amountSats) };
 		}
 
 		const txOutHex = encodeExplicitTxOut(onChain);
@@ -191,7 +230,7 @@ export async function reviewManifestAction(
 		});
 	}
 
-	const plan = planAction(request, action, inputAmounts);
+	const plan = planAction(action, scope, notes);
 
 	if (!plan.ok) {
 		return { reason: plan.reason, refused: true };
@@ -248,69 +287,16 @@ export async function reviewManifestAction(
 		covenantInputs,
 		covenants,
 		feeRateSatsPerKvb,
+		ignoredConstructs: ignored(inspectConstructs(manifest)),
+		normalisation: notes,
 		outputs,
-		protocol: typeof request.manifest.protocol === "string" ? request.manifest.protocol : "",
+		protocol: manifest.protocol ?? "",
 		selected: selection.selected,
 	};
 }
 
 /** Confirmation target for the fee estimate, in blocks. */
 const FEE_TARGET_BLOCKS = 6;
-
-type CovenantSite = {
-	/** The manifest's id for this input or output, which its amounts refer to it by. */
-	id: string;
-	role: "created" | "spent";
-	utxoType: string;
-	wiring: Record<string, unknown>;
-};
-
-/**
- * Every place in the action where a covenant appears, and which side it is on.
- *
- * Inputs spend a covenant, outputs create one. The distinction decides whether there is
- * anything on chain to compare the derived address against.
- */
-function covenantSites(action: Record<string, unknown>): CovenantSite[] {
-	const sites: CovenantSite[] = [];
-
-	for (const entry of asArray(action.inputs)) {
-		const site = covenantReference(asRecord(entry)?.utxo_source);
-
-		if (site) {
-			sites.push({ ...site, id: identifierOf(entry), role: "spent" });
-		}
-	}
-
-	for (const entry of asArray(action.outputs)) {
-		const site = covenantReference(asRecord(entry)?.destination);
-
-		if (site) {
-			sites.push({ ...site, id: identifierOf(entry), role: "created" });
-		}
-	}
-
-	return sites;
-}
-
-function identifierOf(entry: unknown): string {
-	const id = asRecord(entry)?.id;
-
-	return typeof id === "string" ? id : "";
-}
-
-function covenantReference(
-	value: unknown,
-): { utxoType: string; wiring: Record<string, unknown> } | undefined {
-	const record = asRecord(value);
-	const utxoType = record?.utxo_type;
-
-	if (typeof utxoType !== "string") {
-		return undefined;
-	}
-
-	return { utxoType, wiring: asRecord(record?.compile_params) ?? {} };
-}
 
 function findStateOutpoint(
 	request: ParsedLiquidProcessCtParams,
@@ -331,24 +317,6 @@ function findStateOutpoint(
 	return undefined;
 }
 
-function findAction(request: ParsedLiquidProcessCtParams): Record<string, unknown> | undefined {
-	const flat = asRecord(asRecord(request.manifest.actions)?.[request.action]);
-
-	if (flat) {
-		return flat;
-	}
-
-	for (const declared of Object.values(asRecord(request.manifest.classes) ?? {})) {
-		const method = asRecord(asRecord(asRecord(declared)?.methods)?.[request.action]);
-
-		if (method) {
-			return method;
-		}
-	}
-
-	return undefined;
-}
-
 function declaredParamTypes(action: Record<string, unknown>): Record<string, string> {
 	const types: Record<string, string> = {};
 
@@ -361,14 +329,4 @@ function declaredParamTypes(action: Record<string, unknown>): Record<string, str
 	}
 
 	return types;
-}
-
-function asArray(value: unknown): unknown[] {
-	return Array.isArray(value) ? value : [];
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-	return typeof value === "object" && value !== null && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: undefined;
 }

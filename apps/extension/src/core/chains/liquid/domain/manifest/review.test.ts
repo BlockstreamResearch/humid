@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import groupedManifest from "./__fixtures__/p2pk-grouped.manifest.json";
 import p2pkManifest from "./__fixtures__/p2pk.manifest.json";
 import { isRefusal, reviewManifestAction } from "./review";
 import type { ParsedLiquidProcessCtParams } from "./types";
@@ -233,5 +234,75 @@ describe("reviewManifestAction", () => {
 		});
 
 		expect(isRefusal(result)).toBe(true);
+	});
+});
+
+// The runtime core, observed where it actually matters: at the seam the wallet method
+// calls, not only in the units beneath it.
+describe("reviewManifestAction reads through the runtime core", () => {
+	const grouped = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+		request({
+			manifest: groupedManifest as unknown as Record<string, unknown>,
+			...overrides,
+		});
+
+	// AC-10 at the review seam: the grouped twin of the published manifest is reviewed
+	// into the same transaction, so nothing a person is shown depends on which shape the
+	// site chose.
+	test("reviews a grouped manifest into the same result as the flat one", async () => {
+		const flat = await reviewManifestAction(request(), { ...deps, readTxOut: readTxOut("unused") });
+		const fromGrouped = await reviewManifestAction(grouped(), {
+			...deps,
+			readTxOut: readTxOut("unused"),
+		});
+
+		expect(isRefusal(fromGrouped)).toBe(false);
+
+		if (!isRefusal(flat) && !isRefusal(fromGrouped)) {
+			expect(fromGrouped.covenants).toEqual(flat.covenants);
+			expect(fromGrouped.outputs).toEqual(flat.outputs);
+			expect(fromGrouped.selected).toEqual(flat.selected);
+		}
+	});
+
+	test("reports the legacy spelling the grouped document used", async () => {
+		const result = await reviewManifestAction(grouped(), {
+			...deps,
+			readTxOut: readTxOut("unused"),
+		});
+
+		if (!isRefusal(result)) {
+			expect(result.normalisation).toContainEqual({
+				at: "manifest",
+				canonical: "manifest_version",
+				found: "compose_version",
+			});
+		}
+	});
+
+	// AC-02, decorative half: the published manifest carries attestation_version, which no
+	// implementation reads. Ignoring it is right; ignoring it without saying so is not.
+	test("records the constructs it ignored rather than dropping them", async () => {
+		const result = await reviewManifestAction(request(), {
+			...deps,
+			readTxOut: readTxOut("unused"),
+		});
+
+		if (!isRefusal(result)) {
+			expect(result.ignoredConstructs.map((finding) => finding.key)).toContain(
+				"attestation_version",
+			);
+		}
+	});
+
+	test("keeps a load-bearing construct out of the ignored list", async () => {
+		const result = await reviewManifestAction(request(), {
+			...deps,
+			readTxOut: readTxOut("unused"),
+		});
+
+		if (!isRefusal(result)) {
+			expect(result.ignoredConstructs.map((finding) => finding.key)).not.toContain("validations");
+		}
 	});
 });
