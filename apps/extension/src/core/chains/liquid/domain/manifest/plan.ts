@@ -1,6 +1,7 @@
+import { evaluateExpression } from "./evaluate";
 import { asArray, asRecord } from "./json";
 import type { NormalisationNote, NormalisedAction } from "./normalise";
-import { type ReferenceScope, resolveReference } from "./references";
+import type { ReferenceScope } from "./references";
 
 /**
  * A concrete amount the wallet worked out for one of the action's outputs.
@@ -28,12 +29,11 @@ export type PlanResult = { ok: false; reason: string } | { ok: true; plan: Plann
 /**
  * Turns the action's declared outputs into concrete amounts.
  *
- * Each amount is one reference or one literal, resolved at the amount site — which accepts
- * the fee, the deployment's fields, the request's parameters and arguments, a bare name and
- * an attribute of a resolved input. What it still cannot do is arithmetic: the format's
- * amounts can be expressions over other outputs, the fee and chain state, and evaluating
- * those is a dependency graph with a fee re-pass, which is the phased-evaluation slice's
- * whole subject. An expression is refused here by name rather than half-resolved.
+ * Each amount is a literal or an expression evaluated at the amount site, which accepts the
+ * fee, the deployment's fields, the request's parameters and arguments, a bare name and an
+ * attribute of a resolved input. `fee` resolves to whatever the scope carries, so planning
+ * a draft against a fee of zero and re-planning against an estimate is a matter of calling
+ * this twice with different scopes rather than of a second code path.
  */
 export function planAction(
 	action: NormalisedAction,
@@ -68,19 +68,22 @@ export function planAction(
 
 		const amount = resolveAmount(output.amount_sat, scope, notes);
 
-		if (amount === undefined) {
+		if (!amount.ok) {
 			return {
 				ok: false,
-				reason: `Output ${id || "(unnamed)"} has an amount this runtime does not evaluate yet.`,
+				reason: `Output ${id || "(unnamed)"} cannot be paid: ${amount.reason}`,
 			};
 		}
 
-		if (amount <= 0n) {
+		// The evaluator returns a signed value because an expression may legitimately go
+		// negative on the way; an output that lands there pays nothing and is refused here,
+		// which is where the question is about an amount rather than about arithmetic.
+		if (amount.sats <= 0n) {
 			return { ok: false, reason: `Output ${id || "(unnamed)"} would pay nothing.` };
 		}
 
-		fundingSats += amount;
-		outputs.push({ id, sats: amount, target });
+		fundingSats += amount.sats;
+		outputs.push({ id, sats: amount.sats, target });
 	}
 
 	if (outputs.length === 0) {
@@ -110,25 +113,27 @@ function resolveTarget(destination: unknown): PlannedOutput["target"] | undefine
 	return typeof utxoType === "string" ? { kind: "covenant", utxoType } : undefined;
 }
 
-/** A literal, or one reference resolved at the amount site and required to be a count. */
+/** A literal, or an expression evaluated at the amount site. */
 function resolveAmount(
 	amount: unknown,
 	scope: ReferenceScope,
 	notes?: NormalisationNote[],
-): bigint | undefined {
+): { ok: false; reason: string } | { ok: true; sats: bigint } {
 	const literal = asCount(amount);
 
 	if (literal !== undefined) {
-		return literal;
+		return { ok: true, sats: literal };
 	}
 
 	if (typeof amount !== "string") {
-		return undefined;
+		return { ok: false, reason: "its amount is neither a number nor an expression" };
 	}
 
-	const found = resolveReference(amount, "amount", scope, notes);
+	const evaluated = evaluateExpression(amount, "amount", scope, notes);
 
-	return found.ok ? asCount(found.value) : undefined;
+	return evaluated.ok
+		? { ok: true, sats: evaluated.value }
+		: { ok: false, reason: evaluated.reason };
 }
 
 function asCount(value: unknown): bigint | undefined {

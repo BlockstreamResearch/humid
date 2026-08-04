@@ -61,7 +61,7 @@ describe("planAction", () => {
 		}
 	});
 
-	test("refuses an amount it cannot evaluate rather than assuming one", () => {
+	test("refuses an amount whose terms it cannot resolve rather than assuming one", () => {
 		const result = planAction(
 			PAY,
 			request({ amount_sat: "will_in.amount_sat - fee", pubkey: PUBKEY }),
@@ -124,5 +124,68 @@ describe("planAction with resolved inputs", () => {
 		const result = planAction(RECEIVE, { inputs: {}, params: { pubkey: PUBKEY } });
 
 		expect(result).toMatchObject({ ok: false });
+	});
+});
+
+// Amounts are expressions, not single references. The fee is one term among the others,
+// which is what lets a draft be planned against zero and re-planned against an estimate.
+describe("planAction over expressions", () => {
+	const RECEIVE = findAction(MANIFEST, "Receive") as NormalisedAction;
+
+	function payOut(amount: unknown, scope: Partial<ReferenceScope> = {}) {
+		return planAction(
+			action({ outputs: [{ amount_sat: amount, destination: "wallet", id: "out" }] }),
+			{
+				params: { pubkey: PUBKEY },
+				...scope,
+			},
+		);
+	}
+
+	test("pays what an input holds, less the wallet's fee", () => {
+		const result = payOut("p2pk_in.amount_sat - fee", {
+			fee: 500n,
+			inputs: { p2pk_in: { amount_sat: 42_000n } },
+		});
+
+		expect(result).toMatchObject({ ok: true });
+
+		if (result.ok) {
+			expect(result.plan.outputs[0]?.sats).toBe(41_500n);
+		}
+	});
+
+	// The same action planned twice against two fees is how the re-pass works: the fee is a
+	// value in the scope, so nothing about the amount has to be re-parsed to change it.
+	test("the same expression follows the fee it is given", () => {
+		const scope = { inputs: { p2pk_in: { amount_sat: 42_000n } } };
+		const draft = payOut("p2pk_in.amount_sat - fee", { ...scope, fee: 0n });
+		const priced = payOut("p2pk_in.amount_sat - fee", { ...scope, fee: 500n });
+
+		expect(draft.ok && draft.plan.outputs[0]?.sats).toBe(42_000n);
+		expect(priced.ok && priced.plan.outputs[0]?.sats).toBe(41_500n);
+	});
+
+	test("refuses an amount referencing the fee before the wallet has one", () => {
+		const result = payOut("p2pk_in.amount_sat - fee", {
+			inputs: { p2pk_in: { amount_sat: 42_000n } },
+		});
+
+		expect(result).toMatchObject({ ok: false });
+	});
+
+	test("carries the expression into the refusal, so a person can act on it", () => {
+		const result = payOut("nowhere * 2");
+
+		expect(result.ok ? "" : result.reason).toContain("nowhere * 2");
+	});
+
+	test("still plans the published action, which needs no arithmetic", () => {
+		const result = planAction(RECEIVE, {
+			inputs: { p2pk_in: { amount_sat: 42_000n } },
+			params: { pubkey: PUBKEY },
+		});
+
+		expect(result).toMatchObject({ ok: true });
 	});
 });
