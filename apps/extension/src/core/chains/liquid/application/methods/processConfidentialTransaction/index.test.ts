@@ -73,6 +73,7 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 		},
 		loadSmplx: async () =>
 			({
+				compilerVersion: () => "0.6.0",
 				Contract: class {
 					covenantAddress() {
 						return DERIVED;

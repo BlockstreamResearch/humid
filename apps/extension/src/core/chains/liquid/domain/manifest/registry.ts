@@ -93,21 +93,23 @@ const SITES = {
 			outputs: READ,
 			params: READ,
 			ui: SHOWN,
-			validations: UNIMPLEMENTED,
+			validations: READ,
 			witnesses: UNIMPLEMENTED,
 		},
 		unknownIsLoadBearing: true,
 	},
 	input: {
 		constructs: {
-			amount_sat: UNIMPLEMENTED,
-			asset: UNIMPLEMENTED,
+			amount_sat: READ,
+			asset: READ,
 			description: SHOWN,
 			from_address: UNIMPLEMENTED,
 			id: READ,
 			issuance: UNIMPLEMENTED,
 			on_resolved: UNIMPLEMENTED,
-			optional: UNIMPLEMENTED,
+			// The action tolerates this input's absence. The wallet includes what it is given
+			// and never drops one, which is inside what the declaration permits.
+			optional: SHOWN,
 			// Covenants depend on input and output ordering and no implementation enforces
 			// this, so a manifest asking for index 0 and getting 1 builds a transaction the
 			// covenant rejects on chain.
@@ -115,7 +117,9 @@ const SITES = {
 			sequence: UNIMPLEMENTED,
 			ui: SHOWN,
 			utxo_source: READ,
-			witnesses: UNIMPLEMENTED,
+			// Read for the one thing the runtime can act on — which witness the signer must
+			// fill. The witness site below carries what is and is not honoured inside one.
+			witnesses: READ,
 		},
 		unknownIsLoadBearing: true,
 	},
@@ -126,9 +130,9 @@ const SITES = {
 			// implementation including the reference one.
 			attestation_version: UNREAD,
 			actions: READ,
-			chain: UNIMPLEMENTED,
+			chain: READ,
 			classes: READ,
-			compile_debug_symbols: UNIMPLEMENTED,
+			compile_debug_symbols: READ,
 			confidential_outputs: UNIMPLEMENTED,
 			description: SHOWN,
 			errors: SHOWN,
@@ -136,7 +140,7 @@ const SITES = {
 			manifest_version: READ,
 			params: READ,
 			protocol: SHOWN,
-			simplicity_hl_version: UNIMPLEMENTED,
+			simplicity_hl_version: READ,
 			source: UNIMPLEMENTED,
 			utxo_types: READ,
 		},
@@ -145,14 +149,14 @@ const SITES = {
 	output: {
 		constructs: {
 			amount_sat: READ,
-			asset: UNIMPLEMENTED,
+			asset: READ,
 			condition: UNIMPLEMENTED,
 			confidential: UNIMPLEMENTED,
 			data: UNIMPLEMENTED,
 			description: SHOWN,
 			destination: READ,
 			id: READ,
-			optional: UNIMPLEMENTED,
+			optional: SHOWN,
 			required_index: UNIMPLEMENTED,
 			ui: SHOWN,
 		},
@@ -175,9 +179,9 @@ const SITES = {
 	script: {
 		constructs: {
 			compile_params: READ,
-			extra_leaves: UNIMPLEMENTED,
+			extra_leaves: READ,
 			source: READ,
-			type: UNIMPLEMENTED,
+			type: READ,
 		},
 		unknownIsLoadBearing: true,
 	},
@@ -194,11 +198,11 @@ const SITES = {
 	},
 	utxoType: {
 		constructs: {
-			asset: UNIMPLEMENTED,
-			confidential: UNIMPLEMENTED,
+			asset: READ,
+			confidential: READ,
 			description: SHOWN,
 			script: READ,
-			state_vars: UNIMPLEMENTED,
+			state_vars: READ,
 		},
 		unknownIsLoadBearing: true,
 	},
@@ -208,17 +212,25 @@ const SITES = {
 			error: SHOWN,
 			error_code: SHOWN,
 			id: SHOWN,
-			rule: UNIMPLEMENTED,
+			rule: READ,
 		},
 		unknownIsLoadBearing: true,
 	},
+	/**
+	 * A witness the spend has to supply.
+	 *
+	 * Three keys are read and each is also checked, because reading a key is not the same as
+	 * honouring every value it can hold: a witness type, a source or a sighash type this
+	 * runtime cannot produce refuses by name rather than being signed as if it had said
+	 * something else. Those checks live in the refusal surface, not here.
+	 */
 	witness: {
 		constructs: {
 			description: SHOWN,
-			sig_type: UNIMPLEMENTED,
+			sig_type: READ,
 			simplicity_type: UNIMPLEMENTED,
-			source: UNIMPLEMENTED,
-			type: UNIMPLEMENTED,
+			source: READ,
+			type: READ,
 			value: UNIMPLEMENTED,
 		},
 		unknownIsLoadBearing: true,

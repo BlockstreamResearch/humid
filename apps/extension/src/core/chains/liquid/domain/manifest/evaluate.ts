@@ -342,3 +342,66 @@ function bounded(value: bigint): EvaluationResult {
 		? { ok: false, reason: "This amount leaves the 64-bit range these numbers are held in." }
 		: { ok: true, value };
 }
+
+/**
+ * Evaluates a validation's condition: two amounts and one comparison between them.
+ *
+ * Deliberately not a boolean expression language. Every validation in the corpus is one
+ * comparison, and a rule this runtime read only half of would be worse than one it refused
+ * outright — a validation exists to stop a transaction its protocol considers invalid, so
+ * getting it wrong permits exactly what it was written to prevent.
+ */
+export function evaluateCondition(
+	text: string,
+	site: ReferenceSiteKind,
+	scope: ReferenceScope,
+	notes?: NormalisationNote[],
+): { met: boolean; ok: true } | { ok: false; reason: string } {
+	const split = /^(?<left>.+?)\s*(?<operator>>=|<=|==|!=|>|<)\s*(?<right>.+)$/.exec(text.trim());
+	const operator = split?.groups?.operator;
+
+	if (!operator) {
+		return {
+			ok: false,
+			reason: `"${text}" is not a comparison, and this runtime reads no other condition.`,
+		};
+	}
+
+	const left = evaluateExpression(split?.groups?.left ?? "", site, scope, notes);
+
+	if (!left.ok) {
+		return left;
+	}
+
+	const right = evaluateExpression(split?.groups?.right ?? "", site, scope, notes);
+
+	if (!right.ok) {
+		return right;
+	}
+
+	switch (operator) {
+		case "!=": {
+			return { met: left.value !== right.value, ok: true };
+		}
+
+		case "<": {
+			return { met: left.value < right.value, ok: true };
+		}
+
+		case "<=": {
+			return { met: left.value <= right.value, ok: true };
+		}
+
+		case "==": {
+			return { met: left.value === right.value, ok: true };
+		}
+
+		case ">": {
+			return { met: left.value > right.value, ok: true };
+		}
+
+		default: {
+			return { met: left.value >= right.value, ok: true };
+		}
+	}
+}

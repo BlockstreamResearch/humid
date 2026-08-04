@@ -31,7 +31,7 @@ describe("inspectConstructs", () => {
 		});
 
 		test("names where it found something, in the document's own terms", () => {
-			const finding = at(inspect(flat), "validations");
+			const finding = at(inspect({ actions: { Pay: { args: { a: 1 } } } }), "args");
 
 			expect(finding?.at).toBe("action Pay");
 		});
@@ -69,7 +69,7 @@ describe("inspectConstructs", () => {
 	// The refusal itself is ISSUE-021. What this slice owes it is the distinction.
 	describe("load-bearing constructs are separated out", () => {
 		test("a construct the format declares and this runtime does not implement", () => {
-			const finding = at(inspect(flat), "validations");
+			const finding = at(inspect({ actions: { Pay: { create_instance: {} } } }), "create_instance");
 
 			expect(finding).toMatchObject({ declared: true, loadBearing: true });
 		});
@@ -104,20 +104,36 @@ describe("inspectConstructs", () => {
 	});
 
 	describe("the sites it reaches", () => {
+		// `simplicity_type` rather than `sig_type`: the runtime reads the witness's type,
+		// source and sighash type now, and a construct it reads is not a finding.
 		test("a witness on an input", () => {
-			const findings = inspect(flat);
+			const findings = inspect({
+				actions: {
+					Receive: {
+						inputs: [
+							{
+								id: "p2pk_in",
+								utxo_source: { utxo_type: "v" },
+								witnesses: { SIGNATURE: { simplicity_type: "u256", type: "Signature" } },
+							},
+						],
+					},
+				},
+			});
 
-			expect(at(findings, "sig_type")?.at).toBe(
+			expect(at(findings, "simplicity_type")?.at).toBe(
 				"action Receive / input p2pk_in / witness SIGNATURE",
 			);
 		});
 
+		// The script site's own keys are all read now, so an unrecognised one is what is left
+		// to find there.
 		test("a script under a utxo type", () => {
 			const findings = inspect({
-				utxo_types: { vault: { script: { extra_leaves: [], source: "./a.simf" } } },
+				utxo_types: { vault: { script: { salt: "0x00", source: "./a.simf" } } },
 			});
 
-			expect(at(findings, "extra_leaves")?.at).toBe("utxo type vault / script");
+			expect(at(findings, "salt")?.at).toBe("utxo type vault / script");
 		});
 
 		test("a parameter definition", () => {
@@ -128,10 +144,13 @@ describe("inspectConstructs", () => {
 			expect(at(findings, "default")?.at).toBe("action Pay / param owner");
 		});
 
+		// The rule itself is read now; an unrecognised key beside it is what is left to find.
 		test("a validation rule", () => {
-			const findings = inspect(flat);
+			const findings = inspect({
+				actions: { Pay: { validations: [{ id: "amount_nonzero", severity: "warn" }] } },
+			});
 
-			expect(at(findings, "rule")?.at).toBe("action Pay / validation amount_nonzero");
+			expect(at(findings, "severity")?.at).toBe("action Pay / validation amount_nonzero");
 		});
 
 		test("a grouped method is reached the same way a flat action is", () => {

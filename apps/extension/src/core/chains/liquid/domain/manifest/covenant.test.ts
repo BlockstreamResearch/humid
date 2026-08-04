@@ -20,6 +20,7 @@ function request(overrides: Record<string, unknown> = {}) {
 	return {
 		contractSources: { [SOURCE_PATH]: SOURCE },
 		declaredTypes: DECLARED_TYPES,
+		includeDebugSymbols: false,
 		network: "liquid",
 		scope: { params: { pubkey: PUBKEY } },
 		utxoType: "p2pk_output",
@@ -42,6 +43,7 @@ function compiler(address = "tex1p_derived") {
 		compile: (input: {
 			argumentsJson: string;
 			extraLeavesJson: string;
+			includeDebugSymbols: boolean;
 			network: string;
 			source: string;
 		}) => {

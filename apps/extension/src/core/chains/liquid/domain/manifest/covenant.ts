@@ -14,6 +14,8 @@ export type CompileCovenant = (input: {
 	argumentsJson: string;
 	/** Already-encoded taproot leaf payloads, appended to the tree in declaration order. */
 	extraLeavesJson: string;
+	/** The mode this protocol declares its contracts were built in. */
+	includeDebugSymbols: boolean;
 	network: string;
 	source: string;
 }) => Promise<string> | string;
@@ -55,6 +57,7 @@ export async function deriveCovenantAddress(
 		compile: CompileCovenant;
 		contractSources: Record<string, string>;
 		declaredTypes: Record<string, string>;
+		includeDebugSymbols: boolean;
 		network: string;
 		notes?: NormalisationNote[];
 		scope: ReferenceScope;
@@ -106,6 +109,7 @@ export async function deriveCovenantAddress(
 		const address = await input.compile({
 			argumentsJson,
 			extraLeavesJson,
+			includeDebugSymbols: input.includeDebugSymbols,
 			network: input.network,
 			source,
 		});

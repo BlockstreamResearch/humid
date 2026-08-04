@@ -36,6 +36,8 @@ const fundingUtxos = [
 /** The three dependencies every case shares; individual tests override what they exercise. */
 const deps = {
 	compile,
+	compilerVersion: "0.6.0",
+	policyAsset: "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49",
 	fundingUtxos,
 	network: "liquid",
 	readFeeRate,

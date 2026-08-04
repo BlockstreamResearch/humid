@@ -13,10 +13,12 @@ import {
 } from "./normalise";
 import { planAction } from "./plan";
 import type { ReferenceScope } from "./references";
+import { buildMode, refuseUnsupported } from "./refuse";
 import { type ConstructFinding, ignored, inspectConstructs } from "./registry";
 import { resolveActionRequirements } from "./requirements";
 import { covenantSites } from "./sites";
 import type { ParsedLiquidProcessCtParams } from "./types";
+import { checkValidations } from "./validate";
 
 /**
  * What the wallet established for itself about one covenant this action touches.
@@ -130,6 +132,10 @@ export async function reviewManifestAction(
 		network: string;
 		readFeeRate: ReadFeeRate;
 		readTxOut: ReadTxOut;
+		/** The SimplicityHL version compiled into this wallet, which is the only one it has. */
+		compilerVersion: string;
+		/** The asset this wallet pays fees in and is the only one it moves. */
+		policyAsset: string;
 		/** Compiles a contract to the scriptPubKey it locks to, for the hashes a manifest computes. */
 		scriptPubKeyOf: CompileScriptPubKey;
 		walletScriptPubKeyHex: string;
@@ -139,6 +145,18 @@ export async function reviewManifestAction(
 	const manifest = normalised.manifest;
 	const deployment = normaliseInstance(request.instance);
 	const notes: NormalisationNote[] = [...normalised.notes, ...deployment.notes];
+
+	// Everything the wallet will not build, before it builds anything. A refusal here is a
+	// refusal: nothing downstream turns one into a prompt.
+	const refusal = refuseUnsupported(manifest, {
+		compilerVersion: input.compilerVersion,
+		contractSources: request.contractSources,
+		policyAsset: input.policyAsset,
+	});
+
+	if (refusal) {
+		return { reason: refusal.reason, refused: true };
+	}
 
 	const requirements = resolveActionRequirements(request, manifest);
 
@@ -187,6 +205,7 @@ export async function reviewManifestAction(
 			compile: input.compile,
 			contractSources: request.contractSources,
 			declaredTypes,
+			includeDebugSymbols: buildMode(manifest),
 			network: input.network,
 			notes,
 			scope,
@@ -307,6 +326,14 @@ export async function reviewManifestAction(
 
 	if (!plan.ok) {
 		return { reason: plan.reason, refused: true };
+	}
+
+	// The protocol's own rules about this action, checked once its amounts are known — a rule
+	// comparing an amount cannot be checked before there is one.
+	const failed = checkValidations(action, { ...scope, fee: estimatedFee }, notes);
+
+	if (failed) {
+		return { reason: failed.reason, refused: true };
 	}
 
 	const covenantScripts = new Map(covenants.map((found) => [found.utxoType, found.address]));
