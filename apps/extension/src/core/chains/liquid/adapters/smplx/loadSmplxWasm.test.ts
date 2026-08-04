@@ -171,3 +171,69 @@ describe("wallet signer", () => {
 		expect(() => new bindings.WalletSigner(TEST_MNEMONIC, "not-a-network")).toThrow();
 	});
 });
+
+describe("transaction assembly", () => {
+	const TXID = "0".repeat(64);
+	// L-BTC on Liquid testnet.
+	const ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+	// A P2WPKH output of 100_000 sats of the asset above, consensus-encoded.
+	const TXOUT_HEX =
+		"01" +
+		"499a818545f6bae39fc03b637f2a4e1e64e590cac1bc3a6f6d71aa4443654c14" +
+		"01" +
+		"00000000000186a0" +
+		"00" +
+		"160014" +
+		"0000000000000000000000000000000000000000";
+
+	test("starts empty", () => {
+		const builder = new bindings.TransactionBuilder();
+
+		expect(builder.inputCount()).toBe(0);
+		expect(builder.outputCount()).toBe(0);
+		builder.free();
+	});
+
+	test("takes a wallet input as an outpoint plus the output it spends", () => {
+		const builder = new bindings.TransactionBuilder();
+
+		builder.addWalletInput(TXID, 0, TXOUT_HEX);
+
+		expect(builder.inputCount()).toBe(1);
+		builder.free();
+	});
+
+	// Amounts are u64 in the module, so they cross as BigInt rather than number — the same
+	// base-unit discipline the wallet already keeps on its own side.
+	test("takes an unblinded output", () => {
+		const builder = new bindings.TransactionBuilder();
+
+		builder.addOutput("0014" + "00".repeat(20), 50_000n, ASSET);
+
+		expect(builder.outputCount()).toBe(1);
+		builder.free();
+	});
+
+	test("refuses a txid that is not one", () => {
+		const builder = new bindings.TransactionBuilder();
+
+		expect(() => builder.addWalletInput("nope", 0, TXOUT_HEX)).toThrow();
+		expect(builder.inputCount()).toBe(0);
+		builder.free();
+	});
+
+	test("refuses an output encoding it cannot parse", () => {
+		const builder = new bindings.TransactionBuilder();
+
+		expect(() => builder.addWalletInput(TXID, 0, "abcd")).toThrow();
+		builder.free();
+	});
+
+	test("refuses an asset id that is not one", () => {
+		const builder = new bindings.TransactionBuilder();
+
+		expect(() => builder.addOutput("0014" + "00".repeat(20), 1n, "not-an-asset")).toThrow();
+		expect(builder.outputCount()).toBe(0);
+		builder.free();
+	});
+});
