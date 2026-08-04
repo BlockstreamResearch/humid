@@ -14,6 +14,7 @@ import {
 	type ReadFeeRate,
 	type ReadTxOut,
 } from "../../../domain/manifest/chainRead";
+import { guardSpentInputs } from "../../../domain/manifest/inputGuard";
 import {
 	isRefusal,
 	type ManifestReview,
@@ -185,6 +186,23 @@ export const createProcessLiquidConfidentialTransaction = (
 					}
 				},
 			);
+
+			// What came back spends only what the action required and the wallet chose, or
+			// nothing is returned at all. The guard reads the transaction's own bytes rather
+			// than asking the module, because a module's account of itself cannot answer
+			// whether it did something it was not asked to.
+			const guarded = guardSpentInputs(signed.transactionHex, {
+				covenantInputs: review.covenantInputs.map(({ txid, vout }) => ({ txid, vout })),
+				walletInputs: review.selected.map(({ txid, vout }) => ({ txid, vout })),
+			});
+
+			if (!guarded.ok) {
+				throw new WalletRpcInvalidParamsError(
+					guarded.reason,
+					undefined,
+					WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
+				);
+			}
 
 			if (!params.broadcast) {
 				return { broadcast: false, ...signed };

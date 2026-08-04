@@ -19,6 +19,26 @@ const DERIVED = "tex1p_derived";
 const WALLET_ADDRESS = "tex1q_wallet";
 const WALLET_SCRIPT = "0014" + "11".repeat(20);
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+const FUNDING_TXID = "d".repeat(64);
+
+/**
+ * An Elements transaction serialised as far as its inputs, which is what the input guard
+ * reads. The substituted module builds one from what it was actually told to spend, so the
+ * guard is exercised against the shape of the request rather than against a constant that
+ * would agree with it whatever happened.
+ */
+function serialise(spends: { txid: string; vout: number }[]): string {
+	const inputs = spends
+		.map(({ txid, vout }) => {
+			const reversed = (txid.match(/../g) ?? []).reverse().join("");
+			const index = vout.toString(16).padStart(8, "0").match(/../g)!.reverse().join("");
+
+			return `${reversed}${index}00ffffffff`;
+		})
+		.join("");
+
+	return `0200000001${spends.length.toString(16).padStart(2, "0")}${inputs}`;
+}
 
 function params(overrides: Record<string, unknown> = {}) {
 	return {
@@ -45,7 +65,7 @@ function context(): LiquidProcessCtContext {
 				{
 					amount: "1000000",
 					spendable: true,
-					txid: "d".repeat(64),
+					txid: FUNDING_TXID,
 					txOut: "00",
 					vout: 0,
 				},
@@ -58,13 +78,6 @@ function context(): LiquidProcessCtContext {
 type Recorded = { broadcasts: { txHex: string }[]; mnemonicCalls: number };
 
 function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
-	const signed = {
-		feeSats: 500n,
-		free: () => undefined,
-		hex: "02000000deadbeef",
-		txid: "e".repeat(64),
-	};
-
 	return {
 		broadcastTransaction: async ({ txHex }) => {
 			recorded.broadcasts.push({ txHex });
@@ -78,16 +91,29 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 					covenantAddress() {
 						return DERIVED;
 					}
+					scriptPubKeyHex() {
+						return "5120aabb";
+					}
 				},
 				TransactionBuilder: class {
-					addCovenantInput() {}
+					spends: { txid: string; vout: number }[] = [];
+					addCovenantInput(txid: string, vout: number) {
+						this.spends.push({ txid, vout });
+					}
 					addOutput() {}
-					addWalletInput() {}
+					addWalletInput(txid: string, vout: number) {
+						this.spends.push({ txid, vout });
+					}
 					free() {}
 				},
 				WalletSigner: class {
-					finalizeTransaction() {
-						return signed;
+					finalizeTransaction(builder: { spends: { txid: string; vout: number }[] }) {
+						return {
+							feeSats: 500n,
+							free: () => undefined,
+							hex: serialise(builder.spends),
+							txid: "e".repeat(64),
+						};
 					}
 					free() {}
 					scriptPubKeyHex() {
@@ -126,7 +152,7 @@ describe("processLiquidConfidentialTransaction", () => {
 		const result = await method(params(), context());
 
 		expect(result).toMatchObject({ broadcast: false, feeSats: "500" });
-		expect(result.transactionHex).toBe("02000000deadbeef");
+		expect(result.transactionHex).toBe(serialise([{ txid: FUNDING_TXID, vout: 0 }]));
 		expect(recorded.broadcasts).toHaveLength(0);
 	});
 
@@ -135,7 +161,7 @@ describe("processLiquidConfidentialTransaction", () => {
 
 		const result = await method(params({ broadcast: true }), context());
 
-		expect(recorded.broadcasts).toEqual([{ txHex: "02000000deadbeef" }]);
+		expect(recorded.broadcasts).toEqual([{ txHex: serialise([{ txid: FUNDING_TXID, vout: 0 }]) }]);
 		expect(result).toMatchObject({ broadcast: true, txid: "f".repeat(64) });
 	});
 
@@ -193,5 +219,51 @@ describe("processLiquidConfidentialTransaction across declaration shapes", () =>
 		);
 
 		expect(recorded.mnemonicCalls).toBe(1);
+	});
+});
+
+// AC-11 at the seam it actually protects: the guard reads the finished transaction's own
+// bytes, so a module that spends something nobody asked for is caught even though every
+// other part of the request was well formed.
+describe("processLiquidConfidentialTransaction guards what it signs", () => {
+	function subjectSpending(extra: { txid: string; vout: number }) {
+		const recorded: Recorded = { broadcasts: [], mnemonicCalls: 0 };
+		const dependency = dependencies(recorded);
+
+		return {
+			method: createProcessLiquidConfidentialTransaction({
+				...dependency,
+				loadSmplx: async () => {
+					const module = (await dependency.loadSmplx()) as never as {
+						TransactionBuilder: new () => { spends: { txid: string; vout: number }[] };
+					};
+
+					return {
+						...module,
+						TransactionBuilder: class extends module.TransactionBuilder {
+							// Stands in for a module doing something it was not asked to.
+							free() {}
+							addOutput() {
+								this.spends.push(extra);
+							}
+						},
+					} as never;
+				},
+			}),
+			recorded,
+		};
+	}
+
+	test("refuses a transaction spending an input nobody asked for, naming it", async () => {
+		const { method } = subjectSpending({ txid: "9".repeat(64), vout: 2 });
+
+		await expect(method(params(), context())).rejects.toThrow(/9{64}:2/);
+	});
+
+	test("and nothing reaches the network", async () => {
+		const { method, recorded } = subjectSpending({ txid: "9".repeat(64), vout: 2 });
+
+		await expect(method(params({ broadcast: true }), context())).rejects.toThrow();
+		expect(recorded.broadcasts).toHaveLength(0);
 	});
 });

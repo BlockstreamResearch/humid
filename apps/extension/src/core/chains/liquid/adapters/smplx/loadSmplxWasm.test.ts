@@ -4,6 +4,9 @@ import { createRequire } from "node:module";
 
 import * as smplxWasmBindings from "smplx-wasm/smplx_wasm_bg.js";
 
+import { guardSpentInputs } from "../../domain/manifest/inputGuard";
+import { spentInputs } from "../../domain/manifest/spentInputs";
+
 // Exercises the exact bindings `loadSmplxWasm` consumes. The only difference is where
 // the module bytes come from: the extension fetches them through a Vite asset URL, this
 // reads them off disk. Everything after instantiation — the `__wbg_set_wasm` handshake,
@@ -534,5 +537,80 @@ describe("extra taproot leaves", () => {
 
 	test("refuses a leaf that is not hex rather than deriving something", () => {
 		expect(() => addressWith("0xzz")).toThrow();
+	});
+});
+
+// The input guard reads the outpoints out of a finished transaction's own bytes rather than
+// asking the module what it spent — a module's account of itself cannot answer whether the
+// module did something it was not asked to. That only works if the parser agrees with what
+// the module actually serialises, which is what this checks.
+describe("what a signed transaction says it spends", () => {
+	const TXID = "4".repeat(64);
+	const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+
+	function txOut(sats: bigint, scriptHex: string): string {
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const value = sats.toString(16).padStart(16, "0");
+		const len = (scriptHex.length / 2).toString(16).padStart(2, "0");
+
+		return `01${assetLe}01${value}00${len}${scriptHex}`;
+	}
+
+	function signSpending(vouts: number[]) {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+		const builder = new bindings.TransactionBuilder();
+
+		try {
+			for (const vout of vouts) {
+				builder.addWalletInput(TXID, vout, txOut(200_000n, signer.scriptPubKeyHex()));
+			}
+
+			builder.addOutput(signer.scriptPubKeyHex(), 10_000n, POLICY_ASSET);
+
+			const signed = signer.finalizeTransaction(builder, 1000, signer.scriptPubKeyHex());
+			const hex = signed.hex;
+
+			signed.free();
+
+			return hex;
+		} finally {
+			builder.free();
+			signer.free();
+		}
+	}
+
+	test("the parser reads back the outpoint that went in", () => {
+		const result = spentInputs(signSpending([3]));
+
+		expect(result.ok && result.spent).toEqual([{ txid: TXID, vout: 3 }]);
+	});
+
+	test("and reads several back in the order they were added", () => {
+		const result = spentInputs(signSpending([1, 5]));
+
+		expect(result.ok && result.spent).toEqual([
+			{ txid: TXID, vout: 1 },
+			{ txid: TXID, vout: 5 },
+		]);
+	});
+
+	test("the guard passes a transaction spending exactly what the wallet chose", () => {
+		const chosen = [
+			{ txid: TXID, vout: 1 },
+			{ txid: TXID, vout: 5 },
+		];
+
+		expect(
+			guardSpentInputs(signSpending([1, 5]), { covenantInputs: [], walletInputs: chosen }),
+		).toEqual({ ok: true });
+	});
+
+	test("and refuses one spending an outpoint the wallet did not choose", () => {
+		const result = guardSpentInputs(signSpending([1, 5]), {
+			covenantInputs: [],
+			walletInputs: [{ txid: TXID, vout: 1 }],
+		});
+
+		expect(result.ok).toBe(false);
 	});
 });
