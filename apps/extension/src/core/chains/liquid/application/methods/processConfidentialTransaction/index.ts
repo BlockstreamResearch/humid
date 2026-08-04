@@ -24,6 +24,7 @@ import type { ParsedLiquidProcessCtParams } from "../../../domain/manifest/types
 import { parseLiquidProcessCtParams } from "../../../domain/manifest/validation";
 import type { LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../../dappAccountScope";
+import { PROCESS_CT_CONFIRMATION_KIND } from "./ProcessCtConfirmation";
 
 export type LiquidProcessCtContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
@@ -116,7 +117,7 @@ export const createProcessLiquidConfidentialTransaction = (
 				// `not-yet-on-chain` marks one being created, which there is nothing to compare
 				// against — it is a different fact, not a weaker form of verified.
 				covenants: review.covenants,
-				kind: "liquid.processConfidentialTransaction",
+				kind: PROCESS_CT_CONFIRMATION_KIND,
 				protocol: review.protocol,
 			},
 			message: `A site wants to perform "${review.action}" on the ${review.protocol} protocol.`,
