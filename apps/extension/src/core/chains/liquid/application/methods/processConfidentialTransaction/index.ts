@@ -210,8 +210,8 @@ export const createProcessLiquidConfidentialTransaction = (
 			await context.walletBackend.syncAccount(account);
 
 			const result = await reviewManifestAction(params, {
-				compile: ({ argumentsJson, network: target, source }) =>
-					new smplx.Contract(source, argumentsJson).covenantAddress(target),
+				compile: ({ argumentsJson, extraLeavesJson, network: target, source }) =>
+					new smplx.Contract(source, argumentsJson, extraLeavesJson).covenantAddress(target),
 				scriptPubKeyOf: ({ argumentsJson, source }) =>
 					new smplx.Contract(source, argumentsJson).scriptPubKeyHex(network),
 				fundingUtxos: context.walletBackend.getUtxos(account, account.rawPolicyAssetId),

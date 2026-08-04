@@ -489,3 +489,50 @@ describe("signing a covenant that authenticates its spender", () => {
 		});
 	});
 });
+
+// Extra taproot leaves are payloads appended to the tree beside the program's own leaf, and
+// their bytes are as much a part of the covenant address as the parameters are. The shape of
+// that tree is consensus-visible: the reference implementation folds it left and every
+// deployed covenant address was derived that way, so a tree built any other way produces a
+// well-formed address for a contract whose funds sit elsewhere.
+describe("extra taproot leaves", () => {
+	const SOURCE = "fn main() { assert!(jet::eq_32(witness::A, witness::B)); }";
+	const LEAF = (byte: string) => `0x${byte.repeat(64)}`;
+
+	function addressWith(...leaves: string[]) {
+		const contract = new bindings.Contract(SOURCE, undefined, JSON.stringify(leaves));
+
+		return contract.covenantAddress("liquid-testnet");
+	}
+
+	test("no extra leaves derives the address the module always derived", () => {
+		expect(addressWith()).toBe("tex1phpq2t7y3236nxvudhfx7md9p0h3m9vlsskq5nec9trzcue6k979sk55dr6");
+	});
+
+	test("an extra leaf changes the address", () => {
+		expect(addressWith(LEAF("11"))).not.toBe(addressWith());
+	});
+
+	test("the leaves' order is part of the address", () => {
+		expect(addressWith(LEAF("11"), LEAF("22"))).not.toBe(addressWith(LEAF("22"), LEAF("11")));
+	});
+
+	test("the same leaves derive the same address twice", () => {
+		expect(addressWith(LEAF("11"), LEAF("22"))).toBe(addressWith(LEAF("11"), LEAF("22")));
+	});
+
+	// The format's leaves are any length — `bytes` has no length and `pad_to` exists so a
+	// value can be shorter — and the module's held them as a fixed thirty-two bytes until
+	// this. A leaf of another length is a different leaf, not a padded one.
+	test("a leaf shorter than thirty-two bytes is its own leaf, not a padded one", () => {
+		expect(addressWith("0x0102")).not.toBe(addressWith(`0x0102${"00".repeat(30)}`));
+	});
+
+	test("a leaf longer than thirty-two bytes is accepted", () => {
+		expect(addressWith(`0x${"33".repeat(64)}`)).toMatch(/^tex1p/);
+	});
+
+	test("refuses a leaf that is not hex rather than deriving something", () => {
+		expect(() => addressWith("0xzz")).toThrow();
+	});
+});

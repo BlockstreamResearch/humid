@@ -1,5 +1,6 @@
 import { resolveCompileParams } from "./compileParams";
-import { asRecord } from "./json";
+import { encodeLeafItem } from "./encode";
+import { asArray, asRecord } from "./json";
 import type { NormalisationNote, NormalisedManifest } from "./normalise";
 import type { ReferenceScope } from "./references";
 
@@ -11,6 +12,8 @@ import type { ReferenceScope } from "./references";
  */
 export type CompileCovenant = (input: {
 	argumentsJson: string;
+	/** Already-encoded taproot leaf payloads, appended to the tree in declaration order. */
+	extraLeavesJson: string;
 	network: string;
 	source: string;
 }) => Promise<string> | string;
@@ -18,6 +21,8 @@ export type CompileCovenant = (input: {
 export type CovenantDerivation = {
 	/** The address the wallet derived by rebuilding the contract itself. */
 	address: string;
+	/** The extra taproot leaves it was built with, encoded. */
+	extraLeavesJson: string;
 	/**
 	 * The parameters it was built with, in the compiler's own shape.
 	 *
@@ -88,17 +93,25 @@ export async function deriveCovenantAddress(
 		return params;
 	}
 
+	const leaves = encodeExtraLeaves(asRecord(declared.script), asRecord(declared.state_vars));
+
+	if (!leaves.ok) {
+		return { ok: false, reason: `Utxo type "${input.utxoType}": ${leaves.reason}` };
+	}
+
 	const argumentsJson = JSON.stringify(params.arguments);
+	const extraLeavesJson = JSON.stringify(leaves.hex);
 
 	try {
 		const address = await input.compile({
 			argumentsJson,
+			extraLeavesJson,
 			network: input.network,
 			source,
 		});
 
 		return {
-			derivation: { address, argumentsJson, source, utxoType: input.utxoType },
+			derivation: { address, argumentsJson, extraLeavesJson, source, utxoType: input.utxoType },
 			ok: true,
 		};
 	} catch (error) {
@@ -134,4 +147,31 @@ export function covenantMatchesChain(
 			`The ${derivation.utxoType} contract rebuilds to ${derivation.address}, ` +
 			`but the funds are at ${onChainAddress}. This is not the contract the site described.`,
 	};
+}
+
+/**
+ * The encoded payloads of a utxo type's extra taproot leaves, in declaration order.
+ *
+ * Order is part of the address, so this preserves it rather than collecting into anything
+ * that would not. A leaf that cannot be encoded refuses the whole derivation: a covenant
+ * missing one of its leaves is a different covenant, and deriving an address for it would
+ * produce a well-formed answer to the wrong question.
+ */
+function encodeExtraLeaves(
+	script: Record<string, unknown> | undefined,
+	stateVars: Record<string, unknown> | undefined,
+): { hex: string[]; ok: true } | { ok: false; reason: string } {
+	const hex: string[] = [];
+
+	for (const item of asArray(script?.extra_leaves)) {
+		const encoded = encodeLeafItem(item, stateVars ?? {});
+
+		if (!encoded.ok) {
+			return encoded;
+		}
+
+		hex.push(encoded.hex);
+	}
+
+	return { hex, ok: true };
 }

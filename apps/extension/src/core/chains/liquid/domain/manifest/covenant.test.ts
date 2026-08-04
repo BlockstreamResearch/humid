@@ -30,11 +30,21 @@ function request(overrides: Record<string, unknown> = {}) {
 
 /** Stands in for the wasm module, recording what it was asked to compile. */
 function compiler(address = "tex1p_derived") {
-	const calls: { argumentsJson: string; network: string; source: string }[] = [];
+	const calls: {
+		argumentsJson: string;
+		extraLeavesJson: string;
+		network: string;
+		source: string;
+	}[] = [];
 
 	return {
 		calls,
-		compile: (input: { argumentsJson: string; network: string; source: string }) => {
+		compile: (input: {
+			argumentsJson: string;
+			extraLeavesJson: string;
+			network: string;
+			source: string;
+		}) => {
 			calls.push(input);
 
 			return address;
@@ -90,6 +100,7 @@ describe("covenantMatchesChain", () => {
 	const derivation = {
 		address: "tex1p_derived",
 		argumentsJson: "{}",
+		extraLeavesJson: "[]",
 		source: SOURCE,
 		utxoType: "p2pk_output",
 	};
@@ -107,5 +118,56 @@ describe("covenantMatchesChain", () => {
 			expect(result.reason).toContain("tex1p_derived");
 			expect(result.reason).toContain("tex1p_somewhere_else");
 		}
+	});
+});
+
+// Extra taproot leaves are part of the covenant address, so they are encoded from the utxo
+// type's own declaration and handed to the compiler with everything else. A leaf that cannot
+// be encoded refuses the derivation rather than producing an address without it.
+describe("deriveCovenantAddress with extra leaves", () => {
+	function manifestWithLeaves(extraLeaves: unknown[], stateVars?: Record<string, unknown>) {
+		return normaliseManifest({
+			utxo_types: {
+				p2pk_output: {
+					...(stateVars ? { state_vars: stateVars } : {}),
+					script: { extra_leaves: extraLeaves, source: SOURCE_PATH, type: "simplicity" },
+				},
+			},
+		}).manifest;
+	}
+
+	function derive(extraLeaves: unknown[], stateVars?: Record<string, unknown>) {
+		const { calls, compile } = compiler();
+
+		return deriveCovenantAddress(manifestWithLeaves(extraLeaves, stateVars), {
+			...request(),
+			compile,
+		}).then((result) => ({ calls, result }));
+	}
+
+	test("encodes each declared leaf and hands them over in order", async () => {
+		const { calls, result } = await derive([{ type: "u8", value: 1 }, "0xdeadbeef"]);
+
+		expect(result).toMatchObject({ ok: true });
+		expect(JSON.parse(calls[0]?.extraLeavesJson ?? "[]")).toEqual(["01", "deadbeef"]);
+	});
+
+	test("a utxo type with no extra leaves hands over an empty list", async () => {
+		const { calls } = await derive([]);
+
+		expect(calls[0]?.extraLeavesJson).toBe("[]");
+	});
+
+	test("resolves a state variable to its default", async () => {
+		const { calls } = await derive([{ state_var: "counter" }], { counter: { default_value: 3 } });
+
+		expect(JSON.parse(calls[0]?.extraLeavesJson ?? "[]")).toEqual(["03"]);
+	});
+
+	test("refuses the whole derivation when a leaf cannot be encoded", async () => {
+		const { calls, result } = await derive([{ type: "u128", value: 1 }]);
+
+		expect(result).toMatchObject({ ok: false });
+		expect(calls).toHaveLength(0);
 	});
 });
