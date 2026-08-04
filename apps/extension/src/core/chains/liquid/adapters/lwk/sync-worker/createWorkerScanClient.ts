@@ -16,6 +16,14 @@ export type ScanAndReadResult = {
 export type BroadcastInput = { chain: ScanInput["chain"]; psetBase64: string };
 export type BroadcastResult = { txid: string };
 
+/**
+ * Inputs to broadcast an already-signed, consensus-encoded transaction.
+ *
+ * The manifest path produces one of these rather than a PSET: smplx blinds, signs and
+ * finalises internally and hands back a finished transaction.
+ */
+export type BroadcastTxInput = { chain: ScanInput["chain"]; txHex: string };
+
 /** Inputs to read one asset's activity page from the worker's cached wollet. */
 export type ReadActivityInput = ScanInput & {
 	cursor: string | null;
@@ -33,6 +41,7 @@ type SuccessResponse = Extract<SyncWorkerResponse, { ok: true }>;
 /** A promise-per-request handle to a scan backend (a dedicated worker, offscreen, or inline). */
 export type SyncWorkerClient = {
 	broadcast: (input: BroadcastInput) => Promise<BroadcastResult>;
+	broadcastTransaction: (input: BroadcastTxInput) => Promise<BroadcastResult>;
 	readActivity: (input: ReadActivityInput) => Promise<ActivityPageResult>;
 	scan: (input: ScanInput) => Promise<ScanResult>;
 	scanAndRead: (input: ScanInput) => Promise<ScanAndReadResult>;
@@ -95,6 +104,13 @@ export function createWorkerScanClient(): SyncWorkerClient {
 	}
 
 	return {
+		broadcastTransaction() {
+			// Same reason as `broadcast` below: LWK's Esplora client needs a `window` this
+			// context does not have.
+			return Promise.reject(
+				new Error("The dedicated worker cannot broadcast; use the offscreen or inline client."),
+			);
+		},
 		broadcast() {
 			// LWK can't run in a dedicated Worker (Esplora's async retry/sleep needs a `window` a
 			// Worker lacks), so this path never broadcasts — the offscreen/inline clients do. Present

@@ -35,6 +35,12 @@ export type LiquidBroadcastInput = {
 	psetBase64: string;
 };
 
+export type LiquidBroadcastTxInput = {
+	chain: LiquidChainRecord;
+	id: number;
+	txHex: string;
+};
+
 /** Issued assets get 8 decimals until the registry pass provides their real precision. */
 const DEFAULT_ISSUED_ASSET_DECIMALS = 8;
 
@@ -104,6 +110,39 @@ export async function broadcastPset(input: LiquidBroadcastInput): Promise<string
 	// Free the per-broadcast wasm objects so repeated sends don't leak wasm heap.
 	txid.free();
 	pset.free();
+	client.free();
+
+	return txidString;
+}
+
+/**
+ * Broadcast an already-signed, consensus-encoded transaction via the chain's Esplora client,
+ * returning the resulting txid.
+ *
+ * Separate from `broadcastPset` because the manifest path does not produce a PSET: smplx blinds,
+ * signs and finalises internally and hands back a finished transaction. Both run here rather than
+ * in the service worker for the same reason — LWK's Esplora client does its async retry/backoff via
+ * `web_sys::window()`, which the SW lacks.
+ */
+export async function broadcastTransaction(input: LiquidBroadcastTxInput): Promise<string> {
+	const lwk = await loadLwkWasm();
+	const network = createLwkNetwork(lwk, input.chain);
+	const client = createLwkBlockchainClient(lwk, input.chain, network);
+	const transaction = lwk.Transaction.fromString(input.txHex);
+
+	console.warn("[liquid-sync] broadcast tx…", { chainId: input.chain.id, id: input.id });
+	const startedAt = Date.now();
+	const txid = await client.broadcastTx(transaction);
+	const txidString = txid.toString();
+
+	console.warn("[liquid-sync] broadcast tx done", {
+		id: input.id,
+		ms: Date.now() - startedAt,
+		txid: txidString,
+	});
+
+	txid.free();
+	transaction.free();
 	client.free();
 
 	return txidString;
