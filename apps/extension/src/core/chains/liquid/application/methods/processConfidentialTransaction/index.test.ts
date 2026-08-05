@@ -81,11 +81,26 @@ function context(): LiquidProcessCtContext {
 		keyManagerState: {},
 		walletBackend: {
 			getReceiveAddress: () => ({ address: WALLET_ADDRESS, index: 0 }),
-			getUtxos: () => [
+			// The two lists the method reads, kept honest about which is which: a contract action
+			// can only spend an explicit output, so the funding one lives in the explicit list and
+			// the confidential one is there to be held back. A method that stopped asking for the
+			// explicit list would fail here for want of money rather than pass quietly.
+			getExplicitUtxos: () => [
 				{
 					amount: "1000000",
+					confidential: false,
 					spendable: true,
 					txid: FUNDING_TXID,
+					txOut: "00",
+					vout: 0,
+				},
+			],
+			getUtxos: () => [
+				{
+					amount: "9000000",
+					confidential: true,
+					spendable: true,
+					txid: `${"cc".repeat(32)}`,
 					txOut: "00",
 					vout: 0,
 				},

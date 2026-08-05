@@ -135,6 +135,14 @@ export type LiquidWalletBackend = {
 		params: LiquidGetWalletDescriptorParams,
 	) => Promise<LiquidWalletDescriptorEntry[]>;
 	getUtxos: (account: LiquidWalletAccount, rawAssetId: string) => LiquidUTXO[];
+	/**
+	 * The wallet's unspent outputs that hide nothing.
+	 *
+	 * Separate from `getUtxos` because the chain library does not report these as the
+	 * wallet's at all, and because only one path can use them: a contract action cannot
+	 * spend an output whose amount is hidden.
+	 */
+	getExplicitUtxos: (account: LiquidWalletAccount, rawAssetId: string) => LiquidUTXO[];
 	inspectTransfer: (
 		account: LiquidWalletAccount,
 		params: LiquidSendTransferParams,

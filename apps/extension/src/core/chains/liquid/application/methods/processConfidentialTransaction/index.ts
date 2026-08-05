@@ -281,7 +281,14 @@ export const createProcessLiquidConfidentialTransaction = (
 				policyAsset: account.rawPolicyAssetId,
 				scriptPubKeyOf: ({ argumentsJson, source }) =>
 					new smplx.Contract(source, argumentsJson).scriptPubKeyHex(network),
-				fundingUtxos: context.walletBackend.getUtxos(account, account.rawPolicyAssetId),
+				// Both lists, because only one of them can pay for this and the other one is why a
+				// person is short. Selection spends the explicit ones and reports the hidden ones as
+				// held back, which is the difference between "you do not have enough" and "you have
+				// enough and it is in the wrong shape".
+				fundingUtxos: [
+					...context.walletBackend.getExplicitUtxos(account, account.rawPolicyAssetId),
+					...context.walletBackend.getUtxos(account, account.rawPolicyAssetId),
+				],
 				network,
 				accountLabel: `${account.chain?.id ?? context.chain.id} account ${account.accountGroupIndex}`,
 				readFeeRate: dependencies.readFeeRate(context.chain),
