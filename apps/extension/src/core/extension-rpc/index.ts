@@ -3,6 +3,8 @@ import { definePegasusMessageBus } from "@webext-pegasus/transport";
 import type { PegasusMsgProtocolMap } from "@/background";
 import { MsgProtocolRequestMethods, MsgProtocolResponseMethods } from "@/helpers/background";
 
+import { toError } from "./toError";
+
 const REQUEST_TIMEOUT_MS = 60_000;
 
 let requestId = 0;
@@ -44,7 +46,7 @@ function getMessageBus(): BackgroundMessageBus {
 		clearTimeout(pendingRequest.timeoutId);
 
 		if (response.error) {
-			pendingRequest.reject(new Error(String(response.error)));
+			pendingRequest.reject(toError(response.error));
 			return;
 		}
 
