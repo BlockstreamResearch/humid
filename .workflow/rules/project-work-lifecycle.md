@@ -27,8 +27,13 @@ repository owns significant-work bundles and current project knowledge.
 10. Preserve implementation in the exact clean Git commit only with normal
     maintainer authorization.
 11. Run `verify-project-work` across the whole bundle and every bound source
-    revision, promote verified durable truth, obtain completion approval, and
-    close honestly.
+    revision, obtain completion approval, then promote verified durable truth
+    and close honestly. That order is not a preference: a curated page cites the
+    change as its authority, and that citation resolves only once the change is
+    receipt-ready, which requires the recorded completion approval. Drafting the
+    pages earlier is useful and costs nothing; writing them into `knowledge/`
+    earlier leaves the corpus invalid so that progress can look further along
+    than it is.
 
 On a clean session or resume, run `wfctl work context --stage resume` without an
 ID. It may auto-select only one bound active record; multiple records require a

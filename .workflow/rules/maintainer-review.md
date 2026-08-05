@@ -50,6 +50,38 @@ Detail is not the problem and must not be dropped; its position is. Depth that
 arrives before the question buries it, and the same depth below a stated
 question supports it.
 
+## Re-establish the subject before asking about it
+
+A claim is the unit of record. It is not the unit of a question. Recorded
+atomically, a claim keeps only what distinguishes it from its neighbors, which
+is exactly what a reader who was not there cannot reconstruct: a packet built
+straight from one carries a difference with no thing attached to it. "This is
+one colour on one side and another on the other side — was that intended?" is a
+complete atomic claim and an unanswerable question.
+
+Before the packet is written, re-establish four things and put them above the
+question:
+
+- **What it is**, named as the product names it, and where a person using or
+  operating the product meets it.
+- **Where it came from** — which sources say this, and when they said it.
+- **What turns on it** — the flow it sits in and what changes downstream if the
+  answer goes either way.
+- **What is true right now.** Go back to the pinned source and the current
+  implementation and check. The candidate was extracted at reading time, before
+  later findings, and other candidates recorded since may already contradict or
+  settle it. A packet that repeats a days-old record without re-reading is
+  asking the maintainer to adjudicate the agent's memory.
+
+Ask about the subject and list its atomic claims underneath, rather than asking
+about each claim. Several claims about one capability are one question; one
+claim touching several capabilities is still one question, about the one thing
+that has to be decided.
+
+If the subject cannot be described without file paths or symbol names, that is a
+finding to record — the capability has no product-level description yet — and
+not a licence to send the identifiers instead.
+
 Translate rather than cite. A term that exists only in the implementation gets
 replaced by what it does for the product, with the original in parentheses at
 most once. If a decision genuinely cannot be stated without engineering
@@ -75,6 +107,14 @@ and confirming intent that was are different questions, and asking the harder
 one when the easier one applies is how a body of accepted work becomes an
 unanswered queue.
 
+Put the framing decision before implementation, not before closure. `wfctl work
+issue claim` refuses a delivery issue whose framing is unapproved, which is the
+moment to present it: the bundle has been read, nothing is in flight, and the
+maintainer's absence blocks nothing yet. Discovering the same gate at completion
+parks finished work behind a decision that could have been made on day one.
+Approving edits the change record, so refresh its checkpoint and re-read it
+before claiming.
+
 For significant work, record framing and completion decisions with `wfctl work
 approve <id> --stage framing|completion --by human:<maintainer-id>`. That
 command needs an interactive terminal, or an out-of-band `--token` matching
@@ -88,6 +128,15 @@ changes materially.
 
 Approving edits the change record, so re-read it, refresh its review receipt,
 and refresh the checkpoint afterwards.
+
+A checkpoint blocker is the one sentence written for the maintainer rather than
+for the next agent, and the only one that reaches them across a session
+boundary. That makes a stale blocker worse than a missing one: a missing blocker
+makes the next session look, and a stale blocker makes it act — reopening a
+decision already made, or recommending an option since proved impossible. When
+an answer, a discovery, or a change removes what a record was waiting for,
+rewrite its blocker in the same turn. Nothing validates blocker text against the
+record it hangs on; only the person changing the record can keep it true.
 
 After every material maintainer turn, update the spec's mutable current state
 and append the decision/discussion ledger before continuing. Preserve proposed,
