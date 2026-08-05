@@ -27,11 +27,15 @@ runs:
         path: smplx/crates/wasm/pkg
         key: smplx-wasm-${{ runner.os }}-${{ steps.smplx.outputs.sha }}
 
-    - name: Install Rust toolchain (1.85.0 + wasm32)
+    # 1.91.0 because `crates/simplex` declares it as the workspace's minimum, and the
+    # build tree demands it independently: `ar_archive_writer` reached through wasm-pack
+    # requires 1.88.0. An earlier pin of 1.85.0 built locally on a newer toolchain and
+    # failed here on the runner's, which is the whole reason to pin rather than inherit.
+    - name: Install Rust toolchain (1.91.0 + wasm32)
       if: steps.pkg-cache.outputs.cache-hit != 'true'
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: "1.85.0"
+        toolchain: "1.91.0"
         targets: wasm32-unknown-unknown
 
     - name: Cache cargo registry + build
