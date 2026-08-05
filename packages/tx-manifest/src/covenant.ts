@@ -151,21 +151,26 @@ export async function deriveCovenantAddress(
 }
 
 /**
- * Whether a covenant UTXO is what the manifest claims: does the address the wallet
- * derived match the one the funds are actually sitting at?
+ * Whether a covenant UTXO is what the manifest claims: does the script the wallet
+ * derived match the one the funds are actually locked by?
  *
- * `onChainAddress` must come from the chain, never from the request. Comparing two
+ * `onChainScriptPubKeyHex` must come from the chain, never from the request. Comparing two
  * values the same site supplied would pass for any pair it chose to make consistent.
- * The state file carries an outpoint and no address precisely because the address has
+ * The state file carries an outpoint and no script precisely because the script has
  * to be read rather than told.
+ *
+ * The comparison is over the script rather than the address it is written as. The script is
+ * the locking condition itself; an address is one rendering of it, and rendering is where a
+ * difference can hide — the same script has a different address on a different network, and
+ * two spellings of one address are not equal as strings.
  *
  * A mismatch is a refusal. There is no shape of this function that returns a warning.
  */
 export function covenantMatchesChain(
 	derivation: CovenantDerivation,
-	onChainAddress: string,
+	onChainScriptPubKeyHex: string,
 ): { matched: true } | { matched: false; reason: string } {
-	if (derivation.address === onChainAddress) {
+	if (derivation.scriptPubKeyHex.toLowerCase() === onChainScriptPubKeyHex.toLowerCase()) {
 		return { matched: true };
 	}
 
@@ -173,7 +178,8 @@ export function covenantMatchesChain(
 		matched: false,
 		reason:
 			`The ${derivation.utxoType} contract rebuilds to ${derivation.address}, ` +
-			`but the funds are at ${onChainAddress}. This is not the contract the site described.`,
+			"but the funds are locked by a different contract. " +
+			"This is not the contract the site described.",
 	};
 }
 

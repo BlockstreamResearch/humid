@@ -114,18 +114,31 @@ describe("covenantMatchesChain", () => {
 	};
 
 	test("matches when the rebuilt contract lands where the funds are", () => {
-		expect(covenantMatchesChain(derivation, "tex1p_derived")).toEqual({ matched: true });
+		expect(covenantMatchesChain(derivation, SCRIPT)).toEqual({ matched: true });
 	});
 
-	test("refuses when it does not, naming both addresses", () => {
-		const result = covenantMatchesChain(derivation, "tex1p_somewhere_else");
+	// Hex case is a spelling of the same bytes, and a comparison that treats it as a
+	// difference refuses a covenant that is in fact where the funds are.
+	test("matches whatever case the chain reports the script in", () => {
+		expect(covenantMatchesChain(derivation, SCRIPT.toUpperCase())).toEqual({ matched: true });
+	});
+
+	test("refuses when it does not, naming what was rebuilt", () => {
+		const result = covenantMatchesChain(derivation, `5120${"22".repeat(32)}`);
 
 		expect(result.matched).toBe(false);
 
 		if (!result.matched) {
 			expect(result.reason).toContain("tex1p_derived");
-			expect(result.reason).toContain("tex1p_somewhere_else");
+			expect(result.reason).toContain("p2pk_output");
 		}
+	});
+
+	// The address is a rendering of the script and the two are not interchangeable. Comparing
+	// the rendering would pass an address that spells the same script differently and, worse,
+	// accept a script the wallet never derived because something upstream handed it an address.
+	test("does not accept the address in place of the script", () => {
+		expect(covenantMatchesChain(derivation, derivation.address).matched).toBe(false);
 	});
 });
 

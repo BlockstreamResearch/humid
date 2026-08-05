@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
+import transactions from "./__fixtures__/testnet-transactions.json";
 import { createEsploraFeeRateReader, createEsploraTxOutReader } from "./chainRead";
 
-// Response shapes are Esplora's documented ones: /tx/:txid returns a transaction whose
-// vout entries carry scriptpubkey and scriptpubkey_address.
+// The transaction read asks for /tx/:txid/raw and gets consensus bytes back. The fee read is
+// still JSON, which is Esplora's own shape for /fee-estimates.
 const TXID = "a".repeat(64);
+
+/** A real Liquid testnet transaction whose first output is explicit and taproot-locked. */
+const FIXTURE = transactions.explicitTaproot;
 
 function respondWith(body: unknown, ok = true, status = 200) {
 	const calls: { init?: RequestInit; url: string }[] = [];
@@ -13,6 +17,10 @@ function respondWith(body: unknown, ok = true, status = 200) {
 		calls.push({ init, url: String(url) });
 
 		return {
+			arrayBuffer: async () =>
+				typeof body === "string"
+					? Uint8Array.from(body.match(/../g) ?? [], (pair) => Number.parseInt(pair, 16)).buffer
+					: new ArrayBuffer(0),
 			json: async () => body,
 			ok,
 			status,
@@ -22,40 +30,47 @@ function respondWith(body: unknown, ok = true, status = 200) {
 	return { calls, fetchImpl };
 }
 
-const OUTPUT = {
-	asset: "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d",
-	scriptpubkey: "5120aabb",
-	scriptpubkey_address: "tex1p_covenant",
-	value: 5000,
-};
-
 describe("createEsploraTxOutReader", () => {
-	test("reads the requested output", async () => {
-		const { fetchImpl } = respondWith({
-			vout: [{ scriptpubkey: "00", scriptpubkey_address: "other" }, OUTPUT],
-		});
+	test("reads the requested output out of the transaction's bytes", async () => {
+		const { fetchImpl } = respondWith(FIXTURE.raw);
 		const read = createEsploraTxOutReader({ url: "https://esplora.example" }, fetchImpl);
+		const expected = FIXTURE.vout[0];
 
-		await expect(read({ txid: TXID, vout: 1 })).resolves.toMatchObject({
-			amountSats: "5000",
-			scriptPubKeyAddress: "tex1p_covenant",
-			scriptPubKeyHex: "5120aabb",
+		await expect(read({ txid: TXID, vout: 0 })).resolves.toMatchObject({
+			amountSats: String(expected.value),
+			rawAssetId: expected.asset,
+			scriptPubKeyHex: expected.scriptpubkey,
 		});
 	});
 
-	test("asks the configured endpoint, trailing slash or not", async () => {
-		const { calls, fetchImpl } = respondWith({ vout: [OUTPUT] });
+	// Every output of the same transaction, so an index is not being ignored.
+	test("reads each output of a transaction as the chain reports it", async () => {
+		const { fetchImpl } = respondWith(FIXTURE.raw);
+		const read = createEsploraTxOutReader({ url: "https://esplora.example" }, fetchImpl);
+
+		for (const [index, expected] of FIXTURE.vout.entries()) {
+			await expect(read({ txid: TXID, vout: index })).resolves.toMatchObject({
+				scriptPubKeyHex: expected.scriptpubkey,
+			});
+		}
+	});
+
+	// The raw route rather than the summary one: the Waterfalls server this wallet configures
+	// for Liquid testnet answers 404 to /tx/:txid and serves /tx/:txid/raw, and every Esplora
+	// serves both. Asking for the summary made the first live run impossible.
+	test("asks for the transaction's bytes, trailing slash or not", async () => {
+		const { calls, fetchImpl } = respondWith(FIXTURE.raw);
 		const read = createEsploraTxOutReader({ url: "https://esplora.example/" }, fetchImpl);
 
 		await read({ txid: TXID, vout: 0 });
 
-		expect(calls[0]?.url).toBe(`https://esplora.example/tx/${TXID}`);
+		expect(calls[0]?.url).toBe(`https://esplora.example/tx/${TXID}/raw`);
 	});
 
 	// A private or authenticated backend is configured once, for lwk; this read must not
 	// need it configured a second time.
 	test("sends the endpoint's configured headers", async () => {
-		const { calls, fetchImpl } = respondWith({ vout: [OUTPUT] });
+		const { calls, fetchImpl } = respondWith(FIXTURE.raw);
 		const read = createEsploraTxOutReader(
 			{
 				headers: [{ name: "authorization", value: "Bearer token" }],
@@ -70,7 +85,7 @@ describe("createEsploraTxOutReader", () => {
 	});
 
 	test("rejects something that is not a transaction id before asking anyone", async () => {
-		const { calls, fetchImpl } = respondWith({ vout: [OUTPUT] });
+		const { calls, fetchImpl } = respondWith(FIXTURE.raw);
 		const read = createEsploraTxOutReader({ url: "https://esplora.example" }, fetchImpl);
 
 		await expect(read({ txid: "nope", vout: 0 })).rejects.toThrow();
@@ -78,7 +93,7 @@ describe("createEsploraTxOutReader", () => {
 	});
 
 	test("rejects a negative output index before asking anyone", async () => {
-		const { calls, fetchImpl } = respondWith({ vout: [OUTPUT] });
+		const { calls, fetchImpl } = respondWith(FIXTURE.raw);
 		const read = createEsploraTxOutReader({ url: "https://esplora.example" }, fetchImpl);
 
 		await expect(read({ txid: TXID, vout: -1 })).rejects.toThrow();
@@ -93,20 +108,31 @@ describe("createEsploraTxOutReader", () => {
 	});
 
 	test("fails when the transaction has no output at that index", async () => {
-		const { fetchImpl } = respondWith({ vout: [OUTPUT] });
+		const { fetchImpl } = respondWith(FIXTURE.raw);
 		const read = createEsploraTxOutReader({ url: "https://esplora.example" }, fetchImpl);
 
 		await expect(read({ txid: TXID, vout: 7 })).rejects.toThrow();
 	});
 
-	// A confidential output has no scriptpubkey_address in some Esplora deployments;
-	// failing loudly beats returning an object with an empty address that a comparison
-	// would then match against nothing.
-	test("fails when the output came back without a scriptPubKey", async () => {
-		const { fetchImpl } = respondWith({ vout: [{ value: 1 }] });
+	// Failing loudly beats returning something shaped like an answer: a caller that got an
+	// empty script would compare a rebuilt covenant against nothing.
+	test("fails when what came back is not a transaction", async () => {
+		const { fetchImpl } = respondWith("0200");
 		const read = createEsploraTxOutReader({ url: "https://esplora.example" }, fetchImpl);
 
 		await expect(read({ txid: TXID, vout: 0 })).rejects.toThrow();
+	});
+
+	// A confidential output parses; what it cannot do is report an amount or an asset. The
+	// refusal belongs to the caller that needs one, not here.
+	test("reads a confidential output without inventing its amount", async () => {
+		const { fetchImpl } = respondWith(transactions.confidential.raw);
+		const read = createEsploraTxOutReader({ url: "https://esplora.example" }, fetchImpl);
+		const result = await read({ txid: TXID, vout: 0 });
+
+		expect(result.scriptPubKeyHex).toBe(transactions.confidential.vout[0].scriptpubkey);
+		expect(result.amountSats).toBeUndefined();
+		expect(result.rawAssetId).toBeUndefined();
 	});
 });
 

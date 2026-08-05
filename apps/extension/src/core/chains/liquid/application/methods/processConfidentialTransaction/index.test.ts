@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { txOutAt } from "@humid/tx-manifest";
 import groupedManifest from "@humid/tx-manifest/fixtures/p2pk-grouped.manifest.json";
 import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk.manifest.json";
 
@@ -161,12 +162,20 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 				},
 			}) as never,
 		readFeeRate: () => async () => 1000,
-		readTxOut: () => async () => ({
-			amountSats: "42000",
-			rawAssetId: POLICY_ASSET,
-			scriptPubKeyAddress: DERIVED,
-			scriptPubKeyHex: "5120aabb",
-		}),
+		// Answers with bytes and reads them back through the same parser the real reader uses,
+		// so this cannot hand over an output the chain could not have produced.
+		readTxOut: () => async () => {
+			const asset = `01${(POLICY_ASSET.match(/../g) ?? []).reverse().join("")}`;
+			const value = `01${(42_000).toString(16).padStart(16, "0")}`;
+			const script = `${(DERIVED_SCRIPT.length / 2).toString(16).padStart(2, "0")}${DERIVED_SCRIPT}`;
+			const parsed = txOutAt(`02000000000001${asset}${value}00${script}00000000`, 0);
+
+			if (!parsed.ok) {
+				throw new Error(parsed.reason);
+			}
+
+			return parsed.txOut;
+		},
 		resolveAccount: async () =>
 			({ accountGroupIndex: 0, chain: {}, rawPolicyAssetId: POLICY_ASSET }) as never,
 		scriptPubKeyHexOf: async () => WALLET_SCRIPT,

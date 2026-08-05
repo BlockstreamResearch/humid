@@ -10,6 +10,9 @@
  * not be. Broadcast stays with lwk.
  */
 
+import { encodeHex } from "./bytes";
+import { txOutAt } from "./txOut";
+
 export type OutPoint = { txid: string; vout: number };
 
 export type TxOutAtOutPoint = {
@@ -17,34 +20,11 @@ export type TxOutAtOutPoint = {
 	amountSats?: string;
 	/** Raw asset id, when the output is explicit rather than confidential. */
 	rawAssetId?: string;
-	/** The address the output pays to, as the endpoint reports it. */
-	scriptPubKeyAddress: string;
 	/** The output's scriptPubKey in hex. */
 	scriptPubKeyHex: string;
+	/** The output exactly as the chain holds it, to hand to something that spends it. */
+	txOutHex: string;
 };
-
-/**
- * Re-encodes an explicit output so it can be handed to something that spends it.
- *
- * Only valid for an explicit output, which for this purpose is not a limitation: a
- * covenant output is always unblinded, because Simplicity's introspection jets cannot read
- * a confidential commitment. A confidential one returns undefined rather than a plausible
- * encoding, since guessing here would produce a transaction that fails far away from the
- * cause.
- */
-export function encodeExplicitTxOut(txOut: TxOutAtOutPoint): string | undefined {
-	if (txOut.amountSats === undefined || txOut.rawAssetId === undefined) {
-		return undefined;
-	}
-
-	// Elements consensus encoding: explicit asset (0x01 + 32 bytes, reversed), explicit
-	// value (0x01 + 8 bytes big-endian), null nonce, then the script with its length.
-	const assetLittleEndian = (txOut.rawAssetId.match(/../g) ?? []).reverse().join("");
-	const value = BigInt(txOut.amountSats).toString(16).padStart(16, "0");
-	const scriptLength = (txOut.scriptPubKeyHex.length / 2).toString(16).padStart(2, "0");
-
-	return `01${assetLittleEndian}01${value}00${scriptLength}${txOut.scriptPubKeyHex}`;
-}
 
 export type ReadTxOut = (outpoint: OutPoint) => Promise<TxOutAtOutPoint>;
 
@@ -58,6 +38,13 @@ export type EsploraEndpoint = {
  *
  * The endpoint is the one the chain record already configures for lwk, headers included,
  * so a private or authenticated backend keeps working without being configured twice.
+ *
+ * It asks for the transaction's bytes rather than a server's summary of them, for two
+ * reasons. The summary route is not universal — the Waterfalls server this wallet uses for
+ * Liquid testnet serves the descriptor scan lwk needs and answers 404 to a plain transaction
+ * lookup, while every Esplora serves the raw one. And the bytes are what the signing module
+ * has to be handed, so taking them directly removes a re-encoding that could differ from the
+ * chain by a byte and fail somewhere far from the cause.
  */
 export function createEsploraTxOutReader(
 	endpoint: EsploraEndpoint,
@@ -74,7 +61,7 @@ export function createEsploraTxOutReader(
 			throw new Error(`Not an output index: ${vout}`);
 		}
 
-		const response = await fetchImpl(`${base}/tx/${txid}`, {
+		const response = await fetchImpl(`${base}/tx/${txid}/raw`, {
 			headers: Object.fromEntries((endpoint.headers ?? []).map(({ name, value }) => [name, value])),
 		});
 
@@ -82,32 +69,13 @@ export function createEsploraTxOutReader(
 			throw new Error(`Could not read transaction ${txid}: ${response.status}`);
 		}
 
-		const body: unknown = await response.json();
-		const outputs = isRecord(body) && Array.isArray(body.vout) ? body.vout : undefined;
+		const parsed = txOutAt(encodeHex(new Uint8Array(await response.arrayBuffer())), vout);
 
-		if (!outputs) {
-			throw new Error(`Transaction ${txid} came back without outputs.`);
+		if (!parsed.ok) {
+			throw new Error(`Reading ${txid}:${vout}: ${parsed.reason}`);
 		}
 
-		const output = outputs[vout];
-
-		if (!isRecord(output)) {
-			throw new Error(`Transaction ${txid} has no output at index ${vout}.`);
-		}
-
-		const scriptPubKeyHex = output.scriptpubkey;
-		const scriptPubKeyAddress = output.scriptpubkey_address;
-
-		if (typeof scriptPubKeyHex !== "string" || typeof scriptPubKeyAddress !== "string") {
-			throw new Error(`Output ${txid}:${vout} came back without a scriptPubKey.`);
-		}
-
-		return {
-			...(typeof output.value === "number" ? { amountSats: String(output.value) } : {}),
-			...(typeof output.asset === "string" ? { rawAssetId: output.asset } : {}),
-			scriptPubKeyAddress,
-			scriptPubKeyHex,
-		};
+		return parsed.txOut;
 	};
 }
 

@@ -1,4 +1,4 @@
-import { encodeExplicitTxOut, type ReadFeeRate, type ReadTxOut } from "./chainRead";
+import type { ReadFeeRate, ReadTxOut } from "./chainRead";
 import { type CoinSelection, type SelectableUtxo, selectCoins } from "./coinSelection";
 import { resolveComputedParams } from "./computed";
 import { type ConfirmationModel, confirmationModel } from "./confirmation";
@@ -267,7 +267,7 @@ export async function reviewManifestAction(
 			};
 		}
 
-		const matched = covenantMatchesChain(derived.derivation, onChain.scriptPubKeyAddress);
+		const matched = covenantMatchesChain(derived.derivation, onChain.scriptPubKeyHex);
 
 		if (!matched.matched) {
 			return { reason: matched.reason, refused: true };
@@ -277,9 +277,7 @@ export async function reviewManifestAction(
 			inputs[site.id] = { amount_sat: BigInt(onChain.amountSats) };
 		}
 
-		const txOutHex = encodeExplicitTxOut(onChain);
-
-		if (!txOutHex) {
+		if (onChain.amountSats === undefined || onChain.rawAssetId === undefined) {
 			return {
 				reason:
 					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} is confidential. ` +
@@ -287,6 +285,8 @@ export async function reviewManifestAction(
 				refused: true,
 			};
 		}
+
+		const { txOutHex } = onChain;
 
 		covenantInputs.push({
 			argumentsJson: derived.derivation.argumentsJson,

@@ -1,3 +1,5 @@
+import { decodeHex, readReversedHex, readUint32, readVarint, skip } from "./bytes";
+
 /** One transaction input, as the outpoint it spends. */
 export type OutPoint = { txid: string; vout: number };
 
@@ -16,7 +18,7 @@ export type SpentInputs = { ok: true; spent: OutPoint[] } | { ok: false; reason:
  * else's business.
  */
 export function spentInputs(transactionHex: string): SpentInputs {
-	const bytes = decode(transactionHex);
+	const bytes = decodeHex(transactionHex);
 
 	if (!bytes) {
 		return { ok: false, reason: "The signed transaction is not hex." };
@@ -56,89 +58,4 @@ export function spentInputs(transactionHex: string): SpentInputs {
 	}
 
 	return { ok: true, spent };
-}
-
-type Reader = { at: number; bytes: Uint8Array };
-
-function decode(hex: string): Uint8Array | undefined {
-	const digits = hex.startsWith("0x") ? hex.slice(2) : hex;
-
-	if (digits.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(digits)) {
-		return undefined;
-	}
-
-	return Uint8Array.from(digits.match(/../g) ?? [], (pair) => Number.parseInt(pair, 16));
-}
-
-function skip(reader: Reader, count: number): boolean {
-	if (reader.at + count > reader.bytes.length) {
-		return false;
-	}
-
-	reader.at += count;
-
-	return true;
-}
-
-/** A txid is serialised in reverse of how it is written, which is why it is turned back. */
-function readReversedHex(reader: Reader, length: number): string | undefined {
-	if (reader.at + length > reader.bytes.length) {
-		return undefined;
-	}
-
-	const slice = reader.bytes.slice(reader.at, reader.at + length);
-
-	reader.at += length;
-
-	return [...slice]
-		.reverse()
-		.map((byte) => byte.toString(16).padStart(2, "0"))
-		.join("");
-}
-
-function readUint32(reader: Reader): number | undefined {
-	if (reader.at + 4 > reader.bytes.length) {
-		return undefined;
-	}
-
-	let value = 0;
-
-	for (let offset = 3; offset >= 0; offset -= 1) {
-		value = value * 256 + (reader.bytes[reader.at + offset] ?? 0);
-	}
-
-	reader.at += 4;
-
-	return value;
-}
-
-function readVarint(reader: Reader): bigint | undefined {
-	const first = reader.bytes[reader.at];
-
-	if (first === undefined) {
-		return undefined;
-	}
-
-	reader.at += 1;
-
-	const widths: Record<number, number> = { 0xfd: 2, 0xfe: 4, 0xff: 8 };
-	const width = widths[first];
-
-	if (width === undefined) {
-		return BigInt(first);
-	}
-
-	if (reader.at + width > reader.bytes.length) {
-		return undefined;
-	}
-
-	let value = 0n;
-
-	for (let offset = width - 1; offset >= 0; offset -= 1) {
-		value = value * 256n + BigInt(reader.bytes[reader.at + offset] ?? 0);
-	}
-
-	reader.at += width;
-
-	return value;
 }

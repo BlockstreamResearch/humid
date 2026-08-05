@@ -11,10 +11,11 @@
 export {
 	type ReadFeeRate,
 	type ReadTxOut,
+	type TxOutAtOutPoint,
 	createEsploraFeeRateReader,
 	createEsploraTxOutReader,
-	encodeExplicitTxOut,
 } from "./chainRead";
+export { type ParsedTxOut, txOutAt } from "./txOut";
 export {
 	type ConfirmationModel,
 	type ShownConfirmation,

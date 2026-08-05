@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 
 import groupedManifest from "./__fixtures__/p2pk-grouped.manifest.json";
 import p2pkManifest from "./__fixtures__/p2pk.manifest.json";
+import type { TxOutAtOutPoint } from "./chainRead";
 import { estimateFeeSats } from "./fee";
 import { isRefusal, reviewManifestAction } from "./review";
+import { txOutAt } from "./txOut";
 import type { ParsedLiquidProcessCtParams } from "./types";
 
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -16,6 +18,8 @@ const DERIVED = "tex1p_derived";
 // the address is what a person is shown and what an on-chain output is compared against,
 // the scriptPubKey is what an output pays to, and only one of them is hex.
 const DERIVED_SCRIPT = "5120" + "11".repeat(32);
+/** A script that is not the covenant's, for the cases where the chain must disagree. */
+const UNSPENT_ELSEWHERE = "5120" + "22".repeat(32);
 const COMPILED = { address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT };
 
 function request(
@@ -53,14 +57,29 @@ const deps = {
 	walletScriptPubKeyHex: WALLET_SCRIPT,
 };
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+/**
+ * A chain read that answers with bytes rather than with an object shaped like an answer.
+ *
+ * It serialises a real one-output transaction and reads it back through the parser the
+ * production reader uses, so this substitute cannot return anything the real one could not:
+ * an output it builds wrongly fails here rather than passing through green and failing in a
+ * browser. Three faults reached a person through substitutes laxer than what they stood for.
+ */
 const readTxOut =
-	(address: string, amountSats = "42000") =>
-	async () => ({
-		amountSats,
-		rawAssetId: POLICY_ASSET,
-		scriptPubKeyAddress: address,
-		scriptPubKeyHex: "5120aabb",
-	});
+	(scriptPubKeyHex: string, amountSats = "42000") =>
+	async (): Promise<TxOutAtOutPoint> => {
+		const asset = `01${(POLICY_ASSET.match(/../g) ?? []).reverse().join("")}`;
+		const value = `01${BigInt(amountSats).toString(16).padStart(16, "0")}`;
+		const script = `${(scriptPubKeyHex.length / 2).toString(16).padStart(2, "0")}${scriptPubKeyHex}`;
+		const transaction = `02000000000001${asset}${value}00${script}00000000`;
+		const parsed = txOutAt(transaction, 0);
+
+		if (!parsed.ok) {
+			throw new Error(`This substitute built an output the parser cannot read: ${parsed.reason}`);
+		}
+
+		return parsed.txOut;
+	};
 
 const spendRequest = (state: unknown) =>
 	request({
@@ -80,7 +99,7 @@ describe("reviewManifestAction", () => {
 		test("reports the derived address as not yet on chain", async () => {
 			const result = await reviewManifestAction(request(), {
 				...deps,
-				readTxOut: readTxOut("unused"),
+				readTxOut: readTxOut(UNSPENT_ELSEWHERE),
 			});
 
 			expect(isRefusal(result)).toBe(false);
@@ -106,7 +125,7 @@ describe("reviewManifestAction", () => {
 				readTxOut: async () => {
 					asked += 1;
 
-					return { scriptPubKeyAddress: "x", scriptPubKeyHex: "00" };
+					return { scriptPubKeyHex: "00", txOutHex: "00" };
 				},
 			});
 
@@ -120,7 +139,7 @@ describe("reviewManifestAction", () => {
 		test("passes when the rebuilt contract lands where the funds are", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
 				...deps,
-				readTxOut: readTxOut(DERIVED),
+				readTxOut: readTxOut(DERIVED_SCRIPT),
 			});
 
 			expect(isRefusal(result)).toBe(false);
@@ -138,7 +157,7 @@ describe("reviewManifestAction", () => {
 		test("carries the covenant it verified, ready to be spent", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
 				...deps,
-				readTxOut: readTxOut(DERIVED),
+				readTxOut: readTxOut(DERIVED_SCRIPT),
 			});
 
 			expect(isRefusal(result)).toBe(false);
@@ -157,10 +176,22 @@ describe("reviewManifestAction", () => {
 		test("refuses a covenant output the chain reports as confidential", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
 				...deps,
-				readTxOut: async () => ({
-					scriptPubKeyAddress: DERIVED,
-					scriptPubKeyHex: "5120aabb",
-				}),
+				readTxOut: async () => {
+					// A real confidential output: the asset and the value are commitments rather
+					// than numbers, and a nonce is present. Built as bytes and read back, so this
+					// is what the chain would actually hand over.
+					const asset = `0a${"33".repeat(32)}`;
+					const value = `08${"44".repeat(32)}`;
+					const nonce = `02${"55".repeat(32)}`;
+					const script = `${(DERIVED_SCRIPT.length / 2).toString(16).padStart(2, "0")}${DERIVED_SCRIPT}`;
+					const parsed = txOutAt(`02000000000001${asset}${value}${nonce}${script}00000000`, 0);
+
+					if (!parsed.ok) {
+						throw new Error(parsed.reason);
+					}
+
+					return parsed.txOut;
+				},
 			});
 
 			expect(isRefusal(result)).toBe(true);
@@ -171,7 +202,7 @@ describe("reviewManifestAction", () => {
 		test("pays out the amount the chain reports, not one the request supplied", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
 				...deps,
-				readTxOut: readTxOut(DERIVED, "77000"),
+				readTxOut: readTxOut(DERIVED_SCRIPT, "77000"),
 			});
 
 			expect(isRefusal(result)).toBe(false);
@@ -188,7 +219,7 @@ describe("reviewManifestAction", () => {
 		test("refuses when the funds are somewhere else", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
 				...deps,
-				readTxOut: readTxOut("tex1p_somewhere_else"),
+				readTxOut: readTxOut(UNSPENT_ELSEWHERE),
 			});
 
 			expect(isRefusal(result)).toBe(true);
@@ -197,7 +228,7 @@ describe("reviewManifestAction", () => {
 		test("refuses when the state file lists no such covenant", async () => {
 			const result = await reviewManifestAction(spendRequest({ utxos: [] }), {
 				...deps,
-				readTxOut: readTxOut(DERIVED),
+				readTxOut: readTxOut(DERIVED_SCRIPT),
 			});
 
 			expect(isRefusal(result)).toBe(true);
@@ -217,7 +248,7 @@ describe("reviewManifestAction", () => {
 		test("refuses before reading anything when the state file is absent", async () => {
 			const result = await reviewManifestAction(
 				request({ action: "Receive", params: { pubkey: PUBKEY } }),
-				{ ...deps, readTxOut: readTxOut(DERIVED) },
+				{ ...deps, readTxOut: readTxOut(DERIVED_SCRIPT) },
 			);
 
 			expect(isRefusal(result)).toBe(true);
@@ -227,7 +258,7 @@ describe("reviewManifestAction", () => {
 	test("refuses a request missing a part the action needs, naming it", async () => {
 		const result = await reviewManifestAction(request({ contractSources: {} }), {
 			...deps,
-			readTxOut: readTxOut(DERIVED),
+			readTxOut: readTxOut(DERIVED_SCRIPT),
 		});
 
 		expect(isRefusal(result)).toBe(true);
@@ -243,7 +274,7 @@ describe("reviewManifestAction", () => {
 			compile: () => {
 				throw new Error("parse error");
 			},
-			readTxOut: readTxOut(DERIVED),
+			readTxOut: readTxOut(DERIVED_SCRIPT),
 		});
 
 		expect(isRefusal(result)).toBe(true);
@@ -263,10 +294,13 @@ describe("reviewManifestAction reads through the runtime core", () => {
 	// into the same transaction, so nothing a person is shown depends on which shape the
 	// site chose.
 	test("reviews a grouped manifest into the same result as the flat one", async () => {
-		const flat = await reviewManifestAction(request(), { ...deps, readTxOut: readTxOut("unused") });
+		const flat = await reviewManifestAction(request(), {
+			...deps,
+			readTxOut: readTxOut(UNSPENT_ELSEWHERE),
+		});
 		const fromGrouped = await reviewManifestAction(grouped(), {
 			...deps,
-			readTxOut: readTxOut("unused"),
+			readTxOut: readTxOut(UNSPENT_ELSEWHERE),
 		});
 
 		expect(isRefusal(fromGrouped)).toBe(false);
@@ -281,7 +315,7 @@ describe("reviewManifestAction reads through the runtime core", () => {
 	test("reports the legacy spelling the grouped document used", async () => {
 		const result = await reviewManifestAction(grouped(), {
 			...deps,
-			readTxOut: readTxOut("unused"),
+			readTxOut: readTxOut(UNSPENT_ELSEWHERE),
 		});
 
 		if (!isRefusal(result)) {
@@ -298,7 +332,7 @@ describe("reviewManifestAction reads through the runtime core", () => {
 	test("records the constructs it ignored rather than dropping them", async () => {
 		const result = await reviewManifestAction(request(), {
 			...deps,
-			readTxOut: readTxOut("unused"),
+			readTxOut: readTxOut(UNSPENT_ELSEWHERE),
 		});
 
 		if (!isRefusal(result)) {
@@ -311,7 +345,7 @@ describe("reviewManifestAction reads through the runtime core", () => {
 	test("keeps a load-bearing construct out of the ignored list", async () => {
 		const result = await reviewManifestAction(request(), {
 			...deps,
-			readTxOut: readTxOut("unused"),
+			readTxOut: readTxOut(UNSPENT_ELSEWHERE),
 		});
 
 		if (!isRefusal(result)) {
@@ -326,7 +360,7 @@ describe("who decides the fee", () => {
 		const result = await reviewManifestAction(request(), {
 			...deps,
 			readFeeRate: async () => 1234,
-			readTxOut: readTxOut("unused"),
+			readTxOut: readTxOut(UNSPENT_ELSEWHERE),
 		});
 
 		expect(isRefusal(result)).toBe(false);
@@ -342,7 +376,7 @@ describe("who decides the fee", () => {
 			readFeeRate: async () => {
 				throw new Error("no estimate");
 			},
-			readTxOut: readTxOut("unused"),
+			readTxOut: readTxOut(UNSPENT_ELSEWHERE),
 		});
 
 		expect(isRefusal(result)).toBe(true);
@@ -384,7 +418,7 @@ describe("an amount that depends on the fee", () => {
 				params: { pubkey: PUBKEY },
 				state: oneCovenantUtxo as Record<string, unknown>,
 			}),
-			{ ...deps, readTxOut: readTxOut(DERIVED, "42000") },
+			{ ...deps, readTxOut: readTxOut(DERIVED_SCRIPT, "42000") },
 		);
 
 	test("pays out what the covenant holds, less what the wallet worked the fee out to be", async () => {
@@ -426,7 +460,7 @@ describe("what the person is shown", () => {
 	const shown = async () => {
 		const result = await reviewManifestAction(request(), {
 			...deps,
-			readTxOut: readTxOut("unused"),
+			readTxOut: readTxOut(UNSPENT_ELSEWHERE),
 		});
 
 		if (isRefusal(result)) {
@@ -467,7 +501,7 @@ describe("what the person is shown", () => {
 	test("and marks a covenant it did check as checked", async () => {
 		const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
 			...deps,
-			readTxOut: readTxOut(DERIVED),
+			readTxOut: readTxOut(DERIVED_SCRIPT),
 		});
 
 		if (!isRefusal(result)) {
@@ -511,7 +545,7 @@ describe("the mode a protocol declares reaches the compiler", () => {
 
 				return COMPILED;
 			},
-			readTxOut: readTxOut("unused"),
+			readTxOut: readTxOut(UNSPENT_ELSEWHERE),
 		}).then((result) => ({ result, seen }));
 	}
 
