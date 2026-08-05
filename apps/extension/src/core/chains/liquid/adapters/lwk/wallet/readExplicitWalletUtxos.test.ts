@@ -11,7 +11,9 @@ type OutputSpec = {
 	amount: string;
 	blinded: boolean;
 	vout: number;
+	chain?: number;
 	height?: number;
+	index?: number;
 };
 
 function walletTx(
@@ -21,7 +23,9 @@ function walletTx(
 ) {
 	const owned = (spec: OutputSpec) => ({
 		address: () => ({ toString: () => `address:${txid}:${spec.vout}` }),
+		extInt: () => spec.chain ?? 0,
 		height: () => spec.height,
+		wildcardIndex: () => spec.index ?? 0,
 		outpoint: () => ({ txid: () => ({ toString: () => txid }), vout: () => spec.vout }),
 		scriptPubkey: () => ({ toString: () => `script:${spec.vout}` }),
 		unblinded: () => ({
@@ -140,6 +144,24 @@ describe("the wallet's own outputs that hide nothing", () => {
 
 		expect(utxos).toHaveLength(1);
 		expect(utxos[0]?.txOut).toBe(`txout:${A}:0`);
+	});
+
+	// The contract path signs every wallet input with one key, the account's first external
+	// address. An explicit output anywhere else in the range is money the wallet owns and
+	// cannot spend here, and offering it would buy a failure at signing — after the person
+	// approved — instead of a shortfall said plainly beforehand.
+	test("an explicit output the contract path cannot sign is not offered", () => {
+		const elsewhere = readExplicitWalletUtxos(
+			wollet([walletTx(A, [{ amount: "30000", blinded: false, height: 1, index: 4, vout: 0 }])]),
+		);
+
+		expect(elsewhere).toEqual([]);
+
+		const change = readExplicitWalletUtxos(
+			wollet([walletTx(A, [{ amount: "30000", blinded: false, chain: 1, height: 1, vout: 0 }])]),
+		);
+
+		expect(change).toEqual([]);
 	});
 
 	test("an input the wallet did not own does not remove anything", () => {

@@ -8,6 +8,19 @@ import type { LwkWasmModule } from "../loadLwkWasm";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
 
+/** `Chain::External` — the side of the descriptor addresses are handed out from. */
+const CHAIN_EXTERNAL = 0;
+
+/**
+ * The one index the contract path can sign.
+ *
+ * The signing module derives a single key at the account's first external address and signs
+ * every wallet input with it. Until it takes a derivation path per input, that address is the
+ * whole of what a contract action can be funded from — the limitation the contract identity
+ * screen exists to make visible rather than to hide.
+ */
+const SIGNING_INDEX = 0;
+
 /**
  * The wallet's own unspent outputs that hide nothing.
  *
@@ -69,6 +82,16 @@ export function readExplicitWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[]
 			// The only ones this reader is for. A blinded output is already reported by the
 			// ordinary read, and reporting it twice would have the wallet count it twice.
 			if (rawTxOut.isPartiallyBlinded()) {
+				continue;
+			}
+
+			// And only the ones the contract path can actually sign. That path signs every wallet
+			// input with one key, the account's first external one, because the signing module is
+			// given an outpoint and its bytes and no derivation path. An explicit output anywhere
+			// else in the range is real money the wallet owns and cannot spend here, and offering
+			// it to coin selection would buy a failure at signing — after the person approved —
+			// in place of a shortfall said plainly beforehand.
+			if (owned.extInt() !== CHAIN_EXTERNAL || owned.wildcardIndex() !== SIGNING_INDEX) {
 				continue;
 			}
 
