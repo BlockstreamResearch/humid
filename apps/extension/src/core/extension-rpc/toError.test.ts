@@ -48,3 +48,42 @@ describe("toError", () => {
 		expect(toError(circular).message).toBe("The extension failed and did not say why.");
 	});
 });
+
+// A handler wraps a failure in a stable wallet error and attaches the real reason underneath.
+// Only the message reaches a screen, so the chain has to be in it.
+describe("toError and the cause chain", () => {
+	test("the reason underneath reaches the message", () => {
+		const error = toError({
+			cause: { message: "InsufficientFunds: missing 1200 satoshi" },
+			code: -32_002,
+			message: "Could not build, sign, and broadcast the Liquid transfer.",
+		});
+
+		expect(error.message).toBe(
+			"Could not build, sign, and broadcast the Liquid transfer. — caused by: InsufficientFunds: missing 1200 satoshi",
+		);
+	});
+
+	test("the cause is kept as an error too, for a caller that wants the parts", () => {
+		const error = toError({ cause: { message: "underneath" }, message: "wrapper" });
+
+		expect((error as Error & { cause?: Error }).cause?.message).toBe("underneath");
+	});
+
+	test("a wrapper that only restates its cause does not say it twice", () => {
+		expect(toError({ cause: { message: "same" }, message: "same" }).message).toBe("same");
+	});
+
+	test("a chain several deep reads in order", () => {
+		const error = toError({
+			cause: { cause: { message: "third" }, message: "second" },
+			message: "first",
+		});
+
+		expect(error.message).toBe("first — caused by: second — caused by: third");
+	});
+
+	test("no cause reads exactly as it did before", () => {
+		expect(toError({ message: "alone" }).message).toBe("alone");
+	});
+});
