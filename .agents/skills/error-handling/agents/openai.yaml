@@ -1,0 +1,4 @@
+interface:
+  display_name: "Error Handling"
+  short_description: "Error ownership, reporting, and recovery"
+  default_prompt: "Use $error-handling to design or review error propagation, catch boundaries, reporting, and recovery behavior."

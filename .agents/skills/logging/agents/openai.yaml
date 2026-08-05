@@ -1,0 +1,4 @@
+interface:
+  display_name: "Logging"
+  short_description: "Structured cross-platform application logging"
+  default_prompt: "Use $logging to design or update structured logging across web, React Native, Electron renderer, and Electron main runtimes."

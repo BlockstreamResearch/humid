@@ -1,0 +1,4 @@
+interface:
+  display_name: "File Structure"
+  short_description: "Organize files by ownership and visibility"
+  default_prompt: "Use $file-structure to place files behind the narrowest correct module boundary."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Application Routing"
+  short_description: "Own route contracts, page trees, and navigation"
+  default_prompt: "Use $routing to design or change application routes, page hierarchy, guards, params, navigation, or route-tree composition."

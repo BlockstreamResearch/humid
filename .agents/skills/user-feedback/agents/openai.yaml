@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Feedback"
+  short_description: "Safe and contextual outcome feedback"
+  default_prompt: "Use $user-feedback to design or review user-facing success, warning, error, and recovery feedback."
