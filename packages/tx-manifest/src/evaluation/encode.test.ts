@@ -1,3 +1,4 @@
+// oxlint-disable consistent-function-scoping -- the helper belongs to the case it builds, and reading it beside the assertion is the point
 import { describe, expect, test } from "bun:test";
 
 import { encodeDataParts, encodeLeafItem } from "./encode";

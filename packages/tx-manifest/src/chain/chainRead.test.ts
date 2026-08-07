@@ -1,3 +1,4 @@
+// oxlint-disable no-await-in-loop -- these reads go to a real endpoint one transaction at a time on purpose; running them at once would make a rate limit look like a failing test
 import { describe, expect, test } from "bun:test";
 
 import transactions from "../__fixtures__/testnet-transactions.json";

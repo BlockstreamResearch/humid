@@ -1,3 +1,4 @@
+// oxlint-disable consistent-function-scoping -- each test defines the renderer it is asserting about; hoisting them would make two different subjects one
 import { describe, expect, test } from "bun:test";
 
 import {

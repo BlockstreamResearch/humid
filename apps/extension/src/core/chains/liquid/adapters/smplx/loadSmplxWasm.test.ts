@@ -1,3 +1,5 @@
+// oxlint-disable consistent-function-scoping -- each helper builds the case it sits in, and reading it beside the assertion is the point
+// oxlint-disable no-underscore-dangle -- these are wasm-bindgen's own exported names; renaming them would stop the module loading
 import { beforeAll, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";

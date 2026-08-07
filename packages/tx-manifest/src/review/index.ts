@@ -223,6 +223,13 @@ export async function reviewManifestAction(
 	};
 
 	for (const site of covenantSites(action)) {
+		// Sequential on purpose, and the rule is disabled here rather than obeyed. This loop
+		// returns on the first site it refuses, so running the sites concurrently would compile
+		// contracts and send chain reads for covenants after the answer is already known, and
+		// would make which refusal a person is shown depend on which request finished first
+		// instead of on the order the manifest declares. A covenant is refused in declared order
+		// or not at all.
+		// oxlint-disable-next-line no-await-in-loop
 		const derived = await deriveCovenantAddress(manifest, {
 			compile: input.compile,
 			contractSources: request.contractSources,
@@ -263,6 +270,8 @@ export async function reviewManifestAction(
 		let onChain;
 
 		try {
+			// Same loop, same reason: the first refusal wins, so nothing after it is worth reading.
+			// oxlint-disable-next-line no-await-in-loop
 			onChain = await input.readTxOut(outpoint);
 		} catch (error) {
 			return {

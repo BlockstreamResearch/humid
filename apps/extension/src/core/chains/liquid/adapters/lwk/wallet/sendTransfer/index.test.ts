@@ -1,3 +1,4 @@
+// oxlint-disable no-extraneous-class -- this stands in for a chain-library class the real code constructs with new; a function would not be substitutable for it
 import { describe, expect, mock, test } from "bun:test";
 
 /**

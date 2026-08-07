@@ -1,3 +1,4 @@
+// oxlint-disable no-useless-concat -- these fixtures are transaction bytes, and the joins are where one field ends and the next begins; one literal would hide the only thing that makes them readable
 import { describe, expect, test } from "bun:test";
 
 import { guardSpentInputs } from "./inputGuard";

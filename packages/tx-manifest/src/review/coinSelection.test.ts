@@ -87,7 +87,7 @@ describe("confidential outputs", () => {
 	test("are never selected, however much they hold", () => {
 		const result = selectCoins([blinded, explicit], 500n, 0n);
 
-		expect(result.ok && result.selected.map((utxo) => utxo.txid)).toEqual(["a"]);
+		expect(result.ok && result.selected.map((selected) => selected.txid)).toEqual(["a"]);
 	});
 
 	test("and when they are why the account falls short, the refusal says so", () => {

@@ -1,3 +1,4 @@
+// oxlint-disable no-await-in-loop -- the cases run one at a time because each asserts about the signer being freed before the next takes one
 import { describe, expect, test } from "bun:test";
 
 import type { LiquidChainRecord } from "../chains/LiquidChainRecord";
