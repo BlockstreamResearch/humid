@@ -86,6 +86,93 @@ export function refuseUnsupported(
 }
 
 /**
+ * The refusals a document can be checked for on its own, and the ones it cannot.
+ *
+ * The split is a fact about which inputs each check needs, not a judgement about which
+ * matter. Everything in the second list is decided against money, a chain, a fee rate or a
+ * filled request, so a reader who has only the document has not been told those are fine —
+ * they have been told nothing about them, and any surface reporting the first list has to
+ * say so or it reads as a verdict it did not reach.
+ */
+export const DOCUMENT_ONLY_REJECTS = [
+	"foreign-chain",
+	"unimplemented-construct",
+	"unrecognised-construct",
+	"foreign-compiler",
+	"unreadable-build-mode",
+	"unproducible-witness",
+	"foreign-asset",
+	"unbuildable-utxo-type",
+] as const satisfies readonly RejectToken[];
+
+export const NEEDS_MORE_THAN_THE_DOCUMENT_REJECTS = [
+	"incomplete-request",
+	"no-such-action",
+	"no-utxo-to-spend",
+	"chain-read-failed",
+	"covenant-mismatch",
+	"no-fee-rate",
+	"no-funds-at-signing-address",
+	"shortfall",
+	"document-fault",
+] as const satisfies readonly RejectToken[];
+
+/**
+ * The same refusals as {@link refuseUnsupported}, for a reader who is not a wallet.
+ *
+ * Four of the eight need nothing but the document. The compiler check needs the version a
+ * wallet ships and the two asset checks need the network's own asset, and a caller holding
+ * neither gets those checks skipped rather than answered — passing a stand-in would turn
+ * "not checked" into "checked and fine", which is the one thing this must not do.
+ *
+ * Deliberately not a parameter of `refuseUnsupported`: a wallet always holds both, and an
+ * optional field on the wallet's own path is an invitation to omit one there.
+ */
+export function refuseFromDocumentAlone(
+	manifest: NormalisedManifest,
+	input: {
+		compilerVersion?: string;
+		contractSources?: Record<string, string>;
+		policyAsset?: string;
+	},
+): { refusal: Refusal | undefined; skipped: RejectToken[] } {
+	const skipped: RejectToken[] = [];
+
+	const compiler =
+		input.compilerVersion === undefined
+			? undefined
+			: refuseForeignCompiler(manifest, {
+					compilerVersion: input.compilerVersion,
+					contractSources: input.contractSources ?? {},
+				});
+
+	if (input.compilerVersion === undefined) {
+		skipped.push("foreign-compiler");
+	}
+
+	const asset =
+		input.policyAsset === undefined
+			? undefined
+			: (refuseForeignAsset(manifest, input.policyAsset) ??
+				refuseUnbuildableUtxoType(manifest, input.policyAsset));
+
+	if (input.policyAsset === undefined) {
+		skipped.push("foreign-asset", "unbuildable-utxo-type");
+	}
+
+	return {
+		refusal:
+			refuseForeignChain(manifest) ??
+			refuseUnrecognisedConstruct(manifest) ??
+			compiler ??
+			refuseUnreadableBuildMode(manifest) ??
+			refuseUnproducibleWitness(manifest) ??
+			asset,
+		skipped,
+	};
+}
+
+/**
  * Whether this protocol's contracts are built with debug symbols.
  *
  * The flag changes the CMR and therefore the covenant address, so the wallet follows the

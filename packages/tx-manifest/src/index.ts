@@ -39,3 +39,20 @@ export { spentInputs } from "./chain/spentInputs";
 // 4. What a person is shown, and where each value on that screen came from.
 export { type ShownConfirmation, describeOrigin, toShownConfirmation } from "./confirmation";
 export { type Provenanced, computed, fromSite, verified } from "./confirmation/provenance";
+
+// 5. What this package makes of a document, for a reader who is not a wallet.
+//    The four steps above are one flow and this is not part of it: it builds nothing and is
+//    here so that a developer can find out what a document means to this runtime without
+//    connecting a wallet to ask. One function rather than the three readers behind it, so
+//    the answer stays a thing this package says rather than three internals a caller
+//    assembles into an answer of its own.
+export {
+	type InspectManifestOptions,
+	type InspectManifestResult,
+	type ManifestFault,
+	type ManifestInspection,
+	DOCUMENT_ONLY_REFUSALS,
+	inspectManifestDocument,
+} from "./document/inspect";
+export type { ConstructReport, ConstructState } from "./document/registry";
+export type { NormalisationNote } from "./document/normalise";

@@ -31,6 +31,71 @@ export function loadBearing(findings: ConstructFinding[]): ConstructFinding[] {
 }
 
 /**
+ * What the runtime does with one construct, as a name rather than as two flags.
+ *
+ * The flags are the right shape for deciding — `loadBearing` is the whole of what a refusal
+ * turns on — and the wrong shape for showing, because the four combinations are four
+ * different sentences and none of them is "true" or "false". `unrecognised` is the fifth
+ * outcome and not one of the four: it is the state of a key no site lists, which the flags
+ * carry as `declared: false` rather than as a combination of their own.
+ */
+export type ConstructState =
+	/** Read, and what it says changes what gets signed. */
+	| "acted-on"
+	/** Read, and shown to a person; it decides nothing. */
+	| "shown"
+	/** The format defines it and this runtime does not implement it. */
+	| "unimplemented"
+	/** Known, and deliberately read by nothing, here or in the reference implementation. */
+	| "never-read"
+	/** No site lists it, so no specification this runtime knows describes it here. */
+	| "unrecognised";
+
+/** One construct the document declares, and what this runtime makes of it. */
+export type ConstructReport = {
+	/** Where it was found, in the document's own terms. */
+	at: string;
+	key: string;
+	state: ConstructState;
+};
+
+/**
+ * Every construct the document declares, each against what the runtime does with it.
+ *
+ * The companion to {@link inspectConstructs} rather than a replacement: that one answers
+ * "what must this refuse on", which is why it returns only what is unhandled, and this one
+ * answers "what is in this document", which needs the handled ones too. Both walk the same
+ * table, so neither can drift from the other.
+ */
+export function describeConstructs(manifest: NormalisedManifest): ConstructReport[] {
+	const reports: ConstructReport[] = [];
+
+	walkSites(manifest, (node, kind, at) => {
+		const site: ConstructSite = SITES[kind];
+
+		for (const key of Object.keys(node)) {
+			reports.push({ at, key, state: stateOf(site, key) });
+		}
+	});
+
+	return reports;
+}
+
+function stateOf(site: ConstructSite, key: string): ConstructState {
+	const construct = site.constructs[key];
+
+	if (!construct) {
+		return "unrecognised";
+	}
+
+	if (construct.handled) {
+		return construct.loadBearing ? "acted-on" : "shown";
+	}
+
+	return construct.loadBearing ? "unimplemented" : "never-read";
+}
+
+/**
  * How the runtime treats one construct at one kind of site.
  *
  * `handled` is a claim about this codebase rather than about the format, and it is the
@@ -251,26 +316,60 @@ type SiteKind = keyof typeof SITES;
 export function inspectConstructs(manifest: NormalisedManifest): ConstructFinding[] {
 	const findings: ConstructFinding[] = [];
 
-	inspectSite(manifest.node, "manifest", "manifest", findings);
+	walkSites(manifest, (node, kind, at) => {
+		const site: ConstructSite = SITES[kind];
+
+		for (const key of Object.keys(node)) {
+			const construct = site.constructs[key];
+
+			if (construct?.handled) {
+				continue;
+			}
+
+			findings.push({
+				at,
+				declared: construct !== undefined,
+				key,
+				loadBearing: construct ? construct.loadBearing : site.unknownIsLoadBearing,
+			});
+		}
+	});
+
+	return findings;
+}
+
+/** One position in the document, and what it declares. */
+type SiteVisitor = (node: Record<string, unknown>, kind: SiteKind, at: string) => void;
+
+/**
+ * Every position in the document, in one place.
+ *
+ * Extracted so that refusing and reporting read the same traversal rather than two copies of
+ * it: a position added to one and forgotten in the other is a construct that refuses without
+ * appearing, or appears without refusing, and neither is discoverable by reading either
+ * function alone.
+ */
+function walkSites(manifest: NormalisedManifest, visit: SiteVisitor): void {
+	visitSite(manifest.node, "manifest", "manifest", visit);
 
 	for (const action of manifest.actions) {
 		const where = `action ${action.name}`;
 
-		inspectSite(action.node, "action", where, findings);
-		inspectSite(asRecord(action.node.ui), "ui", where, findings);
+		visitSite(action.node, "action", where, visit);
+		visitSite(asRecord(action.node.ui), "ui", where, visit);
 
 		for (const [name, declared] of Object.entries(asRecord(action.node.params) ?? {})) {
-			inspectSite(asRecord(declared), "param", `${where} / param ${name}`, findings);
+			visitSite(asRecord(declared), "param", `${where} / param ${name}`, visit);
 		}
 
-		inspectEntries(asArray(action.node.inputs), "input", where, findings);
-		inspectEntries(asArray(action.node.outputs), "output", where, findings);
+		visitEntries(asArray(action.node.inputs), "input", where, visit);
+		visitEntries(asArray(action.node.outputs), "output", where, visit);
 
 		for (const declared of asArray(action.node.validations)) {
 			const rule = asRecord(declared);
 			const id = typeof rule?.id === "string" ? rule.id : "(unnamed)";
 
-			inspectSite(rule, "validation", `${where} / validation ${id}`, findings);
+			visitSite(rule, "validation", `${where} / validation ${id}`, visit);
 		}
 	}
 
@@ -278,58 +377,41 @@ export function inspectConstructs(manifest: NormalisedManifest): ConstructFindin
 		const where = `utxo type ${name}`;
 		const utxoType = asRecord(declared);
 
-		inspectSite(utxoType, "utxoType", where, findings);
-		inspectSite(asRecord(utxoType?.script), "script", `${where} / script`, findings);
+		visitSite(utxoType, "utxoType", where, visit);
+		visitSite(asRecord(utxoType?.script), "script", `${where} / script`, visit);
 	}
-
-	return findings;
 }
 
 /** Inputs and outputs both carry an id, a display block and per-entry witnesses. */
-function inspectEntries(
+function visitEntries(
 	entries: unknown[],
 	kind: "input" | "output",
 	where: string,
-	findings: ConstructFinding[],
+	visit: SiteVisitor,
 ): void {
 	for (const declared of entries) {
 		const entry = asRecord(declared);
 		const id = typeof entry?.id === "string" ? entry.id : "(unnamed)";
 		const at = `${where} / ${kind} ${id}`;
 
-		inspectSite(entry, kind, at, findings);
-		inspectSite(asRecord(entry?.ui), "ui", at, findings);
+		visitSite(entry, kind, at, visit);
+		visitSite(asRecord(entry?.ui), "ui", at, visit);
 
 		for (const [name, witness] of Object.entries(asRecord(entry?.witnesses) ?? {})) {
-			inspectSite(asRecord(witness), "witness", `${at} / witness ${name}`, findings);
+			visitSite(asRecord(witness), "witness", `${at} / witness ${name}`, visit);
 		}
 	}
 }
 
-function inspectSite(
+function visitSite(
 	node: Record<string, unknown> | undefined,
 	kind: SiteKind,
 	at: string,
-	findings: ConstructFinding[],
+	visit: SiteVisitor,
 ): void {
 	if (!node) {
 		return;
 	}
 
-	const site: ConstructSite = SITES[kind];
-
-	for (const key of Object.keys(node)) {
-		const construct = site.constructs[key];
-
-		if (construct?.handled) {
-			continue;
-		}
-
-		findings.push({
-			at,
-			declared: construct !== undefined,
-			key,
-			loadBearing: construct ? construct.loadBearing : site.unknownIsLoadBearing,
-		});
-	}
+	visit(node, kind, at);
 }
