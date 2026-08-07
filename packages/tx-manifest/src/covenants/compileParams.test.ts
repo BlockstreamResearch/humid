@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import type { ReferenceScope } from "../document/references";
 import { resolveCompileParams } from "./compileParams";
-import type { ReferenceScope } from "./references";
 
 // The wiring and the declared types below are the published p2pk manifest's own:
 // `Pay` writes a destination with compile_params {"PUB_KEY": "params.pubkey"}, and the

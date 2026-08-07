@@ -1,8 +1,8 @@
-import { asRecord } from "./json";
-import { findAction, type NormalisedManifest } from "./normalise";
-import { instanceReferences } from "./references";
-import { covenantSites, namedUtxoTypes } from "./sites";
-import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./types";
+import { asRecord } from "../document/json";
+import { findAction, type NormalisedManifest } from "../document/normalise";
+import { instanceReferences } from "../document/references";
+import { covenantSites, namedUtxoTypes } from "../document/sites";
+import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./request";
 
 /**
  * Works out what the chosen action actually needs from the request, and what of that is

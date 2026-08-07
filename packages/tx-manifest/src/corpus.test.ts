@@ -8,9 +8,9 @@ import lendingV3 from "./__fixtures__/lending_v3.manifest.json";
 import p2pkGrouped from "./__fixtures__/p2pk-grouped.manifest.json";
 import p2pk from "./__fixtures__/p2pk.manifest.json";
 import zeroconf from "./__fixtures__/zeroconf.manifest.json";
-import { findAction, normaliseManifest } from "./normalise";
-import { refuseUnsupported } from "./refuse";
-import { ignored, inspectConstructs, loadBearing } from "./registry";
+import { findAction, normaliseManifest } from "./document/normalise";
+import { refuseUnsupported } from "./document/refuse";
+import { ignored, inspectConstructs, loadBearing } from "./document/registry";
 
 // The seven published manifests, vendored byte for byte from txmanifest-wallet at
 // 7d56516a1a1e44a586f25d45a34619c3953758dd. They are the only thing that can answer what

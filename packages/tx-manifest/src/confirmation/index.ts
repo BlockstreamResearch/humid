@@ -1,7 +1,7 @@
-import { asRecord } from "./json";
-import type { NormalisedAction, NormalisedManifest } from "./normalise";
+import { asRecord } from "../document/json";
+import type { NormalisedAction, NormalisedManifest } from "../document/normalise";
+import type { ManifestReview } from "../review";
 import { computed, fromSite, map, type Origin, type Provenanced, verified } from "./provenance";
-import type { ManifestReview } from "./review";
 
 /** One asset's movement in or out of the wallet, as a person would read it. */
 export type NetEffect = {

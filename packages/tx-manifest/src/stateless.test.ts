@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // AC-14 and D7: a person who wipes the wallet, the browser or the machine must be able to
@@ -11,13 +11,52 @@ import { fileURLToPath } from "node:url";
 
 const RUNTIME = dirname(fileURLToPath(import.meta.url));
 
-function sources(): { name: string; text: string }[] {
-	return readdirSync(RUNTIME)
-		.filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
-		.map((name) => ({ name, text: readFileSync(join(RUNTIME, name), "utf8") }));
+/**
+ * Every source of the runtime, at whatever depth it sits.
+ *
+ * Recursive deliberately. This walked one directory while the package was one directory,
+ * and the day the modules moved into their owners it would have gone on passing while
+ * inspecting two files out of thirty — every check below reporting clean because it had
+ * stopped looking rather than because there was nothing to find. `name` carries the path
+ * from the package root so an offender can be located, and `dir` is what an import
+ * specifier resolves against.
+ */
+function sources(): { dir: string; name: string; text: string }[] {
+	const found: { dir: string; name: string; text: string }[] = [];
+
+	const walk = (dir: string): void => {
+		for (const entry of readdirSync(dir, { withFileTypes: true })) {
+			const path = join(dir, entry.name);
+
+			if (entry.isDirectory()) {
+				// Fixtures are other people's documents, not this runtime's source.
+				if (entry.name !== "__fixtures__") {
+					walk(path);
+				}
+
+				continue;
+			}
+
+			if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+				found.push({ dir, name: relative(RUNTIME, path), text: readFileSync(path, "utf8") });
+			}
+		}
+	};
+
+	walk(RUNTIME);
+
+	return found;
 }
 
 describe("the runtime reads nothing it remembered", () => {
+	// The checks below all report clean when they find nothing, which is the same answer they
+	// give when they are looking at nothing. That is not hypothetical: this file walked one
+	// directory, and when the modules moved into their owners it went on passing over two
+	// files out of thirty. So the first assertion is that there is something to assert about.
+	test("and the checks below are looking at the whole runtime", () => {
+		expect(sources().length).toBeGreaterThan(25);
+	});
+
 	// Everything the runtime needs arrives in the request or derives from the recovery
 	// phrase. Anything that reads what a previous run wrote down would make a second run on
 	// a restored wallet behave differently from the first, which is the whole failure.
@@ -41,16 +80,30 @@ describe("the runtime reads nothing it remembered", () => {
 	}
 
 	test("and none imports anything outside this runtime and its own dependencies", () => {
-		const allowed = /^(?:\.\/[a-zA-Z]+|@noble\/hashes\/[a-z0-9.]+|zod)$/;
+		const dependencies = /^(?:@noble\/hashes\/[a-z0-9.]+|zod)$/;
 		const offenders: string[] = [];
 
-		for (const { name, text } of sources()) {
+		for (const { dir, name, text } of sources()) {
 			for (const match of text.matchAll(/from "(?<specifier>[^"]+)"/g)) {
 				const specifier = match.groups?.specifier ?? "";
 
-				if (!allowed.test(specifier)) {
-					offenders.push(`${name} → ${specifier}`);
+				if (dependencies.test(specifier)) {
+					continue;
 				}
+
+				// A relative import is judged by where it lands rather than by how it is
+				// written. Once the package has directories, `../` is the ordinary way one
+				// module reaches its sibling — and it is also how a module would reach out of
+				// the package altogether. Only resolving it tells the two apart.
+				if (specifier.startsWith(".")) {
+					const escapes = relative(RUNTIME, resolve(dir, specifier)).startsWith("..");
+
+					if (!escapes) {
+						continue;
+					}
+				}
+
+				offenders.push(`${name} → ${specifier}`);
 			}
 		}
 

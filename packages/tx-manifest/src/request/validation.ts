@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { ParsedLiquidProcessCtParams } from "./types";
+import type { ParsedLiquidProcessCtParams } from "./request";
 
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 

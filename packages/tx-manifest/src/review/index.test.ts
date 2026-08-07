@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import groupedManifest from "./__fixtures__/p2pk-grouped.manifest.json";
-import p2pkManifest from "./__fixtures__/p2pk.manifest.json";
-import type { TxOutAtOutPoint } from "./chainRead";
-import { estimateFeeSats } from "./fee";
-import { isRefusal, reviewManifestAction } from "./review";
-import { txOutAt } from "./txOut";
-import type { ParsedLiquidProcessCtParams } from "./types";
+import groupedManifest from "../__fixtures__/p2pk-grouped.manifest.json";
+import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
+import type { TxOutAtOutPoint } from "../chain/chainRead";
+import { txOutAt } from "../chain/txOut";
+import { estimateFeeSats } from "../fee";
+import type { ParsedLiquidProcessCtParams } from "../request/request";
+import { isRefusal, reviewManifestAction } from "./index";
 
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const SOURCE_PATH = "./p2pk.simf";

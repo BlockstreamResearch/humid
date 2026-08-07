@@ -1,8 +1,8 @@
+import { asArray, asRecord } from "../document/json";
+import type { NormalisationNote, NormalisedAction } from "../document/normalise";
+import { type ReferenceScope, resolveReference } from "../document/references";
 import { encodeDataParts } from "./encode";
 import { evaluateExpression } from "./evaluate";
-import { asArray, asRecord } from "./json";
-import type { NormalisationNote, NormalisedAction } from "./normalise";
-import { type ReferenceScope, resolveReference } from "./references";
 
 /**
  * A concrete amount the wallet worked out for one of the action's outputs.

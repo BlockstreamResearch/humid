@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import p2pkManifest from "./__fixtures__/p2pk.manifest.json";
+import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
 import { parseLiquidProcessCtParams } from "./validation";
 
 // AC-13's other half: a site cannot set the fee. The request contract has no place to put

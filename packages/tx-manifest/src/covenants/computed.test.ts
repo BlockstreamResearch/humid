@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import { normaliseManifest } from "../document/normalise";
 import { COVENANT_HASH_SEED, ITERATION_BOUND, resolveComputedParams } from "./computed";
-import { normaliseManifest } from "./normalise";
 
 // A covenant's compile parameters can hold another covenant's script hash, and that other
 // covenant's parameters can hold the first's — which the reference implementation resolves

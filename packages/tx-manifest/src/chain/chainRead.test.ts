@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import transactions from "./__fixtures__/testnet-transactions.json";
+import transactions from "../__fixtures__/testnet-transactions.json";
 import { createEsploraFeeRateReader, createEsploraTxOutReader } from "./chainRead";
 
 // The transaction read asks for /tx/:txid/raw and gets consensus bytes back. The fee read is

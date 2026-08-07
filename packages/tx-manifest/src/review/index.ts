@@ -1,26 +1,30 @@
-import type { ReadFeeRate, ReadTxOut } from "./chainRead";
-import { type CoinSelection, type SelectableUtxo, selectCoins } from "./coinSelection";
-import { resolveComputedParams } from "./computed";
-import { type ConfirmationModel, confirmationModel } from "./confirmation";
-import { type CompileCovenant, covenantMatchesChain, deriveCovenantAddress } from "./covenant";
-import { type CompileScriptPubKey, covenantHashFrom } from "./covenantHash";
-import { estimateFeeSats } from "./fee";
-import { type InputRule, resolveInputRules } from "./inputRules";
-import { asArray, asRecord } from "./json";
+import type { ReadFeeRate, ReadTxOut } from "../chain/chainRead";
+import { type ConfirmationModel, confirmationModel } from "../confirmation";
+import { resolveComputedParams } from "../covenants/computed";
+import {
+	type CompileCovenant,
+	covenantMatchesChain,
+	deriveCovenantAddress,
+} from "../covenants/covenant";
+import { type CompileScriptPubKey, covenantHashFrom } from "../covenants/covenantHash";
+import { asArray, asRecord } from "../document/json";
 import {
 	findAction,
 	type NormalisationNote,
 	normaliseInstance,
 	normaliseManifest,
-} from "./normalise";
-import { planAction } from "./plan";
-import type { ReferenceScope } from "./references";
-import { buildMode, refuseUnsupported } from "./refuse";
-import { type ConstructFinding, ignored, inspectConstructs } from "./registry";
-import { resolveActionRequirements } from "./requirements";
-import { covenantSites } from "./sites";
-import type { ParsedLiquidProcessCtParams } from "./types";
-import { checkValidations } from "./validate";
+} from "../document/normalise";
+import type { ReferenceScope } from "../document/references";
+import { buildMode, refuseUnsupported } from "../document/refuse";
+import { type ConstructFinding, ignored, inspectConstructs } from "../document/registry";
+import { covenantSites } from "../document/sites";
+import { type InputRule, resolveInputRules } from "../evaluation/inputRules";
+import { planAction } from "../evaluation/plan";
+import { checkValidations } from "../evaluation/validate";
+import { estimateFeeSats } from "../fee";
+import type { ParsedLiquidProcessCtParams } from "../request/request";
+import { resolveActionRequirements } from "../request/requirements";
+import { type CoinSelection, type SelectableUtxo, selectCoins } from "./coinSelection";
 
 /**
  * What the wallet established for itself about one covenant this action touches.

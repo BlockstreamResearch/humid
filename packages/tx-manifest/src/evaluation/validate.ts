@@ -1,7 +1,7 @@
+import { asArray, asRecord } from "../document/json";
+import type { NormalisationNote, NormalisedAction } from "../document/normalise";
+import type { ReferenceScope } from "../document/references";
 import { evaluateCondition } from "./evaluate";
-import { asArray, asRecord } from "./json";
-import type { NormalisationNote, NormalisedAction } from "./normalise";
-import type { ReferenceScope } from "./references";
 
 export type ValidationFailure = { reason: string };
 

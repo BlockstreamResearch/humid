@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import type { ReferenceScope } from "../document/references";
 import { evaluateExpression } from "./evaluate";
-import type { ReferenceScope } from "./references";
 
 // The format defines no arithmetic. What real manifests were authored against is the
 // reference implementation's behaviour, recorded in the change bundle's inventory: it

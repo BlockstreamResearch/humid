@@ -1,8 +1,8 @@
+import { asArray, asRecord } from "../document/json";
+import type { NormalisationNote, NormalisedManifest } from "../document/normalise";
+import type { ReferenceScope } from "../document/references";
+import { encodeLeafItem } from "../evaluation/encode";
 import { resolveCompileParams } from "./compileParams";
-import { encodeLeafItem } from "./encode";
-import { asArray, asRecord } from "./json";
-import type { NormalisationNote, NormalisedManifest } from "./normalise";
-import type { ReferenceScope } from "./references";
 
 /**
  * Compiles a covenant and reports the address it derives.

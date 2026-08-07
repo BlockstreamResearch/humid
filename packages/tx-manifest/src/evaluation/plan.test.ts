@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import p2pkManifest from "./__fixtures__/p2pk.manifest.json";
-import { findAction, type NormalisedAction, normaliseManifest } from "./normalise";
+import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
+import { findAction, type NormalisedAction, normaliseManifest } from "../document/normalise";
+import type { ReferenceScope } from "../document/references";
 import { planAction } from "./plan";
-import type { ReferenceScope } from "./references";
 
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const MANIFEST = normaliseManifest(p2pkManifest as unknown as Record<string, unknown>).manifest;

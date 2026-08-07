@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import transactions from "./__fixtures__/testnet-transactions.json";
+import transactions from "../__fixtures__/testnet-transactions.json";
 import { txOutAt } from "./txOut";
 
 /**

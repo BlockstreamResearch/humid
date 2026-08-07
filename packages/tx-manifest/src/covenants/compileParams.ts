@@ -1,5 +1,5 @@
-import type { NormalisationNote } from "./normalise";
-import { type ReferenceScope, resolveReference } from "./references";
+import type { NormalisationNote } from "../document/normalise";
+import { type ReferenceScope, resolveReference } from "../document/references";
 
 /**
  * A contract's compile-time parameters, in SimplicityHL's own argument JSON shape.

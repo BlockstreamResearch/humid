@@ -1,5 +1,9 @@
-import type { NormalisationNote } from "./normalise";
-import { type ReferenceScope, type ReferenceSiteKind, resolveReference } from "./references";
+import type { NormalisationNote } from "../document/normalise";
+import {
+	type ReferenceScope,
+	type ReferenceSiteKind,
+	resolveReference,
+} from "../document/references";
 
 export type EvaluationResult = { ok: true; value: bigint } | { ok: false; reason: string };
 

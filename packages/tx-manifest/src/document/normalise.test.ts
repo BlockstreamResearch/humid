@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import groupedManifest from "./__fixtures__/p2pk-grouped.manifest.json";
-import flatManifest from "./__fixtures__/p2pk.manifest.json";
+import groupedManifest from "../__fixtures__/p2pk-grouped.manifest.json";
+import flatManifest from "../__fixtures__/p2pk.manifest.json";
 import { findAction, normaliseInstance, normaliseManifest } from "./normalise";
 
 // The flat fixture is the published p2pk manifest at txmanifest-wallet

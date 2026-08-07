@@ -1,4 +1,4 @@
-import { asArray, asRecord } from "./json";
+import { asArray, asRecord } from "../document/json";
 
 export type EncodedBytes = { hex: string; ok: true } | { ok: false; reason: string };
 

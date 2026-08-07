@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import flatManifest from "./__fixtures__/p2pk.manifest.json";
+import flatManifest from "../__fixtures__/p2pk.manifest.json";
 import { normaliseManifest } from "./normalise";
 import { type ConstructFinding, ignored, inspectConstructs, loadBearing } from "./registry";
 

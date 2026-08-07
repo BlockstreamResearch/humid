@@ -1,7 +1,7 @@
+import { asArray, asRecord } from "../document/json";
+import type { NormalisationNote, NormalisedAction } from "../document/normalise";
+import { type ReferenceScope, resolveReference } from "../document/references";
 import { evaluateExpression } from "./evaluate";
-import { asArray, asRecord } from "./json";
-import type { NormalisationNote, NormalisedAction } from "./normalise";
-import { type ReferenceScope, resolveReference } from "./references";
 
 /** What an action says about one of its inputs beyond where the money comes from. */
 export type InputRule = {

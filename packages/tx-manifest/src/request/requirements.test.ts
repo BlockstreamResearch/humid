@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import groupedManifest from "./__fixtures__/p2pk-grouped.manifest.json";
-import p2pkManifest from "./__fixtures__/p2pk.manifest.json";
-import { normaliseManifest } from "./normalise";
+import groupedManifest from "../__fixtures__/p2pk-grouped.manifest.json";
+import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
+import { normaliseManifest } from "../document/normalise";
+import type { ParsedLiquidProcessCtParams } from "./request";
 import { resolveActionRequirements } from "./requirements";
-import type { ParsedLiquidProcessCtParams } from "./types";
 
 // The fixture is the published p2pk manifest at txmanifest-wallet
 // 7d56516a1a1e44a586f25d45a34619c3953758dd, unmodified. Expectations below come from

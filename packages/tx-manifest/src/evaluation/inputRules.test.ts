@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
+import { type NormalisedAction, normaliseManifest } from "../document/normalise";
+import type { ReferenceScope } from "../document/references";
 import { encodeDataParts } from "./encode";
 import { resolveInputRules } from "./inputRules";
-import { type NormalisedAction, normaliseManifest } from "./normalise";
-import type { ReferenceScope } from "./references";
 
 // Three constructs the approved specification names as in scope because lending_v3 and
 // last_will cannot be built without them. The shapes below are the ones those manifests
