@@ -31,11 +31,13 @@ function Value({ hint, label, value }: { hint: string; label: string; value: str
 /**
  * The address and key that contract actions are signed with.
  *
- * It is a separate row from the wallet's own address on purpose. Contract actions are
- * signed by a single key inside the contract SDK, which funds from that key's own
- * unblinded address and returns change to it — so paying a contract action from any
- * other wallet address produces a transaction that cannot be signed. Until the SDK signs
- * each input at its own path, saying so is more use than hiding it.
+ * It is a separate row from the wallet's own address on purpose. A contract action is
+ * funded from this one unblinded address and returns change to it, so paying one from any
+ * other wallet address produces a transaction that cannot be signed. Saying so is more
+ * use than hiding it.
+ *
+ * The limit is this wallet's rather than the contract SDK's: the SDK takes a change target
+ * and a derivation path per input, and this wallet supplies one address and no paths.
  *
  * Nothing here is secret: an address anyone can pay and the public form of one key. It
  * is read on demand rather than with the page because reading it loads the contract

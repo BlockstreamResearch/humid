@@ -14,14 +14,19 @@ const SMPLX_NETWORKS: Record<string, string> = {
 /**
  * The one identity a contract action is signed with.
  *
- * This is not the wallet's own address and is not interchangeable with it. Contract
- * actions are signed inside the smplx module by a single key at
- * `m/84h/{1|1776}h/0h/0/0`, and the module funds and returns change to that key's own
- * unblinded address rather than to a wallet change address — so a covenant action can
- * only spend what sits there, and only what sits there unblinded.
+ * This is not the wallet's own address and is not interchangeable with it. A contract
+ * action can be funded only from the unblinded output at this one address, and change
+ * returns here rather than to a wallet change address.
+ *
+ * **The limit is this wallet's, not the signing module's.** An earlier version of this
+ * comment blamed the module, and the module's author said so on review. It takes a change
+ * target and a derivation path per input; this wallet supplies one change script — the
+ * signer's own — and no paths at all, so every wallet input is signed with the key at
+ * `m/84h/{1|1776}h/0h/0/0` because that is the default nothing here overrides. Lifting the
+ * limit is work in this method, not in the module.
  *
  * Both values are read-only and public: an address anyone can pay, and the x-only form
- * of the same key. Nothing here derives, stores or returns a secret.
+ * of the same key. Nothing here returns a secret.
  */
 export type LiquidContractIdentity = {
 	/** The unblinded address contract actions can be funded from, and where change returns. */
