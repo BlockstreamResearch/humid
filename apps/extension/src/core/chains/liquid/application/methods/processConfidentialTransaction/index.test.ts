@@ -256,6 +256,25 @@ describe("processLiquidConfidentialTransaction", () => {
 
 		await expect(method(params({ action: "Withdraw" }), context())).rejects.toThrow(/Withdraw/);
 	});
+
+	// Every refusal on this path shares one wire code, so the sentence is all a caller had to go
+	// on. A site telling "this wallet will never build that" from "your state file is out of
+	// date" had to parse English, and one of those is worth retrying while the other never is.
+	test("and names the refusal beside the sentence, so a caller can branch without reading it", async () => {
+		const { method } = subject();
+
+		const failure = await method(params({ action: "Withdraw" }), context()).then(
+			() => undefined,
+			(error: unknown) => error as { data?: { reject?: string } },
+		);
+
+		// `incomplete-request` rather than `no-such-action`, and the difference is worth pinning:
+		// working out what an action needs happens before looking the action up, so a request
+		// naming an action the manifest does not declare is refused as a request that cannot be
+		// built rather than as a missing name. The sentence still says "Withdraw" — the test above
+		// asserts that — and the token says which check answered.
+		expect(failure?.data?.reject).toBe("incomplete-request");
+	});
 });
 
 // AC-10 end to end: the same protocol written in the grouped shape with the older

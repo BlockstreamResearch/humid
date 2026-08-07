@@ -32,6 +32,7 @@ export { estimateFeeSats } from "./fee";
 // 3. The action, resolved into a reviewed plan or a refusal — and afterwards, the check
 //    that what came back spends only what was asked for.
 export { type ManifestReview, isRefusal, reviewManifestAction } from "./review";
+export type { RejectToken } from "./document/refuse";
 export { guardSpentInputs } from "./chain/inputGuard";
 export { spentInputs } from "./chain/spentInputs";
 

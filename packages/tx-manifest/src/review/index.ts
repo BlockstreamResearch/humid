@@ -15,7 +15,7 @@ import {
 	normaliseManifest,
 } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
-import { buildMode, refuseUnsupported } from "../document/refuse";
+import { buildMode, type RejectToken, refuseUnsupported } from "../document/refuse";
 import { type ConstructFinding, ignored, inspectConstructs } from "../document/registry";
 import { covenantSites } from "../document/sites";
 import { type InputRule, resolveInputRules } from "../evaluation/inputRules";
@@ -123,7 +123,12 @@ export type ManifestReview = {
 	selected: SelectableUtxo[];
 };
 
-export type ReviewRefusal = { reason: string; refused: true };
+export type ReviewRefusal = {
+	reason: string;
+	refused: true;
+	/** Which refusal this is, for a caller that has to branch rather than read. */
+	reject: RejectToken;
+};
 
 export type ReviewManifestActionResult = ManifestReview | ReviewRefusal;
 
@@ -177,7 +182,7 @@ export async function reviewManifestAction(
 	});
 
 	if (refusal) {
-		return { reason: refusal.reason, refused: true };
+		return { reason: refusal.reason, refused: true, reject: refusal.reject };
 	}
 
 	const requirements = resolveActionRequirements(request, manifest);
@@ -187,13 +192,21 @@ export async function reviewManifestAction(
 			.map((entry) => (entry.keys ? `${entry.reason} (${entry.keys.join(", ")})` : entry.reason))
 			.join(" ");
 
-		return { reason: `This request cannot be built. ${named}`, refused: true };
+		return {
+			reason: `This request cannot be built. ${named}`,
+			refused: true,
+			reject: "incomplete-request",
+		};
 	}
 
 	const action = findAction(manifest, request.action);
 
 	if (!action) {
-		return { reason: `The manifest declares no action named "${request.action}".`, refused: true };
+		return {
+			reason: `The manifest declares no action named "${request.action}".`,
+			refused: true,
+			reject: "no-such-action",
+		};
 	}
 
 	const declaredTypes = declaredParamTypes(action.node);
@@ -213,7 +226,7 @@ export async function reviewManifestAction(
 	});
 
 	if (!computed.ok) {
-		return { reason: computed.reason, refused: true };
+		return { reason: computed.reason, refused: true, reject: "document-fault" };
 	}
 
 	const scope: ReferenceScope = {
@@ -243,7 +256,7 @@ export async function reviewManifestAction(
 		});
 
 		if (!derived.ok) {
-			return { reason: derived.reason, refused: true };
+			return { reason: derived.reason, refused: true, reject: "document-fault" };
 		}
 
 		if (site.role === "created") {
@@ -264,6 +277,7 @@ export async function reviewManifestAction(
 			return {
 				reason: `The state file lists no ${site.utxoType} to spend.`,
 				refused: true,
+				reject: "no-utxo-to-spend",
 			};
 		}
 
@@ -277,13 +291,14 @@ export async function reviewManifestAction(
 			return {
 				reason: `Could not read what is at ${outpoint.txid}:${outpoint.vout}: ${String(error)}`,
 				refused: true,
+				reject: "chain-read-failed",
 			};
 		}
 
 		const matched = covenantMatchesChain(derived.derivation, onChain.scriptPubKeyHex);
 
 		if (!matched.matched) {
-			return { reason: matched.reason, refused: true };
+			return { reason: matched.reason, refused: true, reject: "covenant-mismatch" };
 		}
 
 		if (onChain.amountSats !== undefined && site.id) {
@@ -296,6 +311,7 @@ export async function reviewManifestAction(
 					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} is confidential. ` +
 					"A covenant output cannot be, because Simplicity cannot read a confidential commitment.",
 				refused: true,
+				reject: "unbuildable-utxo-type",
 			};
 		}
 
@@ -328,6 +344,7 @@ export async function reviewManifestAction(
 		return {
 			reason: `The wallet could not establish a fee rate, so it will not build this: ${String(error)}`,
 			refused: true,
+			reject: "no-fee-rate",
 		};
 	}
 
@@ -342,7 +359,7 @@ export async function reviewManifestAction(
 	const draft = planAction(action, { ...scope, fee: 0n }, notes);
 
 	if (!draft.ok) {
-		return { reason: draft.reason, refused: true };
+		return { reason: draft.reason, refused: true, reject: "document-fault" };
 	}
 
 	const estimatedFee = estimateFeeSats(
@@ -359,7 +376,7 @@ export async function reviewManifestAction(
 	const plan = planAction(action, { ...scope, fee: estimatedFee }, notes);
 
 	if (!plan.ok) {
-		return { reason: plan.reason, refused: true };
+		return { reason: plan.reason, refused: true, reject: "document-fault" };
 	}
 
 	// What the action requires of each input beyond where the money comes from: a relative
@@ -367,7 +384,7 @@ export async function reviewManifestAction(
 	const inputRules = resolveInputRules(action, { ...scope, fee: estimatedFee }, notes);
 
 	if (!inputRules.ok) {
-		return { reason: inputRules.reason, refused: true };
+		return { reason: inputRules.reason, refused: true, reject: "document-fault" };
 	}
 
 	// The protocol's own rules about this action, checked once its amounts are known — a rule
@@ -375,7 +392,7 @@ export async function reviewManifestAction(
 	const failed = checkValidations(action, { ...scope, fee: estimatedFee }, notes);
 
 	if (failed) {
-		return { reason: failed.reason, refused: true };
+		return { reason: failed.reason, refused: true, reject: "document-fault" };
 	}
 
 	const covenantScripts = new Map(
@@ -399,6 +416,7 @@ export async function reviewManifestAction(
 			return {
 				reason: `Output ${planned.id} pays a covenant the wallet did not verify.`,
 				refused: true,
+				reject: "covenant-mismatch",
 			};
 		}
 
@@ -418,6 +436,7 @@ export async function reviewManifestAction(
 		return {
 			reason: `This action must be funded from ${pinned}, and this wallet holds nothing there.`,
 			refused: true,
+			reject: "no-funds-at-signing-address",
 		};
 	}
 
@@ -428,7 +447,7 @@ export async function reviewManifestAction(
 	);
 
 	if (!selection.ok) {
-		return { reason: selection.reason, refused: true };
+		return { reason: selection.reason, refused: true, reject: "shortfall" };
 	}
 
 	const review: ManifestReview = {

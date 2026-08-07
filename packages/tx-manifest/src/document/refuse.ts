@@ -2,7 +2,60 @@ import { asArray, asRecord } from "./json";
 import type { NormalisedManifest } from "./normalise";
 import { loadBearing, inspectConstructs } from "./registry";
 
-export type Refusal = { reason: string };
+/**
+ * What a refusal is called, so that a program can tell two of them apart.
+ *
+ * The sentence is for a person and is unchanged by this. The token is for the site that asked:
+ * without one, every refusal arrives as a single wire code and a paragraph of English, so "this
+ * wallet does not implement `sequence`" and "your state file names no output to spend" are
+ * indistinguishable to anything but a reader — and the first is permanent while the second is
+ * the site's to fix.
+ *
+ * Short, stable, lower-case and hyphenated, after BIP-22's reject reasons. The vocabulary is
+ * ours rather than the format's: txManifest defines error codes for the validation rules a
+ * manifest itself declares, and none of these are that. They are the wallet's own statements
+ * about what it will not do.
+ */
+export type RejectToken =
+	/** The protocol is for a chain this wallet does not build on. */
+	| "foreign-chain"
+	/** A construct the format defines, in a load-bearing position, that this wallet does not implement. */
+	| "unimplemented-construct"
+	/** A construct in a load-bearing position that no specification this wallet knows describes. */
+	| "unrecognised-construct"
+	/** The manifest or a contract source asks for a compiler this wallet does not ship. */
+	| "foreign-compiler"
+	/** A declared build mode that is neither on nor off. */
+	| "unreadable-build-mode"
+	/** A witness this wallet cannot produce: not a signature, not its key, or not its sighash. */
+	| "unproducible-witness"
+	/** An input or output in an asset this wallet does not move. */
+	| "foreign-asset"
+	/** A covenant this wallet cannot build or spend. */
+	| "unbuildable-utxo-type"
+	/** The request is missing something the chosen action actually references. */
+	| "incomplete-request"
+	/** The manifest declares no action by that name. */
+	| "no-such-action"
+	/** The state file names no output for a covenant the action spends. */
+	| "no-utxo-to-spend"
+	/** The chain could not be read, so what sits at an outpoint is unknown. */
+	| "chain-read-failed"
+	/** A covenant the wallet rebuilt does not match what the chain says holds the money. */
+	| "covenant-mismatch"
+	/** The wallet could not establish a fee rate, and will not build without one. */
+	| "no-fee-rate"
+	/** Nothing spendable sits at the one address this path can sign from. */
+	| "no-funds-at-signing-address"
+	/** The wallet holds less than the action needs, in the form the action can spend. */
+	| "shortfall"
+	/** An expression, encoding or protocol rule the manifest states could not be satisfied. */
+	| "document-fault";
+
+export type Refusal = {
+	reason: string;
+	reject: RejectToken;
+};
 
 /**
  * Every reason this runtime will not build an action, checked before anything is built.
@@ -65,6 +118,7 @@ function refuseForeignChain(manifest: NormalisedManifest): Refusal | undefined {
 		reason:
 			`This protocol is for ${JSON.stringify(declared)}, and this wallet builds Liquid ` +
 			"transactions.",
+		reject: "foreign-chain",
 	};
 }
 
@@ -91,6 +145,7 @@ function refuseUnrecognisedConstruct(manifest: NormalisedManifest): Refusal | un
 				"It will not sign a transaction built from a document it has only partly read."
 			: `This protocol uses "${found.key}" at ${found.at}, which this wallet does not recognise. ` +
 				"It will not sign a transaction built from a document it has only partly read.",
+		reject: found.declared ? "unimplemented-construct" : "unrecognised-construct",
 	};
 }
 
@@ -118,6 +173,7 @@ function refuseForeignCompiler(
 				`This protocol asks for SimplicityHL ${declared} and this wallet has ` +
 				`${input.compilerVersion}. A different compiler derives a different address for the ` +
 				"same contract, so there is nothing safe to build.",
+			reject: "foreign-compiler",
 		};
 	}
 
@@ -129,6 +185,7 @@ function refuseForeignCompiler(
 				reason:
 					`The contract at ${path} asks for SimplicityHL ${range} and this wallet has ` +
 					`${input.compilerVersion}.`,
+				reject: "foreign-compiler",
 			};
 		}
 	}
@@ -149,6 +206,7 @@ function refuseUnreadableBuildMode(manifest: NormalisedManifest): Refusal | unde
 			`This protocol declares compile_debug_symbols as ${JSON.stringify(declared)}, which is ` +
 			"neither on nor off. The wallet builds each contract the way its protocol states, and " +
 			"cannot follow a statement it cannot read.",
+		reject: "unreadable-build-mode",
 	};
 }
 
@@ -176,6 +234,7 @@ function refuseUnproducibleWitness(manifest: NormalisedManifest): Refusal | unde
 						reason:
 							`The witness ${name} at ${at} is a ${String(witness?.type)}, and this wallet ` +
 							"can only produce a signature.",
+						reject: "unproducible-witness",
 					};
 				}
 
@@ -186,6 +245,7 @@ function refuseUnproducibleWitness(manifest: NormalisedManifest): Refusal | unde
 						reason:
 							`The witness ${name} at ${at} is sourced from ${String(source)}, and this ` +
 							"wallet can only sign with a key it holds.",
+						reject: "unproducible-witness",
 					};
 				}
 
@@ -196,6 +256,7 @@ function refuseUnproducibleWitness(manifest: NormalisedManifest): Refusal | unde
 						reason:
 							`The witness ${name} at ${at} asks for ${String(sigType)}, and this wallet ` +
 							"signs over the whole transaction.",
+						reject: "unproducible-witness",
 					};
 				}
 			}
@@ -231,6 +292,7 @@ function refuseForeignAsset(
 						reason:
 							`${action.name} moves ${asset} at ${id}, and this wallet moves only the ` +
 							"network's own asset.",
+						reject: "foreign-asset",
 					};
 				}
 			}
@@ -263,6 +325,7 @@ function refuseUnbuildableUtxoType(
 				reason:
 					`The ${name} contract is a ${String(scriptType)} script, and this wallet builds ` +
 					"Simplicity covenants.",
+				reject: "unbuildable-utxo-type",
 			};
 		}
 
@@ -271,6 +334,7 @@ function refuseUnbuildableUtxoType(
 				reason:
 					`The ${name} covenant is declared confidential. A Simplicity program cannot read a ` +
 					"confidential commitment, so it could never check its own value.",
+				reject: "unbuildable-utxo-type",
 			};
 		}
 
@@ -281,6 +345,7 @@ function refuseUnbuildableUtxoType(
 				reason:
 					`The ${name} covenant holds ${asset}, and this wallet moves only the network's own ` +
 					"asset.",
+				reject: "unbuildable-utxo-type",
 			};
 		}
 	}

@@ -299,9 +299,13 @@ export const createProcessLiquidConfidentialTransaction = (
 			});
 
 			if (isRefusal(result)) {
+				// The sentence is for a person; the token beside it is for the site. Every refusal
+				// on this path shares one wire code, so without the token a caller telling "this
+				// wallet will never build that" from "your state file is out of date" has to parse
+				// English — and one of those is worth retrying while the other never is.
 				throw new WalletRpcInvalidParamsError(
 					result.reason,
-					undefined,
+					{ reject: result.reject },
 					WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
 				);
 			}

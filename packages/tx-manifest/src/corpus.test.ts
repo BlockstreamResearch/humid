@@ -44,6 +44,47 @@ function refusalFor(name: string): string {
 	return refusal ? refusal.reason : "";
 }
 
+function rejectionOf(name: keyof typeof CORPUS) {
+	return refuseUnsupported(normalised(name).manifest, {
+		compilerVersion: "0.6.0",
+		contractSources: {},
+		policyAsset: POLICY_ASSET,
+	})?.reject;
+}
+
+// A refusal a site cannot tell from another refusal is a sentence, not an answer. Five of the
+// seven published protocols are refused, and each has to arrive with a name a program can
+// branch on beside the sentence a person reads — because "this wallet will never build that"
+// and "your state file is out of date" are the same wire code and opposite advice.
+describe("every refusal a published manifest earns is named, not only described", () => {
+	for (const name of Object.keys(CORPUS) as (keyof typeof CORPUS)[]) {
+		test(`${name} is either built or refused by a name`, () => {
+			const reason = refusalFor(name);
+			const reject = rejectionOf(name);
+
+			// Exactly one of the two states, and never a sentence with no name attached.
+			expect(reason === "" ? reject === undefined : typeof reject === "string").toBe(true);
+		});
+	}
+
+	test("and every one the corpus refuses today refuses on a construct, which is a fact about the corpus", () => {
+		const named = (Object.keys(CORPUS) as (keyof typeof CORPUS)[]).map(rejectionOf).filter(Boolean);
+
+		// Five of the seven, and all five on the same branch: each uses a construct this wallet
+		// does not implement, and that check runs before any other could fire. So the vocabulary
+		// is not exercised beyond one token by the published corpus — which is worth asserting
+		// rather than hiding, because the day a manifest is refused for a different reason this
+		// line is what says so.
+		expect(named).toEqual([
+			"unimplemented-construct",
+			"unimplemented-construct",
+			"unimplemented-construct",
+			"unimplemented-construct",
+			"unimplemented-construct",
+		]);
+	});
+});
+
 describe("every published manifest is read", () => {
 	for (const name of Object.keys(CORPUS)) {
 		test(`${name} normalises without throwing`, () => {
