@@ -52,8 +52,13 @@ export function ContractIdentityRow({ accountGroupId }: { accountGroupId: Accoun
 
 		try {
 			setIdentity(await readLiquidContractIdentity(accountGroupId));
-		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : "Could not read the contract identity.");
+		} catch {
+			// What a person is told is chosen here, not carried up from wherever it broke. The
+			// thrown error's own message is written for whoever is debugging the wallet: it may
+			// name a module, a network kind or a derivation path, none of which this reader can
+			// act on, and it changes whenever the code below changes. There is exactly one thing
+			// they can do about any failure of this read, so that is what it says.
+			setError("Could not read the contract identity. Try again.");
 		} finally {
 			setLoading(false);
 		}
