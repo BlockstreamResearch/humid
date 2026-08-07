@@ -131,6 +131,39 @@ describe("the protocols as their authors publish them now", () => {
 		});
 	});
 
+	// The number the whole change is about, and the one an estimate got wrong. Counting the keys
+	// on an action's own node says sixteen of these are clear; counting the action's whole
+	// subtree — its inputs, its outputs, the witnesses inside them — says two. The blockers are
+	// mostly a level down from where an action is named, which is exactly where an estimate does
+	// not look.
+	test("and how many of those actions carry nothing this wallet refuses", () => {
+		const counted = Object.fromEntries(
+			Object.keys(CURRENT).map((name) => {
+				const { manifest } = normaliseManifest(CURRENT[name]!);
+				const blocked = new Set(
+					loadBearing(inspectConstructs(manifest)).map((finding) => finding.at.split(" / ")[0]),
+				);
+
+				return [
+					name,
+					{
+						found: manifest.actions.length,
+						unblocked: manifest.actions.filter((action) => !blocked.has(`action ${action.name}`))
+							.length,
+					},
+				];
+			}),
+		);
+
+		expect(counted).toEqual({
+			dex: { found: 4, unblocked: 1 },
+			last_will: { found: 4, unblocked: 0 },
+			lending_v2: { found: 9, unblocked: 1 },
+			lending_v3: { found: 6, unblocked: 0 },
+			zeroconf: { found: 0, unblocked: 0 },
+		});
+	});
+
 	// The one published protocol this wallet refuses nothing about. It declares no actions, so
 	// nothing can be performed from it either — which is worth stating rather than letting an
 	// empty refusal list read as success.
