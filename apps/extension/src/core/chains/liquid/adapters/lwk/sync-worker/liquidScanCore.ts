@@ -1,3 +1,5 @@
+import { logger } from "@/core/logger";
+
 import type {
 	LiquidActivityPage,
 	LiquidAssetBalance,
@@ -10,6 +12,15 @@ import { createLwkNetwork, type LwkNetwork } from "../createLwkNetwork";
 import { loadLwkWasm, type LwkWasmModule } from "../loadLwkWasm";
 import { readWalletActivityForAsset, readWalletAssetBalances } from "../wallet/readWalletData";
 import { readWalletUtxos } from "../wallet/readWalletUtxos";
+
+/**
+ * The scan worker's own logger.
+ *
+ * These lines carried a hand-written "[liquid-sync]" prefix on every call, which is what a
+ * child logger's scope is for. The facade is a console wrapper with no transports, so it
+ * behaves the same inside a worker as it does on a page.
+ */
+const log = logger.child({ module: "liquid-sync" });
 import { type AssetMetadata, resolveIssuedAssetMetadata } from "../wallet/resolveAssetMetadata";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
@@ -63,11 +74,11 @@ export async function scanFresh(input: LiquidScanInput): Promise<Uint8Array | nu
 	const wollet = new lwk.Wollet(network, new lwk.WolletDescriptor(input.descriptor));
 	const client = createLwkBlockchainClient(lwk, input.chain, network);
 
-	console.warn("[liquid-sync] scan (fresh) fullScan…", { chainId: input.chain.id, id: input.id });
+	log.warn("scan (fresh) fullScan…", { chainId: input.chain.id, id: input.id });
 	const scanStartedAt = Date.now();
 	const update = await client.fullScan(wollet);
 
-	console.warn("[liquid-sync] scan (fresh) done", {
+	log.warn("scan (fresh) done", {
 		hasUpdate: Boolean(update),
 		id: input.id,
 		ms: Date.now() - scanStartedAt,
@@ -96,12 +107,12 @@ export async function broadcastPset(input: LiquidBroadcastInput): Promise<string
 	const client = createLwkBlockchainClient(lwk, input.chain, network);
 	const pset = new lwk.Pset(input.psetBase64);
 
-	console.warn("[liquid-sync] broadcast…", { chainId: input.chain.id, id: input.id });
+	log.warn("broadcast…", { chainId: input.chain.id, id: input.id });
 	const startedAt = Date.now();
 	const txid = await client.broadcast(pset);
 	const txidString = txid.toString();
 
-	console.warn("[liquid-sync] broadcast done", {
+	log.warn("broadcast done", {
 		id: input.id,
 		ms: Date.now() - startedAt,
 		txid: txidString,
@@ -130,12 +141,12 @@ export async function broadcastTransaction(input: LiquidBroadcastTxInput): Promi
 	const client = createLwkBlockchainClient(lwk, input.chain, network);
 	const transaction = lwk.Transaction.fromString(input.txHex);
 
-	console.warn("[liquid-sync] broadcast tx…", { chainId: input.chain.id, id: input.id });
+	log.warn("broadcast tx…", { chainId: input.chain.id, id: input.id });
 	const startedAt = Date.now();
 	const txid = await client.broadcastTx(transaction);
 	const txidString = txid.toString();
 
-	console.warn("[liquid-sync] broadcast tx done", {
+	log.warn("broadcast tx done", {
 		id: input.id,
 		ms: Date.now() - startedAt,
 		txid: txidString,
@@ -156,7 +167,7 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 
 	let wollet = wolletCache.get(cacheKey);
 
-	console.warn("[liquid-sync] scanAndRead start", {
+	log.warn("scanAndRead start", {
 		cachedWollet: Boolean(wollet),
 		chainId: input.chain.id,
 		id: input.id,
@@ -170,11 +181,11 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 	// A fresh client each time picks up backend-setting changes; the wollet is reused.
 	const client = createLwkBlockchainClient(lwk, input.chain, network);
 
-	console.warn("[liquid-sync] fullScan…", { id: input.id });
+	log.warn("fullScan…", { id: input.id });
 	const scanStartedAt = Date.now();
 	const update = await client.fullScan(wollet);
 
-	console.warn("[liquid-sync] fullScan done", {
+	log.warn("fullScan done", {
 		hasUpdate: Boolean(update),
 		id: input.id,
 		ms: Date.now() - scanStartedAt,
@@ -201,7 +212,7 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 	// so a later step can serve getUTXOs/getBalance from the persisted snapshot instead of rescanning.
 	const utxos = readWalletUtxos(wollet);
 
-	console.warn("[liquid-sync] scanAndRead done", {
+	log.warn("scanAndRead done", {
 		assetCount: assets.length,
 		id: input.id,
 		ms: Date.now() - scanStartedAt,
