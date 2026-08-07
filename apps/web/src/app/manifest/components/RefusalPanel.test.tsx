@@ -15,8 +15,9 @@ function render(inspection: Parameters<typeof RefusalPanel>[0]["inspection"]): s
 
 const NOTHING_ASKED: Pick<
 	Parameters<typeof RefusalPanel>[0]["inspection"],
-	"skipped" | "unreachable"
+	"constructs" | "skipped" | "unreachable"
 > = {
+	constructs: [],
 	skipped: [],
 	unreachable: ["covenant-mismatch", "shortfall", "no-fee-rate"],
 };
@@ -61,6 +62,7 @@ describe("what a reader is told about refusal", () => {
 
 	test("separates checks it could have made from checks nothing could", () => {
 		const html = render({
+			constructs: [],
 			refusal: undefined,
 			skipped: ["foreign-compiler"],
 			unreachable: ["shortfall"],
@@ -69,6 +71,34 @@ describe("what a reader is told about refusal", () => {
 		expect(html).toContain("Not checked, because this page was not told what it needs");
 		expect(html).toContain("foreign-compiler");
 		expect(html).toContain("Not checkable from a document at all");
+	});
+
+	// Found by using this page on the five published protocols: each refused on one decorative
+	// field and read as hopeless, when the field table below said three fixable gaps.
+	test("says how many fields would refuse, not only which one the wallet names", () => {
+		const html = render({
+			...NOTHING_ASKED,
+			constructs: [
+				{ at: "manifest", key: "$schema", state: "unrecognised" },
+				{ at: "manifest", key: "contract_templates", state: "unrecognised" },
+				{ at: "manifest", key: "simplicity_hl", state: "unrecognised" },
+				{ at: "manifest", key: "description", state: "shown" },
+			],
+			refusal: { reason: "…", reject: "unrecognised-construct" },
+		});
+
+		expect(html).toContain("3 fields in this document would refuse");
+		expect(html).toContain("The other 2");
+	});
+
+	test("does not count when the wallet's one refusal is the whole of it", () => {
+		const html = render({
+			...NOTHING_ASKED,
+			constructs: [{ at: "manifest", key: "$schema", state: "unrecognised" }],
+			refusal: { reason: "…", reject: "unrecognised-construct" },
+		});
+
+		expect(html).not.toContain("would refuse, and the wallet names");
 	});
 
 	test("says nothing about skipped checks when none were skipped", () => {
