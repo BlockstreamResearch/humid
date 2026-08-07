@@ -19,6 +19,16 @@ Do not request review for freezing a clean Git raw scope, file accounting, QMD
 refresh, index or log maintenance, or source-backed drafts that keep their
 trust state honest. Raw intake itself never counts as evidence.
 
+Reading is never a decision. Accounting for what each bound repository declares
+about itself, running Graphify in every bound root, checking curated knowledge
+before settling meaning — a gate refusing until those are done is telling the
+agent to go and do them, not handing the agent a question. Nothing about them
+reaches the maintainer: not as a request, not as a status line, and not as an
+apology for the delay. The one thing that does reach them is a product
+consequence found while reading — a rule in one repository that makes the
+proposed route impossible there is a decision, and it is put to them as what the
+product must do instead, never as the file it was found in.
+
 Present a compact review packet containing the exact decision, evidence,
 conflicts, recommendation, and requested response. Record approve, correct, or
 defer. Ask one focused question at a time. Silence is not approval.
@@ -88,6 +98,50 @@ most once. If a decision genuinely cannot be stated without engineering
 vocabulary, that is a finding rather than a licence: the capability has no
 product-level description yet, and recording that gap is part of the answer.
 
+## The line, and how to tell which side you are on
+
+Everything this workflow produces is written for one of two readers, and the two
+are not styles of the same text. They are different texts.
+
+| | Written for the record | Written for the maintainer |
+| --- | --- | --- |
+| Reader | The next agent, the compiler, an auditor | A person deciding about their product |
+| Addresses | **Required.** A claim without its pointer is unverifiable | **None.** An address is something to look up, not something to read |
+| Vocabulary | Whatever is exact | Whatever the product itself uses |
+| Failure | A missing pointer | A sentence that cannot be answered without opening something |
+
+Apply one test to every sentence before it reaches the maintainer:
+
+> Would they have to look something up to understand this?
+
+If yes, it is an address, whatever form it takes — a file, a symbol, a record id,
+a ledger code, a commit, a section number, a milestone or tier code, a schema
+value printed as a category, or a term that exists only inside the
+implementation. The test does not depend on the shape of the string or on the
+language anything is written in, which is why it is the test and not a list.
+
+Two failure modes, and the second is the one that follows from over-correcting
+the first:
+
+- **Addressed prose.** "The check in the catalog store was narrowed because the
+  gate validates on publish." Every noun is something to look up.
+- **Emptied prose.** "A check was narrowed for a reason that turned out to be
+  wrong." Nothing to look up and nothing to decide on either.
+
+What is wanted is neither: say what the thing does for the product, and say it
+with enough substance to be judged. "The client stopped checking anything but the
+shape of a record, on the belief that publishing would catch the rest — and
+publishing does not." The pointer to the file stays in the record, and is brought
+out when the maintainer asks to audit rather than to decide.
+
+An address is never deleted to satisfy this. It moves. A finding whose evidence
+was dropped to keep a sentence clean has been made worse, not better.
+
+Where a packet can be generated from records rather than composed, generate it.
+A renderer that never reads an address cannot print one, which is worth more than
+care taken one message at a time. Where it must be composed — most places — the
+test above is the whole rule, and it is the agent's to apply.
+
 One decision per packet. Several stacked in one message read as a status report
 and get answered as none of them.
 
@@ -115,11 +169,36 @@ parks finished work behind a decision that could have been made on day one.
 Approving edits the change record, so refresh its checkpoint and re-read it
 before claiming.
 
+Approval and permission to start are different decisions and the record holds
+them separately. A maintainer who approves a framing and says the work is not to
+begin yet — including one approving only so the bundle stops cluttering their
+queue — is parking it: `wfctl work approve ... --park "<why>"`, or `wfctl work
+park` afterwards. A parked bundle refuses every delivery claim before any other
+gate is even read. Only `wfctl work release --attested "<their words>"` starts
+it, and a release is never inferred: not from a truthful answer to an unrelated
+question, and not from the condition that held it having cleared. The last time
+one was inferred, six commits landed in three source repositories.
+
+Render the framing with `wfctl work ask <id>` rather than composing one. It
+carries the four things approval fixes — what gets done, what deliberately does
+not, what will make it finished, and in what order — and nothing else from a
+record written for an agent. A section still holding the shipped template's own
+words is reported as unwritten rather than read out as scope.
+
 For significant work, record framing and completion decisions with `wfctl work
-approve <id> --stage framing|completion --by human:<maintainer-id>`. That
-command needs an interactive terminal, or an out-of-band `--token` matching
-`WFCTL_APPROVAL_TOKEN`; it writes both the `maintainer_review` receipt and the
-durable approval record the completion gate checks. Never hand-write
+approve <id> --stage framing|completion --by human:<maintainer-id>`. It writes
+both the `maintainer_review` receipt and the durable approval record the
+completion gate checks.
+
+Pass `--attested "<their answer, word for word>" --session "<where they said
+it>"`. That is the ordinary path, because the ordinary case is a maintainer who
+already answered in conversation, and sending them to a second terminal to
+retype a generated bundle id, a stage name and their own identity relocates the
+same answer to a less convenient channel while recording no more than the
+attestation does. A typed confirmation and an out-of-band `--token` matching
+`WFCTL_APPROVAL_TOKEN` both remain, unequal and recorded as such: they prove a
+command ran outside your own writing, which is a stronger record and the
+maintainer's to ask for, never your default. Never hand-write
 `maintainer_review.status`, `by`, `at`, `method`, or `receipt`: a hand-written
 receipt fails verification. Existing explicit maintainer instructions may
 satisfy the framing decision, but still record it through the command; do not

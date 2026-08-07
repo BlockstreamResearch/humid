@@ -39,7 +39,7 @@
     "manage-project-work": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "b83becc7b3d6bfb4b1d074c48c53b5d551bca27107a175a804de1206f1c6cdce"
+      "computedHash": "3c79d2aad3bd880c53b7b4026abf8f229e5b0038a0745ef5b1dfb8586cdc1e4d"
     },
     "qmd": {
       "source": "/Users/lukachisama/.bun/install/global/node_modules/@tobilu/qmd/skills/qmd",
@@ -54,12 +54,12 @@
     "shape-project-direction": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "7014dda9496a2b403aa027863311f0e1a7c6a038e3d4498d4ec61dc82035ead7"
+      "computedHash": "7e0b6c9535c4d1faf95c340b1c1b3b9c8e68d3e9dbc63ba77b56df46b437e192"
     },
     "specify-project-change": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "274b797fc56704ac5f6c83bef60a438f3edbafa081806d1c0608ecc37b2ce5af"
+      "computedHash": "acbe1a8faad0aa2287169bc51924fe28f3c9f3200e4939b9aa508546cbff301e"
     },
     "split-project-change": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
@@ -74,7 +74,7 @@
     "verify-project-work": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "8772c9dcc74bc926ac47bf9aa6933f29cb74e2b94cc7c1a4ceecd7f7a27cf383"
+      "computedHash": "39f6891a942dab859ff17efca8e7d953037530153acb183f61151ec855c087e6"
     }
   }
 }

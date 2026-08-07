@@ -54,6 +54,13 @@ function main() {
   }
 
   const cwd = input.cwd || process.cwd();
+  // Turned off deliberately. The switch is a marker file rather than the absence
+  // of the settings entry, because an upgrade reinstalls the entry and would
+  // silently undo the maintainer's choice.
+  if (disabled(cwd)) {
+    allow();
+    return;
+  }
   const report = readState(cwd);
   if (!report) {
     allow();
@@ -127,6 +134,15 @@ function main() {
     reason: reason(input.last_assistant_message ?? "", awaiting),
   }));
   process.exit(0);
+}
+
+function disabled(cwd) {
+  try {
+    readFileSync(join(cwd, ".workflow/current/hooks/stop-guard.disabled"), "utf8");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readState(cwd) {
@@ -223,6 +239,10 @@ function reason(message, awaiting) {
     "If you are waiting on them, name in one line what you need and end. \"The",
     "work continues by itself\" is not that line — nothing continues once the",
     "turn is over.",
+    "",
+    "Either way, run `wfctl resumable` before you end. It answers whether",
+    "stopping now would lose anything, and a non-zero exit means refresh the",
+    "checkpoint or commit first rather than reporting the problem onward.",
     "",
     "This check returns while each turn moves the repository and releases on the",
     "first turn that does not. Do not acknowledge it, agree with it, explain",

@@ -66,7 +66,10 @@ from real work is better than none, and the cost of the shortcut is only hidden
 when nobody writes it down.
 
 Present acceptance results, engineering findings, checks, deviations, risks,
-and knowledge delta as one completion review packet. Record the maintainer's
+and knowledge delta as one completion review packet. It is maintainer-facing:
+the reader test in `maintainer-review` applies, so acceptance is named by what
+was asked for rather than by criterion id, and a deviation by what changed for
+the product rather than by which file moved. Record the maintainer's
 explicit decision through the approval command; never write the receipt by
 hand:
 
@@ -76,9 +79,10 @@ wfctl work approve <id> --stage completion \
   --note "<what the maintainer accepted>"
 ```
 
-It requires an interactive terminal, or `--token` matching
-`WFCTL_APPROVAL_TOKEN`. `wfctl work verify` rejects a receipt with no matching
-approval record. Finish all semantic edits to `change.md`, then refresh its
+Record what they answered with `--attested "<their words>" --session
+"<where>"`; a typed confirmation and a `--token` matching `WFCTL_APPROVAL_TOKEN`
+remain for a stronger record. `wfctl work verify` rejects a receipt with no
+matching approval record. Finish all semantic edits to `change.md`, then refresh its
 checkpoint in review stage **before** recording the final hash receipt:
 
 ```sh

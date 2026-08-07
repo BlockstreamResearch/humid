@@ -19,6 +19,14 @@ to ask; it is evidence the search was not done.
 acceptance criteria and proven by its terminal status. A finished plan item, a
 written summary, a passing subtask, and a refreshed checkpoint are progress.
 
+**Check that a stop would lose nothing, rather than believing it.** `wfctl
+resumable` answers that from the repository: a checkpoint describing a record
+that has since changed, an open record that never had one, and work on disk no
+checkpoint describes and no commit preserves are three different losses, and the
+last is the one a basis digest structurally cannot see. A non-zero exit is not a
+finding to report onward — refresh the checkpoint or commit, then end. The
+maintainer asking you to wrap up is the failure this replaces.
+
 **End a turn only when you are waiting on the maintainer.** Ending one hands
 control to them, so the test is what you are waiting for and not what you
 wrote. Announcing a next action and stopping is the visible half of this; the

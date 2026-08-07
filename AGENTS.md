@@ -16,9 +16,24 @@ This block is managed by `wfctl`. Read `.workflow/config.json` and all files und
   index, ranking, and snippets as navigation only; verify by direct reading and
   authoritative sources.
 - Present bounded review packets and require explicit maintainer decisions at the gates defined by the workflow.
+- Approving a framing settles what the work is, never that it begins. When the
+  maintainer approves and says starting is premature — including approving only
+  to clear their queue — record both: `wfctl work approve ... --park "<why>"`.
+  A parked bundle refuses every delivery claim, and only `wfctl work release
+  --attested "<their words>"` starts it. Never infer a release from an answer to
+  a different question, and never from the reconstruction or blocker that held
+  it having since cleared: the condition ending is not the same as being told to
+  go.
+- Put a framing to the maintainer with `wfctl work ask`, which renders the four
+  things approval fixes — what gets done, what deliberately does not, what makes
+  it finished, in what order — and nothing else from a record written for you.
 - Record framing and completion approvals with `wfctl work approve`, never by
-  editing `maintainer_review`. The maintainer confirms in their own terminal;
-  a hand-written approval receipt fails verification.
+  editing `maintainer_review`; a hand-written receipt fails verification. Pass
+  `--attested "<their answer, word for word>" --session "<where they said it>"`
+  when they answered in the session, which is the ordinary case. Do not send them
+  to a second terminal: retyping a generated bundle id, a stage name and their
+  own identity records no decision the attestation does not. A typed confirmation
+  or `--token` remains available and is theirs to ask for, never your default.
 - Ask one material question at a time, include a recommendation, and update
   the durable record before continuing.
 - Write every maintainer-facing message in the product's own language, not only
@@ -50,18 +65,30 @@ This block is managed by `wfctl`. Read `.workflow/config.json` and all files und
   different choices remain, present their human meaning, evidence, and
   recommendation; after the maintainer chooses, execute the corresponding
   commands yourself.
+- Before ending a turn, run `wfctl resumable`. It answers, from the repository
+  rather than from your memory of it, whether stopping now would lose anything:
+  a checkpoint describing a record that has since changed, an open record that
+  never had one, or work on disk no checkpoint describes and no commit preserves.
+  A non-zero exit is not a report to pass on — refresh the checkpoint or commit,
+  then end. The maintainer should never have to ask you to wrap up.
 - For significant multi-turn work, create the central bundle early. After every
   material maintainer turn or agent investigation cycle, preserve
   consequential new understanding in the owning record's broad `Discovery
   ledger`, update the affected semantic state, and refresh its structured
   checkpoint last. The preservation trigger is consequence of information
-  loss, not a fixed category of findings.
+  loss, not a fixed category of findings. Small jobs noticed along the way go in
+  the checkpoint's own list — `--todo-add`, cleared with `--todo-drop` — which is
+  neither a blocker nor the next action, survives a checkpoint that says nothing
+  about it, and reaches the next session through the brief. Anything you intend
+  to "come back to" and leave only in prose is lost with the context holding it.
 - Run `wfctl brief --json` before anything else in a session, unless a session
   brief was already delivered as context, in which case use that one. It is the
   authoritative current state of this repository: signals are observed facts and
   capabilities are derived from them. Do not rediscover that state by scanning
-  records, and do not read the list back to the maintainer. Compose one short
-  orientation from it — what exists, what is in progress, what waits on them —
+  records, and do not read the list back to the maintainer. Every open record
+  carries a `*.resume` signal holding where its work stopped and the next action
+  it named; that is the resume state, so read it rather than reconstructing one.
+  Compose one short orientation from it — what exists, what is in progress, what waits on them —
   and offer the operations reported available. For a blocked capability, name
   what would unblock it instead of starting it. The brief never starts work; a
   signal with `awaits: maintainer` is a question for them, not a task for you.

@@ -19,12 +19,20 @@ charting or resuming.
    evidence leaves; unknown future implementation repositories are not guessed.
 2. Run `wfctl work context <id> --stage wayfind` and `wfctl work status <id>`.
    Do not edit product source during this phase.
-3. Name the destination first: what a finished map will make specifiable, for
+3. Run `wfctl work repositories <id>` and read what every bound repository
+   declares about itself — the instructions its maintainer wrote in its own
+   agent file, and the skills installed only there. A map charted from the
+   centre is charted without them otherwise, and they are exactly the rules
+   that decide whether a route is possible in that repository. Invoke
+   `align-project-knowledge` in the same pass: fog is only fog until you check
+   whether the project already answered it. `wfctl work map finish` refuses
+   until every bound repository is accounted for.
+4. Name the destination first: what a finished map will make specifiable, for
    whom, and the boundary it must not cross.
-4. Explore breadth-first. Put a precise answerable question into a Wayfinder
+5. Explore breadth-first. Put a precise answerable question into a Wayfinder
    issue. Put only still-unphraseable in-scope uncertainty into `map.md` fog.
    Put ruled-out work under out of scope.
-5. Create currently visible blockers before their dependants with `wfctl work
+6. Create currently visible blockers before their dependants with `wfctl work
    issue create --phase wayfinding --type
    research|prototype|grilling|task`. Use `wfctl work issue block|unblock` when
    later evidence changes an edge. Stop charting; do not resolve a normal issue

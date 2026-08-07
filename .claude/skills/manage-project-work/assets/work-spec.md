@@ -27,6 +27,8 @@ direction:
 knowledge_alignment:
   reviewed: []
   conflicts: []
+  # Set covered: false with a basis when no curated concept covers this work.
+  # An empty knowledge base is a supported state; an invented concept path is not.
 graph_evidence:
   queries: []
 knowledge_promotion:

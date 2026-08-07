@@ -33,6 +33,33 @@ the contract, invoke `analyze-with-graphify` in every relevant bound root, then
 open the actual source locations. Invoke `align-project-knowledge` before
 settling product or architecture meaning.
 
+Work spanning more than one repository is shaped here, at the centre, because
+only the centre sees them all at once. What the centre does not see is what each
+repository declares about itself: the instructions its maintainer wrote in its
+own agent file, and the skills installed only there. Those are specific and
+binding — one repository opens with a plan file to read first, another calls its
+navigation rule BINDING — and a session that never entered the checkout has no
+way to know they exist.
+
+```sh
+wfctl work repositories <id>
+```
+
+This prints them without leaving the centre. Read every one, then account for
+each bound repository before asking for approval:
+
+```sh
+wfctl work repositories <id> --read <repository> --note "<what its rules require of this work>"
+wfctl work repositories <id> --untouched <repository> --reason "<why this work does not reach it>"
+```
+
+The hash of its instructions and the list of its own skills are taken from the
+checkout, not from you, so the receipt binds to what was there; if the
+repository changes its rules afterwards the receipt is reported stale rather
+than quietly wrong. Framing approval and `wfctl work map finish` both refuse
+until every bound repository is one or the other. Saying nothing is not a third
+option, and neither is a note that only says the file was opened.
+
 Update `change.md` with:
 
 - the problem and intended observable outcome;
@@ -55,7 +82,8 @@ binds the current `change.md` rather than an earlier draft.
 
 ## Review and continue
 
-Present a compact framing packet: outcome, scope, exclusions, decisions,
+Present a compact framing packet — maintainer-facing, so the reader test in
+`maintainer-review` governs every sentence: outcome, scope, exclusions, decisions,
 acceptance IDs, test seams, risks, and unresolved work. Record only explicit
 maintainer approval, and record it through the approval command rather than by
 editing the receipt:
@@ -66,8 +94,10 @@ wfctl work approve <id> --stage framing \
   --note "<what was approved>"
 ```
 
-The command requires an interactive terminal, or `--token` matching
-`WFCTL_APPROVAL_TOKEN` in unattended use. A hand-written
+Render the framing with `wfctl work ask <id>` and record their reply with
+`--attested "<their words>" --session "<where>"`. A typed confirmation and a
+`--token` matching `WFCTL_APPROVAL_TOKEN` remain available and are theirs to ask
+for; do not send them to a second terminal by default. A hand-written
 `maintainer_review.framing` receipt fails verification. Approving rewrites
 `change.md`, so re-read it, refresh its review receipt, and refresh the
 checkpoint afterwards.

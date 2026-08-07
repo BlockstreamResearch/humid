@@ -133,8 +133,10 @@ readable for compatibility.
 
 Framing and completion decisions are recorded with `wfctl work approve <id>
 --stage framing|completion --by human:<maintainer-id>`, never by editing
-`maintainer_review` directly. The command requires an interactive terminal or
-an out-of-band `--token`; a hand-written receipt fails the completion gate.
+`maintainer_review` directly. Record what they answered in the session with
+`--attested "<their words>" --session "<where>"`; a typed confirmation and an
+out-of-band `--token` remain for a maintainer who wants a receipt you could not
+have written. A hand-written receipt fails the completion gate.
 
 `changes/active/<id>/` is already the knowledge-side living record. There is
 no final dump into `raw/`. Completed closure moves the entire bundle intact to
