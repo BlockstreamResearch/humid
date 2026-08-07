@@ -82,7 +82,7 @@ export function describeConstructs(manifest: NormalisedManifest): ConstructRepor
 }
 
 function stateOf(site: ConstructSite, key: string): ConstructState {
-	const construct = site.constructs[key];
+	const construct = constructAt(site, key);
 
 	if (!construct) {
 		return "unrecognised";
@@ -114,6 +114,24 @@ const READ: Construct = { handled: true, loadBearing: true };
 const SHOWN: Construct = { handled: true, loadBearing: false };
 const UNIMPLEMENTED: Construct = { handled: false, loadBearing: true };
 const UNREAD: Construct = { handled: false, loadBearing: false };
+
+/**
+ * The two keys that belong to JSON documents rather than to this format.
+ *
+ * A comment and a pointer to a schema file can appear at any depth, decide nothing anywhere,
+ * and are put there by whatever wrote or edits the document. Listing them at every position
+ * would be nine copies of the same statement and would still be wrong at the tenth position
+ * someone uses one at, so they are answered once here.
+ */
+const DOCUMENT_CONVENTIONS: Record<string, Construct> = {
+	$comment: UNREAD,
+	$schema: UNREAD,
+};
+
+/** What a position says about one key, or what every position says about it. */
+function constructAt(site: ConstructSite, key: string): Construct | undefined {
+	return site.constructs[key] ?? DOCUMENT_CONVENTIONS[key];
+}
 
 /**
  * One kind of position in a manifest, and what it may contain.
@@ -148,6 +166,12 @@ const SITES = {
 			create_instance: UNIMPLEMENTED,
 			description: SHOWN,
 			inputs: READ,
+			// A sentence saying what this action does, written for whoever approves it, beside the
+			// shorter `description`. It decides nothing that gets signed. Not shown: its text
+			// interpolates values from the deployment and the request through a syntax no
+			// specification describes, and a confident sentence about the wrong amounts changes
+			// what a person agrees to.
+			intent: UNREAD,
 			is_constructor: UNIMPLEMENTED,
 			on_input_resolved: UNIMPLEMENTED,
 			on_post_broadcast: UNIMPLEMENTED,
@@ -190,7 +214,6 @@ const SITES = {
 	},
 	manifest: {
 		constructs: {
-			$comment: SHOWN,
 			// Reserved for a signature slot that does not exist, and read by no
 			// implementation including the reference one.
 			attestation_version: UNREAD,
@@ -198,6 +221,10 @@ const SITES = {
 			chain: READ,
 			classes: READ,
 			compile_debug_symbols: READ,
+			// The container of a contract's actions, under the name the corpus uses now. Its
+			// previous name is `classes` above; the normaliser reads both and neither is
+			// preferred, because several generations of the same protocol coexist.
+			contract_templates: READ,
 			confidential_outputs: UNIMPLEMENTED,
 			description: SHOWN,
 			errors: SHOWN,
@@ -205,6 +232,10 @@ const SITES = {
 			manifest_version: READ,
 			params: READ,
 			protocol: SHOWN,
+			// A block the format grew to hold what used to sit at the top level. Only the build
+			// mode is inside it today, lifted by the normaliser to the flat name this runtime
+			// already acts on.
+			simplicity_hl: READ,
 			simplicity_hl_version: READ,
 			source: UNIMPLEMENTED,
 			utxo_types: READ,
@@ -320,7 +351,7 @@ export function inspectConstructs(manifest: NormalisedManifest): ConstructFindin
 		const site: ConstructSite = SITES[kind];
 
 		for (const key of Object.keys(node)) {
-			const construct = site.constructs[key];
+			const construct = constructAt(site, key);
 
 			if (construct?.handled) {
 				continue;

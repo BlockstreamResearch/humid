@@ -89,6 +89,8 @@ export function normaliseManifest(raw: Record<string, unknown>): NormaliseManife
 	delete node.compose_version;
 	delete node.compile_params;
 
+	liftBuildMode(node, notes);
+
 	if (manifestVersion !== undefined) {
 		node.manifest_version = manifestVersion;
 	}
@@ -167,6 +169,30 @@ export function normaliseInstance(
 }
 
 /**
+ * The build mode moved into a block of its own, and the wallet reads it where it was.
+ *
+ * `compile_debug_symbols` at the top level became `simplicity_hl.debug_symbols`. It is not
+ * cosmetic: the mode changes a contract's commitment root and therefore its address, so a
+ * document whose statement goes unread is built the other way and refuses against where the
+ * money actually sits. A document carrying the flat name keeps it — the older spelling is not
+ * overwritten by a newer copy, which is how every other lift here behaves.
+ */
+function liftBuildMode(node: Record<string, unknown>, notes: NormalisationNote[]): void {
+	const block = asRecord(node.simplicity_hl);
+
+	if (!block || !("debug_symbols" in block) || "compile_debug_symbols" in node) {
+		return;
+	}
+
+	node.compile_debug_symbols = block.debug_symbols;
+	notes.push({
+		at: "manifest",
+		canonical: "compile_debug_symbols",
+		found: "simplicity_hl.debug_symbols",
+	});
+}
+
+/**
  * Protocol-level compile parameters.
  *
  * The current spelling is a flat `params` map. The legacy one splits the same values into
@@ -195,9 +221,9 @@ function normaliseProtocolParams(
 }
 
 /**
- * Both declaration shapes, in declaration order: flat `actions` first, then each class's
- * `methods`. A name declared in both resolves to the flat one, which is what every reader
- * of this manifest did before the two shapes were unified.
+ * Every declaration shape, in declaration order: flat `actions` first, then each container's.
+ * A name declared twice resolves to the flat one, which is what every reader of this manifest
+ * did before the shapes were unified.
  */
 function normaliseActions(
 	raw: Record<string, unknown>,
@@ -217,21 +243,44 @@ function normaliseActions(
 		actions.push(normaliseAction(name, node, undefined, notes));
 	}
 
-	for (const [className, declared] of Object.entries(asRecord(raw.classes) ?? {})) {
-		for (const [name, method] of Object.entries(asRecord(asRecord(declared)?.methods) ?? {})) {
-			const node = asRecord(method);
+	for (const container of CONTAINERS) {
+		for (const [owner, declared] of Object.entries(asRecord(raw[container.holder]) ?? {})) {
+			const held = asRecord(asRecord(declared)?.[container.holds]);
 
-			if (!node || seen.has(name)) {
-				continue;
+			if (held && container.holder !== "classes") {
+				notes.push({ at: `container ${owner}`, canonical: "classes", found: container.holder });
 			}
 
-			seen.add(name);
-			actions.push(normaliseAction(name, node, className, notes));
+			for (const [name, method] of Object.entries(held ?? {})) {
+				const node = asRecord(method);
+
+				if (!node || seen.has(name)) {
+					continue;
+				}
+
+				seen.add(name);
+				actions.push(normaliseAction(name, node, owner, notes));
+			}
 		}
 	}
 
 	return actions;
 }
+
+/**
+ * The names a container of actions has been known by, newest last.
+ *
+ * One shape under two vocabularies rather than two shapes: a container names a contract, holds
+ * the values one deployment of it fills in, and holds the actions performed against it. The
+ * corpus renamed both halves at once — `classes.methods` became `contract_templates.actions` —
+ * and a document written in either is the same document. Both are read, because a wallet that
+ * traded one for the other would be as blind to the previous generation as it was to this one,
+ * and the corpus keeps several generations of the same protocol side by side.
+ */
+const CONTAINERS = [
+	{ holder: "classes", holds: "methods" },
+	{ holder: "contract_templates", holds: "actions" },
+] as const;
 
 function normaliseAction(
 	name: string,
