@@ -82,7 +82,12 @@ This block is managed by `wfctl`. Read `.workflow/config.json` and all files und
   about it, and reaches the next session through the brief. Anything you intend
   to "come back to" and leave only in prose is lost with the context holding it.
 - Run `wfctl brief --json` before anything else in a session, unless a session
-  brief was already delivered as context, in which case use that one. It is the
+  brief was already delivered as context, in which case use that one — after
+  checking it arrived whole. A brief grows with the number of open records and
+  is delivered truncated once it passes what a session accepts, as a preview and
+  a path to the rest. Read that path before using it. The preview is the first
+  bytes rather than the important ones, and a session opened on it starts from a
+  fraction of the state while reading exactly like a complete one. It is the
   authoritative current state of this repository: signals are observed facts and
   capabilities are derived from them. Do not rediscover that state by scanning
   records, and do not read the list back to the maintainer. Every open record

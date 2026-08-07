@@ -46,7 +46,7 @@
       "sha256": "0bb95f5bc34cb2ee9c3c453a171cd36f60d8c7d4eeb283ea07e8ad91d5b3ef93"
     },
     ".workflow/runtime/guard-stop.mjs": {
-      "sha256": "1c83e1c15e047609016ae24c7966d9167856d64fd7c92b95690bd1c848dcaab0"
+      "sha256": "726c6a1cc4865ef9c7d86f3e85dc26341b8738960a456a16b35806b69ffca8aa"
     },
     ".workflow/runtime/idle-guard.sh": {
       "sha256": "8a132664ff43cc732e4da14b33e7b72f89e5facbb26169b3135eac2c64390da2"

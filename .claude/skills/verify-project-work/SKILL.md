@@ -56,6 +56,27 @@ two-axis knowledge quality gate, validate every changed concept, and list exact
 concepts under `knowledge_promotion`. Otherwise record a concrete no-update
 reason.
 
+Account for what this work decided before it closes. Every answer the maintainer
+gave is recorded verbatim in this bundle, and closure is the last moment it can
+reach a page rather than an archive:
+
+```sh
+wfctl work decisions <id>
+wfctl work decisions <id> --what "<the decision>" --said "<where they said it>" \
+  --promoted knowledge/decisions/<slug>.md
+```
+
+`--folded <concept>` when an existing page already carries it, `--not-durable`
+with a reason when it settles nothing beyond this work, and `--none "<why>"` when
+the whole bundle settled nothing. A resolved Wayfinder map is checked against, so
+an answer it recorded cannot archive unaccounted for.
+
+Nothing here asks the maintainer anything. They decided already; this records
+where their answer now lives. What does reach them is one confirmation, not one
+per decision: the pages are drafted from their own words, and the question is
+whether the rendering is faithful — asked once, with named exceptions, as
+`maintainer-review` requires of confirming written records.
+
 A concept promoted from a bundle in a project with no reconstructed baseline
 carries the same shape as one established by whole-project reading and a much
 narrower footing: it was derived from whatever this task happened to touch. Say

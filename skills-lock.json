@@ -4,7 +4,7 @@
     "align-project-knowledge": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "99a3e86766230d7f82c2370d3e31ec2437b68983e1cdd5c84b6e4397634debac"
+      "computedHash": "4b16b699280863a9a8cb0d0a0fda3abf77ab150024920293b79b29c932fc7f42"
     },
     "analyze-with-graphify": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
@@ -74,7 +74,7 @@
     "verify-project-work": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "39f6891a942dab859ff17efca8e7d953037530153acb183f61151ec855c087e6"
+      "computedHash": "beb0ed2cdac8ebaa4fd5b3af706e2c3c0cc6df628051ce3f837329eeb0d7165e"
     }
   }
 }

@@ -21,6 +21,17 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "wfctl brief --hook"
+          }
+        ]
+      }
     ]
   }
 }
