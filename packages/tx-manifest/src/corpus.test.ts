@@ -190,7 +190,7 @@ describe("what the corpus uses and this wallet does not read", () => {
 			}
 		}
 
-		expect([...unread].sort()).toEqual([
+		expect([...unread].toSorted()).toEqual([
 			"confidential",
 			"create_instance",
 			"default",

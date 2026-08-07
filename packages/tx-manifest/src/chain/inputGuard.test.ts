@@ -17,9 +17,14 @@ function transaction(...spends: { issuance?: boolean; txid: string; vout: number
 	const count = spends.length.toString(16).padStart(2, "0");
 	const inputs = spends
 		.map(({ issuance, txid, vout }) => {
-			const reversed = (txid.match(/../g) ?? []).reverse().join("");
+			const reversed = (txid.match(/../g) ?? []).toReversed().join("");
 			const marked = issuance ? vout | 0x80_00_00_00 : vout;
-			const index = (marked >>> 0).toString(16).padStart(8, "0").match(/../g)!.reverse().join("");
+			const index = (marked >>> 0)
+				.toString(16)
+				.padStart(8, "0")
+				.match(/../g)!
+				.toReversed()
+				.join("");
 
 			return `${reversed}${index}00ffffffff`;
 		})

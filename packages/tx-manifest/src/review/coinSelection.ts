@@ -51,7 +51,9 @@ export function selectCoins(
 
 	const needed = targetSats + headroomSats;
 	const usable = available.filter((utxo) => utxo.spendable && !utxo.confidential);
-	const spendable = usable.slice().sort((a, b) => (toSats(b.amount) > toSats(a.amount) ? 1 : -1));
+	const spendable = usable
+		.slice()
+		.toSorted((a, b) => (toSats(b.amount) > toSats(a.amount) ? 1 : -1));
 
 	// What is there and cannot be used, so a refusal can say so. A person looking at a
 	// balance that covers the amount needs to be told why it does not count, rather than

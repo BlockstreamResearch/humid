@@ -50,8 +50,8 @@ const FUNDING_TXID = "d".repeat(64);
 function serialise(spends: { txid: string; vout: number }[]): string {
 	const inputs = spends
 		.map(({ txid, vout }) => {
-			const reversed = (txid.match(/../g) ?? []).reverse().join("");
-			const index = vout.toString(16).padStart(8, "0").match(/../g)!.reverse().join("");
+			const reversed = (txid.match(/../g) ?? []).toReversed().join("");
+			const index = vout.toString(16).padStart(8, "0").match(/../g)!.toReversed().join("");
 
 			return `${reversed}${index}00ffffffff`;
 		})
@@ -180,7 +180,7 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 		// Answers with bytes and reads them back through the same parser the real reader uses,
 		// so this cannot hand over an output the chain could not have produced.
 		readTxOut: () => async () => {
-			const asset = `01${(POLICY_ASSET.match(/../g) ?? []).reverse().join("")}`;
+			const asset = `01${(POLICY_ASSET.match(/../g) ?? []).toReversed().join("")}`;
 			const value = `01${(42_000).toString(16).padStart(16, "0")}`;
 			const script = `${(DERIVED_SCRIPT.length / 2).toString(16).padStart(2, "0")}${DERIVED_SCRIPT}`;
 			const parsed = txOutAt(`02000000000001${asset}${value}00${script}00000000`, 0);
@@ -370,7 +370,7 @@ describe("processLiquidConfidentialTransaction on a restored wallet", () => {
 
 		await subject().method(params(), watched);
 
-		expect([...new Set(read)].sort()).toEqual([
+		expect([...new Set(read)].toSorted()).toEqual([
 			"authorization",
 			"chain",
 			"keyManagerState",

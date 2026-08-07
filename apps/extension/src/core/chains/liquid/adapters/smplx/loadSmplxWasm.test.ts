@@ -253,7 +253,7 @@ describe("finalising a transaction", () => {
 
 	/** An explicit Elements output of `sats` of the policy asset, paying to `scriptHex`. */
 	function encodeTxOut(sats: bigint, scriptHex: string): string {
-		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).toReversed().join("");
 		const value = sats.toString(16).padStart(16, "0");
 		const scriptLen = (scriptHex.length / 2).toString(16).padStart(2, "0");
 
@@ -324,7 +324,7 @@ describe("covenant inputs and the dry-run", () => {
 	function covenantTxOut(sats: bigint): string {
 		const contract = new bindings.Contract(P2PK_SOURCE, ARGS);
 		const script = contract.scriptPubKeyHex("liquid-testnet");
-		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).toReversed().join("");
 		const value = sats.toString(16).padStart(16, "0");
 		const scriptLen = (script.length / 2).toString(16).padStart(2, "0");
 
@@ -377,7 +377,7 @@ describe("covenant inputs and the dry-run", () => {
 	test("refuses to dry-run an input that is not a covenant", () => {
 		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
 		const builder = new bindings.TransactionBuilder();
-		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).toReversed().join("");
 		const walletTxOut = `01${assetLe}0100000000000186a000${"16"}${signer.scriptPubKeyHex()}`;
 
 		builder.addWalletInput(TXID, 0, walletTxOut);
@@ -408,7 +408,7 @@ describe("signing a covenant that authenticates its spender", () => {
 	const RATE = 1000;
 
 	function txOut(sats: bigint, scriptHex: string): string {
-		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).toReversed().join("");
 		const value = sats.toString(16).padStart(16, "0");
 		const len = (scriptHex.length / 2).toString(16).padStart(2, "0");
 
@@ -549,7 +549,7 @@ describe("what a signed transaction says it spends", () => {
 	const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 
 	function txOut(sats: bigint, scriptHex: string): string {
-		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).toReversed().join("");
 		const value = sats.toString(16).padStart(16, "0");
 		const len = (scriptHex.length / 2).toString(16).padStart(2, "0");
 
@@ -800,7 +800,7 @@ describe("a transaction balances against the fee that is charged", () => {
 	const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 
 	function txOut(sats: bigint, scriptHex: string): string {
-		const assetLe = (POLICY_ASSET.match(/../g) ?? []).reverse().join("");
+		const assetLe = (POLICY_ASSET.match(/../g) ?? []).toReversed().join("");
 		const value = sats.toString(16).padStart(16, "0");
 		const len = (scriptHex.length / 2).toString(16).padStart(2, "0");
 

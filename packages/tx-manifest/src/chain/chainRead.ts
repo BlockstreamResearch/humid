@@ -116,7 +116,7 @@ export function createEsploraFeeRateReader(
 		const targets = Object.keys(body)
 			.map(Number)
 			.filter((value) => Number.isFinite(value))
-			.sort((a, b) => a - b);
+			.toSorted((a, b) => a - b);
 		const chosen = targets.find((value) => value >= targetBlocks) ?? targets.at(-1);
 		const satsPerVbyte = chosen === undefined ? undefined : body[String(chosen)];
 

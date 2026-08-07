@@ -210,7 +210,7 @@ function readRawUint32(reader: Reader): number | undefined {
 }
 
 function reverseHex(hex: string): string {
-	return (hex.match(/../g) ?? []).reverse().join("");
+	return (hex.match(/../g) ?? []).toReversed().join("");
 }
 
 function bigEndian(hex: string): bigint {

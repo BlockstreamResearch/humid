@@ -55,7 +55,7 @@ export function readReversedHex(reader: Reader, length: number): string | undefi
 
 	reader.at += length;
 
-	return encodeHex(slice.reverse());
+	return encodeHex(slice.toReversed());
 }
 
 export function readUint32(reader: Reader): number | undefined {

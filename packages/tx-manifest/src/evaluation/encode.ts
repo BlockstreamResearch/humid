@@ -265,7 +265,7 @@ function pad(hex: string, target: unknown, align: unknown): EncodedBytes {
 }
 
 function reverse(hex: string): string {
-	return (hex.match(/../g) ?? []).reverse().join("");
+	return (hex.match(/../g) ?? []).toReversed().join("");
 }
 
 function asCount(value: unknown): bigint | undefined {

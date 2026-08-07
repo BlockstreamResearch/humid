@@ -68,7 +68,7 @@ const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585
 const readTxOut =
 	(scriptPubKeyHex: string, amountSats = "42000") =>
 	async (): Promise<TxOutAtOutPoint> => {
-		const asset = `01${(POLICY_ASSET.match(/../g) ?? []).reverse().join("")}`;
+		const asset = `01${(POLICY_ASSET.match(/../g) ?? []).toReversed().join("")}`;
 		const value = `01${BigInt(amountSats).toString(16).padStart(16, "0")}`;
 		const script = `${(scriptPubKeyHex.length / 2).toString(16).padStart(2, "0")}${scriptPubKeyHex}`;
 		const transaction = `02000000000001${asset}${value}00${script}00000000`;
