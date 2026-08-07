@@ -19,6 +19,7 @@ import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
 import { toScriptPubKeyHex } from "../../../adapters/lwk/wallet/toScriptPubKeyHex";
 import { withAccountMnemonic } from "../../../adapters/lwk/wallet/withAccountMnemonic";
+import { SMPLX_COMPILER_VERSION } from "../../../adapters/smplx/compilerVersion";
 import { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
@@ -166,7 +167,7 @@ export const createProcessLiquidConfidentialTransaction = (
 						// Covenant inputs first: the manifest's own input order is what a covenant
 						// introspects, and wallet inputs are the wallet's addition to it.
 						for (const covenant of review.covenantInputs) {
-							builder.addCovenantInput(
+							builder.addContractInput(
 								covenant.txid,
 								covenant.vout,
 								covenant.txOutHex,
@@ -189,11 +190,13 @@ export const createProcessLiquidConfidentialTransaction = (
 							builder.addOutput(output.scriptPubKeyHex, output.sats, account.rawPolicyAssetId);
 						}
 
-						const result = signer.finalizeTransaction(
-							builder,
-							review.feeRateSatsPerKvb,
-							signer.scriptPubKeyHex(),
-						);
+						// Where change goes is a fact about this transaction, so it is set on the
+						// builder rather than passed to the call that signs it. Unset, the module
+						// returns change to the signer's own derived address, which this wallet does
+						// watch today but only because the signing path is limited to one index.
+						builder.addChange(signer.scriptPubKeyHex());
+
+						const result = signer.finalizeTransaction(builder, review.feeRateSatsPerKvb);
 						const extracted = {
 							feeSats: result.feeSats.toString(),
 							transactionHex: result.hex,
@@ -270,14 +273,14 @@ export const createProcessLiquidConfidentialTransaction = (
 
 					try {
 						return {
-							address: contract.covenantAddress(target),
+							address: contract.contractAddress(target),
 							scriptPubKeyHex: contract.scriptPubKeyHex(target),
 						};
 					} finally {
 						contract.free();
 					}
 				},
-				compilerVersion: smplx.compilerVersion(),
+				compilerVersion: SMPLX_COMPILER_VERSION,
 				policyAsset: account.rawPolicyAssetId,
 				scriptPubKeyOf: ({ argumentsJson, source }) =>
 					new smplx.Contract(source, argumentsJson).scriptPubKeyHex(network),

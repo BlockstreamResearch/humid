@@ -61,7 +61,7 @@ describe("smplx wasm module", () => {
 
 	test("derives a covenant address", () => {
 		const contract = new bindings.Contract(PROBE_SOURCE);
-		const address = contract.covenantAddress("liquid-testnet");
+		const address = contract.contractAddress("liquid-testnet");
 
 		expect(address.startsWith("tex1p")).toBe(true);
 	});
@@ -75,7 +75,7 @@ describe("smplx wasm module", () => {
 	test("rejects an unknown network by name", () => {
 		const contract = new bindings.Contract(PROBE_SOURCE);
 
-		expect(() => contract.covenantAddress("not-a-network")).toThrow();
+		expect(() => contract.contractAddress("not-a-network")).toThrow();
 	});
 });
 
@@ -99,18 +99,43 @@ describe("contract parameters", () => {
 		expect(contract.commitmentMerkleRoot()).toMatch(/^[0-9a-f]{64}$/);
 	});
 
+	// The one address in this file that money has actually sat at. Everything else here pins a
+	// value this module produced; this pins one the Liquid testnet chain holds, from the live
+	// runs of 2026-08-07 — `08e775d0…` paid a covenant at this address and `5c3a56a0…` spent it
+	// with a Simplicity witness the network accepted.
+	//
+	// It exists because a check that only compares this module against itself cannot notice the
+	// module being replaced. A stale copy of the wasm binary in node_modules did exactly that
+	// for most of a day: the JavaScript glue is hardlinked and refreshes on rebuild while the
+	// binary is a separate copy that only `bun install` replaces, so every suite ran new glue
+	// against an old module and passed. This assertion would still have passed then — the
+	// address was the same — which is the point: it is the one that ties a derivation to money
+	// rather than to a previous run of the same code.
+	test("derives the covenant address the live runs put money at", () => {
+		const contract = new bindings.Contract(
+			P2PK_SOURCE,
+			args("0xc9fda1adfd5af94ccbe2a6cd72433fc6dc1731fe3f8b3fee90ca96367ca71041"),
+		);
+
+		expect(contract.contractAddress("liquid-testnet")).toBe(
+			"tex1plmdx307xcw7hfewf7pmmfum0l6tkr35keugxzczc2azmqw4uzlasst2a40",
+		);
+
+		contract.free();
+	});
+
 	test("different parameters produce different covenant addresses", () => {
 		const alice = new bindings.Contract(P2PK_SOURCE, args(ALICE));
 		const bob = new bindings.Contract(P2PK_SOURCE, args(BOB));
 
-		expect(alice.covenantAddress("liquid-testnet")).not.toBe(bob.covenantAddress("liquid-testnet"));
+		expect(alice.contractAddress("liquid-testnet")).not.toBe(bob.contractAddress("liquid-testnet"));
 	});
 
 	test("the same parameters produce the same covenant address", () => {
 		const first = new bindings.Contract(P2PK_SOURCE, args(ALICE));
 		const second = new bindings.Contract(P2PK_SOURCE, args(ALICE));
 
-		expect(first.covenantAddress("liquid-testnet")).toBe(second.covenantAddress("liquid-testnet"));
+		expect(first.contractAddress("liquid-testnet")).toBe(second.contractAddress("liquid-testnet"));
 	});
 
 	test("refuses malformed argument JSON when the contract is constructed", () => {
@@ -276,7 +301,9 @@ describe("finalising a transaction", () => {
 
 		builder.addOutput(signer.scriptPubKeyHex(), 50_000n, POLICY_ASSET);
 
-		const signed = signer.finalizeTransaction(builder, FEE_RATE, signer.scriptPubKeyHex());
+		builder.addChange(signer.scriptPubKeyHex());
+
+		const signed = signer.finalizeTransaction(builder, FEE_RATE);
 
 		expect(signed.hex).toMatch(/^[0-9a-f]+$/);
 		expect(signed.txid).toMatch(/^[0-9a-f]{64}$/);
@@ -293,20 +320,42 @@ describe("finalising a transaction", () => {
 
 		builder.addOutput(signer.scriptPubKeyHex(), 999_999n, POLICY_ASSET);
 
-		expect(() => signer.finalizeTransaction(builder, FEE_RATE, signer.scriptPubKeyHex())).toThrow();
+		builder.addChange(signer.scriptPubKeyHex());
+
+		expect(() => signer.finalizeTransaction(builder, FEE_RATE)).toThrow();
 
 		builder.free();
 		signer.free();
 	});
 
+	// The refusal moved with the change target: it is rejected when it is stated rather than
+	// when the transaction is signed, which is earlier and is where a caller can act on it.
 	test("refuses a change script it cannot parse, rather than sending change nowhere", () => {
 		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
 		const builder = fundedBuilder(signer, 100_000n);
 
 		builder.addOutput(signer.scriptPubKeyHex(), 50_000n, POLICY_ASSET);
 
-		expect(() => signer.finalizeTransaction(builder, FEE_RATE, "not-hex")).toThrow();
+		expect(() => builder.addChange("not-hex")).toThrow();
 
+		builder.free();
+		signer.free();
+	});
+
+	// Unset change is the SDK's own behaviour and this fork did not change it: the module
+	// returns change to the signer's derived address. Asserted because removing the parameter
+	// made it reachable by omission rather than only by argument.
+	test("finalises without a change target, returning change to the signer's own address", () => {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+		const builder = fundedBuilder(signer, 100_000n);
+
+		builder.addOutput(signer.scriptPubKeyHex(), 50_000n, POLICY_ASSET);
+
+		const signed = signer.finalizeTransaction(builder, FEE_RATE);
+
+		expect(signed.txid).toMatch(/^[0-9a-f]{64}$/);
+
+		signed.free();
 		builder.free();
 		signer.free();
 	});
@@ -336,7 +385,7 @@ describe("covenant inputs and the dry-run", () => {
 	test("takes a covenant input", () => {
 		const builder = new bindings.TransactionBuilder();
 
-		builder.addCovenantInput(TXID, 0, covenantTxOut(100_000n), P2PK_SOURCE, ARGS);
+		builder.addContractInput(TXID, 0, covenantTxOut(100_000n), P2PK_SOURCE, ARGS);
 
 		expect(builder.inputCount()).toBe(1);
 		builder.free();
@@ -346,7 +395,7 @@ describe("covenant inputs and the dry-run", () => {
 		const builder = new bindings.TransactionBuilder();
 
 		expect(() =>
-			builder.addCovenantInput(TXID, 0, covenantTxOut(1n), P2PK_SOURCE, ARGS, "{ not json"),
+			builder.addContractInput(TXID, 0, covenantTxOut(1n), P2PK_SOURCE, ARGS, "{ not json"),
 		).toThrow();
 		expect(builder.inputCount()).toBe(0);
 		builder.free();
@@ -358,13 +407,13 @@ describe("covenant inputs and the dry-run", () => {
 		const builder = new bindings.TransactionBuilder();
 		const contract = new bindings.Contract(P2PK_SOURCE, ARGS);
 
-		builder.addCovenantInput(TXID, 0, covenantTxOut(100_000n), P2PK_SOURCE, ARGS);
+		builder.addContractInput(TXID, 0, covenantTxOut(100_000n), P2PK_SOURCE, ARGS);
 		builder.addOutput(contract.scriptPubKeyHex("liquid-testnet"), 90_000n, POLICY_ASSET);
 
 		let outcome = "ran";
 
 		try {
-			builder.dryRunCovenantInput(0, "liquid-testnet");
+			builder.dryRunContractInput(0, "liquid-testnet");
 		} catch (error) {
 			outcome = String(error);
 		}
@@ -384,7 +433,7 @@ describe("covenant inputs and the dry-run", () => {
 
 		builder.addWalletInput(TXID, 0, walletTxOut);
 
-		expect(() => builder.dryRunCovenantInput(0, "liquid-testnet")).toThrow();
+		expect(() => builder.dryRunContractInput(0, "liquid-testnet")).toThrow();
 
 		builder.free();
 		signer.free();
@@ -393,7 +442,7 @@ describe("covenant inputs and the dry-run", () => {
 	test("refuses to dry-run an input that does not exist", () => {
 		const builder = new bindings.TransactionBuilder();
 
-		expect(() => builder.dryRunCovenantInput(4, "liquid-testnet")).toThrow();
+		expect(() => builder.dryRunContractInput(4, "liquid-testnet")).toThrow();
 		builder.free();
 	});
 });
@@ -430,7 +479,7 @@ describe("signing a covenant that authenticates its spender", () => {
 
 		try {
 			for (let i = 0; i < covenantInputs; i += 1) {
-				builder.addCovenantInput(
+				builder.addContractInput(
 					TXID,
 					i,
 					txOut(200_000n, covenantScript),
@@ -449,7 +498,9 @@ describe("signing a covenant that authenticates its spender", () => {
 				builder.addOutput(signer.scriptPubKeyHex(), 10_000n, POLICY_ASSET);
 			}
 
-			const signed = signer.finalizeTransaction(builder, RATE, signer.scriptPubKeyHex());
+			builder.addChange(signer.scriptPubKeyHex());
+
+			const signed = signer.finalizeTransaction(builder, RATE);
 			const fee = signed.feeSats;
 
 			signed.free();
@@ -507,7 +558,7 @@ describe("extra taproot leaves", () => {
 	function addressWith(...leaves: string[]) {
 		const contract = new bindings.Contract(SOURCE, undefined, JSON.stringify(leaves));
 
-		return contract.covenantAddress("liquid-testnet");
+		return contract.contractAddress("liquid-testnet");
 	}
 
 	test("no extra leaves derives the address the module always derived", () => {
@@ -569,7 +620,9 @@ describe("what a signed transaction says it spends", () => {
 
 			builder.addOutput(signer.scriptPubKeyHex(), 10_000n, POLICY_ASSET);
 
-			const signed = signer.finalizeTransaction(builder, 1000, signer.scriptPubKeyHex());
+			builder.addChange(signer.scriptPubKeyHex());
+
+			const signed = signer.finalizeTransaction(builder, 1000);
 			const hex = signed.hex;
 
 			signed.free();
@@ -644,7 +697,7 @@ describe("golden covenant addresses", () => {
 			input.debug,
 		);
 
-		return contract.covenantAddress(input.network ?? "liquid-testnet");
+		return contract.contractAddress(input.network ?? "liquid-testnet");
 	}
 
 	test("the parameterised contract, on testnet", () => {
@@ -779,7 +832,7 @@ describe("the simplicity-lending contracts", () => {
 		};
 
 		expect(
-			new bindings.Contract(text, JSON.stringify(other), undefined, undefined).covenantAddress(
+			new bindings.Contract(text, JSON.stringify(other), undefined, undefined).contractAddress(
 				"liquid-testnet",
 			),
 		).not.toBe(
@@ -788,7 +841,7 @@ describe("the simplicity-lending contracts", () => {
 				JSON.stringify(ARGUMENTS.lending),
 				undefined,
 				undefined,
-			).covenantAddress("liquid-testnet"),
+			).contractAddress("liquid-testnet"),
 		);
 	});
 });
@@ -818,7 +871,9 @@ describe("a transaction balances against the fee that is charged", () => {
 			builder.addWalletInput(TXID, 0, txOut(funded, signer.scriptPubKeyHex()), undefined);
 			builder.addOutput(signer.scriptPubKeyHex(), paid, POLICY_ASSET);
 
-			const signed = signer.finalizeTransaction(builder, rate, signer.scriptPubKeyHex());
+			builder.addChange(signer.scriptPubKeyHex());
+
+			const signed = signer.finalizeTransaction(builder, rate);
 			const fee = signed.feeSats;
 
 			signed.free();

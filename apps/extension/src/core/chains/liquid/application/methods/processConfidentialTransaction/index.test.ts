@@ -123,7 +123,7 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 			({
 				compilerVersion: () => "0.6.0",
 				Contract: class {
-					covenantAddress() {
+					contractAddress() {
 						return DERIVED;
 					}
 					// Held across the wasm boundary, so the method releases it. A substitute
@@ -138,8 +138,17 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 				// through a green suite (DISC-138), so the rule is now the module's own: what
 				// it decodes, this decodes.
 				TransactionBuilder: class {
+					change: string | undefined;
 					spends: { txid: string; vout: number }[] = [];
-					addCovenantInput(txid: string, vout: number, txOutHex: string) {
+					// The change target moved onto the builder, and so did the parse that rejects
+					// one it cannot read. Recorded rather than swallowed, so a method that stopped
+					// stating where change goes fails here instead of sending it to the module's
+					// own default in silence.
+					addChange(scriptPubKeyHex: string) {
+						requireHex("change script", scriptPubKeyHex);
+						this.change = scriptPubKeyHex;
+					}
+					addContractInput(txid: string, vout: number, txOutHex: string) {
 						requireHex("covenant input's previous output", txOutHex);
 						requireTxid(txid);
 						this.spends.push({ txid, vout });
@@ -157,11 +166,12 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 				},
 				WalletSigner: class {
 					finalizeTransaction(
-						builder: { spends: { txid: string; vout: number }[] },
+						builder: { change?: string; spends: { txid: string; vout: number }[] },
 						_feeRateSatsPerKvb: number,
-						changeScriptPubKeyHex: string,
 					) {
-						requireHex("change script", changeScriptPubKeyHex);
+						if (builder.change === undefined) {
+							throw new Error("The transaction was finalised without a change target.");
+						}
 
 						return {
 							feeSats: 500n,
