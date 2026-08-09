@@ -32,6 +32,7 @@ import { dirname, join } from "node:path";
 
 const MESSAGE_LIMIT = 600;
 const MAX_REENTRIES = 100;
+const BLOCK_HISTORY = 50;
 
 function allow() {
   process.exit(0);
@@ -129,11 +130,50 @@ function main() {
     }
   }
 
+  recordBlock(cwd, {
+    at: new Date().toISOString(),
+    session: input.session_id ?? "",
+    reentry: carried.count + 1,
+    awaiting: awaiting.map((signal) => ({ id: signal.id, subject: signal.subject ?? "" })),
+  });
+
   process.stdout.write(JSON.stringify({
     decision: "block",
     reason: reason(input.last_assistant_message ?? "", awaiting),
   }));
   process.exit(0);
+}
+
+/**
+ * Every block, with what armed it. Deciding whether this guard needs a way to
+ * end a turn that is not a blocker takes evidence about the blocks it actually
+ * makes, and the only alternative on offer was re-reading session transcripts by
+ * hand and hoping the interesting one was among them.
+ *
+ * Bounded and rewritten whole: a log nobody prunes becomes its own problem, and
+ * the recent blocks are the ones that answer anything.
+ */
+function recordBlock(cwd, entry) {
+  try {
+    const path = join(cwd, ".workflow/current/hooks/stop-guard-blocks.json");
+    let history = [];
+    try {
+      const parsed = JSON.parse(readFileSync(path, "utf8"));
+      if (Array.isArray(parsed)) {
+        history = parsed;
+      }
+    } catch {
+      // A first block, or a file this run is about to replace anyway.
+    }
+    history.push(entry);
+    mkdirSync(dirname(path), { recursive: true });
+    const temporary = `${path}.tmp`;
+    writeFileSync(temporary, `${JSON.stringify(history.slice(-BLOCK_HISTORY), null, 1)}\n`, "utf8");
+    renameSync(temporary, path);
+  } catch {
+    // Recording is for us, never for the turn. A hook that fails here would
+    // cost the run something the evidence is not worth.
+  }
 }
 
 function disabled(cwd) {
@@ -222,8 +262,14 @@ function reason(message, awaiting) {
   const outstanding = awaiting
     .map((signal) => `  - ${signal.summary}${signal.subject ? ` (${signal.subject})` : ""}`)
     .join("\n");
+  // Written as targets rather than bans. Steering by prohibition drags the
+  // forbidden behaviour into context and makes it more available: the ban
+  // half-reads as an instruction to do the thing. This message closed on four
+  // prohibitions in one sentence — acknowledge, agree, explain, answer empty —
+  // and collected all four in the wild.
   return [
-    "Automatic turn check from wfctl. The maintainer did not write this.",
+    "Automatic turn check from wfctl. This is the workflow speaking, not the",
+    "maintainer.",
     "",
     "The turn ended with this text:",
     tail,
@@ -231,30 +277,27 @@ function reason(message, awaiting) {
     "The repository reports work awaiting the agent:",
     outstanding,
     "",
-    "Ending a turn hands control to the maintainer, so the question is not what",
-    "your last message said. It is whether you are waiting on them. If you are",
-    "not, you have not finished: take the next action you can take alone. That",
-    "includes an action you named, and equally one you never mentioned.",
+    "Ending a turn hands control to the maintainer. The test is whether you are",
+    "waiting on them, and the list above is the evidence. When you can act alone,",
+    "act: take the next action, whether you named it or not.",
     "",
-    "If you are waiting on them, say so where the repository can see it, not only",
-    "in your message. Record it as a blocker on the owning checkpoint:",
+    "When you are waiting on them, put it where the repository can see it. Record",
+    "it as a blocker on the owning checkpoint:",
     "",
     "  wfctl work checkpoint <id> --actor ... --blockers \"<what you need from them>\"",
     "",
     "A checkpoint that names a blocker is held for the maintainer, and this check",
-    "goes quiet. Prose does not do that. An agent already blocked on a person",
-    "wrote what it needed in nine consecutive messages and was returned nine",
-    "times, because nothing it wrote changed what the repository reported.",
+    "goes quiet. Only the record does that: an agent blocked on a person wrote",
+    "what it needed in nine consecutive messages and was returned nine times,",
+    "because the repository kept reporting the work as its own.",
     "",
-    "Either way, run `wfctl resumable` before you end. It answers whether",
-    "stopping now would lose anything, and a non-zero exit means refresh the",
-    "checkpoint or commit first rather than reporting the problem onward.",
+    "Either way, run `wfctl resumable` before you end. It answers whether stopping",
+    "now would lose anything; on a non-zero exit, refresh the checkpoint or commit,",
+    "then end.",
     "",
-    "This check returns while each turn moves the repository and releases on the",
-    "first turn that does not — so finding unrelated work to do keeps it coming",
-    "back. If what you are missing is a person, the line above ends it; more work",
-    "does not. Do not acknowledge this check, agree with it, explain yourself, or",
-    "answer with an empty turn.",
+    "This check returns while each turn moves the repository, and releases on the",
+    "first turn that does not. When a person is what you are missing, the blocker",
+    "above ends it. Answer with the next action, taken.",
   ].join("\n");
 }
 

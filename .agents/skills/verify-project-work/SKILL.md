@@ -1,131 +1,120 @@
 ---
 name: verify-project-work
-description: Verify a significant project change against every file in its central bundle, every stable acceptance ID, and every exact bound source revision without hiding gaps. Use before claiming a bounded change, slice, multi-repository delivery, project-only decision, or architecture change complete; before knowledge promotion; or when auditing an implementation against its approved contract.
+description: Verify a change against its contract and its real production path before anyone calls it done. Use when claiming work complete, before promoting what it established into knowledge, or when auditing an implementation against the framing that was approved.
 ---
 
 # Verify Project Work
 
-Completion is a claim supported by complete accounting and fresh semantic
-evidence. Structural green output is never proof by itself.
+A green build proves the build is green. Completion is a claim about what the
+product now does, and it holds only because someone looked.
 
-Read [the completion gate](references/completion-gate.md) before recording final
-receipts.
+The tool refuses an incomplete accounting on its own: a stale receipt, an open
+issue, a missing approval, a dirty checkout, an unaccounted decision. It cannot
+tell reading from recording, a check that proves something from one that merely
+passes, or a criterion nobody exercised from one that failed. Those are yours,
+and they are what this skill is for.
 
-## Account for the whole bundle
+Read [the completion gate](references/completion-gate.md) when a refusal names a
+requirement you have not met, or when deciding what a partial closure must say.
 
-1. Run `wfctl work status <id>` and stop on any checkout, branch, worktree, or
-   binding mismatch.
-2. Run `wfctl work context <id> --stage review`.
-3. Read every required file completely, including long issue tails and every
-   artifact that informs the result. Mark only a genuinely irrelevant
-   supporting artifact `irrelevant`, with a reason.
-4. After each read, record `wfctl work review file <id> <path>`. Re-read and
-   refresh a receipt whenever the file changes.
-5. Run `wfctl work review status <id>` and require zero unseen,
-   changed-after-review, or invalid files.
+## Read what the review stage names
 
-## Review on independent axes
+`wfctl work context <id> --stage review` lists what must be accounted for, and
+`wfctl work review file` records each one at its current hash.
 
-**Contract axis:** map every stable acceptance ID to non-dropped issues,
-production behavior, direct evidence, and a verification receipt. Find missing
-requirements, partial behavior, scope creep, and implementation that appears
-present but contradicts the contract.
+A receipt proves accounting. Comprehension has no receipt, which is why reading
+is the step and recording is the residue. Read each file to its end: a long issue
+tail is where deferred work gets written down, and it is the part a skim reaches
+last. Mark a supporting artifact `irrelevant` only when you can say what makes it
+irrelevant to this result.
 
-**Engineering axis:** inspect the real diff and production path in every exact
-code root. Invoke Graphify-first analysis, then open actual source, callers,
-boundaries, state, errors, and consumers. Check project standards, architecture,
-security, operations, and maintainability independently of whether the spec was
-followed.
+A receipt binds to the bytes it was taken over, so any file the review itself
+edits comes back as changed-after-review and needs reading again. Expect that of
+`change.md` in particular: the review is what changes it.
 
-Run focused behavior checks and the broader relevant test, build, type, lint,
-and runtime checks. Expected values must come from the contract or an
-independent authority, not the implementation. Look adversarially for disabled
-paths, placeholders, mocks, fixtures, temporary compatibility code, unhandled
-branches, and silently deferred work.
+## Review the contract
 
-Record one exact repository/revision/worktree receipt per bound leaf. Require a
-clean commit containing the reviewed implementation; obtain normal maintainer
-authorization before committing. For project-only work, verify decisions,
-knowledge, and links without inventing code evidence.
+Take each thing that was asked for and find three things: the production
+behaviour that delivers it, the evidence that it does, and the path a person
+using or operating the product reaches it by.
 
-## Promote and close
+Expect the gaps to be quiet. A requirement nothing implements. A behaviour that
+stops halfway. Work that arrived unasked. An implementation that looks present
+and does the opposite of what was agreed.
 
-Decide whether verified durable truth changed. If yes, route product behavior
-and engineering realization through their separate curation skills, run the
-two-axis knowledge quality gate, validate every changed concept, and list exact
-concepts under `knowledge_promotion`. Otherwise record a concrete no-update
-reason.
+Expected values come from the contract or an independent authority. An expected
+value read off the implementation confirms the implementation to itself.
 
-Account for what this work decided before it closes. Every answer the maintainer
-gave is recorded verbatim in this bundle, and closure is the last moment it can
-reach a page rather than an archive:
+## Review the engineering
 
-```sh
-wfctl work decisions <id>
-wfctl work decisions <id> --what "<the decision>" --said "<where they said it>" \
-  --promoted knowledge/decisions/<slug>.md
-```
+Invoke Graphify-first analysis, then open the real diff and the production path
+in every bound code root: source, callers, boundaries, state, errors, consumers.
+Judge project standards, architecture, security, operations and maintainability
+on their own, whether or not the spec was followed. Run the focused behaviour
+checks and the broader test, build, type, lint and runtime checks.
 
-`--folded <concept>` when an existing page already carries it, `--not-durable`
-with a reason when it settles nothing beyond this work, and `--none "<why>"` when
-the whole bundle settled nothing. A resolved Wayfinder map is checked against, so
-an answer it recorded cannot archive unaccounted for.
+Hunt what a passing suite hides — a disabled path, a placeholder, a mock standing
+in for the thing, a fixture doing the work, temporary compatibility code, an
+unhandled branch, work quietly deferred. `evidence-first` says what each of those
+proves and what it does not; here the point is that a review which never went
+looking will not find one.
 
-Nothing here asks the maintainer anything. They decided already; this records
-where their answer now lives. What does reach them is one confirmation, not one
-per decision: the pages are drafted from their own words, and the question is
-whether the rendering is faithful — asked once, with named exceptions, as
-`maintainer-review` requires of confirming written records.
+Ask before you commit. Closure requires a clean checkout whose recorded commit
+contains the reviewed implementation, and the gate cannot see whether anyone
+agreed to the commit that made it clean.
 
-A concept promoted from a bundle in a project with no reconstructed baseline
-carries the same shape as one established by whole-project reading and a much
-narrower footing: it was derived from whatever this task happened to touch. Say
-so in its `maintainer-decision` source — name the bundle and state that no
-reconstruction has covered this subject — so a later baseline knows to re-derive
-it rather than treat it as already settled. Promote it anyway: knowledge grown
-from real work is better than none, and the cost of the shortcut is only hidden
-when nobody writes it down.
+For project-only work, verify decisions, knowledge and links, and let code
+evidence stay absent rather than invented.
 
-Present acceptance results, engineering findings, checks, deviations, risks,
-and knowledge delta as one completion review packet. It is maintainer-facing:
-the reader test in `maintainer-review` applies, so acceptance is named by what
-was asked for rather than by criterion id, and a deviation by what changed for
-the product rather than by which file moved. Record the maintainer's
-explicit decision through the approval command; never write the receipt by
-hand:
+## Decide what the project now knows
 
-```sh
-wfctl work approve <id> --stage completion \
-  --by human:<maintainer-id> \
-  --note "<what the maintainer accepted>"
-```
+Decide whether verified durable truth changed. When it did, route product
+behaviour and engineering realization through their separate curation skills, run
+the two-axis quality gate, and validate every changed concept. When it did not,
+say concretely why.
 
-Record what they answered with `--attested "<their words>" --session
-"<where>"`; a typed confirmation and a `--token` matching `WFCTL_APPROVAL_TOKEN`
-remain for a stronger record. `wfctl work verify` rejects a receipt with no
-matching approval record. Finish all semantic edits to `change.md`, then refresh its
-checkpoint in review stage **before** recording the final hash receipt:
+A concept promoted from a bundle in a project with no reconstructed baseline has
+the same shape as one established by whole-project reading and a far narrower
+footing: it came from whatever this task happened to touch. Say so in its
+`maintainer-decision` source — name the bundle, state that no reconstruction has
+covered this subject — so a later baseline re-derives it instead of trusting it.
+Promote it anyway. Knowledge grown from real work beats none, and the shortcut
+costs something only while it stays unwritten.
 
-```sh
-wfctl work checkpoint <id> \
-  --actor "agent:<identity>" \
-  --stage review \
-  --state "Final verification and maintainer decision are recorded." \
-  --last "Reconciled acceptance, implementation, and knowledge promotion." \
-  --next "Re-read changed bundle files, refresh their receipts, and run the completion gate."
-```
+Account for every answer the maintainer gave with `wfctl work decisions <id>`.
+Closure is the last moment an answer can reach a page instead of an archive, and
+a resolved Wayfinder map is the checklist the accounting is held against.
 
-Re-read `change.md` completely after that command and refresh its receipt, plus
-every other file changed by the review. Require a current checkpoint and zero
-unseen, changed-after-review, or invalid files. Then run:
+This asks them nothing — they decided already. What reaches them is one
+confirmation that the drafted pages are faithful to their own words: once, with
+named exceptions, as `maintainer-review` requires of confirming written records.
+
+## Put the decision, then close
+
+Render it with `wfctl work ask <id> --stage completion`, which carries the four
+things accepting one fixes and reads them from the record.
+
+The render is only as honest as what it reads. An unresolved risk nobody wrote
+down stays invisible, and a criterion left `pending` because nobody checked reads
+exactly like one that failed. Repair the record and render again; a packet edited
+by hand is composed again, and composed is what put file paths and criterion ids
+in front of them.
+
+Record their decision with `wfctl work approve <id> --stage completion`, passing
+their own answer through `--attested`. A hand-written receipt fails verification.
+
+Then finish in this order, because each step invalidates the one before it.
+Every semantic edit to `change.md` first. Then `wfctl work checkpoint <id>
+--stage review`, before the final hash receipt — a checkpoint edit changes the
+file's hash, so a receipt taken ahead of it is stale on arrival. Then re-read
+`change.md` and everything else the review changed, and refresh those receipts.
+Then:
 
 ```sh
 wfctl work verify <id>
 wfctl work close <id> --outcome completed|partial|abandoned
 ```
 
-Use the honest outcome. Completed closure fails on open issues or claims,
-unresolved Wayfinder state, acceptance gaps, stale file receipts, dirty or
-mismatched source revisions, a stale checkpoint, missing evidence, or
-incomplete promotion. Closing the bundle makes its checkpoint terminal; do not
-create a capture for this completed session state.
+Use the honest outcome. `partial` and `abandoned` are results, and a `completed`
+that had to be argued for is the one worth doubting. Closing makes the bundle's
+checkpoint terminal; the session state it holds is finished rather than captured.

@@ -11,7 +11,13 @@
 # hung in exactly the way it exists to catch.
 
 set -u
-IDLE="${IDLE:-600}"
+# Below whatever the host allows a foreground command before moving it to the
+# background, deliberately. At the same number this can never speak first: the
+# command is taken away in the same second the watch would have reported, so a
+# build that went quiet is only ever heard about from the host, and the report
+# this exists to make never arrives. Four minutes of total silence is long
+# enough that a healthy compile — which prints as it goes — does not trip it.
+IDLE="${IDLE:-240}"
 SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 POLL="${IDLE_GUARD_POLL:-2}"
 

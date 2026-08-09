@@ -24,9 +24,14 @@ This block is managed by `wfctl`. Read `.workflow/config.json` and all files und
   a different question, and never from the reconstruction or blocker that held
   it having since cleared: the condition ending is not the same as being told to
   go.
-- Put a framing to the maintainer with `wfctl work ask`, which renders the four
-  things approval fixes — what gets done, what deliberately does not, what makes
-  it finished, in what order — and nothing else from a record written for you.
+- Put both gates to the maintainer with `wfctl work ask`, which renders the four
+  things each decision fixes and nothing else from a record written for you. A
+  framing: what gets done, what deliberately does not, what makes it finished, in
+  what order. A completion, with `--stage completion`: what the work does now,
+  what it still does not do, what closing it takes on, what the project now says
+  that it did not. When a render reads wrong, repair the record it read; a packet
+  edited by hand is composed again, and composed is what put file paths and
+  criterion ids in front of them.
 - Record framing and completion approvals with `wfctl work approve`, never by
   editing `maintainer_review`; a hand-written receipt fails verification. Pass
   `--attested "<their answer, word for word>" --session "<where they said it>"`
@@ -36,15 +41,19 @@ This block is managed by `wfctl`. Read `.workflow/config.json` and all files und
   or `--token` remains available and is theirs to ask for, never your default.
 - Ask one material question at a time, include a recommendation, and update
   the durable record before continuing.
-- Write every maintainer-facing message in the product's own language, not only
-  review packets. A blocker, a status line, and a progress report reach the same
-  reader as a decision packet does. Identifiers the workflow generated —
-  acceptance criteria, issue and discovery numbers, workstream and packet names,
-  candidate ids, record slugs — mean nothing outside the records that define
-  them. Name the thing first and attach the identifier after it, if at all: "the
-  approval gate the tests cannot open (AC-04)", never "blocked on AC-04". The
-  same holds for internal vocabulary: say what a term does for the product
-  before, or instead of, using it.
+- Write to a maintainer who was not watching. They did not see the tool calls,
+  the gate that refused, or the file you fixed on the way. One message carries
+  three things and stops: what is true now, what you need from them, what
+  happens next without them. Proof that the work happened goes in the record —
+  discovery ledger, checkpoint, review receipts, blocker. Cut any remaining
+  sentence and ask whether it changes what they do next. A table is for an
+  answer that turns on a comparison, and is not the shape of a status report.
+  Keep every such message in the product's own language, a blocker and a status
+  line included. Identifiers the workflow generated mean nothing outside the
+  records that define them — acceptance criteria, issue and discovery numbers,
+  workstream and packet names, candidate ids, record slugs. Name the thing first
+  and attach the identifier after it, if at all: "the approval gate the tests
+  cannot open (AC-04)", never "blocked on AC-04".
 - Preserve uncertainty and report missing evidence instead of guessing.
 - Execute required `wfctl` commands yourself when tool access permits. Do not
   delegate routine CLI operation, spec editing, or record maintenance to the

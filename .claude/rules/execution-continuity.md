@@ -34,7 +34,19 @@ larger half announces nothing — "the work continues by itself", "the rest can
 wait for the next boundary", a status report that names no blocker — and parks
 just as completely, because nothing continues once the turn is over. If you are
 not waiting on the maintainer, take the next action you can take alone. If you
-are, name in one line what you need from them.
+are, name what you need from them **and record it as a blocker on the owning
+checkpoint**. Only that changes what the repository reports, so only that stops
+you being returned to a turn whose one missing piece is a person.
+
+**Never wait for a background command by spinning.** A command that outruns its
+foreground limit is moved to the background and announces its own completion;
+waiting for it is not your job and doing so costs more than it saves. A loop
+that polls a file without pausing consumes a whole core, and it takes that core
+from the build it is waiting for — a Rust suite was watched this way twice in
+one session, for five hundred seconds each, against a compile competing for the
+same processor, and the second watch timed out having learned nothing. If you
+genuinely must wait on something the host does not announce, pause between
+checks rather than spinning, and prefer doing unrelated accepted work.
 
 **A discovery is not a stop.** Material that contradicts what was accepted is an
 entry in the discovery ledger, and the work continues. Stop only when the

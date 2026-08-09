@@ -18,7 +18,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const GUARD = join(dirname(fileURLToPath(import.meta.url)), "idle-guard.sh");
-const IDLE_SECONDS = process.env.WFCTL_IDLE_GUARD_SECONDS || "600";
+// Must stay under the host's foreground limit; see idle-guard.sh for why equal
+// values silence the watch entirely.
+const IDLE_SECONDS = process.env.WFCTL_IDLE_GUARD_SECONDS || "240";
 
 function shellQuote(value) {
   return `'${value.replaceAll("'", `'\\''`)}'`;

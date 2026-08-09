@@ -29,36 +29,58 @@ consequence found while reading — a rule in one repository that makes the
 proposed route impossible there is a decision, and it is put to them as what the
 product must do instead, never as the file it was found in.
 
-Present a compact review packet containing the exact decision, evidence,
-conflicts, recommendation, and requested response. Record approve, correct, or
-defer. Ask one focused question at a time. Silence is not approval.
+Record approve, correct, or defer. Silence is not approval.
 
-## Write the decision for the product owner
+## Write for someone who was not watching
 
-The maintainer decides what the product should be. They are not reading to
-check the investigation, and they do not hold the file layout, the type names,
-or yesterday's discovery numbering in their head. A packet written as if they
-do forces them to reconstruct the product meaning out of engineering artifacts
-before they can answer, and the usual outcome is not a wrong decision but no
-decision at all.
+The maintainer did not see the tool calls, the gate that refused, or the file
+you fixed on the way. They hold no identifier you generated and no count from
+your last turn. Every message is read cold, by a person deciding about their
+product, and one that catches them up first buries what it came to say.
 
-Order the packet so the decision is answerable from the top:
+A message carries three things in this order, and stops:
 
-1. **What happens today**, in the words a person using or operating the product
-   would use. No file paths, no symbol names, no identifiers the product's own
-   language does not contain.
-2. **What is in doubt**, stated as a product question rather than an
-   implementation observation.
-3. **What each answer means** — what gets recorded, what changes, what does not.
-   Reconstruction never edits source, so say plainly that no answer here fixes
-   anything by itself.
-4. **The recommendation**, one option named, with its cost.
-5. **The evidence**, last and clearly separable, addressed by claim or discovery
-   id for anyone who wants to audit it.
+1. **What is true now** that was not true before. One or two lines.
+2. **What you need from them**, if anything. One question, one recommendation.
+3. **What happens next without them.** One line.
 
-Detail is not the problem and must not be dropped; its position is. Depth that
-arrives before the question buries it, and the same depth below a stated
-question supports it.
+Everything else goes in the record, which already has a place for each kind of
+it: the discovery ledger for what you learned, the checkpoint for where the work
+stands, review receipts for what you read, the blocker for what you are waiting
+on. Sending it instead is not thoroughness. It moves the reading onto the person
+least able to do it, and the record still ends up empty.
+
+The message is finished when cutting any remaining sentence would change what
+the maintainer does next. Cut one and check. If nothing changes, it was written
+for you.
+
+A structured document is the common way to fail this, because it looks like
+care. Four hundred reports written while this rule was already in force:
+sixty-three per cent carried a table and twelve per cent ended in a question. A
+table compares things the reader already cares about. Reached for before there
+is a question, it is a log with borders. Write the three lines first, and add a
+table only when the answer turns on a comparison.
+
+**Sentences.** Use the active voice. Give one idea per sentence and keep it to
+twenty words. Use simple past, present, and future. Use the same word for the
+same thing every time; a synonym reads as a second thing. Drop idioms, slang,
+and internal vocabulary. Keep paragraphs to six sentences.
+
+**Keep technical items exact.** A path, a symbol, a version, a price, or a count
+is reproduced character for character or left out. Never paraphrase one into
+approximate prose: "about five thousand" and "the pricing worker" cannot be
+checked, and being unable to check it is the cost the shortening was supposed to
+avoid. What decides whether it appears at all is the reader test below.
+
+## Ask one thing, and make it cheap to answer
+
+Give the answer a shape they can hit. Name the options, or say what a bare yes
+changes. A question with no stub gets answered with a paragraph you then have to
+interpret, which is a second decision you made on their behalf.
+
+Say plainly that "I do not know" is an answer you can record. A recorded gap is
+worth more than a preference guessed from a polite reply and then treated as
+settled.
 
 ## Re-establish the subject before asking about it
 
@@ -88,20 +110,13 @@ about each claim. Several claims about one capability are one question; one
 claim touching several capabilities is still one question, about the one thing
 that has to be decided.
 
-If the subject cannot be described without file paths or symbol names, that is a
-finding to record — the capability has no product-level description yet — and
-not a licence to send the identifiers instead.
-
 Translate rather than cite. A term that exists only in the implementation gets
 replaced by what it does for the product, with the original in parentheses at
-most once. If a decision genuinely cannot be stated without engineering
-vocabulary, that is a finding rather than a licence: the capability has no
-product-level description yet, and recording that gap is part of the answer.
+most once. A subject that cannot be described at all without file paths or
+symbol names is a finding to record — the capability has no product-level
+description yet — and never a licence to send the identifiers instead.
 
 ## The line, and how to tell which side you are on
-
-Everything this workflow produces is written for one of two readers, and the two
-are not styles of the same text. They are different texts.
 
 | | Written for the record | Written for the maintainer |
 | --- | --- | --- |
@@ -117,11 +132,10 @@ Apply one test to every sentence before it reaches the maintainer:
 If yes, it is an address, whatever form it takes — a file, a symbol, a record id,
 a ledger code, a commit, a section number, a milestone or tier code, a schema
 value printed as a category, or a term that exists only inside the
-implementation. The test does not depend on the shape of the string or on the
-language anything is written in, which is why it is the test and not a list.
+implementation. It is a test rather than a list because it reads the reader, not
+the shape of the string or the language it is written in.
 
-Two failure modes, and the second is the one that follows from over-correcting
-the first:
+Two failure modes, and over-correcting the first produces the second:
 
 - **Addressed prose.** "The check in the catalog store was narrowed because the
   gate validates on publish." Every noun is something to look up.
@@ -179,11 +193,15 @@ it, and a release is never inferred: not from a truthful answer to an unrelated
 question, and not from the condition that held it having cleared. The last time
 one was inferred, six commits landed in three source repositories.
 
-Render the framing with `wfctl work ask <id>` rather than composing one. It
-carries the four things approval fixes — what gets done, what deliberately does
-not, what will make it finished, and in what order — and nothing else from a
-record written for an agent. A section still holding the shipped template's own
-words is reported as unwritten rather than read out as scope.
+Render both gates with `wfctl work ask <id> [--stage completion]` rather than
+composing one. Each carries the four things its decision fixes — a framing:
+what gets done, what deliberately does not, what will make it finished, and in
+what order; a completion: what the work does now, what it still does not do,
+what closing it takes on, and what the project now says that it did not — and
+nothing else from a record written for an agent. A section still holding the
+shipped template's own words is reported as unwritten rather than read out as
+scope. A render is only as honest as the record behind it: repair the record
+rather than the packet, because a packet edited by hand is composed again.
 
 For significant work, record framing and completion decisions with `wfctl work
 approve <id> --stage framing|completion --by human:<maintainer-id>`. It writes
