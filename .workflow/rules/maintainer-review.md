@@ -11,8 +11,9 @@ Require an explicit maintainer decision before:
   did not already request that outcome;
 - implementing a significant spec whose outcome, scope, exclusions, acceptance
   criteria, or material decisions have not already been explicitly accepted;
+- writing anything into `knowledge/`, which is the project speaking about itself;
 - selecting current truth when evidence cannot resolve chronology or authority;
-- accepting material re-scoping, unresolved risk, or a completion claim;
+- closing work whose delivery no longer matches the framing they approved;
 - recording `verified` by a `human:<id>` actor.
 
 Do not request review for freezing a clean Git raw scope, file accounting, QMD
@@ -81,6 +82,26 @@ interpret, which is a second decision you made on their behalf.
 Say plainly that "I do not know" is an answer you can record. A recorded gap is
 worth more than a preference guessed from a polite reply and then treated as
 settled.
+
+## Find their answer before asking for it again
+
+Run `wfctl knowledge decided "<subject>"` before putting anything to them. It
+reads the four places an answer lands — a promoted decision page, the bundle that
+asked the question, a resolved Wayfinder map, and a capture — and reports what it
+finds with the date, their own words, and whether a curated page carries it. On a
+bundle, `--record <id>` writes the result into the framing, and the framing gate
+holds until it has.
+
+Their answer is usually not on a page. Twenty-two of twenty-six recorded
+decisions in one project had never been promoted, so a search of curated
+knowledge truthfully found nothing and read exactly like a question nobody had
+answered. Work already delivered counts the same way: a completed issue that
+recorded a consequence as theirs to settle has answered the question once
+already, and asking again spends their turn on their own bookkeeping.
+
+Cite the page when there is one and the record when there is not, and say which.
+A decision reachable only through an archive is one the corpus has not been
+taught, and saying so is what eventually teaches it.
 
 ## Re-establish the subject before asking about it
 
@@ -175,13 +196,48 @@ and confirming intent that was are different questions, and asking the harder
 one when the easier one applies is how a body of accepted work becomes an
 unanswered queue.
 
-Put the framing decision before implementation, not before closure. `wfctl work
-issue claim` refuses a delivery issue whose framing is unapproved, which is the
-moment to present it: the bundle has been read, nothing is in flight, and the
-maintainer's absence blocks nothing yet. Discovering the same gate at completion
-parks finished work behind a decision that could have been made on day one.
-Approving edits the change record, so refresh its checkpoint and re-read it
-before claiming.
+## Where the two gates are, and why closure is not one
+
+A maintainer decides two things about a piece of work. What it is, before it
+starts. What the project says about itself afterwards. Everything between those
+is the agent's, including the moment the work finishes.
+
+**Put the framing decision before implementation.** `wfctl work issue claim`
+refuses a delivery issue whose framing is unapproved, which is the moment to
+present it: the bundle has been read, nothing is in flight, and the maintainer's
+absence blocks nothing yet. Approving edits the change record, so refresh its
+checkpoint and re-read it before claiming.
+
+**Closure is arithmetic, so close it.** Whether the acceptance criteria are met,
+the receipts carry evidence, every issue is terminal and the revisions are pinned
+is what the completion gate itself checks. A maintainer asked to confirm that is
+being asked to sign a sum they cannot check better than the tool, and the cost is
+not theoretical: four bundles were framed and approved for one unattended night,
+two were delivered in sixty-two minutes and stopped at that gate, the other two
+were never started, and seven hours and fifty-four minutes passed before anyone
+could say the word. Nothing about those two bundles was in doubt.
+
+**Closure returns to them when delivery drifted from the framing.** That is the
+one case at the end where something is genuinely undecided, because what was
+approved is not what was built. Two things raise it, both observable: the
+acceptance criteria have been reworded, added to or cut since the approval, or
+work left the route as a dropped issue. The tool names which, and the completion
+approval it then asks for is the same command it always was — now the exception
+rather than the toll.
+
+**Promotion is the gate that compounds.** Approving a completion writes a receipt
+an auditor may read once. Approving a page writes what every future session reads
+first and what the next framing is aligned against. Draft the pages under the
+bundle's `promotion/` directory before closing, record them with `wfctl work
+promotion <id>`, and put them to the maintainer with `wfctl work ask <id> --stage
+promotion`, which shows the pages themselves rather than a list of paths. Their
+word, through `wfctl work promote <id>`, is what writes them into `knowledge/`.
+
+A bundle closed with pages waiting sits in the promotion queue instead of the
+archive, and nothing running is held by it — the code shipped, the issues are
+terminal. What it does hold is the next framing approval in the same Area, on the
+ground that aligning new work against knowledge already known to be behind is the
+alignment telling them something the project has stopped believing.
 
 Approval and permission to start are different decisions and the record holds
 them separately. A maintainer who approves a framing and says the work is not to
@@ -193,20 +249,24 @@ it, and a release is never inferred: not from a truthful answer to an unrelated
 question, and not from the condition that held it having cleared. The last time
 one was inferred, six commits landed in three source repositories.
 
-Render both gates with `wfctl work ask <id> [--stage completion]` rather than
-composing one. Each carries the four things its decision fixes — a framing:
-what gets done, what deliberately does not, what will make it finished, and in
-what order; a completion: what the work does now, what it still does not do,
-what closing it takes on, and what the project now says that it did not — and
-nothing else from a record written for an agent. A section still holding the
-shipped template's own words is reported as unwritten rather than read out as
-scope. A render is only as honest as the record behind it: repair the record
-rather than the packet, because a packet edited by hand is composed again.
+Render every gate with `wfctl work ask <id> [--stage promotion|completion]`
+rather than composing one. A framing carries what gets done, what deliberately
+does not, what will make it finished, and in what order. A promotion carries the
+pages themselves, in full, and says of each whether it replaces something the
+project already claims. A completion — asked only where delivery drifted —
+carries what the work does now, what it still does not do, what closing it takes
+on, and what the project now says that it did not. Nothing else from a record
+written for an agent reaches any of them. A section still holding the shipped
+template's own words is reported as unwritten rather than read out as scope. A
+render is only as honest as the record behind it: repair the record rather than
+the packet, because a packet edited by hand is composed again.
 
-For significant work, record framing and completion decisions with `wfctl work
-approve <id> --stage framing|completion --by human:<maintainer-id>`. It writes
-both the `maintainer_review` receipt and the durable approval record the
-completion gate checks.
+Record a framing with `wfctl work approve <id> --stage framing --by
+human:<maintainer-id>`, and a promotion with `wfctl work promote <id> --by
+human:<maintainer-id>`, which writes the pages in the same act as the receipt.
+Both write the `maintainer_review` entry and the durable approval record the
+gates check. A framing approval also digests the acceptance criteria it settled,
+which is what later tells a reworded contract from the one they agreed to.
 
 Pass `--attested "<their answer, word for word>" --session "<where they said
 it>"`. That is the ordinary path, because the ordinary case is a maintainer who
@@ -221,7 +281,8 @@ maintainer's to ask for, never your default. Never hand-write
 receipt fails verification. Existing explicit maintainer instructions may
 satisfy the framing decision, but still record it through the command; do not
 ask for the same decision twice. Reopen the gate when the approved framing
-changes materially.
+changes materially — and where the acceptance criteria are what changed, the tool
+reopens it for you at closure rather than trusting anyone to notice.
 
 Approving edits the change record, so re-read it, refresh its review receipt,
 and refresh the checkpoint afterwards.

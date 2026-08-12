@@ -39,8 +39,11 @@ implementation begins.
 
 Before completed closure, enumerate the entire bundle with `wfctl work context
 --stage review`, re-read every file, refresh stale receipts, reconcile every
-stable acceptance ID against direct evidence, promote durable truth separately,
-and obtain explicit maintainer completion approval.
+stable acceptance ID against direct evidence, and draft the curated pages this
+work changes under the bundle's `promotion/` directory. Then record them with
+`wfctl work promotion <id>` and close. Closure needs no maintainer: it asks only
+whether the work matches the framing they already approved, and the gates answer
+that. The pages are what needs them, and they are asked after the bundle closes.
 
 A capture is not automatically a chore. When it holds something only the
 maintainer can settle, create it with `--awaits maintainer` so it appears in

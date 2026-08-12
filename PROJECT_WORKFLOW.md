@@ -234,18 +234,25 @@ map or creates a parallel strategy source.
    chronology, or which source governs.
 4. **Knowledge** — material claims about vision, product meaning, architecture,
    ownership, contracts, policy, decisions, supersession, or accepted risk.
-5. **Completion** — acceptance results, directly inspected implementation,
-   fresh checks, deviations, risks, and the knowledge delta or no-update reason.
+5. **Promotion** — the pages the work would write into `knowledge/`, in full,
+   and what each of them replaces.
+
+You are not asked whether finished work is finished. Whether the criteria are
+met, the receipts carry evidence and the revisions are pinned is what the tool
+checks, and it checks it better than a summary of it can. The exception is
+delivery that no longer matches the framing you approved — reworded criteria, or
+work dropped from the route — and there the agent comes back to you.
 
 An approval is explicit. Silence and continued conversation are not approval.
 You never edit YAML manually.
 
-Framing and completion approvals for significant work are recorded by you, with
-`wfctl work approve <change-id> --stage framing|completion --by
-human:<your-id>`. The command prints the decision and waits for you to type
-`approve`; the agent can prepare it but cannot answer that prompt, and a
-receipt written into the record by hand fails verification. Automation may
-substitute `--token` matching a `WFCTL_APPROVAL_TOKEN` you set out of band.
+Approvals are recorded by you: `wfctl work approve <change-id> --stage framing
+--by human:<your-id>` for a framing, and `wfctl work promote <change-id> --by
+human:<your-id>` for the pages, which writes them in the same act. Ordinarily the
+agent records the answer you already gave in conversation, word for word. You can
+ask instead for a typed confirmation, or for automation to use a `--token`
+matching a `WFCTL_APPROVAL_TOKEN` you set out of band; a receipt written into the
+record by hand fails verification either way.
 
 This records provenance, not identity. It shows the approval came from a
 deliberate separate step, not that a specific person typed it. Every other
@@ -289,16 +296,18 @@ the living record before continuing.
     worktree receipt per repository.
 13. Enumerate and read the complete bundle, refresh every content-hash receipt,
     and reject unseen, changed, malformed, or silently dropped work.
-14. Promote durable verified truth into `knowledge/`, or record why no current
-    knowledge changed.
-15. Obtain completion approval, mark the record completion-ready, and compute
-    current content hashes for promoted stable concepts.
-16. Run `wfctl knowledge validate --target <Knowledge root>` for promoted
-    concepts.
-17. Run `wfctl knowledge build --target <Knowledge root>` to prove links,
+14. Draft the pages this work changes under the bundle's `promotion/` directory,
+    at the path each will occupy inside `knowledge/`, and record them with
+    `wfctl work promotion <change-id>` — or `--none "<why>"` when nothing the
+    project says about itself changed.
+15. Run `wfctl knowledge build --target <Knowledge root>` to prove links,
     authored relationships, and stable-concept reachability.
-18. Run `wfctl work verify`, and archive the honest
-    outcome with `wfctl work close`.
+16. Run `wfctl work verify`, and archive the honest outcome with
+    `wfctl work close`. A bundle holding pages waits in the promotion queue
+    rather than the archive.
+17. Put the pages to you with `wfctl work ask <change-id> --stage promotion`, and
+    write them on your word with `wfctl work promote <change-id>`. That copies
+    them into `knowledge/`, validates them, and archives the bundle.
 
 A material turn may come from discussion or investigation. It changes a
 requirement, constraint, alternative, decision, scope, evidence, risk,

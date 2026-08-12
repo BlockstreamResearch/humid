@@ -27,13 +27,15 @@ repository owns significant-work bundles and current project knowledge.
 10. Preserve implementation in the exact clean Git commit only with normal
     maintainer authorization.
 11. Run `verify-project-work` across the whole bundle and every bound source
-    revision, obtain completion approval, then promote verified durable truth
-    and close honestly. That order is not a preference: a curated page cites the
-    change as its authority, and that citation resolves only once the change is
-    receipt-ready, which requires the recorded completion approval. Drafting the
-    pages earlier is useful and costs nothing; writing them into `knowledge/`
-    earlier leaves the corpus invalid so that progress can look further along
-    than it is.
+    revision, draft the curated pages under the bundle's `promotion/` directory,
+    record them with `wfctl work promotion <id>`, and close. None of that needs
+    the maintainer: closure is what the gates already prove, and they prove it
+    better than a person reading a summary of it at midnight.
+12. Put the pages to them with `wfctl work ask <id> --stage promotion` and write
+    them with `wfctl work promote <id>` once they answer. Until then the closed
+    bundle waits in the promotion queue rather than the archive, and the pages
+    wait with it. `knowledge/` never holds a page nobody approved, and the corpus
+    is never left invalid so that progress can look further along than it is.
 
 On a clean session or resume, run `wfctl work context --stage resume` without an
 ID. It may auto-select only one bound active record; multiple records require a

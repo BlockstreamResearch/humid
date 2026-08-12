@@ -54,17 +54,15 @@ Do not design from code and memory alone. Establish the project's current intent
 10. Compare the proposed behavior with both code evidence and curated intent.
 11. Treat only `knowledge/` as the default current-knowledge surface. Do not
    consult `raw/` or `intake/` to fill a gap.
-12. Ask whether this was already decided, and search `changes` for it — the QMD
-    collection covering active and archived change records, selected with
-    `-c changes`. A decision the maintainer made is recorded verbatim in the
-    bundle that asked for it, and until that bundle's closure promotes it to a
-    page, the archive is the only place it exists. Nothing in curated knowledge
-    will say so, because a search of an empty decisions road truthfully finds
-    nothing and reads exactly like a question nobody has answered. A resolved
-    Wayfinder map lists them under `resolved`, one entry per answer. Cite the
-    promoted page when there is one and the change record when there is not,
-    and say which — a decision reached only through an archive is a decision the
-    corpus has not yet been taught.
+12. Ask whether this was already decided: `wfctl knowledge decided "<subject>"
+    --record <id>`. It reads the four places an answer lands — a promoted
+    decision page, the bundle that asked the question, a resolved Wayfinder map,
+    a capture — plus issues already delivered, and writes what it found into this
+    bundle's alignment, which the framing gate requires. Cite the promoted page
+    when there is one and the record when there is not, and say which. Search
+    `changes` with QMD as well when the wording is uncertain: the command ranks
+    by overlapping terms and finds what shares them, where a semantic query finds
+    what means the same thing.
 13. Record QMD queries, graph-expanded concept paths, directly reviewed
     concept paths, constraints, and any conflict in the central change bundle.
 

@@ -129,19 +129,22 @@ readable for compatibility.
   change may be implemented directly from `change.md` after framing approval,
   while preserving the same workspace and progress rules.
 - Use `verify-project-work` for complete file accounting, spec/implementation
-  reconciliation, knowledge promotion, completion review, and archival.
+  reconciliation, drafting the curated pages, closure, and promotion.
 
-Framing and completion decisions are recorded with `wfctl work approve <id>
---stage framing|completion --by human:<maintainer-id>`, never by editing
-`maintainer_review` directly. Record what they answered in the session with
-`--attested "<their words>" --session "<where>"`; a typed confirmation and an
-out-of-band `--token` remain for a maintainer who wants a receipt you could not
-have written. A hand-written receipt fails the completion gate.
+A framing is recorded with `wfctl work approve <id> --stage framing --by
+human:<maintainer-id>`, and a promotion with `wfctl work promote <id> --by
+human:<maintainer-id>`, never by editing `maintainer_review` directly. Record
+what they answered in the session with `--attested "<their words>" --session
+"<where>"`; a typed confirmation and an out-of-band `--token` remain for a
+maintainer who wants a receipt you could not have written. A hand-written receipt
+fails the completion gate. Closure itself asks them nothing — that is the tool's
+to check, and a completion approval is required only where delivery no longer
+matches the framing they approved.
 
 `changes/active/<id>/` is already the knowledge-side living record. There is
-no final dump into `raw/`. Completed closure moves the entire bundle intact to
-`changes/archive/<id>/`; verified durable truth is separately curated into
-`knowledge/`.
+no final dump into `raw/`. Closure moves the entire bundle intact to
+`changes/promotion/<id>/` while its drafted pages wait on the maintainer, and to
+`changes/archive/<id>/` once they land or once there are none.
 
 ## Pending capture
 

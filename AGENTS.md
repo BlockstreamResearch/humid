@@ -24,21 +24,41 @@ This block is managed by `wfctl`. Read `.workflow/config.json` and all files und
   a different question, and never from the reconstruction or blocker that held
   it having since cleared: the condition ending is not the same as being told to
   go.
-- Put both gates to the maintainer with `wfctl work ask`, which renders the four
-  things each decision fixes and nothing else from a record written for you. A
-  framing: what gets done, what deliberately does not, what makes it finished, in
-  what order. A completion, with `--stage completion`: what the work does now,
-  what it still does not do, what closing it takes on, what the project now says
-  that it did not. When a render reads wrong, repair the record it read; a packet
-  edited by hand is composed again, and composed is what put file paths and
-  criterion ids in front of them.
-- Record framing and completion approvals with `wfctl work approve`, never by
-  editing `maintainer_review`; a hand-written receipt fails verification. Pass
-  `--attested "<their answer, word for word>" --session "<where they said it>"`
-  when they answered in the session, which is the ordinary case. Do not send them
-  to a second terminal: retyping a generated bundle id, a stage name and their
-  own identity records no decision the attestation does not. A typed confirmation
-  or `--token` remains available and is theirs to ask for, never your default.
+- Ask the maintainer two things, and closure is neither of them. A framing, with
+  `wfctl work ask <id>`: what gets done, what deliberately does not, what makes it
+  finished, in what order. A promotion, with `--stage promotion`: the pages this
+  work would write into curated knowledge, in full, and what each replaces. Both
+  are rendered from the record rather than composed; when a render reads wrong,
+  repair the record it read, because a packet edited by hand is composed again
+  and composed is what put file paths and criterion ids in front of them.
+- Close finished work yourself. Whether the criteria are met, the receipts carry
+  evidence and the revisions are pinned is what the gates already check, and
+  asking the maintainer to confirm arithmetic is not a decision. One night this
+  cost seven hours and fifty-four minutes: two of four approved bundles were
+  delivered in an hour, stopped at a gate only a sleeping person could open, and
+  the other two were never started. Closure returns to them in exactly one case,
+  and the tool names it: delivery no longer matches the framing they approved,
+  because the criteria were reworded or work was dropped from the route.
+- Draft the curated pages before closing, under the bundle's `promotion/`
+  directory, at the path each will occupy inside `knowledge/`. Then run `wfctl
+  work promotion <id>`, which records them from what is on disk, or `--none
+  "<why>"` when this work changes nothing the project says about itself. A closed
+  bundle holding pages waits in the promotion queue rather than archiving, and
+  `wfctl work promote <id>` writes them on the maintainer's word.
+- Record approvals with the commands, never by editing `maintainer_review`; a
+  hand-written receipt fails verification. Pass `--attested "<their answer, word
+  for word>" --session "<where they said it>"` when they answered in the session,
+  which is the ordinary case. Do not send them to a second terminal: retyping a
+  generated bundle id, a stage name and their own identity records no decision
+  the attestation does not. A typed confirmation or `--token` remains available
+  and is theirs to ask for, never your default.
+- Run `wfctl knowledge decided "<subject>"` before putting any question to the
+  maintainer, whatever route you are on. It reads the four places an answer lands
+  — a promoted page, the bundle that asked, a resolved map, a capture — plus work
+  already delivered, and reports the date and their own words. Most answers are
+  not on a page, so a search of curated knowledge alone finds nothing and reads
+  like a question nobody has answered. On a bundle, `--record <id>` writes the
+  result into the framing, which the framing gate requires.
 - Ask one material question at a time, include a recommendation, and update
   the durable record before continuing.
 - Write to a maintainer who was not watching. They did not see the tool calls,

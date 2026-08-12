@@ -16,9 +16,13 @@ A completed record requires:
 - `implementation_reviewed: true` for code-scoped work, or
   `knowledge_reviewed: true` for project-only work;
 - `maintainer_review.framing.status: approved` with a human actor and timestamp;
-- `maintainer_review.completion.status: approved` with a human actor and timestamp;
-- `knowledge_promotion.status: applied` with validated concept paths, or
-  `not-needed` with a concrete reason;
+- `knowledge_promotion.status: pending` with the pages drafted under the bundle's
+  `promotion/` directory, `applied` with validated concept paths, or `not-needed`
+  with a concrete reason;
+- delivery that still matches the approved framing. Where the acceptance criteria
+  have been reworded since the approval, or an issue was dropped from the route,
+  closure additionally requires `maintainer_review.completion.status: approved` —
+  it is the one case at the end where what was approved is not what was built;
 - one or more fresh checks with commands and outcomes;
 - `verification.result: passed`;
 - no unresolved item without an explicit accepted disposition;
@@ -34,11 +38,15 @@ the changed record and record its final file receipt. A checkpoint edit changes
 the file hash; recording the receipt before the checkpoint would immediately
 make that receipt stale.
 
+Nothing here needs the maintainer. Every item is something the record either
+carries or does not, which is why closure is the agent's: a person asked to
+confirm this list is signing arithmetic they cannot check better than the tool.
+What is theirs is the framing before the work and the pages after it.
+
 The CLI validates the bundle graph, file hashes, record structure, exact source
-bindings, and any promoted concept files. It
-cannot prove that a conversation occurred, that semantic evidence is correct,
-or that no material claim was omitted. The agent must record a maintainer
-approval only after an explicit decision, and the maintainer remains
-responsible for that decision.
+bindings, and any promoted concept files. It cannot prove that a conversation
+occurred, that semantic evidence is correct, or that no material claim was
+omitted. The agent must record a maintainer approval only after an explicit
+decision, and the maintainer remains responsible for that decision.
 
 If a requirement is intentionally dropped, update scope and record who accepted the change. Do not merely check it off.
