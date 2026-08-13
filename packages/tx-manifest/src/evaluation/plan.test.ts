@@ -29,6 +29,9 @@ describe("planAction", () => {
 		if (result.ok) {
 			expect(result.plan.fundingSats).toBe(50_000n);
 			expect(result.plan.outputs).toContainEqual({
+				// A covenant output can never hide what it carries: its own program reads the
+				// amount, and no jet can introspect a commitment.
+				blinding: { blinding: "open", decidedBy: "unblindable" },
 				id: "p2pk_out",
 				sats: 50_000n,
 				target: { kind: "covenant", utxoType: "p2pk_output" },
@@ -113,6 +116,9 @@ describe("planAction with resolved inputs", () => {
 
 		if (result.ok) {
 			expect(result.plan.outputs).toContainEqual({
+				// An output paid to the wallet says nothing about hiding, and on this network
+				// silence means hidden. Nothing acts on that yet; the plan carries it.
+				blinding: { blinding: "hidden", decidedBy: "chain" },
 				id: "received_out",
 				sats: 42_000n,
 				target: { kind: "wallet" },

@@ -1,6 +1,7 @@
 import { asArray, asRecord } from "../document/json";
 import type { NormalisationNote, NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
+import { type BlindingDecision, resolveBlinding } from "./blinding";
 import { encodeDataParts } from "./encode";
 import { evaluateExpression } from "./evaluate";
 
@@ -11,6 +12,8 @@ import { evaluateExpression } from "./evaluate";
  * 2^53 is representable in a transaction and not in a double.
  */
 export type PlannedOutput = {
+	/** Whether this output hides what it carries, and whose word decided that. */
+	blinding: BlindingDecision;
 	/** The manifest's id for this output, for anything that has to name it. */
 	id: string;
 	/** Absent for change, whose amount is whatever is left after the fee. */
@@ -44,6 +47,8 @@ export function planAction(
 	action: NormalisedAction,
 	scope: ReferenceScope,
 	notes?: NormalisationNote[],
+	/** The document's file-level blinding default, which no published manifest states. */
+	documentDefault?: unknown,
 ): PlanResult {
 	const outputs: PlannedOutput[] = [];
 	let fundingSats = 0n;
@@ -62,8 +67,18 @@ export function planAction(
 			return { ok: false, reason: `Output ${id || "(unnamed)"} ${target.reason}` };
 		}
 
+		const blinding = resolveBlinding({
+			declared: output.confidential,
+			documentDefault,
+			...(target.target.kind === "covenant"
+				? { unblindable: "covenant" as const }
+				: target.target.kind === "data"
+					? { unblindable: "data" as const }
+					: {}),
+		});
+
 		if (target.target.kind === "change") {
-			outputs.push({ id, target: target.target });
+			outputs.push({ blinding, id, target: target.target });
 
 			continue;
 		}
@@ -71,7 +86,7 @@ export function planAction(
 		// An op_return output carries bytes rather than value. It is provably unspendable, so
 		// it pays nothing and nothing needs to fund it.
 		if (target.target.kind === "data") {
-			outputs.push({ id, sats: 0n, target: target.target });
+			outputs.push({ blinding, id, sats: 0n, target: target.target });
 
 			continue;
 		}
@@ -93,7 +108,7 @@ export function planAction(
 		}
 
 		fundingSats += amount.sats;
-		outputs.push({ id, sats: amount.sats, target: target.target });
+		outputs.push({ blinding, id, sats: amount.sats, target: target.target });
 	}
 
 	if (outputs.length === 0) {

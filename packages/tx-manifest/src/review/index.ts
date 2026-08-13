@@ -466,7 +466,12 @@ export async function reviewManifestAction(
 	// One pass is enough because an amount does not change what a transaction weighs: in
 	// Elements a value occupies a fixed size whatever its magnitude. Without that property
 	// this would not converge.
-	const draft = planAction(action, { ...scope, fee: 0n }, notes);
+	const draft = planAction(
+		action,
+		{ ...scope, fee: 0n },
+		notes,
+		manifest.node.confidential_outputs,
+	);
 
 	if (!draft.ok) {
 		return { reason: draft.reason, refused: true, reject: "document-fault" };
@@ -484,7 +489,12 @@ export async function reviewManifestAction(
 		feeRateSatsPerKvb,
 	);
 
-	const plan = planAction(action, { ...scope, fee: estimatedFee }, notes);
+	const plan = planAction(
+		action,
+		{ ...scope, fee: estimatedFee },
+		notes,
+		manifest.node.confidential_outputs,
+	);
 
 	if (!plan.ok) {
 		return { reason: plan.reason, refused: true, reject: "document-fault" };
@@ -506,6 +516,11 @@ export async function reviewManifestAction(
 		return { reason: failed.reason, refused: true, reject: "document-fault" };
 	}
 
+	// Nothing acts on what the precedence decided yet. Every output in the published corpus
+	// that says nothing resolves to hidden, and this wallet builds explicit values — so acting
+	// on it refuses almost every protocol, including two that pass today. That is a decision
+	// about what the product can do rather than one about this code, and it is with the
+	// maintainer.
 	const covenantScripts = new Map(
 		covenants.map((found) => [found.utxoType, found.scriptPubKeyHex]),
 	);

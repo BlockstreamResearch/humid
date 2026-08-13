@@ -229,11 +229,11 @@ const SITES = {
 			chain: READ,
 			classes: READ,
 			compile_debug_symbols: READ,
+			confidential_outputs: UNIMPLEMENTED,
 			// The container of a contract's actions, under the name the corpus uses now. Its
 			// previous name is `classes` above; the normaliser reads both and neither is
 			// preferred, because several generations of the same protocol coexist.
 			contract_templates: READ,
-			confidential_outputs: UNIMPLEMENTED,
 			description: SHOWN,
 			errors: SHOWN,
 			lifecycle: SHOWN,
