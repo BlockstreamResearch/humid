@@ -75,7 +75,7 @@ skill by name.
 
 Raw text can tell the agent what to investigate. It cannot support a claim,
 even when several raw files agree. A trusted derivative must cite the
-maintainer decision, pinned code, runtime receipt, reviewed archived change, or
+maintainer decision, pinned code, runtime receipt, closed change, or
 primary external source that independently established the claim.
 
 ## Multiple inputs, one promotion gate
@@ -341,13 +341,15 @@ At the start of significant work, the agent first creates a central bundle so
 the discussion cannot disappear after compaction. It then performs Graphify
 code analysis and QMD-assisted current-knowledge alignment before presenting
 the framing packet. QMD runs from the configured knowledge root and searches
-only its `knowledge` collection by default. At the end, review the verification
-and knowledge delta before accepting completion.
+only its `knowledge` collection by default. At the end, you are shown the pages
+the work would write into project knowledge, in full, and nothing enters until
+you say so.
 
 Describe the desired change in ordinary language. The agent owns creation,
-status checks, verification, and archival of the work record; you never need
-its ID or commands. It asks you only for ambiguous routing, framing, product
-authority, commit authorization, and completion decisions.
+status checks, verification, closure, and archival of the work record; you never
+need its ID or commands. It asks you only for ambiguous routing, framing,
+product authority, commit authorization, and what the project now says about
+itself.
 
 You may also ask read-only product questions here:
 

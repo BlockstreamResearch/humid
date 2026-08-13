@@ -33,10 +33,29 @@ wrote. Announcing a next action and stopping is the visible half of this; the
 larger half announces nothing — "the work continues by itself", "the rest can
 wait for the next boundary", a status report that names no blocker — and parks
 just as completely, because nothing continues once the turn is over. If you are
-not waiting on the maintainer, take the next action you can take alone. If you
-are, name what you need from them **and record it as a blocker on the owning
-checkpoint**. Only that changes what the repository reports, so only that stops
-you being returned to a turn whose one missing piece is a person.
+not waiting on the maintainer, take the next action you can take alone.
+
+**Finishing a unit is not finishing.** Completing an issue releases its claim,
+so the bundle is left holding ready issues that nobody has claimed — which is
+what every long run looks like between units, and the moment a turn is most
+likely to end on "next I will do X" and then not. There is no boundary there.
+The next unit is available work, and available work is yours.
+
+**Say why you are stopping, in the record, when you stop.** Prose is not state:
+a turn that explains itself and ends has explained itself to nobody, because the
+explanation goes with the session. Two sentences end a turn, and they are
+different sentences.
+
+- The maintainer is what the work is missing. Record a blocker on the owning
+  checkpoint — `--status blocked --blocker "<what you need from them>"` — which
+  puts the work in their queue and takes it off yours.
+- Nothing is missing except this session: the context is spent, or the next unit
+  will not fit in what is left of it. Record `--handoff "<why this session stops
+  here>"`, which tells the next session and asks them nothing. It is cleared by
+  the next checkpoint, so it explains one stop rather than every stop after it.
+
+A blocker for the second case is a lie that costs them a turn, and silence for
+either is what the workflow returns you to.
 
 **Never wait for a background command by spinning.** A command that outruns its
 foreground limit is moved to the background and announces its own completion;

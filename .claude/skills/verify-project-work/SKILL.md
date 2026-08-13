@@ -72,7 +72,8 @@ Decide whether verified durable truth changed, and write the pages while the
 understanding is fresh. Route product behaviour and engineering realization
 through their separate curation skills and run the two-axis quality gate — but
 write each page under the bundle's `promotion/` directory, at the exact path it
-will occupy inside `knowledge/`. Nothing enters the corpus here.
+will occupy inside `knowledge/` — spelled with or without a leading `knowledge/`,
+which name the same page. Nothing enters the corpus here.
 
 A concept promoted from a bundle in a project with no reconstructed baseline has
 the same shape as one established by whole-project reading and a far narrower

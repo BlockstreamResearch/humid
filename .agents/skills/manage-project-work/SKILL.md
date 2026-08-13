@@ -40,6 +40,8 @@ wfctl work start <slug> --title "<title>" --mode full|slice|wayfinder
 Start from one leaf for single-repository delivery. Start from knowledge with
 no leaf for project-only work, or repeat `--leaf` for known multi-repository
 scope. Do not bind guessed leaves merely because Wayfinder may need them later.
+Work that turns out to need one gains it later with `wfctl work bind <id>`, run
+from that repository's own checkout.
 
 Run `wfctl work status <id>` and `wfctl work context <id> --stage shape`.
 Use the returned bundle in knowledge for records and only the returned code

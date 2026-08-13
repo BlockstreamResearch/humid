@@ -14,17 +14,17 @@
     "curate-engineering-knowledge": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "c7e0c90d212a52c82b8d974d7553a8a73517146d4ea7454749c5274758c05e9e"
+      "computedHash": "e4d658327bf87851941d0eb0130c7d15e72562e3ff9c6d51ef7ceb10c9383984"
     },
     "curate-product-knowledge": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "ce5c45e2449918252b18893c948ea6ed89267e7b3bd62dca2a86dfb99742e025"
+      "computedHash": "4e9a863ce20536e073744042e22159cc8a38c667f4d572729ed35db43b6d6530"
     },
     "curate-project-knowledge": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "26574b9003576326d9787a98a55db2c92409ddc516bd6327df0eab5a63bba08b"
+      "computedHash": "f79eb1b6dc2192f8385bd5f6a0f1d5515603465112ea3c34c22dee65e813c387"
     },
     "explore-project-knowledge": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
@@ -34,12 +34,12 @@
     "implement-work-item": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "ad5d30eb8c656ad1162116f1cf7318211c973ff694159081a121374432b782d2"
+      "computedHash": "a21a8c78d3371e81db35cbe1f0d52475de1dadb56a772ee9ca76913cd56cd403"
     },
     "manage-project-work": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "1f33177bfcb13423c56bc9b7a6a4b1dac8d28b653a776847d785183bca10e93d"
+      "computedHash": "f51cef85094f0707199c5f62b2474e4333d67c5588bd6bc4d2c289070112e65c"
     },
     "qmd": {
       "source": "/Users/lukachisama/.bun/install/global/node_modules/@tobilu/qmd/skills/qmd",
@@ -69,12 +69,12 @@
     "verify-knowledge-quality": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "3ba1e87f02ccfdb7ef5fc3be0438d37c3e4063780bd85fe86537747987740431"
+      "computedHash": "d825cc63dfc8eac2a1116567d1a3441dfdf5559fe10354bb7967eecc3e6143d9"
     },
     "verify-project-work": {
       "source": "/Users/lukachisama/Documents/agent-skills/workflow",
       "sourceType": "local",
-      "computedHash": "335b19c9782d95f72ef5c6c07f66a4a8c814f9242c79f143cb0660f3685795a3"
+      "computedHash": "0b0bba317ec806d47ff4630b6e0afc62ab910c993894916a0bfd1c8fd0f2a35a"
     }
   }
 }

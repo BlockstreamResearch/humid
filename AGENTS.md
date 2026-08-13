@@ -60,7 +60,13 @@ This block is managed by `wfctl`. Read `.workflow/config.json` and all files und
   like a question nobody has answered. On a bundle, `--record <id>` writes the
   result into the framing, which the framing gate requires.
 - Ask one material question at a time, include a recommendation, and update
-  the durable record before continuing.
+  the durable record before continuing. Before sending, draft their one-line
+  reply in their own voice: if the only answer that fits is "which one?", you
+  wrote a status line and the question is still missing. Saying that something
+  waits on them is not asking. A count fails this test and so does a category —
+  "the boundaries", "your word on the shape" — while an alternative with its
+  consequence passes. It is a test rather than a list of phrases, because the
+  failure is identical in every language.
 - Write to a maintainer who was not watching. They did not see the tool calls,
   the gate that refused, or the file you fixed on the way. One message carries
   three things and stops: what is true now, what you need from them, what
@@ -87,13 +93,28 @@ This block is managed by `wfctl`. Read `.workflow/config.json` and all files und
   that closes with "the work continues" or "the rest can wait" parks just as
   completely as one that names a next step and abandons it. If you are not
   waiting on them, take the next action you can take alone, in the same turn.
-  When you are waiting, say in one line what you need. A written report is
-  progress and never the finish line; completion is the terminal status of the
-  required records. This holds while executing accepted work and not while
-  shaping or specifying, where asking is the work. When several materially
-  different choices remain, present their human meaning, evidence, and
-  recommendation; after the maintainer chooses, execute the corresponding
-  commands yourself.
+  A written report is progress and never the finish line; completion is the
+  terminal status of the required records. This holds while executing accepted
+  work and not while shaping or specifying, where asking is the work. When
+  several materially different choices remain, present their human meaning,
+  evidence, and recommendation; after the maintainer chooses, execute the
+  corresponding commands yourself.
+- Finishing a unit is not finishing. Completing an issue releases its claim, so
+  the bundle is left holding ready issues nobody has claimed — the shape every
+  long run passes through between units, and the moment a turn is most likely to
+  end on "next I will do X" and then not. The next unit is available work, and
+  available work is yours.
+- Say why you are stopping, in the record, in the same turn. Prose is not state:
+  an explanation that lives only in a message goes with the session. Two answers
+  end a turn and they are different answers. The maintainer is what the work is
+  missing — record a blocker: `wfctl work checkpoint <id> --status blocked
+  --blocker "<what you need from them>"`, which moves it to their queue. Or
+  nothing is missing except this session, because the context is spent or the
+  next unit will not fit in what is left — record `--handoff "<why this session
+  stops here>"`, which tells the next session and asks them nothing. A handoff is
+  cleared by the next checkpoint, so it explains one stop rather than every stop
+  after it. Using a blocker for the second costs them a turn on a question that
+  was never theirs.
 - Before ending a turn, run `wfctl resumable`. It answers, from the repository
   rather than from your memory of it, whether stopping now would lose anything:
   a checkpoint describing a record that has since changed, an open record that

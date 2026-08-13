@@ -15,7 +15,8 @@ promotion, a new Area, or decision migration.
 
 A promotion may start from:
 
-- a completed and maintainer-reviewed archived change;
+- a closed change, whose pages are written under its own `promotion/` directory
+  and enter `knowledge/` only when the maintainer approves them;
 - confirmed raw-intake candidate IDs with independent authority;
 - confirmed source-first reconstruction candidate IDs;
 - directly inspected source and tests at an exact Git revision;
@@ -79,11 +80,31 @@ for symmetry.
     concept. Do not self-approve a failed, uncertain, unread, or blocked check.
 13. Finish content before hashing. Bind the passed quality receipt and normal
     verification to the same `wfctl knowledge hash --concept <path>` output.
-    Normative claims require human verification.
-14. Run `wfctl knowledge validate`, `wfctl knowledge build`, and `qmd update`.
-    Rebuild embeddings only when semantic retrieval is needed.
-15. Return to the originating intake, reconstruction, or change workflow and
-    record exact promoted paths. Do not report completion while any gate fails.
+    Normative claims require human verification. The hash reads frontmatter and
+    body rather than location, so a page drafted under a bundle's `promotion/`
+    directory is sealed where it is and the seal survives the copy.
+14. Run `wfctl knowledge validate`, `wfctl knowledge build`, and `qmd update` for
+    a page that is already in `knowledge/`. Rebuild embeddings only when semantic
+    retrieval is needed.
+15. Return to the originating workflow and record where each page is. A change
+    bundle keeps its pages under `promotion/` and records them with `wfctl work
+    promotion <id>`; nothing it wrote is in the corpus, and saying it is promoted
+    would claim a decision the maintainer has not made. Do not report completion
+    while any gate fails.
+
+## Where a page goes before it is knowledge
+
+Writing into `knowledge/` is the project speaking about itself, and it is a
+maintainer decision. Two routes reach it, and they differ:
+
+| Source | Where the page is written | What puts it in `knowledge/` |
+| --- | --- | --- |
+| Change bundle | `changes/<state>/<id>/promotion/<destination>` | `wfctl work promote <id>`, on the maintainer's word |
+| Reconstruction or intake case | `knowledge/` directly | the case's own promotion, which its closure is waiting for |
+
+The destination path is the same either way: write the draft at exactly the path
+it will occupy, because that is the path it is copied to and the path every link
+in it must resolve against.
 
 ## Authority rules
 

@@ -23,9 +23,13 @@ in a session.
    evidence.
 4. Run `wfctl knowledge validate --concept <path>` and distinguish structural
    failures from semantic failures. Structural success is necessary but never
-   sufficient.
+   sufficient. A page still drafted under a bundle's `promotion/` directory has
+   no corpus position yet, so its structural validation runs when it is
+   promoted; a refusal there writes nothing and leaves the page where it is.
 5. Run `wfctl knowledge hash --concept <path>` and pin the candidate content
-   hash before semantic review.
+   hash before semantic review. The path may be a draft: the hash reads
+   frontmatter and body, never location, and a promoted page is copied byte for
+   byte, so a seal bound to the draft still matches once it lands.
 
 ## Run two independent axes
 

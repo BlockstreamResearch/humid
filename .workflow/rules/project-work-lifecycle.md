@@ -36,6 +36,8 @@ repository owns significant-work bundles and current project knowledge.
     bundle waits in the promotion queue rather than the archive, and the pages
     wait with it. `knowledge/` never holds a page nobody approved, and the corpus
     is never left invalid so that progress can look further along than it is.
+    A page they send back is rewritten where it sits, resealed, its receipt
+    refreshed, and recorded again with `wfctl work promotion <id>`.
 
 On a clean session or resume, run `wfctl work context --stage resume` without an
 ID. It may auto-select only one bound active record; multiple records require a

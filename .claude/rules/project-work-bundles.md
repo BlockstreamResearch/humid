@@ -33,6 +33,12 @@ Before claiming an issue, record a current review receipt for every required
 context file. Claim from the exact bound leaf before code work. Never infer a
 worktree from repository name, branch, sibling paths, or bundle location.
 
+A bundle started from the centre without naming a leaf binds no source
+repository, and delivery has nowhere to happen. Give it one from that
+repository's own checkout with `wfctl work bind <id>`; `wfctl work rebind` moves
+a binding the record already carries and is the wrong verb here. Neither is a
+maintainer decision.
+
 Wayfinder is deliberate and planning-only. It resolves precise question issues
 and fog into a reviewed specification before any delivery issue or product-code
 implementation begins.

@@ -7,16 +7,16 @@
       "sha256": "a94b241d4cee56b3617a564e94911e48e63c35641de446b59a0f4b115cb5d558"
     },
     ".claude/rules/execution-continuity.md": {
-      "sha256": "5e77ad0c14faed7eb6661fb69f6ce4f118d3800da4ba6797c986b45714d20b3d"
+      "sha256": "164105e87a8f79fc5a004146f1cd22950b90d3bada7061b1a61dc6f8467396ee"
     },
     ".claude/rules/maintainer-review.md": {
-      "sha256": "ee12e298ba4ee760e31c44f59447c9cd2d1bc2db075cdc6a3952cdc54cdd6939"
+      "sha256": "0c289acdb9624926261d45f68da7fe0215da066088eaafb3d477bb6b10c09eff"
     },
     ".claude/rules/project-work-bundles.md": {
-      "sha256": "72c0f39dfd4f7d4d3eac35ddc8edfb6b5d6df96bea6fa97a14b3cc4cd835ced1"
+      "sha256": "f1598bedea4647318e5d28c4f65cc5a4369825a4324e98df3478d95a4d7327fe"
     },
     ".claude/rules/project-work-lifecycle.md": {
-      "sha256": "bf40b682d2dbf063e4fbecff7cb7dff13fabedfce4817492f39087060200ae52"
+      "sha256": "3bcfe1d61b1e52c02afc5b08b381ed4c6c942eaac2f6c170e70817fd33322b8b"
     },
     ".claude/rules/workflow-routing.md": {
       "sha256": "98f929de44907dcafb3e460e6ef2912b1e812397020ea8738364117fb7b5b23c"
@@ -28,16 +28,16 @@
       "sha256": "a94b241d4cee56b3617a564e94911e48e63c35641de446b59a0f4b115cb5d558"
     },
     ".workflow/rules/execution-continuity.md": {
-      "sha256": "5e77ad0c14faed7eb6661fb69f6ce4f118d3800da4ba6797c986b45714d20b3d"
+      "sha256": "164105e87a8f79fc5a004146f1cd22950b90d3bada7061b1a61dc6f8467396ee"
     },
     ".workflow/rules/maintainer-review.md": {
-      "sha256": "ee12e298ba4ee760e31c44f59447c9cd2d1bc2db075cdc6a3952cdc54cdd6939"
+      "sha256": "0c289acdb9624926261d45f68da7fe0215da066088eaafb3d477bb6b10c09eff"
     },
     ".workflow/rules/project-work-bundles.md": {
-      "sha256": "72c0f39dfd4f7d4d3eac35ddc8edfb6b5d6df96bea6fa97a14b3cc4cd835ced1"
+      "sha256": "f1598bedea4647318e5d28c4f65cc5a4369825a4324e98df3478d95a4d7327fe"
     },
     ".workflow/rules/project-work-lifecycle.md": {
-      "sha256": "bf40b682d2dbf063e4fbecff7cb7dff13fabedfce4817492f39087060200ae52"
+      "sha256": "3bcfe1d61b1e52c02afc5b08b381ed4c6c942eaac2f6c170e70817fd33322b8b"
     },
     ".workflow/rules/workflow-routing.md": {
       "sha256": "98f929de44907dcafb3e460e6ef2912b1e812397020ea8738364117fb7b5b23c"
@@ -46,7 +46,7 @@
       "sha256": "9198433e2a84e5cba17f2779aa9422f45f5e68d9bbe66d3084df3d9586cc016d"
     },
     ".workflow/runtime/guard-stop.mjs": {
-      "sha256": "75f4c57a3356706423d3018783b5880c11588006721289689e14dbf356d846e6"
+      "sha256": "57f0059be7042f62f8a04b2f42ec72578be16580829567d986ba38eaa4a4ca5e"
     },
     ".workflow/runtime/idle-guard.sh": {
       "sha256": "c2cb5ae64478631b10f86ce5dcd2f49241e9da8ba84fad6b1c3ffcc49f632a6b"

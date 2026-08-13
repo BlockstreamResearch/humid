@@ -100,5 +100,7 @@ does not infer another issue, actor, checkout, or code root. If
 deliberately giving the issue back, run `wfctl work issue release`; it resets
 the issue checkpoint to ready. Completion makes the issue checkpoint terminal;
 then refresh the parent checkpoint with the next frontier action. Do not mark a
-partial outcome completed. Final change-wide review, knowledge promotion, and
-archival belong to `verify-project-work` after every required issue is terminal.
+partial outcome completed. Final change-wide review, drafting the pages this work
+changes, and closure belong to `verify-project-work` after every required issue
+is terminal; the maintainer's approval of those pages comes after the bundle is
+closed, and holds nothing up.

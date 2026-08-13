@@ -71,6 +71,12 @@ product-first and bounded:
 - show delivery honestly;
 - keep `Engineering details` as links with short nontechnical labels.
 
+The path a page occupies is where it will live, whichever route it takes to get
+there. Work from a change bundle writes it under that bundle's `promotion/`
+directory at exactly that path, and the maintainer's word is what copies it into
+`knowledge/`. Work from a reconstruction or intake case writes it into
+`knowledge/` directly, because that promotion is what its closure waits for.
+
 ## Verify before stable
 
 1. Invoke `verify-knowledge-quality` after the substantive body is complete.
