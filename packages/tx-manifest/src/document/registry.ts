@@ -199,7 +199,10 @@ const SITES = {
 			description: SHOWN,
 			from_address: READ,
 			id: READ,
-			issuance: UNIMPLEMENTED,
+			// Read for the one kind the wallet can carry out. A reissuance and a minted
+			// reissuance token are refused by name where the block is resolved, because both
+			// depend on what the request carries rather than on what the document says.
+			issuance: READ,
 			on_resolved: READ,
 			// The action tolerates this input's absence. The wallet includes what it is given
 			// and never drops one, which is inside what the declaration permits.

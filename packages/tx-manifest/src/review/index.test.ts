@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import groupedManifest from "../__fixtures__/p2pk-grouped.manifest.json";
 import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
 import type { TxOutAtOutPoint } from "../chain/chainRead";
+import { deriveNewIssuance } from "../chain/issuance";
 import { txOutAt } from "../chain/txOut";
 import { estimateFeeSats } from "../fee";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
@@ -570,5 +571,121 @@ describe("the mode a protocol declares reaches the compiler", () => {
 		const plain = await withMode();
 
 		expect(declared.seen).not.toEqual(plain.seen);
+	});
+});
+
+/**
+ * An action that creates an asset, in the shape the corpus writes one.
+ *
+ * The declaration and the hook are lifted from `lending_v3`'s `CreateFactory`, which mints
+ * an asset from a wallet output and records it in the deployment it is creating. What is
+ * added is a place a later line reads it from: an OP_RETURN carrying the asset id, which is
+ * how the same protocol publishes what it created. Read end to end, this is the whole claim
+ * — the wallet commits to one of its own outputs, derives the asset that output produces,
+ * and the document's own later line resolves it by name.
+ */
+function issuingManifest() {
+	const document = structuredClone(p2pkManifest) as unknown as Record<string, unknown>;
+	const actions = document.actions as Record<string, Record<string, unknown>>;
+	const pay = actions.Pay!;
+	const inputs = pay.inputs as Record<string, unknown>[];
+	const outputs = pay.outputs as Record<string, unknown>[];
+
+	inputs[0]!.issuance = { asset_amount_sat: 2, inflation_amount_sat: 0, kind: "new" };
+	inputs[0]!.on_resolved = { set: { "instance.MINTED_ASSET": "asset" } };
+	outputs.push({
+		data: { parts: [{ type: "bytes", value: "instance.MINTED_ASSET" }] },
+		description: "The asset this action created, published for whoever indexes it.",
+		destination: { type: "op_return" },
+		id: "minted_marker",
+	});
+
+	return document;
+}
+
+const TWO_UTXOS = [
+	{ amount: "600000", spendable: true, txid: "d".repeat(64), txOut: "00", vout: 7 },
+	{ amount: "1000000", spendable: true, txid: "c".repeat(64), txOut: "00", vout: 0 },
+];
+
+describe("an input that creates an asset", () => {
+	async function issuingReview() {
+		return reviewManifestAction(request({ manifest: issuingManifest() }), {
+			...deps,
+			fundingUtxos: TWO_UTXOS,
+			readTxOut: readTxOut(UNSPENT_ELSEWHERE),
+		});
+	}
+
+	test("derives the asset from the wallet output it commits to spending", async () => {
+		const result = await issuingReview();
+
+		expect(isRefusal(result)).toBe(false);
+
+		if (isRefusal(result)) {
+			return;
+		}
+
+		const issued = result.issuances[0];
+
+		expect(result.issuances.length).toBe(1);
+		expect(issued?.inputId).toBe("funding_input");
+		expect(issued?.assetAmountSats).toBe(2n);
+		// The asset is a statement about one output, so it has to be the derivation of the
+		// output this transaction actually spends rather than of any output the wallet holds.
+		expect(issued?.asset).toBe(
+			deriveNewIssuance({ txid: issued?.outpoint.txid ?? "", vout: issued?.outpoint.vout ?? 0 })
+				?.asset ?? "",
+		);
+	});
+
+	// The output the asset is derived from has to be spent, exactly once. Left out, the id is
+	// for an asset that never exists; taken twice, there is no transaction at all.
+	test("spends that output once, and the selection does not offer it again", async () => {
+		const result = await issuingReview();
+
+		if (isRefusal(result)) {
+			throw new Error(result.reason);
+		}
+
+		const issued = result.issuances[0]!;
+		const spending = result.selected.filter(
+			(utxo) => utxo.txid === issued.outpoint.txid && utxo.vout === issued.outpoint.vout,
+		);
+
+		expect(spending.length).toBe(1);
+		expect(result.selected[0]?.txid).toBe(issued.outpoint.txid);
+	});
+
+	test("makes the asset readable by name in a line written after it", async () => {
+		const result = await issuingReview();
+
+		if (isRefusal(result)) {
+			throw new Error(result.reason);
+		}
+
+		const marker = result.outputs.find((output) => output.id === "minted_marker");
+
+		// The OP_RETURN carries the asset as bytes, so the id the hook read is in the script
+		// the transaction pays to — not merely in a value the review kept to itself.
+		expect(marker?.scriptPubKeyHex).toContain(result.issuances[0]!.asset);
+		// And it is the script the document asked for. Paid to the wallet instead, this output
+		// would carry nothing, pay nothing, and look exactly like a correct one from outside.
+		expect(marker?.scriptPubKeyHex.startsWith("6a")).toBe(true);
+		expect(marker?.scriptPubKeyHex).not.toBe(WALLET_SCRIPT);
+	});
+
+	test("refuses when the wallet has no output to derive an asset from", async () => {
+		const result = await reviewManifestAction(request({ manifest: issuingManifest() }), {
+			...deps,
+			fundingUtxos: [],
+			readTxOut: readTxOut(UNSPENT_ELSEWHERE),
+		});
+
+		expect(isRefusal(result)).toBe(true);
+
+		if (isRefusal(result)) {
+			expect(result.reject).toBe("shortfall");
+		}
 	});
 });

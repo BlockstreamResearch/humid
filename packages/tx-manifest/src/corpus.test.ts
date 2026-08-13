@@ -234,7 +234,6 @@ describe("what the corpus uses and this wallet does not read", () => {
 		expect([...unread].toSorted()).toEqual([
 			"confidential",
 			"default",
-			"issuance",
 			"required_index",
 			"simplicity_type",
 			"source",

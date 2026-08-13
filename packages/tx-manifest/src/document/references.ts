@@ -72,6 +72,7 @@ export type ReferenceSiteKind =
 	| "compileParam"
 	| "destination"
 	| "expression"
+	| "issuedAmount"
 	| "witnessKey";
 
 const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: string }> = {
@@ -91,6 +92,18 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 	expression: {
 		accepts: ["fee", "instance", "params", "args", "input-attribute", "bare"],
 		describes: "an expression",
+	},
+	/**
+	 * How many units an issuance creates, which is not an amount anyone pays.
+	 *
+	 * The fee is absent for the same reason it is absent from a compile parameter: the fee
+	 * comes from the shape of the transaction, and how much of an asset exists cannot depend
+	 * on what it costs to say so. An attribute of a resolved input is absent because the
+	 * issuance is what makes that input's asset what it is.
+	 */
+	issuedAmount: {
+		accepts: ["instance", "params", "args", "bare"],
+		describes: "an issued amount",
 	},
 	/** The key a witness is produced from. */
 	witnessKey: {

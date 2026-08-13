@@ -28,12 +28,18 @@ import {
 	withHookValues,
 } from "../evaluation/hooks";
 import { type InputRule, resolveInputRules } from "../evaluation/inputRules";
+import {
+	declaredIssuance,
+	issuanceAttributes,
+	type PlannedIssuance,
+	resolveIssuance,
+} from "../evaluation/issuance";
 import { planAction } from "../evaluation/plan";
 import { checkValidations } from "../evaluation/validate";
 import { estimateFeeSats } from "../fee";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { resolveActionRequirements } from "../request/requirements";
-import { type CoinSelection, type SelectableUtxo, selectCoins } from "./coinSelection";
+import { type CoinSelection, type SelectableUtxo, selectCoins, toSats } from "./coinSelection";
 
 /**
  * What the wallet established for itself about one covenant this action touches.
@@ -114,6 +120,14 @@ export type ManifestReview = {
 	 * silently is indistinguishable from one that missed it.
 	 */
 	ignoredConstructs: ConstructFinding[];
+	/**
+	 * The assets this action creates, each with the output of the wallet's it is derived from.
+	 *
+	 * An asset id is a function of the output the issuing input spends, so the two are kept
+	 * together: separated, nothing downstream could tell whether the id belongs to the output
+	 * the transaction actually spends or to one considered and dropped.
+	 */
+	issuances: PlannedIssuance[];
 	/**
 	 * Everything the person is shown, with every value's origin attached.
 	 *
@@ -223,6 +237,8 @@ export async function reviewManifestAction(
 	const covenantInputs: ReviewedCovenantInput[] = [];
 	/** What each covenant input actually holds, read from the chain rather than told. */
 	const inputs: Record<string, Record<string, unknown>> = {};
+	/** Which output each input spends, for the ones whose identity an issuance depends on. */
+	const spent = new Map<string, { txid: string; vout: number }>();
 
 	// The parameters a manifest works out for itself come first: a covenant compiled with
 	// another covenant's hash needs that hash before its own address can be derived, and a
@@ -312,6 +328,10 @@ export async function reviewManifestAction(
 			};
 		}
 
+		if (site.id) {
+			spent.set(site.id, outpoint);
+		}
+
 		let onChain;
 
 		try {
@@ -373,6 +393,22 @@ export async function reviewManifestAction(
 		});
 	}
 
+	// An asset an action creates is derived from the output its issuing input spends, so that
+	// output is settled here rather than at the selection below: an input's own hook reads the
+	// asset as soon as the input resolves, and an id derived from an output the wallet had not
+	// yet committed to spending would be an id for a different asset.
+	const issued = resolveIssuances(action, {
+		fundingUtxos: input.fundingUtxos,
+		inputs,
+		notes,
+		scope,
+		spent,
+	});
+
+	if (!issued.ok) {
+		return { reason: issued.reason, refused: true, reject: issued.reject };
+	}
+
 	// Hooks run after every input is resolved and before anything is built, which is what
 	// makes them able to say what an input turned out to hold. An input's own hook goes first
 	// and in declaration order, then the action's, because a document's later line may read
@@ -415,9 +451,10 @@ export async function reviewManifestAction(
 		{
 			covenantInputs: covenantInputs.length,
 			outputs: draft.plan.outputs.length,
-			// The wallet has not chosen its inputs yet, and one is the common case; a
-			// selection that takes more is priced below, before anything is committed to.
-			walletInputs: 1,
+			// The wallet has not chosen the rest of its inputs yet, and one is the common case; a
+			// selection that takes more is priced below, before anything is committed to. The
+			// outputs already committed to for an issuance are not a guess and are counted.
+			walletInputs: Math.max(1, issued.reserved.length),
 		},
 		feeRateSatsPerKvb,
 	);
@@ -456,10 +493,14 @@ export async function reviewManifestAction(
 
 		// A covenant output pays the address the wallet derived, never one the request
 		// supplied. There is no path from a site-supplied address to a transaction output.
+		// An op_return pays to the bytes the plan encoded: it is the output, and paying it to
+		// the wallet instead would drop what the protocol published and pay nothing to nobody.
 		const scriptPubKeyHex =
 			planned.target.kind === "covenant"
 				? covenantScripts.get(planned.target.utxoType)
-				: input.walletScriptPubKeyHex;
+				: planned.target.kind === "data"
+					? planned.target.hex
+					: input.walletScriptPubKeyHex;
 
 		if (!scriptPubKeyHex) {
 			return {
@@ -476,12 +517,13 @@ export async function reviewManifestAction(
 	// A protocol requiring a specific address is usually requiring a specific key, and funding
 	// it from whatever the wallet happens to hold builds a transaction it did not ask for.
 	const pinned = inputRules.rules.find((rule) => rule.fromAddress !== undefined)?.fromAddress;
-	const fundable =
+	const fundable = (
 		pinned === undefined
 			? input.fundingUtxos
-			: input.fundingUtxos.filter((utxo) => utxo.scriptPubKeyHex === pinned);
+			: input.fundingUtxos.filter((utxo) => utxo.scriptPubKeyHex === pinned)
+	).filter((utxo) => !issued.reserved.includes(utxo));
 
-	if (pinned !== undefined && fundable.length === 0) {
+	if (pinned !== undefined && fundable.length === 0 && issued.reserved.length === 0) {
 		return {
 			reason: `This action must be funded from ${pinned}, and this wallet holds nothing there.`,
 			refused: true,
@@ -489,11 +531,33 @@ export async function reviewManifestAction(
 		};
 	}
 
-	const selection: CoinSelection = selectCoins(
-		fundable,
-		plan.plan.fundingSats,
-		BigInt(Math.ceil(feeRateSatsPerKvb)),
-	);
+	// An output committed to for an issuance was chosen before the action's address pin could
+	// be resolved, because the asset id depends on it and the hooks that read that id run
+	// first. Where the two disagree the action is refused rather than built from the other
+	// output: moving the issuance would mint a different asset than the one already computed.
+	const misplaced =
+		pinned === undefined
+			? undefined
+			: issued.reserved.find((utxo) => utxo.scriptPubKeyHex !== pinned);
+
+	if (misplaced) {
+		return {
+			reason:
+				`This action must be funded from ${pinned}, and the output it issues an asset from ` +
+				"is not there.",
+			refused: true,
+			reject: "no-funds-at-signing-address",
+		};
+	}
+
+	// What the outputs committed to for an issuance already bring, which the selection below
+	// does not have to find again.
+	const held = issued.reserved.reduce((total, utxo) => total + toSats(utxo.amount), 0n);
+	const outstanding = plan.plan.fundingSats - held;
+	const selection: CoinSelection =
+		outstanding > 0n
+			? selectCoins(fundable, outstanding, BigInt(Math.ceil(feeRateSatsPerKvb)))
+			: { ok: true, selected: [], totalSats: held };
 
 	if (!selection.ok) {
 		return { reason: selection.reason, refused: true, reject: "shortfall" };
@@ -507,11 +571,14 @@ export async function reviewManifestAction(
 		estimatedFeeSats: estimatedFee,
 		feeRateSatsPerKvb,
 		ignoredConstructs: ignored(inspectConstructs(manifest)),
+		issuances: issued.issuances,
 		normalisation: notes,
 		outputs,
 		inputRules: inputRules.rules,
 		protocol: manifest.protocol ?? "",
-		selected: selection.selected,
+		// The outputs an issuance is derived from come first and in the order the action
+		// declares them, because each asset id is a statement about one of them.
+		selected: [...issued.reserved, ...selection.selected],
 	};
 
 	return {
@@ -525,6 +592,94 @@ export async function reviewManifestAction(
 
 /** Confirmation target for the fee estimate, in blocks. */
 const FEE_TARGET_BLOCKS = 6;
+
+type ResolvedIssuances =
+	| { issuances: PlannedIssuance[]; ok: true; reserved: SelectableUtxo[] }
+	| { ok: false; reason: string; reject: RejectToken };
+
+/**
+ * Works out every asset this action creates, and which output each one is derived from.
+ *
+ * A covenant input already has an output: the state file named it and the chain confirmed
+ * what is there. An input the wallet funds does not, and this is where it gets one — the
+ * asset id is a function of that output, so choosing it later would mean deriving an id for
+ * an output the transaction might not spend.
+ *
+ * The chosen output is returned as reserved rather than merely noted. Everything after this
+ * treats the funding pool as what is left, because an output spent twice is not a
+ * transaction, and an issuance derived from one the wallet then declined to spend is worse:
+ * it is a well-formed id for an asset that would never exist.
+ */
+function resolveIssuances(
+	action: NormalisedAction,
+	context: {
+		fundingUtxos: SelectableUtxo[];
+		/** What the wallet established about each input, which the issued asset joins. */
+		inputs: Record<string, Record<string, unknown>>;
+		notes: NormalisationNote[];
+		scope: ReferenceScope;
+		spent: Map<string, { txid: string; vout: number }>;
+	},
+): ResolvedIssuances {
+	const issuances: PlannedIssuance[] = [];
+	const reserved: SelectableUtxo[] = [];
+
+	// Smallest first, and it is a choice about what is left rather than about this input: an
+	// issuance needs an output's identity and not its value, so taking the smallest leaves the
+	// most behind to fund the action with. Nothing here honours an amount the input declares
+	// for itself — no wallet input's amount is honoured today — which is recorded rather than
+	// hidden, because a protocol whose issuing input is also its collateral gets an output
+	// chosen for the wrong reason.
+	const spare = context.fundingUtxos
+		.filter((utxo) => utxo.spendable && !utxo.confidential)
+		.toSorted((one, other) => (toSats(one.amount) > toSats(other.amount) ? 1 : -1));
+
+	for (const entry of asArray(action.node.inputs)) {
+		const declared = asRecord(entry);
+		const issuance = declared && declaredIssuance(declared);
+
+		if (!declared || !issuance) {
+			continue;
+		}
+
+		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
+		const onChain = context.spent.get(id);
+		const funding = onChain ? undefined : spare[reserved.length];
+		const outpoint = onChain ?? (funding && { txid: funding.txid, vout: funding.vout });
+
+		if (!outpoint) {
+			return {
+				ok: false,
+				reason:
+					`Input ${id} issues an asset, which needs one of this wallet's own outputs to ` +
+					"derive it from, and there is none left to use.",
+				reject: "shortfall",
+			};
+		}
+
+		const resolved = resolveIssuance(
+			{ declared: issuance, id, outpoint },
+			context.scope,
+			context.notes,
+		);
+
+		if (!resolved.ok) {
+			return resolved;
+		}
+
+		if (funding) {
+			reserved.push(funding);
+		}
+
+		issuances.push(resolved.issuance);
+		context.inputs[id] = {
+			...context.inputs[id],
+			...issuanceAttributes(resolved.issuance),
+		};
+	}
+
+	return { issuances, ok: true, reserved };
+}
 
 function findStateOutpoint(
 	request: ParsedLiquidProcessCtParams,

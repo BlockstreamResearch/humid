@@ -1,6 +1,6 @@
 import { asRecord } from "../document/json";
 import type { NormalisationNote, NormalisedAction } from "../document/normalise";
-import type { ReferenceScope } from "../document/references";
+import { type ReferenceScope, resolveReference } from "../document/references";
 import { evaluateExpression } from "./evaluate";
 
 /**
@@ -83,19 +83,46 @@ export function runHook(
 			return { ok: false, reason: `The hook's value for ${target} is not an expression.` };
 		}
 
-		const evaluated = evaluateExpression(expression, "amount", running, notes);
+		const evaluated = valueOf(expression, running, notes);
 
 		if (!evaluated.ok) {
 			return { ok: false, reason: `Setting ${target}: ${evaluated.reason}` };
 		}
 
-		const value = String(evaluated.value);
-
-		values[lane][name] = value;
-		running = foldInto(running, lane, name, value);
+		values[lane][name] = evaluated.value;
+		running = foldInto(running, lane, name, evaluated.value);
 	}
 
 	return { ok: true, values };
+}
+
+/**
+ * What one assignment comes to: a number it works out, or a value it names.
+ *
+ * Arithmetic is tried first, and everything the corpus's action-level hooks write is
+ * arithmetic. What is not is the reason an input has a hook at all: `"asset"` is the asset
+ * that input just created, a thirty-two byte id, and there is no number it could be. A hook
+ * that could only produce numbers would refuse the very assignment protocols write hooks for.
+ *
+ * The arithmetic failure is the one reported when neither works, because a value that names
+ * nothing is almost always a mistyped expression rather than a mistyped name.
+ */
+function valueOf(
+	expression: string,
+	scope: ReferenceScope,
+	notes?: NormalisationNote[],
+): { ok: false; reason: string } | { ok: true; value: string } {
+	const evaluated = evaluateExpression(expression, "amount", scope, notes);
+
+	if (evaluated.ok) {
+		return { ok: true, value: String(evaluated.value) };
+	}
+
+	const named = resolveReference(expression, "expression", scope, notes);
+
+	return named.ok && typeof named.value === "string"
+		? { ok: true, value: named.value }
+		: { ok: false, reason: evaluated.reason };
 }
 
 /**

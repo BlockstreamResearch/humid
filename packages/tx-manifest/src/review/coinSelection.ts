@@ -89,7 +89,7 @@ export function selectCoins(
 }
 
 /** Amounts arrive as base-unit strings and stay exact; a double would round past 2^53. */
-function toSats(amount: string): bigint {
+export function toSats(amount: string): bigint {
 	try {
 		return BigInt(amount);
 	} catch {
