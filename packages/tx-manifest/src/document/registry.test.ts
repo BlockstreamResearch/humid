@@ -69,7 +69,7 @@ describe("inspectConstructs", () => {
 	// The refusal itself is ISSUE-021. What this slice owes it is the distinction.
 	describe("load-bearing constructs are separated out", () => {
 		test("a construct the format declares and this runtime does not implement", () => {
-			const finding = at(inspect({ actions: { Pay: { on_pre_broadcast: {} } } }), "on_pre_broadcast");
+			const finding = at(inspect({ actions: { Pay: { on_validate: {} } } }), "on_validate");
 
 			expect(finding).toMatchObject({ declared: true, loadBearing: true });
 		});

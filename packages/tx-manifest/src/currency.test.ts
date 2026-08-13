@@ -95,21 +95,13 @@ describe("the protocols as their authors publish them now", () => {
 		);
 
 		expect(blocked).toEqual({
-			dex: [
-				"confidential",
-				"default",
-				"required_index",
-				"simplicity_type",
-				"value",
-			],
+			dex: ["confidential", "default", "required_index", "simplicity_type", "value"],
 			last_will: ["default", "required_index", "simplicity_type", "value"],
 			lending_v2: [
 				"compute",
 				"confidential",
 				"default",
 				"issuance",
-				"on_pre_broadcast",
-				"on_resolved",
 				"required_index",
 				"simplicity_type",
 				"value",
@@ -119,7 +111,6 @@ describe("the protocols as their authors publish them now", () => {
 				"confidential",
 				"default",
 				"issuance",
-				"on_resolved",
 				"required_index",
 				"simplicity_type",
 				"value",

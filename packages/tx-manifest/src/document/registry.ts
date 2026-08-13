@@ -180,7 +180,7 @@ const SITES = {
 			is_constructor: UNREAD,
 			on_input_resolved: UNIMPLEMENTED,
 			on_post_broadcast: UNIMPLEMENTED,
-			on_pre_broadcast: UNIMPLEMENTED,
+			on_pre_broadcast: READ,
 			// A full SimplicityHL program, not a formula: honouring it means executing a
 			// contract at build time. Out of scope for this change and named rather than absent.
 			on_validate: UNIMPLEMENTED,
@@ -200,7 +200,7 @@ const SITES = {
 			from_address: READ,
 			id: READ,
 			issuance: UNIMPLEMENTED,
-			on_resolved: UNIMPLEMENTED,
+			on_resolved: READ,
 			// The action tolerates this input's absence. The wallet includes what it is given
 			// and never drops one, which is inside what the declaration permits.
 			optional: SHOWN,

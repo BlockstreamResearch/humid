@@ -235,8 +235,6 @@ describe("what the corpus uses and this wallet does not read", () => {
 			"confidential",
 			"default",
 			"issuance",
-			"on_pre_broadcast",
-			"on_resolved",
 			"required_index",
 			"simplicity_type",
 			"source",

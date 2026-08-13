@@ -12,6 +12,7 @@ import { asArray, asRecord } from "../document/json";
 import {
 	findAction,
 	type NormalisationNote,
+	type NormalisedAction,
 	normaliseInstance,
 	normaliseManifest,
 } from "../document/normalise";
@@ -19,6 +20,13 @@ import type { ReferenceScope } from "../document/references";
 import { buildMode, type RejectToken, refuseUnsupported } from "../document/refuse";
 import { type ConstructFinding, ignored, inspectConstructs } from "../document/registry";
 import { covenantSites } from "../document/sites";
+import {
+	actionHook,
+	inputHook,
+	inputHookScope,
+	runHook,
+	withHookValues,
+} from "../evaluation/hooks";
 import { type InputRule, resolveInputRules } from "../evaluation/inputRules";
 import { planAction } from "../evaluation/plan";
 import { checkValidations } from "../evaluation/validate";
@@ -250,7 +258,7 @@ export async function reviewManifestAction(
 		return { reason: created.reason, refused: true, reject: "document-fault" };
 	}
 
-	const scope: ReferenceScope = {
+	let scope: ReferenceScope = {
 		inputs,
 		instance: created
 			? { ...deployment.instance.fields, ...created.instance.fields }
@@ -325,7 +333,13 @@ export async function reviewManifestAction(
 		}
 
 		if (onChain.amountSats !== undefined && site.id) {
-			inputs[site.id] = { amount_sat: BigInt(onChain.amountSats) };
+			// The asset is recorded beside the amount because an input's own hook reads it under
+			// the bare name `asset`, and a hook that could not see it would set a field of the
+			// deployment from nothing.
+			inputs[site.id] = {
+				amount_sat: BigInt(onChain.amountSats),
+				...(onChain.rawAssetId === undefined ? {} : { asset: onChain.rawAssetId }),
+			};
 		}
 
 		if (onChain.amountSats === undefined || onChain.rawAssetId === undefined) {
@@ -358,6 +372,18 @@ export async function reviewManifestAction(
 			verified: "matches-chain",
 		});
 	}
+
+	// Hooks run after every input is resolved and before anything is built, which is what
+	// makes them able to say what an input turned out to hold. An input's own hook goes first
+	// and in declaration order, then the action's, because a document's later line may read
+	// what an earlier one set — and every output amount and validation below reads the result.
+	const hooked = runActionHooks(action, scope, notes);
+
+	if (!hooked.ok) {
+		return { reason: hooked.reason, refused: true, reject: "document-fault" };
+	}
+
+	scope = hooked.scope;
 
 	let feeRateSatsPerKvb: number;
 
@@ -531,4 +557,49 @@ function declaredParamTypes(action: Record<string, unknown>): Record<string, str
 	}
 
 	return types;
+}
+
+/**
+ * Runs every hook this action declares, in the order the format defines.
+ *
+ * Each input's own hook first — in declaration order, each against a scope carrying what the
+ * hooks before it set — and then the action's own. An input's hook reads two bare names that
+ * mean the input being resolved rather than anything in scope, so it is given a scope of its
+ * own rather than the shared one.
+ */
+function runActionHooks(
+	action: NormalisedAction,
+	scope: ReferenceScope,
+	notes: NormalisationNote[],
+): { ok: false; reason: string } | { ok: true; scope: ReferenceScope } {
+	let running = scope;
+
+	for (const entry of asArray(action.node.inputs)) {
+		const declared = asRecord(entry);
+		const set = declared && inputHook(declared);
+
+		if (!declared || !set) {
+			continue;
+		}
+
+		const id = typeof declared.id === "string" ? declared.id : undefined;
+		const resolved = id ? (running.inputs?.[id] ?? {}) : {};
+		const ran = runHook(set, inputHookScope(running, resolved), notes);
+
+		if (!ran.ok) {
+			return ran;
+		}
+
+		running = withHookValues(running, ran.values);
+	}
+
+	const set = actionHook(action);
+
+	if (!set) {
+		return { ok: true, scope: running };
+	}
+
+	const ran = runHook(set, running, notes);
+
+	return ran.ok ? { ok: true, scope: withHookValues(running, ran.values) } : ran;
 }
