@@ -7,6 +7,7 @@ import {
 	deriveCovenantAddress,
 } from "../covenants/covenant";
 import { type CompileScriptPubKey, covenantHashFrom } from "../covenants/covenantHash";
+import { createsInstance, resolveCreatedInstance } from "../covenants/instance";
 import { asArray, asRecord } from "../document/json";
 import {
 	findAction,
@@ -229,9 +230,31 @@ export async function reviewManifestAction(
 		return { reason: computed.reason, refused: true, reject: "document-fault" };
 	}
 
+	// A constructor has no deployment to read and creates one instead, so its field values are
+	// worked out here rather than arriving with the request. They join the scope under the same
+	// name every other reference reads, because the covenant this action locks funds into is
+	// compiled with the deployment it is creating.
+	const created = createsInstance(action)
+		? resolveCreatedInstance(action, {
+				contractSources: request.contractSources,
+				hashCovenant: covenantHashFrom(input.scriptPubKeyOf),
+				notes,
+				scope: {
+					instance: deployment.instance.fields,
+					params: { ...request.params, ...computed.values },
+				},
+			})
+		: undefined;
+
+	if (created && !created.ok) {
+		return { reason: created.reason, refused: true, reject: "document-fault" };
+	}
+
 	const scope: ReferenceScope = {
 		inputs,
-		instance: deployment.instance.fields,
+		instance: created
+			? { ...deployment.instance.fields, ...created.instance.fields }
+			: deployment.instance.fields,
 		params: { ...request.params, ...computed.values },
 	};
 

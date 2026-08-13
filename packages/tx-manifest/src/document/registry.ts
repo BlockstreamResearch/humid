@@ -163,7 +163,7 @@ const SITES = {
 	action: {
 		constructs: {
 			args: UNIMPLEMENTED,
-			create_instance: UNIMPLEMENTED,
+			create_instance: READ,
 			description: SHOWN,
 			inputs: READ,
 			// A sentence saying what this action does, written for whoever approves it, beside the
@@ -172,7 +172,12 @@ const SITES = {
 			// specification describes, and a confident sentence about the wrong amounts changes
 			// what a person agrees to.
 			intent: UNREAD,
-			is_constructor: UNIMPLEMENTED,
+			// The older generation's flag beside the block. The newer one dropped it, on the
+			// ground that an action carrying the block is the constructor and a flag adds
+			// nothing; six of the corpus's eleven constructors carry both and five carry only
+			// the block. So it is read for nothing, which is different from being ignored:
+			// what it asserts is asserted better by the block beside it.
+			is_constructor: UNREAD,
 			on_input_resolved: UNIMPLEMENTED,
 			on_post_broadcast: UNIMPLEMENTED,
 			on_pre_broadcast: UNIMPLEMENTED,

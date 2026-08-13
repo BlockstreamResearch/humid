@@ -180,11 +180,11 @@ describe("what this wallet can do with each published protocol", () => {
 	// Recorded as the measurement rather than as an expectation: these five refuse today, and
 	// the first construct each refuses on is what a slice implementing it would remove.
 	test.each([
-		["dex", "is_constructor"],
-		["last_will", "is_constructor"],
+		["dex", "default"],
+		["last_will", "default"],
 		["lending", "confidential"],
 		["lending_v2", "confidential"],
-		["lending_v3", "is_constructor"],
+		["lending_v3", "default"],
 	])("%s refuses, on %s", (name, construct) => {
 		expect(refusalFor(name)).toContain(construct);
 	});
@@ -233,9 +233,7 @@ describe("what the corpus uses and this wallet does not read", () => {
 
 		expect([...unread].toSorted()).toEqual([
 			"confidential",
-			"create_instance",
 			"default",
-			"is_constructor",
 			"issuance",
 			"on_pre_broadcast",
 			"on_resolved",
