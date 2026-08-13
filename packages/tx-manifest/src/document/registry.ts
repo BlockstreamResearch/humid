@@ -242,7 +242,13 @@ const SITES = {
 			// already acts on.
 			simplicity_hl: READ,
 			simplicity_hl_version: READ,
-			source: UNIMPLEMENTED,
+			// One line in the published specification — "relative path to the top-level .simf
+			// file" — and nothing anywhere says what a runtime does with it. The newer schema
+			// dropped it from the top level entirely, the reference implementation reads no such
+			// field, and no published manifest carries one: a covenant's source is named on the
+			// covenant, where it decides an address. So it decides nothing here, and refusing a
+			// document for carrying it would be refusing for a field the format has abandoned.
+			source: UNREAD,
 			utxo_types: READ,
 		},
 		unknownIsLoadBearing: true,

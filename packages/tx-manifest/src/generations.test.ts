@@ -15,6 +15,7 @@ import p2pk from "./__fixtures__/p2pk.manifest.json";
 import zeroconf from "./__fixtures__/zeroconf.manifest.json";
 import { normaliseManifest } from "./document/normalise";
 import { parseReference } from "./document/references";
+import { inspectConstructs, loadBearing } from "./document/registry";
 
 // Both criteria this file answers are about the published corpus rather than about
 // documents written to suit the reader, so every assertion below counts something in
@@ -161,5 +162,26 @@ describe("both reference spellings are live in the published corpus", () => {
 
 		expect(deprecated).toMatchObject({ deprecated: true, form: "instance", name: "OWNER" });
 		expect(current).toMatchObject({ form: "instance", name: "OWNER" });
+	});
+});
+
+describe("a field the format has abandoned decides nothing", () => {
+	// The published specification lists a top-level path to a contract source in one line and
+	// says nothing about what a runtime does with it. The newer schema dropped it, the
+	// reference implementation reads no such field, and no published manifest carries one.
+	test("no published manifest carries a top-level contract source", () => {
+		const carrying = Object.entries(ALL)
+			.filter(([, document]) => typeof document.source === "string")
+			.map(([name]) => name);
+
+		expect(carrying).toEqual([]);
+	});
+
+	test("and a document that carries one is read rather than refused", () => {
+		const withSource = { ...(ALL.p2pk as Record<string, unknown>), source: "./p2pk.simf" };
+		const { manifest } = normaliseManifest(withSource);
+		const blocking = loadBearing(inspectConstructs(manifest)).map((finding) => finding.key);
+
+		expect(blocking).not.toContain("source");
 	});
 });
