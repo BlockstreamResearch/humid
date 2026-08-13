@@ -274,14 +274,21 @@ const SITES = {
 	},
 	param: {
 		constructs: {
-			compute: UNIMPLEMENTED,
-			default: UNIMPLEMENTED,
+			// How a parameter is filled without asking anyone. An expression is evaluated and a
+			// value the wallet itself holds refuses by name, because a review that opens no
+			// signing key cannot produce one.
+			compute: READ,
+			// The literal used when nothing supplied a value, which is the last of the three
+			// steps and never overwrites one a person chose.
+			default: READ,
 			derived: UNIMPLEMENTED,
 			description: SHOWN,
 			// The reference implementation's own comment calls it informational only for
 			// display, so it does not decide a value and cannot change what is signed.
 			formula: UNREAD,
-			source: UNIMPLEMENTED,
+			// The oldest generation's spelling of a value the wallet supplies. Read together
+			// with the newer one, so a refusal names the thing rather than the spelling.
+			source: READ,
 			type: READ,
 		},
 		unknownIsLoadBearing: true,

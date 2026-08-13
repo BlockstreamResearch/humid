@@ -134,12 +134,14 @@ describe("inspectConstructs", () => {
 			expect(at(findings, "salt")?.at).toBe("utxo type vault / script");
 		});
 
+		// `derived` rather than `default`: how a parameter is filled is read now, and the one
+		// spelling of it the corpus never uses is what is left to find at this position.
 		test("a parameter definition", () => {
 			const findings = inspect({
-				actions: { Pay: { params: { owner: { default: "0x00", type: "pubkey" } } } },
+				actions: { Pay: { params: { owner: { derived: "0x00", type: "pubkey" } } } },
 			});
 
-			expect(at(findings, "default")?.at).toBe("action Pay / param owner");
+			expect(at(findings, "derived")?.at).toBe("action Pay / param owner");
 		});
 
 		// The rule itself is read now; an unrecognised key beside it is what is left to find.

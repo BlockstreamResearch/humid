@@ -34,6 +34,7 @@ import {
 	type PlannedIssuance,
 	resolveIssuance,
 } from "../evaluation/issuance";
+import { fillParameters } from "../evaluation/parameters";
 import { planAction } from "../evaluation/plan";
 import { checkValidations } from "../evaluation/validate";
 import { type StaticWitness, resolveStaticWitnesses } from "../evaluation/witness";
@@ -217,7 +218,29 @@ export async function reviewManifestAction(
 		return { reason: refusal.reason, refused: true, reject: refusal.reject };
 	}
 
-	const requirements = resolveActionRequirements(request, manifest);
+	const action = findAction(manifest, request.action);
+
+	if (!action) {
+		return {
+			reason: `The manifest declares no action named "${request.action}".`,
+			refused: true,
+			reject: "no-such-action",
+		};
+	}
+
+	// What the protocol already knows the answer to is filled before anything asks whether the
+	// request is complete. The other order reports a parameter as missing that the document
+	// itself supplies, which sends a site looking for a value it was never meant to send.
+	const filled = fillParameters(action, request.params, {
+		instance: normaliseInstance(request.instance).instance.fields,
+		params: request.params,
+	});
+
+	if (!filled.ok) {
+		return { reason: filled.reason, refused: true, reject: filled.reject };
+	}
+
+	const requirements = resolveActionRequirements({ ...request, params: filled.params }, manifest);
 
 	if (requirements.missing.length > 0) {
 		const named = requirements.missing
@@ -228,16 +251,6 @@ export async function reviewManifestAction(
 			reason: `This request cannot be built. ${named}`,
 			refused: true,
 			reject: "incomplete-request",
-		};
-	}
-
-	const action = findAction(manifest, request.action);
-
-	if (!action) {
-		return {
-			reason: `The manifest declares no action named "${request.action}".`,
-			refused: true,
-			reject: "no-such-action",
 		};
 	}
 
@@ -256,7 +269,7 @@ export async function reviewManifestAction(
 		contractSources: request.contractSources,
 		hashCovenant: covenantHashFrom(input.scriptPubKeyOf),
 		notes,
-		scope: { instance: deployment.instance.fields, params: request.params },
+		scope: { instance: deployment.instance.fields, params: filled.params },
 	});
 
 	if (!computed.ok) {
@@ -274,7 +287,7 @@ export async function reviewManifestAction(
 				notes,
 				scope: {
 					instance: deployment.instance.fields,
-					params: { ...request.params, ...computed.values },
+					params: { ...filled.params, ...computed.values },
 				},
 			})
 		: undefined;
@@ -288,7 +301,7 @@ export async function reviewManifestAction(
 		instance: created
 			? { ...deployment.instance.fields, ...created.instance.fields }
 			: deployment.instance.fields,
-		params: { ...request.params, ...computed.values },
+		params: { ...filled.params, ...computed.values },
 	};
 
 	for (const site of covenantSites(action)) {
