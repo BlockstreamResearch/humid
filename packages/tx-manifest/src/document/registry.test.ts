@@ -104,8 +104,8 @@ describe("inspectConstructs", () => {
 	});
 
 	describe("the sites it reaches", () => {
-		// `simplicity_type` rather than `sig_type`: the runtime reads the witness's type,
-		// source and sighash type now, and a construct it reads is not a finding.
+		// Every key the witness site lists is read now, so an unrecognised one is what is left
+		// to find there — and finding it proves the walk reaches inside a witness at all.
 		test("a witness on an input", () => {
 			const findings = inspect({
 				actions: {
@@ -114,16 +114,14 @@ describe("inspectConstructs", () => {
 							{
 								id: "p2pk_in",
 								utxo_source: { utxo_type: "v" },
-								witnesses: { SIGNATURE: { simplicity_type: "u256", type: "Signature" } },
+								witnesses: { SIGNATURE: { salt: "0x00", type: "Signature" } },
 							},
 						],
 					},
 				},
 			});
 
-			expect(at(findings, "simplicity_type")?.at).toBe(
-				"action Receive / input p2pk_in / witness SIGNATURE",
-			);
+			expect(at(findings, "salt")?.at).toBe("action Receive / input p2pk_in / witness SIGNATURE");
 		});
 
 		// The script site's own keys are all read now, so an unrecognised one is what is left

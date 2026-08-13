@@ -73,7 +73,8 @@ export type ReferenceSiteKind =
 	| "destination"
 	| "expression"
 	| "issuedAmount"
-	| "witnessKey";
+	| "witnessKey"
+	| "witnessValue";
 
 const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: string }> = {
 	/** An output's amount, or an input's minimum. */
@@ -109,6 +110,18 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 	witnessKey: {
 		accepts: ["instance", "params", "args", "bare"],
 		describes: "a witness key",
+	},
+	/**
+	 * A name appearing inside the typed value a witness states.
+	 *
+	 * The fee is absent because a witness decides which branch of a contract runs, and a
+	 * branch chosen by what the transaction costs would change as the transaction's own shape
+	 * changed. An attribute of a resolved input is absent because no published protocol reads
+	 * one here and admitting a form nothing exercises is admitting one nothing checks.
+	 */
+	witnessValue: {
+		accepts: ["instance", "params", "args"],
+		describes: "part of a witness value",
 	},
 };
 

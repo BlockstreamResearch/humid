@@ -338,10 +338,13 @@ const SITES = {
 		constructs: {
 			description: SHOWN,
 			sig_type: READ,
-			simplicity_type: UNIMPLEMENTED,
+			// The type and the literal of a value the document states outright. They are read
+			// together and never apart: a value with no type is a witness nothing can
+			// type-check, and a type with no value names nothing to check.
+			simplicity_type: READ,
 			source: READ,
 			type: READ,
-			value: UNIMPLEMENTED,
+			value: READ,
 		},
 		unknownIsLoadBearing: true,
 	},

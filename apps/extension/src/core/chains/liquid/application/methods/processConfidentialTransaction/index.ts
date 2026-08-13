@@ -82,6 +82,28 @@ export type LiquidProcessCtDependencies = {
 	withMnemonic: typeof withAccountMnemonic;
 };
 
+/**
+ * The witness values one covenant input needs, in the shape the signing module takes.
+ *
+ * A type and a literal, both text, keyed by the name the contract declares. The wallet does
+ * not parse either: the compiler that will type-check the literal is the authority on what it
+ * means, and a wallet reading `Right(Left(()))` for itself would be a second opinion about
+ * which branch of a contract runs.
+ */
+function witnessValuesJson(
+	values: { name: string; simplicityType: string; value: string }[] | undefined,
+): string | undefined {
+	if (!values || values.length === 0) {
+		return undefined;
+	}
+
+	return JSON.stringify(
+		Object.fromEntries(
+			values.map(({ name, simplicityType, value }) => [name, { type: simplicityType, value }]),
+		),
+	);
+}
+
 /** How the method is wired in the extension. Tests substitute what they need. */
 export const liquidProcessCtDependencies: LiquidProcessCtDependencies = {
 	// Imported when a transaction is actually broadcast rather than at module load: the
@@ -173,10 +195,12 @@ export const createProcessLiquidConfidentialTransaction = (
 								covenant.txOutHex,
 								covenant.source,
 								covenant.argumentsJson,
-								// No witness values: a covenant that authenticates its spender needs a
-								// signature over this transaction, which only the signer can make, and
-								// naming it is what asks for one.
-								undefined,
+								// The values the document states outright, which is how a covenant with
+								// more than one branch is told which to run. A signature is not among
+								// them: only the signer can make one, and naming it below is what asks
+								// for one. Passed as the compiler's own witness shape — a type and a
+								// literal, both text — because the compiler is what parses SimplicityHL.
+								witnessValuesJson(covenant.witnessValues),
 								covenant.signatureWitness,
 								sequenceFor(review, covenant.id),
 							);

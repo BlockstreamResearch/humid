@@ -36,6 +36,7 @@ import {
 } from "../evaluation/issuance";
 import { planAction } from "../evaluation/plan";
 import { checkValidations } from "../evaluation/validate";
+import { type StaticWitness, resolveStaticWitnesses } from "../evaluation/witness";
 import { estimateFeeSats } from "../fee";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { resolveActionRequirements } from "../request/requirements";
@@ -80,6 +81,14 @@ export type ReviewedCovenantInput = {
 	txOutHex: string;
 	txid: string;
 	vout: number;
+	/**
+	 * The values this input's contract needs supplied rather than signed.
+	 *
+	 * A covenant with more than one branch is told which one to run by a witness the document
+	 * states outright. Carried through unparsed, because the compiler that type-checks a
+	 * SimplicityHL literal is the authority on what it means and this package is not.
+	 */
+	witnessValues?: StaticWitness[];
 };
 
 /** One output of the transaction the wallet worked out, ready to be shown and then built. */
@@ -420,6 +429,22 @@ export async function reviewManifestAction(
 	}
 
 	scope = hooked.scope;
+
+	// Stated witness values come after the hooks, because one published protocol selects its
+	// branch by a field of its own deployment and a hook is what may have written it.
+	const stated = resolveStaticWitnesses(action, scope, notes);
+
+	if (!stated.ok) {
+		return { reason: stated.reason, refused: true, reject: "document-fault" };
+	}
+
+	for (const covenant of covenantInputs) {
+		const values = stated.witnesses.get(covenant.id);
+
+		if (values) {
+			covenant.witnessValues = values;
+		}
+	}
 
 	let feeRateSatsPerKvb: number;
 

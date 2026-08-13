@@ -689,3 +689,63 @@ describe("an input that creates an asset", () => {
 		}
 	});
 });
+
+describe("a covenant told which branch to run", () => {
+	/**
+	 * The p2pk spend, with a branch selector grafted onto its covenant input.
+	 *
+	 * The declaration is the shape every published protocol writes: a SimplicityHL type and a
+	 * literal, both stated by the document. p2pk's own contract has one branch, so the value
+	 * here proves the path rather than the protocol.
+	 */
+	function branchingManifest() {
+		const document = structuredClone(p2pkManifest) as unknown as Record<string, unknown>;
+		const actions = document.actions as Record<string, Record<string, unknown>>;
+		const inputs = actions.Receive!.inputs as Record<string, unknown>[];
+		const witnesses = inputs[0]!.witnesses as Record<string, unknown>;
+
+		witnesses.PATH = {
+			simplicity_type: "Either<u32, u32>",
+			type: "simplicityhl",
+			value: "Left(instance.CHOSEN)",
+		};
+
+		return document;
+	}
+
+	test("carries the stated value on the input it belongs to, resolved", async () => {
+		const result = await reviewManifestAction(
+			{
+				...spendRequest(oneCovenantUtxo),
+				instance: { instance: { fields: { CHOSEN: "7" } } },
+				manifest: branchingManifest(),
+			},
+			{ ...deps, readTxOut: readTxOut(DERIVED_SCRIPT) },
+		);
+
+		expect(isRefusal(result)).toBe(false);
+
+		if (isRefusal(result)) {
+			return;
+		}
+
+		const spent = result.covenantInputs.find((covenant) => covenant.id === "p2pk_in");
+
+		// The type travels unparsed and the literal has its one name filled in. Nothing else in
+		// the text is touched: `Left` is the language's word, not a value to look up.
+		expect(spent?.witnessValues).toEqual([
+			{ name: "PATH", simplicityType: "Either<u32, u32>", value: "Left(7)" },
+		]);
+		// The signature the covenant needs is still asked for beside it, not replaced by it.
+		expect(spent?.signatureWitness).toBe("SIGNATURE");
+	});
+
+	test("refuses when the value names something the deployment does not carry", async () => {
+		const result = await reviewManifestAction(
+			{ ...spendRequest(oneCovenantUtxo), manifest: branchingManifest() },
+			{ ...deps, readTxOut: readTxOut(DERIVED_SCRIPT) },
+		);
+
+		expect(isRefusal(result)).toBe(true);
+	});
+});

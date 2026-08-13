@@ -95,24 +95,10 @@ describe("the protocols as their authors publish them now", () => {
 		);
 
 		expect(blocked).toEqual({
-			dex: ["confidential", "default", "required_index", "simplicity_type", "value"],
-			last_will: ["default", "required_index", "simplicity_type", "value"],
-			lending_v2: [
-				"compute",
-				"confidential",
-				"default",
-				"required_index",
-				"simplicity_type",
-				"value",
-			],
-			lending_v3: [
-				"compute",
-				"confidential",
-				"default",
-				"required_index",
-				"simplicity_type",
-				"value",
-			],
+			dex: ["confidential", "default", "required_index"],
+			last_will: ["default", "required_index"],
+			lending_v2: ["compute", "confidential", "default", "required_index"],
+			lending_v3: ["compute", "confidential", "default", "required_index"],
 			zeroconf: [],
 		});
 	});
@@ -143,7 +129,7 @@ describe("the protocols as their authors publish them now", () => {
 
 		expect(counted).toEqual({
 			dex: { found: 4, unblocked: 1 },
-			last_will: { found: 4, unblocked: 0 },
+			last_will: { found: 4, unblocked: 2 },
 			lending_v2: { found: 9, unblocked: 1 },
 			lending_v3: { found: 6, unblocked: 0 },
 			zeroconf: { found: 0, unblocked: 0 },

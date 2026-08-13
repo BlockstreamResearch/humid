@@ -1,3 +1,4 @@
+import { STATIC_WITNESS } from "../evaluation/witness";
 import { asArray, asRecord } from "./json";
 import type { NormalisedManifest } from "./normalise";
 import { loadBearing, inspectConstructs } from "./registry";
@@ -315,6 +316,26 @@ function refuseUnproducibleWitness(manifest: NormalisedManifest): Refusal | unde
 			for (const [name, entry] of Object.entries(asRecord(input?.witnesses) ?? {})) {
 				const witness = asRecord(entry);
 				const at = `${action.name} / input ${id} / witness ${name}`;
+
+				// A value the document states outright is produced rather than signed: the type
+				// and the literal travel to the compiler as text, which is the component that
+				// parses SimplicityHL. Both have to be there — a stated value missing its type
+				// is a witness nothing can check.
+				if (witness?.type === STATIC_WITNESS) {
+					if (typeof witness.simplicity_type === "string" && typeof witness.value === "string") {
+						continue;
+					}
+
+					return {
+						reason:
+							`The witness ${name} at ${at} states a value and ` +
+							(typeof witness.simplicity_type === "string"
+								? "no value to give it."
+								: "no type to give it.") +
+							" This wallet will not hand a contract a value nothing can type-check.",
+						reject: "unproducible-witness",
+					};
+				}
 
 				if (witness?.type !== "Signature") {
 					return {

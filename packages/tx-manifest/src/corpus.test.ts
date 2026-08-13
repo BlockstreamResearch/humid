@@ -231,13 +231,6 @@ describe("what the corpus uses and this wallet does not read", () => {
 			}
 		}
 
-		expect([...unread].toSorted()).toEqual([
-			"confidential",
-			"default",
-			"required_index",
-			"simplicity_type",
-			"source",
-			"value",
-		]);
+		expect([...unread].toSorted()).toEqual(["confidential", "default", "required_index", "source"]);
 	});
 });
