@@ -36,6 +36,7 @@ import {
 } from "../evaluation/issuance";
 import { fillParameters } from "../evaluation/parameters";
 import { planAction } from "../evaluation/plan";
+import { checkPositions, type StatedPosition } from "../evaluation/positions";
 import { checkValidations } from "../evaluation/validate";
 import { type StaticWitness, resolveStaticWitnesses } from "../evaluation/witness";
 import { estimateFeeSats } from "../fee";
@@ -655,6 +656,72 @@ export async function reviewManifestAction(
 
 	if (!selection.ok) {
 		return { reason: selection.reason, refused: true, reject: "shortfall" };
+	}
+
+	// Where each piece actually lands, against where the document says it must. The wallet
+	// builds covenant inputs in the order the action declares them and then its own outputs,
+	// and it builds the declared outputs in order with its change last — so the layout is
+	// known here, and a piece that cannot land where it was asked to is refused by name.
+	const positions: StatedPosition[] = [];
+	let walletInputRank = 0;
+
+	for (const entry of asArray(action.node.inputs)) {
+		const declared = asRecord(entry);
+
+		if (!declared) {
+			continue;
+		}
+
+		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
+		const covenantAt = covenantInputs.findIndex((covenant) => covenant.id === id);
+		const at = covenantAt >= 0 ? covenantAt : covenantInputs.length + walletInputRank;
+
+		if (covenantAt < 0) {
+			walletInputRank += 1;
+		}
+
+		if (typeof declared.required_index === "number") {
+			positions.push({ at, id, kind: "input", stated: declared.required_index });
+		}
+	}
+
+	for (const [at, planned] of outputs.entries()) {
+		const declared = asArray(action.node.outputs)
+			.map((entry) => asRecord(entry))
+			.find((entry) => entry?.id === planned.id);
+
+		if (typeof declared?.required_index === "number") {
+			positions.push({ at, id: planned.id, kind: "output", stated: declared.required_index });
+		}
+	}
+
+	// Change is the wallet's own and the builder appends it last, so its position is known
+	// without being chosen. A document stating one for it is stating one the wallet can only
+	// meet by accident.
+	const changeOutputs = plan.plan.outputs.filter((planned) => planned.target.kind === "change");
+
+	for (const planned of changeOutputs) {
+		const declared = asArray(action.node.outputs)
+			.map((entry) => asRecord(entry))
+			.find((entry) => entry?.id === planned.id);
+
+		if (typeof declared?.required_index === "number") {
+			positions.push({
+				at: outputs.length,
+				id: planned.id,
+				kind: "output",
+				stated: declared.required_index,
+			});
+		}
+	}
+
+	const positioned = checkPositions(positions, {
+		inputs: covenantInputs.length + selection.selected.length,
+		outputs: outputs.length + Math.min(changeOutputs.length, 1),
+	});
+
+	if (!positioned.ok) {
+		return { reason: positioned.reason, refused: true, reject: "unbuildable-position" };
 	}
 
 	const review: ManifestReview = {

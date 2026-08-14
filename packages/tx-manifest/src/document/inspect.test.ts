@@ -139,7 +139,7 @@ describe("what it would refuse on, and what it never asked", () => {
 		expect(unreachable).toContain("covenant-mismatch");
 		expect(unreachable).toContain("shortfall");
 		expect(unreachable).toContain("no-fee-rate");
-		expect(unreachable).toHaveLength(9);
+		expect(unreachable).toHaveLength(10);
 	});
 
 	test("names the reachable checks it could not perform, rather than passing them", () => {

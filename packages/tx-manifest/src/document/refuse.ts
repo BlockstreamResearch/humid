@@ -34,6 +34,8 @@ export type RejectToken =
 	| "foreign-asset"
 	/** A covenant this wallet cannot build or spend. */
 	| "unbuildable-utxo-type"
+	/** An input or output that cannot land at the transaction position it states. */
+	| "unbuildable-position"
 	/** The request is missing something the chosen action actually references. */
 	| "incomplete-request"
 	/** The manifest declares no action by that name. */
@@ -115,6 +117,7 @@ export const NEEDS_MORE_THAN_THE_DOCUMENT_REJECTS = [
 	"no-fee-rate",
 	"no-funds-at-signing-address",
 	"shortfall",
+	"unbuildable-position",
 	"document-fault",
 ] as const satisfies readonly RejectToken[];
 

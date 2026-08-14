@@ -207,10 +207,11 @@ const SITES = {
 			// The action tolerates this input's absence. The wallet includes what it is given
 			// and never drops one, which is inside what the declaration permits.
 			optional: SHOWN,
-			// Covenants depend on input and output ordering and no implementation enforces
-			// this, so a manifest asking for index 0 and getting 1 builds a transaction the
-			// covenant rejects on chain.
-			required_index: UNIMPLEMENTED,
+			// Read, and checked against where the wallet will actually put this input. Being
+			// stricter than the reference implementation here is the maintainer's decision of
+			// 2026-08-14: a covenant reads positions, so a mismatch is rejected by the network
+			// after signing, and refusing before it is strictly better.
+			required_index: READ,
 			sequence: READ,
 			ui: SHOWN,
 			utxo_source: READ,
@@ -272,7 +273,7 @@ const SITES = {
 			destination: READ,
 			id: READ,
 			optional: SHOWN,
-			required_index: UNIMPLEMENTED,
+			required_index: READ,
 			ui: SHOWN,
 		},
 		unknownIsLoadBearing: true,

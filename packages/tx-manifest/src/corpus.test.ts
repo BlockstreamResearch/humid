@@ -67,21 +67,24 @@ describe("every refusal a published manifest earns is named, not only described"
 		});
 	}
 
-	test("and every one the corpus refuses today refuses on a construct, which is a fact about the corpus", () => {
-		const named = (Object.keys(CORPUS) as (keyof typeof CORPUS)[]).map(rejectionOf).filter(Boolean);
+	// The measurement this bundle exists to move. Every published protocol used to be refused
+	// on a construct this wallet did not implement; none is now. What is left is a different
+	// statement about the wallet rather than about its reading: three protocols move an asset
+	// it does not move, and the oldest generation asks for a witness it cannot produce.
+	test("and no published manifest is refused for a construct any more", () => {
+		const named = Object.fromEntries(
+			(Object.keys(CORPUS) as (keyof typeof CORPUS)[]).map((name) => [name, rejectionOf(name)]),
+		);
 
-		// Five of the seven, and all five on the same branch: each uses a construct this wallet
-		// does not implement, and that check runs before any other could fire. So the vocabulary
-		// is not exercised beyond one token by the published corpus — which is worth asserting
-		// rather than hiding, because the day a manifest is refused for a different reason this
-		// line is what says so.
-		expect(named).toEqual([
-			"unimplemented-construct",
-			"unimplemented-construct",
-			"unimplemented-construct",
-			"unimplemented-construct",
-			"unimplemented-construct",
-		]);
+		expect(named).toEqual({
+			dex: "foreign-asset",
+			last_will: undefined,
+			lending: "unproducible-witness",
+			lending_v2: "foreign-asset",
+			lending_v3: "foreign-asset",
+			p2pk: undefined,
+			zeroconf: undefined,
+		});
 	});
 });
 
@@ -177,20 +180,36 @@ describe("what this wallet can do with each published protocol", () => {
 		expect(refusalFor("zeroconf")).toBe("");
 	});
 
-	// Recorded as the measurement rather than as an expectation: these five refuse today, and
-	// the first construct each refuses on is what a slice implementing it would remove.
+	// Recorded as the measurement rather than as an expectation: what stops each of the three
+	// still refused is now the asset it moves or the witness it asks for, and no longer a part
+	// of the document this wallet had not read.
 	test.each([
-		["dex", "required_index"],
-		["last_will", "required_index"],
-		["lending", "required_index"],
-		["lending_v2", "required_index"],
-		["lending_v3", "required_index"],
-	])("%s refuses, on %s", (name, construct) => {
-		expect(refusalFor(name)).toContain(construct);
+		["dex", "moves"],
+		["lending", "witness"],
+		["lending_v2", "moves"],
+		["lending_v3", "moves"],
+	])("%s refuses, and not on a construct", (name, because) => {
+		expect(refusalFor(name)).toContain(because);
 	});
 
-	test("and every refusal names where it was, not just what it was", () => {
-		expect(refusalFor("lending")).toContain("action SetupLending / input collateral_in");
+	test("last_will is read and built, where it was refused before this bundle", () => {
+		expect(refusalFor("last_will")).toBe("");
+	});
+
+	// A refusal still names where it was. Nothing in the corpus earns one from its document
+	// alone any more, so this exercises the sentence on a document written to earn it.
+	test("and a refusal names where it was, not just what it was", () => {
+		const { manifest } = normaliseManifest({
+			actions: { Spend: { inputs: [{ id: "vault_in", utxo_source: "wallet", unheard_of: 1 }] } },
+			chain: "liquid",
+		});
+		const refusal = refuseUnsupported(manifest, {
+			compilerVersion: "0.6.0",
+			contractSources: {},
+			policyAsset: POLICY_ASSET,
+		});
+
+		expect(refusal?.reason).toContain("action Spend / input vault_in");
 	});
 });
 
@@ -231,6 +250,8 @@ describe("what the corpus uses and this wallet does not read", () => {
 			}
 		}
 
-		expect([...unread].toSorted()).toEqual(["required_index"]);
+		// Empty, which is what this bundle set out to make true: every construct the published
+		// corpus uses is now one this wallet reads.
+		expect([...unread].toSorted()).toEqual([]);
 	});
 });
