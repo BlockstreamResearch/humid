@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
 import dexManifest from "@humid/tx-manifest/fixtures/current/dex.manifest.json";
 import lastWillManifest from "@humid/tx-manifest/fixtures/current/last_will.manifest.json";
 import lendingV2Manifest from "@humid/tx-manifest/fixtures/current/lending_v2.manifest.json";
@@ -65,9 +66,12 @@ describe("what the textarea currently holds", () => {
 			throw new Error("expected a readable document");
 		}
 
-		// The page ships no compiler version and no policy asset, and reports that rather than
-		// supplying a stand-in — which would turn "not checked" into "checked and fine".
-		expect(result.skipped).toEqual(["foreign-compiler", "foreign-asset", "unbuildable-utxo-type"]);
+		// The compiler version this page always has, because it reads the one the wallet ships.
+		// The network's asset it does not, until a person says which network — and it reports
+		// that rather than supplying a stand-in, which would turn "not checked" into "checked
+		// and fine". This document references no contracts, so the compiler check is whole.
+		expect(result.skipped).toEqual(["foreign-asset", "unbuildable-utxo-type"]);
+		expect(result.partial).toEqual([]);
 	});
 });
 
@@ -97,8 +101,10 @@ describe("the two checks that need the network's own asset", () => {
 	test("with a network chosen, neither is reported as not run any more", () => {
 		const result = read(zeroconfManifest, LIQUID_MAINNET);
 
-		// The compiler check still is; this page holds no version yet.
-		expect(result.skipped).toEqual(["foreign-compiler"]);
+		// Nothing is left unrun: this document declares no covenant contracts, so the compiler
+		// check has only the document's own declaration to read and has read it.
+		expect(result.skipped).toEqual([]);
+		expect(result.partial).toEqual([]);
 	});
 
 	// The three the wallet refuses on the asset they move. Named rather than counted: a document
@@ -128,5 +134,59 @@ describe("the two checks that need the network's own asset", () => {
 	test("testnet reaches the same verdict as mainnet on the published corpus", () => {
 		expect(read(dexManifest, LIQUID_TESTNET).refusal?.reject).toBe("foreign-asset");
 		expect(read(lastWillManifest, LIQUID_TESTNET).refusal).toBeUndefined();
+	});
+});
+
+// AC-04. The page holds the compiler version the wallet ships, which answers one of the two
+// places a version is declared. The other is inside each contract source, and this is the page
+// saying which of those it read rather than letting the half it did read stand for both.
+
+describe("the compiler check, which is declared in two places", () => {
+	function read(manifest: unknown, contractSources?: Record<string, string>) {
+		const result = readDocument(JSON.stringify(manifest), { contractSources });
+
+		if (result.kind !== "read" || !result.ok) {
+			throw new Error("expected a readable document");
+		}
+
+		return result;
+	}
+
+	test("names the contract sources the document references, supplied or not", () => {
+		expect(read(lastWillManifest).contracts).toEqual(["./last_will.simf"]);
+	});
+
+	test("with no sources, says the contracts went unread rather than reporting the check run", () => {
+		const result = read(lastWillManifest);
+
+		expect(result.skipped).not.toContain("foreign-compiler");
+		expect(result.partial).toEqual([{ reject: "foreign-compiler", unread: ["./last_will.simf"] }]);
+	});
+
+	test("with every referenced source supplied, the check is answered in full", () => {
+		const result = read(lastWillManifest, { "./last_will.simf": "fn main() {}" });
+
+		expect(result.partial).toEqual([]);
+		expect(result.refusal).toBeUndefined();
+	});
+
+	test("refuses a source asking for a version this wallet does not ship, naming the file", () => {
+		const result = read(lastWillManifest, {
+			"./last_will.simf": 'simc "9.9.9"\nfn main() {}',
+		});
+
+		expect(result.refusal?.reject).toBe("foreign-compiler");
+		expect(result.refusal?.reason).toContain("./last_will.simf");
+		// The version this wallet ships, which the page reads from the same place the wallet does.
+		expect(result.refusal?.reason).toContain(SMPLX_COMPILER_VERSION);
+	});
+
+	test("a source that asks for the version this wallet ships is not refused", () => {
+		const result = read(lastWillManifest, {
+			"./last_will.simf": `simc "${SMPLX_COMPILER_VERSION}"\nfn main() {}`,
+		});
+
+		expect(result.refusal).toBeUndefined();
+		expect(result.partial).toEqual([]);
 	});
 });

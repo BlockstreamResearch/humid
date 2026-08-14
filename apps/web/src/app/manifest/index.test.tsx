@@ -30,6 +30,7 @@ describe("the inspector with nothing around it", () => {
 		expect(html).not.toContain("What the wallet would refuse");
 		expect(html).not.toContain("What each field is");
 		expect(html).not.toContain("What was rewritten");
+		expect(html).not.toContain("The contracts this document references");
 	});
 
 	test("offers a document to start from, so the empty box is not the only way in", () => {

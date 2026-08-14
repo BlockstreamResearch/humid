@@ -54,5 +54,6 @@ export {
 	DOCUMENT_ONLY_REFUSALS,
 	inspectManifestDocument,
 } from "./document/inspect";
+export type { PartialCheck } from "./document/refuse";
 export type { ConstructReport, ConstructState } from "./document/registry";
 export type { NormalisationNote } from "./document/normalise";

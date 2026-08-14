@@ -1,5 +1,5 @@
 import { asArray, asRecord } from "./json";
-import type { NormalisedAction } from "./normalise";
+import type { NormalisedAction, NormalisedManifest } from "./normalise";
 
 /**
  * One place in an action where a covenant appears, and which side it is on.
@@ -59,6 +59,27 @@ export function covenantSites(action: NormalisedAction): CovenantSite[] {
 /** The utxo types this action reaches, in the order it names them. */
 export function namedUtxoTypes(action: NormalisedAction): string[] {
 	return [...new Set(covenantSites(action).map((site) => site.utxoType))];
+}
+
+/**
+ * Every contract source path the whole document references, through the covenants it declares.
+ *
+ * The action-scoped question — which sources does *this* action need — belongs to a request and
+ * is asked there. This is the document-wide one, which is what a reader holding no request has
+ * to ask before it can say whether it read the contracts or only the document.
+ */
+export function contractSourcePaths(manifest: NormalisedManifest): string[] {
+	const paths = new Set<string>();
+
+	for (const declared of Object.values(manifest.utxoTypes)) {
+		const source = asRecord(asRecord(declared)?.script)?.source;
+
+		if (typeof source === "string") {
+			paths.add(source);
+		}
+	}
+
+	return [...paths];
 }
 
 function identifierOf(entry: unknown): string {

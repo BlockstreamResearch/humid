@@ -173,6 +173,50 @@ describe("what it would refuse on, and what it never asked", () => {
 	});
 });
 
+// A compiler version is declared twice — once by the document and once by a directive inside
+// each contract source — so a reader given only the version has answered one of the two. That
+// is neither skipped nor done, and reporting it as either is this surface's own failure mode
+// happening one level down.
+describe("a check that read one of the two places that decide it", () => {
+	test("names the sources it did not read, and does not call the check skipped", () => {
+		const result = inspect(flat, { compilerVersion: "0.4.0" });
+
+		expect(result.skipped).not.toContain("foreign-compiler");
+		expect(result.partial).toEqual([{ reject: "foreign-compiler", unread: ["./p2pk.simf"] }]);
+	});
+
+	test("is answered in full once every source the document references arrives", () => {
+		const result = inspect(flat, {
+			compilerVersion: "0.4.0",
+			contractSources: { "./p2pk.simf": "fn main() {}" },
+		});
+
+		expect(result.partial).toEqual([]);
+		expect(result.skipped).not.toContain("foreign-compiler");
+	});
+
+	test("a document referencing no contracts is answered in full by the version alone", () => {
+		expect(inspect({ chain: "liquid" }, { compilerVersion: "0.4.0" }).partial).toEqual([]);
+	});
+
+	test("with no version at all the check is skipped, which is not the same thing", () => {
+		const result = inspect(flat);
+
+		expect(result.skipped).toContain("foreign-compiler");
+		expect(result.partial).toEqual([]);
+	});
+
+	test("refuses a source asking for another compiler, naming the file it arrived under", () => {
+		const result = inspect(flat, {
+			compilerVersion: "0.4.0",
+			contractSources: { "./p2pk.simf": 'simc "9.9.9"\nfn main() {}' },
+		});
+
+		expect(result.refusal?.reject).toBe("foreign-compiler");
+		expect(result.refusal?.reason).toContain("./p2pk.simf");
+	});
+});
+
 // The reason this is a package function rather than a page: the page must not be able to
 // reach a network, and neither must this.
 describe("what it does not do", () => {

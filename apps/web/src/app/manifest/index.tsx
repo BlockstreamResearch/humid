@@ -15,8 +15,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { LIQUID_NETWORKS, liquidNetworkByChainId } from "@/lib/liquid-networks";
 
 import { ConstructTable } from "./components/ConstructTable";
+import { ContractSourceList } from "./components/ContractSourceList";
 import { RefusalPanel } from "./components/RefusalPanel";
 import { RewriteList } from "./components/RewriteList";
+import { matchContractSources, type SuppliedSource } from "./contractSources";
 import { readDocument } from "./readDocument";
 
 /**
@@ -46,8 +48,25 @@ const NO_NETWORK = "none";
 export default function ManifestInspector() {
 	const [text, setText] = useState("");
 	const [chosenChain, setChosenChain] = useState("");
+	const [suppliedSources, setSuppliedSources] = useState<SuppliedSource[]>([]);
 	const network = useMemo(() => liquidNetworkByChainId(chosenChain), [chosenChain]);
-	const document = useMemo(() => readDocument(text, { network }), [text, network]);
+
+	// Read twice, because a file arrives under the name it has on a disk and the reader wants it
+	// under the path the document references it by — and only the document says what those paths
+	// are. The first read asks that question, which no supplied source can change the answer to,
+	// and the second is the one the page reports.
+	const { document, matched } = useMemo(() => {
+		const referenced = readDocument(text, { network });
+		const matched = matchContractSources(
+			referenced.kind === "read" && referenced.ok ? referenced.contracts : [],
+			suppliedSources,
+		);
+
+		return {
+			document: readDocument(text, { contractSources: matched.sources, network }),
+			matched,
+		};
+	}, [text, network, suppliedSources]);
 
 	return (
 		<div className="mx-auto flex min-h-svh w-full max-w-4xl flex-col gap-6 p-4 md:p-6">
@@ -132,6 +151,18 @@ export default function ManifestInspector() {
 							description="Checked before anything is built, and only against the document itself."
 						>
 							<RefusalPanel inspection={document} />
+						</Panel>
+						<Panel
+							title="The contracts this document references"
+							description="Read here in the page, so the compiler check reads both places that declare a version rather than one."
+						>
+							<ContractSourceList
+								contracts={document.contracts}
+								onClear={() => setSuppliedSources([])}
+								onSupply={setSuppliedSources}
+								supplied={matched.sources}
+								unmatched={matched.unmatched}
+							/>
 						</Panel>
 						<Panel
 							title="What each field is"

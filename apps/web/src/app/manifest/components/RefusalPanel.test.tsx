@@ -15,9 +15,10 @@ function render(inspection: Parameters<typeof RefusalPanel>[0]["inspection"]): s
 
 const NOTHING_ASKED: Pick<
 	Parameters<typeof RefusalPanel>[0]["inspection"],
-	"constructs" | "skipped" | "unreachable"
+	"constructs" | "partial" | "skipped" | "unreachable"
 > = {
 	constructs: [],
+	partial: [],
 	skipped: [],
 	unreachable: ["covenant-mismatch", "shortfall", "no-fee-rate"],
 };
@@ -63,6 +64,7 @@ describe("what a reader is told about refusal", () => {
 	test("separates checks it could have made from checks nothing could", () => {
 		const html = render({
 			constructs: [],
+			partial: [],
 			refusal: undefined,
 			skipped: ["foreign-compiler"],
 			unreachable: ["shortfall"],
@@ -71,6 +73,35 @@ describe("what a reader is told about refusal", () => {
 		expect(html).toContain("Not checked, because this page was not told what it needs");
 		expect(html).toContain("foreign-compiler");
 		expect(html).toContain("Not checkable from a document at all");
+	});
+
+	// AC-04. Between skipped and done there is a third answer, and the page has to carry it or
+	// a check that read one of its two places is read as one that passed.
+	test("keeps a half-answered check apart from both a skipped one and a passed one", () => {
+		const html = render({
+			...NOTHING_ASKED,
+			partial: [{ reject: "foreign-compiler", unread: ["./p2pk.simf"] }],
+			refusal: undefined,
+		});
+
+		expect(html).toContain("Checked in one of the two places that decide it");
+		expect(html).toContain("./p2pk.simf");
+		expect(html).not.toContain("Not checked, because");
+	});
+
+	test("says which sources went unread rather than that some did", () => {
+		const html = render({
+			...NOTHING_ASKED,
+			partial: [{ reject: "foreign-compiler", unread: ["./lending.simf", "./script_auth.simf"] }],
+			refusal: undefined,
+		});
+
+		expect(html).toContain("./lending.simf");
+		expect(html).toContain("./script_auth.simf");
+	});
+
+	test("says nothing about a half-answered check when every check was answered in full", () => {
+		expect(render({ ...NOTHING_ASKED, refusal: undefined })).not.toContain("Checked in one of");
 	});
 
 	// Found by using this page on the five published protocols: each refused on one decorative

@@ -13,6 +13,7 @@
 	"dependencies": {
 		"@fontsource-variable/jetbrains-mono": "^5.2.8",
 		"@humid/appkit-injected-adapter": "workspace:*",
+		"@humid/smplx-compiler": "workspace:*",
 		"@humid/tx-manifest": "workspace:*",
 		"@reown/appkit": "^1.8.19",
 		"@reown/appkit-common": "^1.8.19",

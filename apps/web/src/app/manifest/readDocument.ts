@@ -1,3 +1,4 @@
+import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
 import { inspectManifestDocument, type InspectManifestResult } from "@humid/tx-manifest";
 
 import type { LiquidNetwork } from "@/lib/liquid-networks";
@@ -14,6 +15,14 @@ export type ReadDocument =
 	| ({ kind: "read" } & InspectManifestResult);
 
 export type ReadOptions = {
+	/**
+	 * The sources of the contracts this document references, under those paths.
+	 *
+	 * A compiler version is declared twice, and one of the two declarations lives inside the
+	 * contract source. Absent them the reader answers for the document's own declaration and
+	 * reports which sources it did not read, which is a third answer and not a pass.
+	 */
+	contractSources?: Record<string, string>;
 	/**
 	 * The network the reader should mean, when a person has said which.
 	 *
@@ -50,11 +59,17 @@ export function readDocument(text: string, options: ReadOptions = {}): ReadDocum
 		};
 	}
 
-	// The asset only when a person has named a network, and no compiler version at all yet.
-	// Never a stand-in for either: that would turn "not checked" into "checked and fine", and
-	// the package reports an absent input as skipped so the page can print it.
+	// The compiler version always, because this page and the wallet read it from the same place.
+	// The asset only when a person has named a network, and the contract sources only when they
+	// have handed them over. Never a stand-in for any of them: that would turn "not checked"
+	// into "checked and fine", and the package says what it could not reach so the page prints
+	// it — including the half-answer, where the version arrived and the sources did not.
 	return {
 		kind: "read",
-		...inspectManifestDocument(parsed, { policyAsset: options.network?.policyAsset }),
+		...inspectManifestDocument(parsed, {
+			compilerVersion: SMPLX_COMPILER_VERSION,
+			contractSources: options.contractSources,
+			policyAsset: options.network?.policyAsset,
+		}),
 	};
 }

@@ -3,11 +3,13 @@ import { normaliseManifest, type NormalisationNote } from "./normalise";
 import {
 	DOCUMENT_ONLY_REJECTS,
 	NEEDS_MORE_THAN_THE_DOCUMENT_REJECTS,
+	type PartialCheck,
 	type Refusal,
 	type RejectToken,
 	refuseFromDocumentAlone,
 } from "./refuse";
 import { type ConstructReport, describeConstructs } from "./registry";
+import { contractSourcePaths } from "./sites";
 
 /**
  * What this package makes of one document, for a reader who is not a wallet.
@@ -21,6 +23,22 @@ import { type ConstructReport, describeConstructs } from "./registry";
 export type ManifestInspection = {
 	/** Every construct the document declares, against what this runtime does with it. */
 	constructs: ConstructReport[];
+	/**
+	 * Every contract source path this document references, whether or not it was supplied.
+	 *
+	 * A caller holding files has no other way to learn which of them this document is asking
+	 * for, and the answer does not depend on what it passed in — so it is reported rather than
+	 * left to be inferred from what came back unread.
+	 */
+	contracts: string[];
+	/**
+	 * Checks that ran against only part of what declares them, with what went unread.
+	 *
+	 * Empty when every check the caller's inputs allowed was answered in full. A check here has
+	 * not passed and has not been skipped: it read one of the places that decide it, which is
+	 * worth saying out loud rather than folding into either neighbour.
+	 */
+	partial: PartialCheck[];
 	/**
 	 * The first refusal decided from the document alone, if any.
 	 *
@@ -86,11 +104,13 @@ export function inspectManifestDocument(
 	}
 
 	const { manifest, notes } = normaliseManifest(document);
-	const { refusal, skipped } = refuseFromDocumentAlone(manifest, options);
+	const { partial, refusal, skipped } = refuseFromDocumentAlone(manifest, options);
 
 	return {
 		constructs: describeConstructs(manifest),
+		contracts: contractSourcePaths(manifest),
 		ok: true,
+		partial,
 		refusal,
 		rewrites: notes,
 		skipped,

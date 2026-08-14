@@ -2,6 +2,7 @@ import { STATIC_WITNESS } from "../evaluation/witness";
 import { asArray, asRecord } from "./json";
 import type { NormalisedManifest } from "./normalise";
 import { loadBearing, inspectConstructs } from "./registry";
+import { contractSourcePaths } from "./sites";
 
 /**
  * What a refusal is called, so that a program can tell two of them apart.
@@ -132,12 +133,31 @@ export const NEEDS_MORE_THAN_THE_DOCUMENT_REJECTS = [
 ] as const satisfies readonly RejectToken[];
 
 /**
+ * A check that ran against less than declares it, and what went unread.
+ *
+ * Between "not checked" and "checked" there is a third answer, and leaving it out is how a
+ * surface comes to report a check as done when half of it never happened. Only the compiler
+ * check can be in this state today, because it is the only one declared in two places.
+ */
+export type PartialCheck = {
+	reject: RejectToken;
+	/** What the caller did not supply, named the way the document names it. */
+	unread: string[];
+};
+
+/**
  * The same refusals as {@link refuseUnsupported}, for a reader who is not a wallet.
  *
  * Four of the eight need nothing but the document. The compiler check needs the version a
  * wallet ships and the two asset checks need the network's own asset, and a caller holding
  * neither gets those checks skipped rather than answered — passing a stand-in would turn
  * "not checked" into "checked and fine", which is the one thing this must not do.
+ *
+ * The compiler check has a third outcome, because it reads two places: the document's own
+ * declared version, and a `simc` directive inside each contract source. Given the version and
+ * not the sources it answers for the first and cannot answer for the second, so it reports
+ * which sources went unread rather than letting a half-answer stand as a whole one. A document
+ * referencing no contracts has nothing unread and is answered in full.
  *
  * Deliberately not a parameter of `refuseUnsupported`: a wallet always holds both, and an
  * optional field on the wallet's own path is an invitation to omit one there.
@@ -149,8 +169,9 @@ export function refuseFromDocumentAlone(
 		contractSources?: Record<string, string>;
 		policyAsset?: string;
 	},
-): { refusal: Refusal | undefined; skipped: RejectToken[] } {
+): { partial: PartialCheck[]; refusal: Refusal | undefined; skipped: RejectToken[] } {
 	const skipped: RejectToken[] = [];
+	const partial: PartialCheck[] = [];
 
 	const compiler =
 		input.compilerVersion === undefined
@@ -162,6 +183,13 @@ export function refuseFromDocumentAlone(
 
 	if (input.compilerVersion === undefined) {
 		skipped.push("foreign-compiler");
+	} else {
+		const supplied = input.contractSources ?? {};
+		const unread = contractSourcePaths(manifest).filter((path) => !(path in supplied));
+
+		if (unread.length > 0) {
+			partial.push({ reject: "foreign-compiler", unread });
+		}
 	}
 
 	const asset =
@@ -175,6 +203,7 @@ export function refuseFromDocumentAlone(
 	}
 
 	return {
+		partial,
 		refusal:
 			refuseForeignChain(manifest) ??
 			refuseUnrecognisedConstruct(manifest) ??

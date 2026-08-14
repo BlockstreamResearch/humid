@@ -22,7 +22,10 @@ import { Badge } from "@/components/ui/badge";
 export function RefusalPanel({
 	inspection,
 }: {
-	inspection: Pick<ManifestInspection, "constructs" | "refusal" | "skipped" | "unreachable">;
+	inspection: Pick<
+		ManifestInspection,
+		"constructs" | "partial" | "refusal" | "skipped" | "unreachable"
+	>;
 }) {
 	const wouldRefuse = inspection.constructs.filter(
 		(report) => report.state === "unimplemented" || report.state === "unrecognised",
@@ -65,6 +68,29 @@ export function RefusalPanel({
 				/>
 			)}
 
+			{inspection.partial.length > 0 && (
+				<section className="flex flex-col gap-2">
+					<h3 className="text-sm font-medium">Checked in one of the two places that decide it</h3>
+					<p className="text-muted-foreground text-xs">
+						A compiler version is declared twice: by the document, and by a directive inside each
+						contract source. The document's own declaration was checked. These sources were not
+						read, so what they ask for is unknown — which is not the same as agreeing.
+					</p>
+					{inspection.partial.map((check) => (
+						<div key={check.reject} className="flex flex-wrap items-center gap-1">
+							<Badge variant="outline" className="font-mono">
+								{check.reject}
+							</Badge>
+							{check.unread.map((path) => (
+								<code key={path} className="text-muted-foreground font-mono text-xs">
+									{path}
+								</code>
+							))}
+						</div>
+					))}
+				</section>
+			)}
+
 			<Unasked
 				heading="Not checkable from a document at all"
 				explanations={[
@@ -89,7 +115,7 @@ function whyUnasked(skipped: readonly RejectToken[]): string[] {
 
 	if (skipped.includes("foreign-compiler")) {
 		explanations.push(
-			"The compiler check needs the single SimplicityHL version a wallet ships, and this page ships none.",
+			"The compiler check needs the single SimplicityHL version a wallet ships, and the reader was given none.",
 		);
 	}
 
