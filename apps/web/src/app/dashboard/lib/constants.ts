@@ -1,7 +1,12 @@
 import { LIQUID_MAINNET_CHAIN_ID, LIQUID_TESTNET_CHAIN_ID } from "@humid/appkit-injected-adapter";
 
-export const LIQUID_MAINNET_LBTC_ASSET_ID = `${LIQUID_MAINNET_CHAIN_ID}/elip144:6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d`;
-export const LIQUID_TESTNET_LBTC_ASSET_ID = `${LIQUID_TESTNET_CHAIN_ID}/elip144:144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49`;
+import { LIQUID_MAINNET, LIQUID_TESTNET } from "@/lib/liquid-networks";
+
+// Chain-qualified for the wallet RPC, from the same asset the manifest inspector compares
+// against. Written once: two spellings of one fact drift, and the wrong one refuses a document
+// that should have built.
+export const LIQUID_MAINNET_LBTC_ASSET_ID = `${LIQUID_MAINNET_CHAIN_ID}/elip144:${LIQUID_MAINNET.policyAsset}`;
+export const LIQUID_TESTNET_LBTC_ASSET_ID = `${LIQUID_TESTNET_CHAIN_ID}/elip144:${LIQUID_TESTNET.policyAsset}`;
 
 export const DEFAULT_IDENTITY = "ssh://humid@localhost";
 export const DEFAULT_IDENTITY_CHALLENGE =

@@ -1,4 +1,4 @@
-import type { ManifestInspection } from "@humid/tx-manifest";
+import type { ManifestInspection, RejectToken } from "@humid/tx-manifest";
 
 import { Badge } from "@/components/ui/badge";
 
@@ -60,33 +60,65 @@ export function RefusalPanel({
 			{inspection.skipped.length > 0 && (
 				<Unasked
 					heading="Not checked, because this page was not told what it needs"
-					explanation="The compiler check needs the single SimplicityHL version a wallet ships, and this page ships none."
+					explanations={whyUnasked(inspection.skipped)}
 					tokens={inspection.skipped}
 				/>
 			)}
 
 			<Unasked
 				heading="Not checkable from a document at all"
-				explanation="Each of these is decided against money, a chain read, a fee rate or a filled request. Reading a document establishes nothing about any of them."
+				explanations={[
+					"Each of these is decided against money, a chain read, a fee rate or a filled request. Reading a document establishes nothing about any of them.",
+				]}
 				tokens={inspection.unreachable}
 			/>
 		</div>
 	);
 }
 
+/**
+ * Why each unrun check was not run, in the reader's own terms.
+ *
+ * One sentence per missing input rather than per check, because two of them are missing the
+ * same thing and a person reading this is deciding what to do about it. Where the answer is
+ * theirs to give, the sentence says so — an explanation that only states what is absent
+ * leaves the page looking broken rather than waiting.
+ */
+function whyUnasked(skipped: readonly RejectToken[]): string[] {
+	const explanations: string[] = [];
+
+	if (skipped.includes("foreign-compiler")) {
+		explanations.push(
+			"The compiler check needs the single SimplicityHL version a wallet ships, and this page ships none.",
+		);
+	}
+
+	if (skipped.includes("foreign-asset") || skipped.includes("unbuildable-utxo-type")) {
+		explanations.push(
+			"The asset checks need the asset the network charges in, and no network is chosen. Choose one above and they run.",
+		);
+	}
+
+	return explanations;
+}
+
 function Unasked({
-	explanation,
+	explanations,
 	heading,
 	tokens,
 }: {
-	explanation: string;
+	explanations: readonly string[];
 	heading: string;
 	tokens: readonly string[];
 }) {
 	return (
 		<section className="flex flex-col gap-2">
 			<h3 className="text-sm font-medium">{heading}</h3>
-			<p className="text-muted-foreground text-xs">{explanation}</p>
+			{explanations.map((explanation) => (
+				<p key={explanation} className="text-muted-foreground text-xs">
+					{explanation}
+				</p>
+			))}
 			<div className="flex flex-wrap gap-1">
 				{tokens.map((token) => (
 					<Badge key={token} variant="outline" className="font-mono">

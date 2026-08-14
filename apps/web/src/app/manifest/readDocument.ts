@@ -1,5 +1,7 @@
 import { inspectManifestDocument, type InspectManifestResult } from "@humid/tx-manifest";
 
+import type { LiquidNetwork } from "@/lib/liquid-networks";
+
 /** Nothing has been pasted yet, which is not a fault to report. */
 export type EmptyDocument = { kind: "empty" };
 
@@ -11,6 +13,17 @@ export type ReadDocument =
 	| UnreadableDocument
 	| ({ kind: "read" } & InspectManifestResult);
 
+export type ReadOptions = {
+	/**
+	 * The network the reader should mean, when a person has said which.
+	 *
+	 * Two of the checks compare against the network's own asset, and the two Liquid networks
+	 * carry different ones. Nothing in a document decides this, so absent an answer the reader
+	 * is given no asset and reports those checks as not run.
+	 */
+	network?: LiquidNetwork;
+};
+
 /**
  * Turns whatever is in the textarea into one of three outcomes.
  *
@@ -19,7 +32,7 @@ export type ReadDocument =
  * only the first is a syntax problem. The second is the package's own judgement and is
  * carried through unchanged rather than restated here.
  */
-export function readDocument(text: string): ReadDocument {
+export function readDocument(text: string, options: ReadOptions = {}): ReadDocument {
 	const trimmed = text.trim();
 
 	if (trimmed === "") {
@@ -37,8 +50,11 @@ export function readDocument(text: string): ReadDocument {
 		};
 	}
 
-	// No compiler version and no policy asset, deliberately. This page ships neither, and a
-	// stand-in for either would turn "not checked" into "checked and fine" — the package
-	// reports both as skipped, and the page prints that.
-	return { kind: "read", ...inspectManifestDocument(parsed) };
+	// The asset only when a person has named a network, and no compiler version at all yet.
+	// Never a stand-in for either: that would turn "not checked" into "checked and fine", and
+	// the package reports an absent input as skipped so the page can print it.
+	return {
+		kind: "read",
+		...inspectManifestDocument(parsed, { policyAsset: options.network?.policyAsset }),
+	};
 }
