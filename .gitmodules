@@ -5,4 +5,4 @@
 [submodule "smplx"]
 	path = smplx
 	url = https://github.com/lukachi/smplx.git
-	branch = humid/wasm
+	branch = humid/wasm-issuance
