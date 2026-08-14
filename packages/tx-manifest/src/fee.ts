@@ -42,8 +42,25 @@ const PER_OUTPUT = 67n;
  */
 const PER_COVENANT_INPUT = 87n;
 
+/**
+ * What an issuance adds to the input carrying it.
+ *
+ * A surcharge rather than an input of its own: an issuance sits on an input that is already
+ * counted as a wallet or a covenant one, and adds to it the amount issued, the inflation
+ * keys, the entropy and the blinding nonce.
+ *
+ * Measured the same way as everything else here — an ordinary wallet input, and the same
+ * input carrying an issuance, both signed, and the difference in what the module charged at
+ * 1000 sat/kvb. Only the wallet shape was measured. The fields belong to the input rather
+ * than to its witness, so a covenant input carrying an issuance is priced the same, and that
+ * is stated here rather than measured.
+ */
+const PER_ISSUING_INPUT = 74n;
+
 export type TransactionShape = {
 	covenantInputs: number;
+	/** How many of those inputs also create an asset. Counted again rather than instead. */
+	issuingInputs: number;
 	outputs: number;
 	walletInputs: number;
 };
@@ -54,7 +71,8 @@ export function estimateVsize(shape: TransactionShape): bigint {
 		BASE_VSIZE +
 		PER_WALLET_INPUT * BigInt(shape.walletInputs) +
 		PER_OUTPUT * BigInt(shape.outputs) +
-		PER_COVENANT_INPUT * BigInt(shape.covenantInputs)
+		PER_COVENANT_INPUT * BigInt(shape.covenantInputs) +
+		PER_ISSUING_INPUT * BigInt(shape.issuingInputs)
 	);
 }
 

@@ -510,6 +510,9 @@ export async function reviewManifestAction(
 	const estimatedFee = estimateFeeSats(
 		{
 			covenantInputs: covenantInputs.length,
+			// Each issuance is a surcharge on an input already counted above, and is known
+			// exactly: the outputs it derives from were committed to before this ran.
+			issuingInputs: issued.issuances.length,
 			outputs: draft.plan.outputs.length,
 			// The wallet has not chosen the rest of its inputs yet, and one is the common case; a
 			// selection that takes more is priced below, before anything is committed to. The

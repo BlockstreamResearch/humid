@@ -123,7 +123,37 @@ function context(): LiquidProcessCtContext {
 	} as unknown as LiquidProcessCtContext;
 }
 
-type Recorded = { broadcasts: { txHex: string }[]; mnemonicCalls: number; paid: string[] };
+/**
+ * What the module hands back when it is told to issue, which nothing on this path reads yet.
+ *
+ * It is held across the wasm boundary like everything else the module returns, so the method
+ * has to release it, and a substitute without `free` would let a leak pass unnoticed.
+ */
+function issuanceReport() {
+	return {
+		assetId: "not read yet",
+		entropy: "not read yet",
+		free() {},
+		reissuanceTokenId: "not read yet",
+	};
+}
+
+/** One issuance the builder was told to put on an input, and what it was told about it. */
+type IssuedInput = {
+	assetAmountSats: bigint;
+	contractInput: boolean;
+	inflationAmountSats: bigint;
+	issuerContractHex: string | undefined;
+	txid: string;
+	vout: number;
+};
+
+type Recorded = {
+	broadcasts: { txHex: string }[];
+	issued: IssuedInput[];
+	mnemonicCalls: number;
+	paid: string[];
+};
 
 function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 	return {
@@ -171,6 +201,32 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 						requireTxid(txid);
 						this.spends.push({ txid, vout });
 					}
+					addContractIssuanceInput(
+						txid: string,
+						vout: number,
+						txOutHex: string,
+						_source: string,
+						_argumentsJson: string | undefined,
+						_witnessJson: string | undefined,
+						_signatureWitness: string | undefined,
+						assetAmountSats: bigint,
+						inflationAmountSats: bigint,
+						issuerContractHex: string | undefined,
+					) {
+						requireHex("covenant input's previous output", txOutHex);
+						requireTxid(txid);
+						this.spends.push({ txid, vout });
+						recorded.issued.push({
+							assetAmountSats,
+							contractInput: true,
+							inflationAmountSats,
+							issuerContractHex,
+							txid,
+							vout,
+						});
+
+						return issuanceReport();
+					}
 					addOutput(
 						scriptPubKeyHex: string,
 						_amountSats: bigint,
@@ -190,6 +246,28 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 						requireHex("wallet input's previous output", txOut);
 						requireTxid(txid);
 						this.spends.push({ txid, vout });
+					}
+					addWalletIssuanceInput(
+						txid: string,
+						vout: number,
+						txOut: string,
+						assetAmountSats: bigint,
+						inflationAmountSats: bigint,
+						issuerContractHex: string | undefined,
+					) {
+						requireHex("wallet input's previous output", txOut);
+						requireTxid(txid);
+						this.spends.push({ txid, vout });
+						recorded.issued.push({
+							assetAmountSats,
+							contractInput: false,
+							inflationAmountSats,
+							issuerContractHex,
+							txid,
+							vout,
+						});
+
+						return issuanceReport();
 					}
 					free() {}
 				},
@@ -248,7 +326,7 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 }
 
 function subject() {
-	const recorded: Recorded = { broadcasts: [], mnemonicCalls: 0, paid: [] };
+	const recorded: Recorded = { broadcasts: [], issued: [], mnemonicCalls: 0, paid: [] };
 
 	return { method: createProcessLiquidConfidentialTransaction(dependencies(recorded)), recorded };
 }
@@ -355,7 +433,7 @@ describe("processLiquidConfidentialTransaction across declaration shapes", () =>
 // other part of the request was well formed.
 describe("processLiquidConfidentialTransaction guards what it signs", () => {
 	function subjectSpending(extra: { txid: string; vout: number }) {
-		const recorded: Recorded = { broadcasts: [], mnemonicCalls: 0, paid: [] };
+		const recorded: Recorded = { broadcasts: [], issued: [], mnemonicCalls: 0, paid: [] };
 		const dependency = dependencies(recorded);
 
 		return {
@@ -515,5 +593,86 @@ describe("what the outputs actually pay to", () => {
 
 		expect(recorded.paid).toContain(DERIVED_SCRIPT);
 		expect(recorded.paid).not.toContain(DERIVED);
+	});
+});
+
+/**
+ * The same protocol with its funding input creating an asset.
+ *
+ * Written here rather than vendored because no published manifest this wallet can build
+ * declares an issuance: the ones in the corpus that do reach for constructs it refuses first,
+ * so a fixture taken from them would assert a refusal and never reach the builder.
+ */
+function issuingManifest(
+	issuance: Record<string, unknown> = { asset_amount_sat: 1_000, kind: "new" },
+) {
+	const manifest = structuredClone(p2pkManifest) as unknown as {
+		actions: { Pay: { inputs: Record<string, unknown>[] } };
+	};
+	const [funding] = manifest.actions.Pay.inputs;
+
+	if (!funding) {
+		throw new Error("the fixture's Pay action declares no inputs");
+	}
+
+	funding.issuance = issuance;
+
+	return manifest;
+}
+
+// The asset an action creates is worked out while the document is read, from an output the
+// wallet commits to before anything else runs. Until now none of that reached the module, so
+// the wallet showed a person an asset and signed a transaction that created nothing.
+describe("an input that creates an asset", () => {
+	test("carries the issuance the wallet settled, on the output it was derived from", async () => {
+		const { method, recorded } = subject();
+
+		await method(params({ manifest: issuingManifest() }), context());
+
+		expect(recorded.issued).toEqual([
+			{
+				assetAmountSats: 1_000n,
+				contractInput: false,
+				inflationAmountSats: 0n,
+				// Nothing is stated, because a manifest declares no issuer contract at any
+				// position. Both sides commit to the empty one and each says so.
+				issuerContractHex: undefined,
+				txid: FUNDING_TXID,
+				vout: 0,
+			},
+		]);
+	});
+
+	test("and the transaction it signs spends that same output", async () => {
+		const { method } = subject();
+
+		const result = await method(params({ manifest: issuingManifest() }), context());
+
+		expect(result.transactionHex).toBe(serialise([{ txid: FUNDING_TXID, vout: 0 }]));
+	});
+
+	test("while an action that creates nothing tells the builder about no issuance", async () => {
+		const { method, recorded } = subject();
+
+		await method(params(), context());
+
+		expect(recorded.issued).toEqual([]);
+	});
+
+	// A reissuance needs the entropy of an issuance that already happened, which reaches a
+	// request only on a supplied input this wallet does not read. Refused by name rather than
+	// minting a different asset under the protocol's name.
+	test("but reissuing is refused by name rather than derived from this transaction", async () => {
+		const { method } = subject();
+
+		const failure = await method(
+			params({ manifest: issuingManifest({ asset_amount_sat: 1_000, kind: "reissue" }) }),
+			context(),
+		).then(
+			() => undefined,
+			(error: unknown) => error as { data?: { reject?: string } },
+		);
+
+		expect(failure?.data?.reject).toBe("unimplemented-construct");
 	});
 });

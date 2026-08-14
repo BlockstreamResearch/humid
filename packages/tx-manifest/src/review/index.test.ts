@@ -442,7 +442,7 @@ describe("an amount that depends on the fee", () => {
 			// One covenant input, one output, and the wallet input the estimate assumes.
 			expect(result.estimatedFeeSats).toBe(
 				estimateFeeSats(
-					{ covenantInputs: 1, outputs: 1, walletInputs: 1 },
+					{ covenantInputs: 1, issuingInputs: 0, outputs: 1, walletInputs: 1 },
 					result.feeRateSatsPerKvb,
 				),
 			);

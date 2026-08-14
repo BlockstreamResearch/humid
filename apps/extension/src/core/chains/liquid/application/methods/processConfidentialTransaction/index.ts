@@ -186,28 +186,106 @@ export const createProcessLiquidConfidentialTransaction = (
 					const builder = new smplx.TransactionBuilder();
 
 					try {
+						// Which inputs create an asset, keyed by the output each one is derived
+						// from. That outpoint is the only join both sides promise: the manifest
+						// named the input, the wallet chose the output, and an asset id is a
+						// function of the output rather than of where the input ended up. Matching
+						// on order would be matching on something neither side states.
+						const issuing = new Map(
+							review.issuances.map((issuance) => [
+								outpointKey(issuance.outpoint.txid, issuance.outpoint.vout),
+								issuance,
+							]),
+						);
+						const placed = new Set<string>();
+
 						// Covenant inputs first: the manifest's own input order is what a covenant
 						// introspects, and wallet inputs are the wallet's addition to it.
 						for (const covenant of review.covenantInputs) {
-							builder.addContractInput(
-								covenant.txid,
-								covenant.vout,
-								covenant.txOutHex,
-								covenant.source,
-								covenant.argumentsJson,
-								// The values the document states outright, which is how a covenant with
-								// more than one branch is told which to run. A signature is not among
-								// them: only the signer can make one, and naming it below is what asks
-								// for one. Passed as the compiler's own witness shape — a type and a
-								// literal, both text — because the compiler is what parses SimplicityHL.
-								witnessValuesJson(covenant.witnessValues),
-								covenant.signatureWitness,
-								sequenceFor(review, covenant.id),
-							);
+							const key = outpointKey(covenant.txid, covenant.vout);
+							const issuance = issuing.get(key);
+
+							// The values the document states outright, which is how a covenant with
+							// more than one branch is told which to run. A signature is not among
+							// them: only the signer can make one, and naming it below is what asks
+							// for one. Passed as the compiler's own witness shape — a type and a
+							// literal, both text — because the compiler is what parses SimplicityHL.
+							const witness = witnessValuesJson(covenant.witnessValues);
+
+							if (issuance) {
+								placed.add(key);
+								// The issuer contract is left unstated because a manifest declares
+								// none at any position, so both sides commit to nothing and each
+								// says so. The module reports what it made of this; reading that
+								// report is the next thing this path learns to do.
+								builder
+									.addContractIssuanceInput(
+										covenant.txid,
+										covenant.vout,
+										covenant.txOutHex,
+										covenant.source,
+										covenant.argumentsJson,
+										witness,
+										covenant.signatureWitness,
+										issuance.assetAmountSats,
+										issuance.inflationAmountSats,
+										undefined,
+										sequenceFor(review, covenant.id),
+									)
+									.free();
+							} else {
+								builder.addContractInput(
+									covenant.txid,
+									covenant.vout,
+									covenant.txOutHex,
+									covenant.source,
+									covenant.argumentsJson,
+									witness,
+									covenant.signatureWitness,
+									sequenceFor(review, covenant.id),
+								);
+							}
 						}
 
 						for (const utxo of review.selected) {
-							builder.addWalletInput(utxo.txid, utxo.vout, utxo.txOut);
+							const key = outpointKey(utxo.txid, utxo.vout);
+							const issuance = issuing.get(key);
+
+							if (issuance) {
+								placed.add(key);
+								builder
+									.addWalletIssuanceInput(
+										utxo.txid,
+										utxo.vout,
+										utxo.txOut,
+										issuance.assetAmountSats,
+										issuance.inflationAmountSats,
+										undefined,
+										undefined,
+									)
+									.free();
+							} else {
+								builder.addWalletInput(utxo.txid, utxo.vout, utxo.txOut);
+							}
+						}
+
+						// An asset derived from an output no input spends is an id for something
+						// that would never exist, and the person would have been shown it. This
+						// cannot happen while the outputs an issuance is derived from are the ones
+						// reserved out of the funding pool, which is why it is an assertion about
+						// this path rather than a refusal a document can provoke.
+						const stranded = review.issuances.find(
+							(issuance) =>
+								!placed.has(outpointKey(issuance.outpoint.txid, issuance.outpoint.vout)),
+						);
+
+						if (stranded) {
+							throw new WalletRpcInvalidParamsError(
+								`Input ${stranded.inputId} issues an asset from an output this ` +
+									"transaction does not spend, so the asset would never exist.",
+								undefined,
+								WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
+							);
 						}
 
 						// An output the document wants hidden is hidden with this wallet's own blinding
@@ -364,6 +442,11 @@ export const processLiquidConfidentialTransaction = createProcessLiquidConfident
  */
 function sequenceFor(review: ManifestReview, id: string): number | undefined {
 	return review.inputRules.find((rule) => rule.id === id)?.sequence;
+}
+
+/** One output, written the same way on both sides of a comparison. */
+function outpointKey(txid: string, vout: number): string {
+	return `${txid}:${vout}`;
 }
 
 function requireNetwork(context: LiquidProcessCtContext): string {

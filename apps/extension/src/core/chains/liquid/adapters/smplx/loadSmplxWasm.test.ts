@@ -890,7 +890,10 @@ describe("a transaction balances against the fee that is charged", () => {
 	// transaction balance — which is why an estimate that is merely close is safe.
 	test("the charged fee covers the difference the wallet did not pay out", () => {
 		const funded = 100_000n;
-		const estimated = estimateFeeSats({ covenantInputs: 0, outputs: 1, walletInputs: 1 }, 1000);
+		const estimated = estimateFeeSats(
+			{ covenantInputs: 0, issuingInputs: 0, outputs: 1, walletInputs: 1 },
+			1000,
+		);
 		const charged = build(funded, funded - estimated, 1000);
 
 		expect(charged > 0n).toBe(true);
@@ -901,7 +904,10 @@ describe("a transaction balances against the fee that is charged", () => {
 	// leaving the transaction short.
 	test("an over-estimate leaves the transaction payable rather than short", () => {
 		const funded = 100_000n;
-		const generous = estimateFeeSats({ covenantInputs: 2, outputs: 3, walletInputs: 3 }, 1000);
+		const generous = estimateFeeSats(
+			{ covenantInputs: 2, issuingInputs: 0, outputs: 3, walletInputs: 3 },
+			1000,
+		);
 
 		expect(() => build(funded, funded - generous, 1000)).not.toThrow();
 	});
@@ -910,5 +916,74 @@ describe("a transaction balances against the fee that is charged", () => {
 	// than producing a transaction the network would drop.
 	test("paying out everything leaves nothing for the fee, and is refused", () => {
 		expect(() => build(100_000n, 100_000n, 1000)).toThrow();
+	});
+});
+
+// The surcharge an issuance puts on the input carrying it, measured rather than modelled.
+// The wallet plans the fee before anything is signed, so a model that did not know about
+// issuance would under-state every action that creates an asset.
+describe("what an issuance adds to the input carrying it", () => {
+	const TXID = "6".repeat(64);
+	const ISSUING_POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+
+	function txOut(sats: bigint, scriptHex: string): string {
+		const assetLe = (ISSUING_POLICY_ASSET.match(/../g) ?? []).toReversed().join("");
+		const value = sats.toString(16).padStart(16, "0");
+		const len = (scriptHex.length / 2).toString(16).padStart(2, "0");
+
+		return `01${assetLe}01${value}00${len}${scriptHex}`;
+	}
+
+	/** The same transaction twice, once with the funding input creating an asset. */
+	function charged(issuing: boolean): bigint {
+		const signer = new bindings.WalletSigner(TEST_MNEMONIC, "liquid-testnet");
+		const builder = new bindings.TransactionBuilder();
+
+		try {
+			const script = signer.scriptPubKeyHex();
+
+			if (issuing) {
+				builder
+					.addWalletIssuanceInput(
+						TXID,
+						0,
+						txOut(100_000n, script),
+						1_000n,
+						0n,
+						undefined,
+						undefined,
+					)
+					.free();
+			} else {
+				builder.addWalletInput(TXID, 0, txOut(100_000n, script), undefined);
+			}
+
+			builder.addOutput(script, 10_000n, ISSUING_POLICY_ASSET);
+			builder.addChange(script);
+
+			const signed = signer.finalizeTransaction(builder, 1000);
+			const fee = signed.feeSats;
+
+			signed.free();
+
+			return fee;
+		} finally {
+			builder.free();
+			signer.free();
+		}
+	}
+
+	// At 1000 sat/kvb the fee charged is the vsize, so these are weights.
+	test("is what the model says it is", () => {
+		const plain = charged(false);
+		const issuing = charged(true);
+
+		expect(plain).toBe(
+			estimateFeeSats({ covenantInputs: 0, issuingInputs: 0, outputs: 1, walletInputs: 1 }, 1000),
+		);
+		expect(issuing).toBe(
+			estimateFeeSats({ covenantInputs: 0, issuingInputs: 1, outputs: 1, walletInputs: 1 }, 1000),
+		);
+		expect(issuing - plain).toBe(74n);
 	});
 });
