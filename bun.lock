@@ -13,6 +13,7 @@
         "@hookform/resolvers": "^5.4.0",
         "@hugeicons/core-free-icons": "^4.2.0",
         "@hugeicons/react": "^1.1.6",
+        "@humid/smplx-compiler": "workspace:*",
         "@humid/tx-manifest": "workspace:*",
         "@noble/curves": "1.9.7",
         "@noble/hashes": "1.8.0",
@@ -168,6 +169,10 @@
         "@reown/appkit-controllers": ">=1.8.0",
         "@walletconnect/universal-provider": ">=2.0.0",
       },
+    },
+    "packages/smplx-compiler": {
+      "name": "@humid/smplx-compiler",
+      "version": "1.0.0",
     },
     "packages/tx-manifest": {
       "name": "@humid/tx-manifest",
@@ -413,6 +418,8 @@
     "@humanwhocodes/retry": ["@humanwhocodes/retry@0.4.2", "", {}, "sha512-xeO57FpIu4p1Ri3Jq/EXq4ClRm86dVF2z/+kvFnyqVYRavTZmaFaUBbWCOuuTh0o/g7DSsk6kc2vrS4Vl5oPOQ=="],
 
     "@humid/appkit-injected-adapter": ["@humid/appkit-injected-adapter@workspace:packages/appkit-injected-adapter"],
+
+    "@humid/smplx-compiler": ["@humid/smplx-compiler@workspace:packages/smplx-compiler"],
 
     "@humid/tx-manifest": ["@humid/tx-manifest@workspace:packages/tx-manifest"],
 

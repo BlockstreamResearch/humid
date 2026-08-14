@@ -1,3 +1,4 @@
+import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
 import {
 	createEsploraFeeRateReader,
 	createEsploraTxOutReader,
@@ -20,7 +21,6 @@ import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
 import { toScriptPubKeyHex } from "../../../adapters/lwk/wallet/toScriptPubKeyHex";
 import { withAccountMnemonic } from "../../../adapters/lwk/wallet/withAccountMnemonic";
-import { SMPLX_COMPILER_VERSION } from "../../../adapters/smplx/compilerVersion";
 import { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
