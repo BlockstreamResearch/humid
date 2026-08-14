@@ -8,6 +8,7 @@ import {
 	parseLiquidProcessCtParams,
 	type ReadFeeRate,
 	type ReadTxOut,
+	type RejectToken,
 	reviewManifestAction,
 	toShownConfirmation,
 } from "@humid/tx-manifest";
@@ -199,6 +200,38 @@ export const createProcessLiquidConfidentialTransaction = (
 						);
 						const placed = new Set<string>();
 
+						// The module derives the asset for itself, from the same output, and reports
+						// what it made of it. This is the first fact the wallet and the module each
+						// establish independently, so it gets the treatment every other such fact
+						// gets: they are compared, and a difference refuses rather than one of the
+						// two being trusted. A silent disagreement means one of them is creating a
+						// different asset than the other, and nothing downstream could tell which.
+						const agreeOrRefuse = (
+							issuance: (typeof review.issuances)[number],
+							reported: {
+								assetId: string;
+								entropy: string;
+								free: () => void;
+								reissuanceTokenId: string;
+							},
+						) => {
+							try {
+								const difference = firstDisagreement(issuance, reported);
+
+								if (difference) {
+									throw new WalletRpcInvalidParamsError(
+										`Input ${issuance.inputId} creates an asset the signing module ` +
+											`does not agree about: the ${difference.what} the wallet derived ` +
+											`is ${difference.mine} and the module reports ${difference.theirs}.`,
+										{ reject: "built-something-else" satisfies RejectToken },
+										WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
+									);
+								}
+							} finally {
+								reported.free();
+							}
+						};
+
 						// Covenant inputs first: the manifest's own input order is what a covenant
 						// introspects, and wallet inputs are the wallet's addition to it.
 						for (const covenant of review.covenantInputs) {
@@ -216,10 +249,10 @@ export const createProcessLiquidConfidentialTransaction = (
 								placed.add(key);
 								// The issuer contract is left unstated because a manifest declares
 								// none at any position, so both sides commit to nothing and each
-								// says so. The module reports what it made of this; reading that
-								// report is the next thing this path learns to do.
-								builder
-									.addContractIssuanceInput(
+								// says so.
+								agreeOrRefuse(
+									issuance,
+									builder.addContractIssuanceInput(
 										covenant.txid,
 										covenant.vout,
 										covenant.txOutHex,
@@ -231,8 +264,8 @@ export const createProcessLiquidConfidentialTransaction = (
 										issuance.inflationAmountSats,
 										undefined,
 										sequenceFor(review, covenant.id),
-									)
-									.free();
+									),
+								);
 							} else {
 								builder.addContractInput(
 									covenant.txid,
@@ -253,8 +286,9 @@ export const createProcessLiquidConfidentialTransaction = (
 
 							if (issuance) {
 								placed.add(key);
-								builder
-									.addWalletIssuanceInput(
+								agreeOrRefuse(
+									issuance,
+									builder.addWalletIssuanceInput(
 										utxo.txid,
 										utxo.vout,
 										utxo.txOut,
@@ -262,8 +296,8 @@ export const createProcessLiquidConfidentialTransaction = (
 										issuance.inflationAmountSats,
 										undefined,
 										undefined,
-									)
-									.free();
+									),
+								);
 							} else {
 								builder.addWalletInput(utxo.txid, utxo.vout, utxo.txOut);
 							}
@@ -283,7 +317,7 @@ export const createProcessLiquidConfidentialTransaction = (
 							throw new WalletRpcInvalidParamsError(
 								`Input ${stranded.inputId} issues an asset from an output this ` +
 									"transaction does not spend, so the asset would never exist.",
-								undefined,
+								{ reject: "built-something-else" satisfies RejectToken },
 								WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
 							);
 						}
@@ -447,6 +481,26 @@ function sequenceFor(review: ManifestReview, id: string): number | undefined {
 /** One output, written the same way on both sides of a comparison. */
 function outpointKey(txid: string, vout: number): string {
 	return `${txid}:${vout}`;
+}
+
+/**
+ * What the module says it issued, against what the wallet derived, in one comparison.
+ *
+ * All three values, because two of them agreeing while the third does not is still a
+ * disagreement about what is being created. Both sides are lowered before they are compared:
+ * normalising one side only is a comparison that can pass while the values differ.
+ */
+function firstDisagreement(
+	planned: { asset: string; entropy: string; reissuanceToken: string },
+	reported: { assetId: string; entropy: string; reissuanceTokenId: string },
+): { mine: string; theirs: string; what: string } | undefined {
+	const compared = [
+		{ mine: planned.asset, theirs: reported.assetId, what: "asset" },
+		{ mine: planned.reissuanceToken, theirs: reported.reissuanceTokenId, what: "reissuance token" },
+		{ mine: planned.entropy, theirs: reported.entropy, what: "entropy" },
+	];
+
+	return compared.find(({ mine, theirs }) => mine.toLowerCase() !== theirs.toLowerCase());
 }
 
 function requireNetwork(context: LiquidProcessCtContext): string {

@@ -139,7 +139,10 @@ describe("what it would refuse on, and what it never asked", () => {
 		expect(unreachable).toContain("covenant-mismatch");
 		expect(unreachable).toContain("shortfall");
 		expect(unreachable).toContain("no-fee-rate");
-		expect(unreachable).toHaveLength(10);
+		// The signing module disagreeing with the wallet is decided after a transaction has
+		// been built, which is further from a document than any of the others here.
+		expect(unreachable).toContain("built-something-else");
+		expect(unreachable).toHaveLength(11);
 	});
 
 	test("names the reachable checks it could not perform, rather than passing them", () => {

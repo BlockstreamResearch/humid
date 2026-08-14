@@ -43,9 +43,11 @@ describe("what the textarea currently holds", () => {
 		expect(result.constructs.length).toBeGreaterThan(0);
 		// A count rather than a list, so a refusal that stops needing more than the document —
 		// or a new one that does — fails here and gets looked at. The tenth is the stated
-		// transaction position, which needs a transaction to be unbuildable in.
-		expect(result.unreachable).toHaveLength(10);
+		// transaction position, which needs a transaction to be unbuildable in; the eleventh is
+		// the signing module disagreeing with the wallet, which needs one to have been built.
+		expect(result.unreachable).toHaveLength(11);
 		expect(result.unreachable).toContain("unbuildable-position");
+		expect(result.unreachable).toContain("built-something-else");
 	});
 
 	test("never asks for the checks it holds no values for", () => {

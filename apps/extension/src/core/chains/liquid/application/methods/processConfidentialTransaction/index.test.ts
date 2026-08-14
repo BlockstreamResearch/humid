@@ -124,18 +124,28 @@ function context(): LiquidProcessCtContext {
 }
 
 /**
- * What the module hands back when it is told to issue, which nothing on this path reads yet.
+ * What the module reports for the one output these checks issue from.
  *
- * It is held across the wasm boundary like everything else the module returns, so the method
- * has to release it, and a substitute without `free` would let a leak pass unnoticed.
+ * Written out rather than computed with the wallet's own function. The point of the check is
+ * that two independent derivations agree, and a substitute that called the wallet's would
+ * agree by construction and prove nothing. These are the values the wallet derives for
+ * `FUNDING_TXID:0` committing to no issuer contract, so a change on either side fails here.
  */
-function issuanceReport() {
-	return {
-		assetId: "not read yet",
-		entropy: "not read yet",
-		free() {},
-		reissuanceTokenId: "not read yet",
-	};
+const ISSUED: IssuanceAccount = {
+	assetId: "3e04c1072681d13b140419b4e1acf7084daa94fbde3accb80321ae6e8badb057",
+	entropy: "d95f2c5c8e8eacb0581b8ea00e403e826049dcedbff88f3b9e609b3020e65978",
+	reissuanceTokenId: "cfc308991457ed32a50cc8494cdbad89d61a9e8c3380f4ef884c0a5d82002c9e",
+};
+
+type IssuanceAccount = { assetId: string; entropy: string; reissuanceTokenId: string };
+
+/**
+ * The module's account of one issuance, held across the wasm boundary like everything else it
+ * returns — so the method has to release it, and a substitute without `free` would let a leak
+ * pass unnoticed.
+ */
+function issuanceReport(account: IssuanceAccount) {
+	return { ...account, free() {} };
 }
 
 /** One issuance the builder was told to put on an input, and what it was told about it. */
@@ -155,7 +165,10 @@ type Recorded = {
 	paid: string[];
 };
 
-function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
+function dependencies(
+	recorded: Recorded,
+	issued: IssuanceAccount = ISSUED,
+): LiquidProcessCtDependencies {
 	return {
 		broadcastTransaction: async ({ txHex }) => {
 			recorded.broadcasts.push({ txHex });
@@ -225,7 +238,7 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 							vout,
 						});
 
-						return issuanceReport();
+						return issuanceReport(issued);
 					}
 					addOutput(
 						scriptPubKeyHex: string,
@@ -267,7 +280,7 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 							vout,
 						});
 
-						return issuanceReport();
+						return issuanceReport(issued);
 					}
 					free() {}
 				},
@@ -325,10 +338,13 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 	};
 }
 
-function subject() {
+function subject(issued: IssuanceAccount = ISSUED) {
 	const recorded: Recorded = { broadcasts: [], issued: [], mnemonicCalls: 0, paid: [] };
 
-	return { method: createProcessLiquidConfidentialTransaction(dependencies(recorded)), recorded };
+	return {
+		method: createProcessLiquidConfidentialTransaction(dependencies(recorded, issued)),
+		recorded,
+	};
 }
 
 describe("processLiquidConfidentialTransaction", () => {
@@ -674,5 +690,73 @@ describe("an input that creates an asset", () => {
 		);
 
 		expect(failure?.data?.reject).toBe("unimplemented-construct");
+	});
+});
+
+// The asset an action creates is the first fact the wallet and the signing module each work
+// out for themselves, from the same output. They should agree, and a silent disagreement
+// means one of them is creating a different asset than the other with nothing downstream able
+// to tell which.
+describe("when the module disagrees about the asset it issued", () => {
+	test("the two derivations agreeing is what lets the transaction be signed", async () => {
+		const { method } = subject();
+
+		const result = await method(params({ manifest: issuingManifest() }), context());
+
+		expect(result.transactionHex).toBe(serialise([{ txid: FUNDING_TXID, vout: 0 }]));
+	});
+
+	test("a different asset refuses, and says which value disagreed", async () => {
+		const { method } = subject({ ...ISSUED, assetId: `${"0".repeat(63)}1` });
+
+		const failure = await method(params({ manifest: issuingManifest() }), context()).then(
+			() => undefined,
+			(error: unknown) => error as { data?: { reject?: string }; message?: string },
+		);
+
+		expect(failure?.data?.reject).toBe("built-something-else");
+		expect(failure?.message).toContain("asset");
+		expect(failure?.message).toContain(ISSUED.assetId);
+	});
+
+	// Two of the three agreeing is still a disagreement about what is being created, so each
+	// one is its own case rather than the asset standing in for all three.
+	test("a different reissuance token refuses too", async () => {
+		const { method } = subject({ ...ISSUED, reissuanceTokenId: `${"0".repeat(63)}2` });
+
+		const failure = await method(params({ manifest: issuingManifest() }), context()).then(
+			() => undefined,
+			(error: unknown) => error as { data?: { reject?: string }; message?: string },
+		);
+
+		expect(failure?.data?.reject).toBe("built-something-else");
+		expect(failure?.message).toContain("reissuance token");
+	});
+
+	test("and so does a different entropy", async () => {
+		const { method } = subject({ ...ISSUED, entropy: `${"0".repeat(63)}3` });
+
+		const failure = await method(params({ manifest: issuingManifest() }), context()).then(
+			() => undefined,
+			(error: unknown) => error as { data?: { reject?: string }; message?: string },
+		);
+
+		expect(failure?.data?.reject).toBe("built-something-else");
+		expect(failure?.message).toContain("entropy");
+	});
+
+	// The wallet's own derivation is what decides. A comparison that lowered one side only
+	// could pass while the values differ, so both are lowered and the same value written the
+	// other way round is still the same value.
+	test("the same value in another case is not a disagreement", async () => {
+		const { method } = subject({
+			assetId: ISSUED.assetId.toUpperCase(),
+			entropy: ISSUED.entropy.toUpperCase(),
+			reissuanceTokenId: ISSUED.reissuanceTokenId.toUpperCase(),
+		});
+
+		const result = await method(params({ manifest: issuingManifest() }), context());
+
+		expect(result.transactionHex).toBe(serialise([{ txid: FUNDING_TXID, vout: 0 }]));
 	});
 });

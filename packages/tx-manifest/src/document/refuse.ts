@@ -53,7 +53,16 @@ export type RejectToken =
 	/** The wallet holds less than the action needs, in the form the action can spend. */
 	| "shortfall"
 	/** An expression, encoding or protocol rule the manifest states could not be satisfied. */
-	| "document-fault";
+	| "document-fault"
+	/**
+	 * The signing module's account of what it built is not what the wallet agreed to.
+	 *
+	 * Nothing a site can correct and never worth retrying: the document was read, the action
+	 * resolved, and the person may already have approved. What failed is the agreement between
+	 * the wallet and the module underneath it, and the wallet returns nothing rather than a
+	 * transaction it cannot vouch for.
+	 */
+	| "built-something-else";
 
 export type Refusal = {
 	reason: string;
@@ -119,6 +128,7 @@ export const NEEDS_MORE_THAN_THE_DOCUMENT_REJECTS = [
 	"shortfall",
 	"unbuildable-position",
 	"document-fault",
+	"built-something-else",
 ] as const satisfies readonly RejectToken[];
 
 /**
