@@ -35,9 +35,22 @@ function requireTxid(txid: string): void {
 		throw new Error(`Invalid txid: ${txid}`);
 	}
 }
+
+/**
+ * What the real module does with a blinding key, which is parse it as a compressed public key.
+ *
+ * A substitute that took any string here would accept an output the module refuses, and the
+ * refusal would arrive after the person had already approved.
+ */
+function requireBlindingKey(what: string, value: string): void {
+	if (!/^0[23][0-9a-fA-F]{64}$/.test(value)) {
+		throw new Error(`Invalid ${what}: malformed public key`);
+	}
+}
 const DERIVED = "tex1p_derived";
 const WALLET_ADDRESS = "tex1q_wallet";
 const WALLET_SCRIPT = "0014" + "11".repeat(20);
+const BLINDING_KEY = `02${PUBKEY}`;
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 const FUNDING_TXID = "d".repeat(64);
 
@@ -144,8 +157,13 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 					// one it cannot read. Recorded rather than swallowed, so a method that stopped
 					// stating where change goes fails here instead of sending it to the module's
 					// own default in silence.
-					addChange(scriptPubKeyHex: string) {
+					addChange(scriptPubKeyHex: string, blindingKeyHex?: string) {
 						requireHex("change script", scriptPubKeyHex);
+
+						if (blindingKeyHex !== undefined) {
+							requireBlindingKey("change blinding key", blindingKeyHex);
+						}
+
 						this.change = scriptPubKeyHex;
 					}
 					addContractInput(txid: string, vout: number, txOutHex: string) {
@@ -153,8 +171,19 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 						requireTxid(txid);
 						this.spends.push({ txid, vout });
 					}
-					addOutput(scriptPubKeyHex: string) {
+					addOutput(
+						scriptPubKeyHex: string,
+						_amountSats: bigint,
+						assetHex: string,
+						blindingKeyHex?: string,
+					) {
 						requireHex("output script", scriptPubKeyHex);
+						requireHex("asset id", assetHex);
+
+						if (blindingKeyHex !== undefined) {
+							requireBlindingKey("output blinding key", blindingKeyHex);
+						}
+
 						recorded.paid.push(scriptPubKeyHex);
 					}
 					addWalletInput(txid: string, vout: number, txOut: string) {
@@ -165,6 +194,12 @@ function dependencies(recorded: Recorded): LiquidProcessCtDependencies {
 					free() {}
 				},
 				WalletSigner: class {
+					// The wallet hides an output with its own blinding key, so the substitute has
+					// to have one. Without it every path that hides anything failed here for the
+					// wrong reason, which is what happened between the blinding work and now.
+					blindingPublicKey() {
+						return BLINDING_KEY;
+					}
 					finalizeTransaction(
 						builder: { change?: string; spends: { txid: string; vout: number }[] },
 						_feeRateSatsPerKvb: number,
@@ -278,12 +313,13 @@ describe("processLiquidConfidentialTransaction", () => {
 			(error: unknown) => error as { data?: { reject?: string } },
 		);
 
-		// `incomplete-request` rather than `no-such-action`, and the difference is worth pinning:
-		// working out what an action needs happens before looking the action up, so a request
-		// naming an action the manifest does not declare is refused as a request that cannot be
-		// built rather than as a missing name. The sentence still says "Withdraw" — the test above
-		// asserts that — and the token says which check answered.
-		expect(failure?.data?.reject).toBe("incomplete-request");
+		// `no-such-action` rather than `incomplete-request`, and the difference is worth pinning:
+		// the action is looked up before anything asks what it needs, because filling a
+		// parameter needs the action that declares it. So a request naming an action the
+		// manifest does not declare is refused as a missing name rather than as a request that
+		// cannot be built. The sentence still says "Withdraw" — the test above asserts that —
+		// and the token says which check answered.
+		expect(failure?.data?.reject).toBe("no-such-action");
 	});
 });
 

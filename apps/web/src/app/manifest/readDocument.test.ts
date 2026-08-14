@@ -41,7 +41,11 @@ describe("what the textarea currently holds", () => {
 
 		expect(result.rewrites).toHaveLength(1);
 		expect(result.constructs.length).toBeGreaterThan(0);
-		expect(result.unreachable).toHaveLength(9);
+		// A count rather than a list, so a refusal that stops needing more than the document —
+		// or a new one that does — fails here and gets looked at. The tenth is the stated
+		// transaction position, which needs a transaction to be unbuildable in.
+		expect(result.unreachable).toHaveLength(10);
+		expect(result.unreachable).toContain("unbuildable-position");
 	});
 
 	test("never asks for the checks it holds no values for", () => {
