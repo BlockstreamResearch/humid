@@ -210,6 +210,9 @@ describe("reviewManifestAction", () => {
 
 			if (!isRefusal(result)) {
 				expect(result.outputs).toContainEqual({
+					// The document says nothing about hiding this one, and on this network silence
+					// means hidden.
+					blinded: true,
 					id: "received_out",
 					sats: 77_000n,
 					scriptPubKeyHex: WALLET_SCRIPT,

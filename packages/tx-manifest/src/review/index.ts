@@ -94,6 +94,14 @@ export type ReviewedCovenantInput = {
 
 /** One output of the transaction the wallet worked out, ready to be shown and then built. */
 export type ReviewedOutput = {
+	/**
+	 * Whether this output hides what it carries, decided by the order the format defines.
+	 *
+	 * Carried rather than left to the builder, because the decision is the document's and the
+	 * builder has never read the document. An output built the wrong way here is one whose
+	 * amount is published when the protocol meant it kept, and nothing later could tell.
+	 */
+	blinded: boolean;
 	id: string;
 	sats: bigint;
 	scriptPubKeyHex: string;
@@ -109,6 +117,14 @@ export type ReviewedOutput = {
  */
 export type ManifestReview = {
 	action: string;
+	/**
+	 * Whether the change this transaction returns hides what it carries.
+	 *
+	 * Change is an output like any other in the document's eyes, and the corpus declares one
+	 * for almost every action while saying nothing about it — so the network's own default
+	 * decides, and on Liquid that means hidden.
+	 */
+	changeBlinded: boolean;
 	covenants: CovenantFinding[];
 	/** The covenant outputs this action spends, ready to be added as inputs. */
 	covenantInputs: ReviewedCovenantInput[];
@@ -529,11 +545,31 @@ export async function reviewManifestAction(
 		return { reason: failed.reason, refused: true, reject: "document-fault" };
 	}
 
-	// Nothing acts on what the precedence decided yet. Every output in the published corpus
-	// that says nothing resolves to hidden, and this wallet builds explicit values — so acting
-	// on it refuses almost every protocol, including two that pass today. That is a decision
-	// about what the product can do rather than one about this code, and it is with the
-	// maintainer.
+	// An output the document wants hidden is hidden with this wallet's own blinding key, which
+	// is the key of the address it pays to. That holds for its own outputs and for its change,
+	// and not for an address the document names — there the key belongs to whoever owns that
+	// address, and this wallet has no way to obtain it.
+	const foreign = plan.plan.outputs.find(
+		(planned) =>
+			planned.blinding.blinding === "hidden" &&
+			planned.target.kind !== "change" &&
+			planned.target.kind !== "wallet",
+	);
+
+	if (foreign) {
+		return {
+			reason:
+				`The output ${foreign.id || "(unnamed)"} must hide what it carries and pays somewhere ` +
+				"this wallet holds no blinding key for.",
+			refused: true,
+			reject: "unimplemented-construct",
+		};
+	}
+
+	/** Whether the transaction's change hides what it carries, by the same order. */
+	const changeBlinded =
+		plan.plan.outputs.find((planned) => planned.target.kind === "change")?.blinding.blinding ===
+		"hidden";
 	const covenantScripts = new Map(
 		covenants.map((found) => [found.utxoType, found.scriptPubKeyHex]),
 	);
@@ -563,7 +599,12 @@ export async function reviewManifestAction(
 			};
 		}
 
-		outputs.push({ id: planned.id, sats: planned.sats, scriptPubKeyHex });
+		outputs.push({
+			blinded: planned.blinding.blinding === "hidden",
+			id: planned.id,
+			sats: planned.sats,
+			scriptPubKeyHex,
+		});
 	}
 
 	// An action pinning an input to one address restricts what the wallet may fund it from.
@@ -623,6 +664,7 @@ export async function reviewManifestAction(
 		covenants,
 		estimatedFeeSats: estimatedFee,
 		feeRateSatsPerKvb,
+		changeBlinded,
 		ignoredConstructs: ignored(inspectConstructs(manifest)),
 		issuances: issued.issuances,
 		normalisation: notes,

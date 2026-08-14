@@ -229,7 +229,9 @@ const SITES = {
 			chain: READ,
 			classes: READ,
 			compile_debug_symbols: READ,
-			confidential_outputs: UNIMPLEMENTED,
+			// The document's own default for whether an output hides what it carries. No published
+			// manifest states one, so it is read for the case none of them is.
+			confidential_outputs: READ,
 			// The container of a contract's actions, under the name the corpus uses now. Its
 			// previous name is `classes` above; the normaliser reads both and neither is
 			// preferred, because several generations of the same protocol coexist.
@@ -261,7 +263,10 @@ const SITES = {
 			amount_sat: READ,
 			asset: READ,
 			condition: UNIMPLEMENTED,
-			confidential: UNIMPLEMENTED,
+			// Whether this output hides what it carries. The wallet hides it with its own
+			// blinding key; one paid to an address the document names refuses, because the key
+			// there belongs to whoever owns the address.
+			confidential: READ,
 			data: READ,
 			description: SHOWN,
 			destination: READ,

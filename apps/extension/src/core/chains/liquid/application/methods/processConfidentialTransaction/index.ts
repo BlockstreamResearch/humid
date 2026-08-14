@@ -210,15 +210,27 @@ export const createProcessLiquidConfidentialTransaction = (
 							builder.addWalletInput(utxo.txid, utxo.vout, utxo.txOut);
 						}
 
+						// An output the document wants hidden is hidden with this wallet's own blinding
+						// key. Which outputs those are was decided while reading the document, not
+						// here: the builder has never read it, and an output built the wrong way is
+						// one whose amount is published when the protocol meant it kept.
 						for (const output of review.outputs) {
-							builder.addOutput(output.scriptPubKeyHex, output.sats, account.rawPolicyAssetId);
+							builder.addOutput(
+								output.scriptPubKeyHex,
+								output.sats,
+								account.rawPolicyAssetId,
+								output.blinded ? signer.blindingPublicKey() : undefined,
+							);
 						}
 
 						// Where change goes is a fact about this transaction, so it is set on the
 						// builder rather than passed to the call that signs it. Unset, the module
 						// returns change to the signer's own derived address, which this wallet does
 						// watch today but only because the signing path is limited to one index.
-						builder.addChange(signer.scriptPubKeyHex());
+						builder.addChange(
+							signer.scriptPubKeyHex(),
+							review.changeBlinded ? signer.blindingPublicKey() : undefined,
+						);
 
 						const result = signer.finalizeTransaction(builder, review.feeRateSatsPerKvb);
 						const extracted = {

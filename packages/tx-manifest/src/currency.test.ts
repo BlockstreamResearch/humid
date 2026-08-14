@@ -95,10 +95,10 @@ describe("the protocols as their authors publish them now", () => {
 		);
 
 		expect(blocked).toEqual({
-			dex: ["confidential", "required_index"],
+			dex: ["required_index"],
 			last_will: ["required_index"],
-			lending_v2: ["confidential", "required_index"],
-			lending_v3: ["confidential", "required_index"],
+			lending_v2: ["required_index"],
+			lending_v3: ["required_index"],
 			zeroconf: [],
 		});
 	});
@@ -128,9 +128,9 @@ describe("the protocols as their authors publish them now", () => {
 		);
 
 		expect(counted).toEqual({
-			dex: { found: 4, unblocked: 1 },
+			dex: { found: 4, unblocked: 3 },
 			last_will: { found: 4, unblocked: 3 },
-			lending_v2: { found: 9, unblocked: 1 },
+			lending_v2: { found: 9, unblocked: 3 },
 			lending_v3: { found: 6, unblocked: 0 },
 			zeroconf: { found: 0, unblocked: 0 },
 		});
