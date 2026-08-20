@@ -157,11 +157,16 @@ describe("deriveCovenantAddress with extra leaves", () => {
 		}).manifest;
 	}
 
-	function derive(extraLeaves: unknown[], stateVars?: Record<string, unknown>) {
+	function derive(
+		extraLeaves: unknown[],
+		stateVars?: Record<string, unknown>,
+		instance?: Record<string, unknown>,
+	) {
 		const { calls, compile } = compiler();
+		const scope = { instance, params: { pubkey: PUBKEY } };
 
 		return deriveCovenantAddress(manifestWithLeaves(extraLeaves, stateVars), {
-			...request(),
+			...request(instance ? { scope } : {}),
 			compile,
 		}).then((result) => ({ calls, result }));
 	}
@@ -190,5 +195,64 @@ describe("deriveCovenantAddress with extra leaves", () => {
 
 		expect(result).toMatchObject({ ok: false });
 		expect(calls).toHaveLength(0);
+	});
+
+	/**
+	 * The two leaves a live lending protocol writes on its collateral covenant, in the shape it
+	 * writes them: a kind and a list of parts. The bytes are the ones its own contract rebuilds
+	 * and its own Rust builder writes — a flag in the last of thirty-two bytes, and a debt as
+	 * eight big-endian bytes right-aligned in thirty-two.
+	 */
+	test("builds a leaf written as a kind and a payload, reading a name off the deployment", async () => {
+		const { calls, result } = await derive(
+			[
+				{ payload: [`0x${"00".repeat(31)}01`], type: "tapdata" },
+				{
+					payload: [
+						{
+							align: "right",
+							endian: "be",
+							pad_to: 32,
+							type: "u64",
+							value: "instance.CURRENT_DEBT",
+						},
+					],
+					type: "tapdata",
+				},
+			],
+			undefined,
+			{ CURRENT_DEBT: "52500" },
+		);
+
+		expect(result).toMatchObject({ ok: true });
+		expect(JSON.parse(calls[0]?.extraLeavesJson ?? "[]")).toEqual([
+			`${"00".repeat(31)}01`,
+			`${"00".repeat(30)}cd14`,
+		]);
+	});
+
+	test("names the leaf and the part when a name in one resolves to nothing", async () => {
+		const { calls, result } = await derive(
+			["0x00", { payload: [{ type: "u64", value: "instance.MISSING" }], type: "tapdata" }],
+			undefined,
+			{ CURRENT_DEBT: "52500" },
+		);
+
+		expect(result).toMatchObject({ ok: false });
+		expect(result.ok ? "" : result.reason).toContain("extra leaf 2");
+		expect(result.ok ? "" : result.reason).toContain("payload part 1");
+		expect(result.ok ? "" : result.reason).toContain("instance.MISSING");
+		expect(calls).toHaveLength(0);
+	});
+
+	/**
+	 * A leaf is part of the tree the address is derived from, so a kind of leaf this compiler
+	 * cannot build is refused rather than built as if it were the one it can.
+	 */
+	test("refuses a kind of leaf nothing can build", async () => {
+		const { result } = await derive([{ payload: ["0x00"], type: "tapscript" }]);
+
+		expect(result).toMatchObject({ ok: false });
+		expect(result.ok ? "" : result.reason).toContain("tapscript");
 	});
 });

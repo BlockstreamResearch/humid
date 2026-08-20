@@ -2,6 +2,7 @@ import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
 import {
 	createEsploraFeeRateReader,
 	createEsploraTxOutReader,
+	guardBlindedOutputs,
 	guardSpentInputs,
 	isRefusal,
 	type ManifestReview,
@@ -15,6 +16,7 @@ import {
 } from "@humid/tx-manifest";
 
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
+import { logger } from "@/core/logger";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
@@ -37,6 +39,16 @@ export type LiquidProcessCtContext = WalletRpcBaseContext & {
 
 export type LiquidProcessCtResult = {
 	broadcast: boolean;
+	/**
+	 * The deployment this action brought into existence, when it created one.
+	 *
+	 * Absent for every action that only spends what already exists. Returned rather than left
+	 * for the caller to work out again, because half of these fields are functions of outputs
+	 * the wallet chose — an asset id is derived from the output its issuing input spends — and
+	 * a caller reconstructing them afterwards would be guessing which output that was. The
+	 * deployment outlives the transaction; the transaction is where it can still be read.
+	 */
+	deployment?: Record<string, string>;
 	feeSats: string;
 	transactionHex: string;
 	txid: string;
@@ -170,6 +182,34 @@ export const createProcessLiquidConfidentialTransaction = (
 		}),
 		execute: async ({ context, params, review }) => {
 			const network = requireNetwork(context);
+
+			/*
+			 * What the signing module is about to be told about each covenant, beside what the
+			 * review established about the same covenant from the chain.
+			 *
+			 * Written at warn so it survives a production build, because this is the seam where the
+			 * two compiles can disagree and the disagreement only shows up as an execution failure
+			 * after a person has approved. `covenantBuild` is the marker for which build is loaded:
+			 * an extension without it in the log is an older copy, whatever the files on disk say.
+			 */
+			logger.warn("covenantBuild", {
+				action: review.action,
+				covenants: review.covenants.map((found) => ({
+					address: found.address,
+					role: found.role,
+					utxoType: found.utxoType,
+					verified: found.verified,
+				})),
+				inputs: review.covenantInputs.map((covenant) => ({
+					argumentsJson: covenant.argumentsJson,
+					extraLeavesJson: covenant.extraLeavesJson,
+					id: covenant.id,
+					includeDebugSymbols: covenant.includeDebugSymbols,
+					sourceBytes: covenant.source.length,
+					txid: covenant.txid,
+					vout: covenant.vout,
+				})),
+			});
 			const account = await dependencies.resolveAccount(context);
 			const smplx = await dependencies.loadSmplx();
 
@@ -185,6 +225,15 @@ export const createProcessLiquidConfidentialTransaction = (
 				(mnemonic) => {
 					const signer = new smplx.WalletSigner(mnemonic, network);
 					const builder = new smplx.TransactionBuilder();
+
+					// A covenant branch guarded by a lock height reads the transaction's own
+					// locktime, and one that declares none satisfies no such branch. The review
+					// answers with where the chain is — the same thing every wallet writes there,
+					// and nothing about any protocol. Skipped where it read nothing, because an
+					// action whose covenants are not time-locked does not need one.
+					if (review.locktimeHeight !== undefined) {
+						builder.setLocktimeHeight(review.locktimeHeight);
+					}
 
 					try {
 						// Which inputs create an asset, keyed by the output each one is derived
@@ -232,27 +281,71 @@ export const createProcessLiquidConfidentialTransaction = (
 							}
 						};
 
-						// Covenant inputs first: the manifest's own input order is what a covenant
-						// introspects, and wallet inputs are the wallet's addition to it.
-						for (const covenant of review.covenantInputs) {
-							const key = outpointKey(covenant.txid, covenant.vout);
+						// In the order the review worked out, which is the document's wherever it
+						// states one. Every covenant used to be added first and the wallet's own
+						// after, which is one order among many: a covenant introspects positions,
+						// and a document stating one for an input the wallet supplies is saying
+						// that that order builds a transaction its contract will not run against.
+						for (const planned of review.inputOrder) {
+							const key =
+								planned.source === "covenant"
+									? outpointKey(planned.covenant.txid, planned.covenant.vout)
+									: outpointKey(planned.utxo.txid, planned.utxo.vout);
 							const issuance = issuing.get(key);
-
-							// The values the document states outright, which is how a covenant with
-							// more than one branch is told which to run. A signature is not among
-							// them: only the signer can make one, and naming it below is what asks
-							// for one. Passed as the compiler's own witness shape — a type and a
-							// literal, both text — because the compiler is what parses SimplicityHL.
-							const witness = witnessValuesJson(covenant.witnessValues);
 
 							if (issuance) {
 								placed.add(key);
-								// The issuer contract is left unstated because a manifest declares
-								// none at any position, so both sides commit to nothing and each
-								// says so.
-								agreeOrRefuse(
-									issuance,
-									builder.addContractIssuanceInput(
+							}
+
+							if (planned.source === "covenant") {
+								const { covenant } = planned;
+								// The values the document states outright, which is how a covenant
+								// with more than one branch is told which to run. A signature is not
+								// among them: only the signer can make one, and naming it below is
+								// what asks for one. Passed as the compiler's own witness shape — a
+								// type and a literal, both text — because the compiler is what
+								// parses SimplicityHL.
+								const witness = witnessValuesJson(covenant.witnessValues);
+
+								if (issuance) {
+									logger.warn("covenantBuild:issue", {
+										id: covenant.id,
+										includeDebugSymbols: covenant.includeDebugSymbols,
+										leaves: covenant.extraLeavesJson,
+									});
+
+									// The issuer contract is left unstated because a manifest declares
+									// none at any position, so both sides commit to nothing and each
+									// says so.
+									agreeOrRefuse(
+										issuance,
+										builder.addContractIssuanceInput(
+											covenant.txid,
+											covenant.vout,
+											covenant.txOutHex,
+											covenant.source,
+											covenant.argumentsJson,
+											witness,
+											covenant.signatureWitness,
+											issuance.assetAmountSats,
+											issuance.inflationAmountSats,
+											undefined,
+											sequenceFor(review, covenant.id),
+											covenant.extraLeavesJson,
+											covenant.includeDebugSymbols,
+										),
+									);
+								} else {
+									// The leaves and the mode go with the source and the parameters, because all
+									// four decide the script the covenant locks to. Sending the first two alone
+									// builds a different contract than the one the review checked against the
+									// chain, and the covenant refuses its own spend at execution.
+									logger.warn("covenantBuild:spend", {
+										id: covenant.id,
+										includeDebugSymbols: covenant.includeDebugSymbols,
+										leaves: covenant.extraLeavesJson,
+									});
+									builder.addContractInput(
 										covenant.txid,
 										covenant.vout,
 										covenant.txOutHex,
@@ -260,32 +353,18 @@ export const createProcessLiquidConfidentialTransaction = (
 										covenant.argumentsJson,
 										witness,
 										covenant.signatureWitness,
-										issuance.assetAmountSats,
-										issuance.inflationAmountSats,
-										undefined,
 										sequenceFor(review, covenant.id),
-									),
-								);
-							} else {
-								builder.addContractInput(
-									covenant.txid,
-									covenant.vout,
-									covenant.txOutHex,
-									covenant.source,
-									covenant.argumentsJson,
-									witness,
-									covenant.signatureWitness,
-									sequenceFor(review, covenant.id),
-								);
-							}
-						}
+										covenant.extraLeavesJson,
+										covenant.includeDebugSymbols,
+									);
+								}
 
-						for (const utxo of review.selected) {
-							const key = outpointKey(utxo.txid, utxo.vout);
-							const issuance = issuing.get(key);
+								continue;
+							}
+
+							const { utxo } = planned;
 
 							if (issuance) {
-								placed.add(key);
 								agreeOrRefuse(
 									issuance,
 									builder.addWalletIssuanceInput(
@@ -327,10 +406,15 @@ export const createProcessLiquidConfidentialTransaction = (
 						// here: the builder has never read it, and an output built the wrong way is
 						// one whose amount is published when the protocol meant it kept.
 						for (const output of review.outputs) {
+							// Paid in the asset the review worked out for it, which is not always this
+							// account's policy asset and used to be assumed to be. An output carrying a
+							// protocol's own token, built in the network's asset instead, pays real
+							// money to a covenant expecting a token — and nothing downstream of here
+							// could tell.
 							builder.addOutput(
 								output.scriptPubKeyHex,
 								output.sats,
-								account.rawPolicyAssetId,
+								output.asset,
 								output.blinded ? signer.blindingPublicKey() : undefined,
 							);
 						}
@@ -378,8 +462,33 @@ export const createProcessLiquidConfidentialTransaction = (
 				);
 			}
 
+			// And what came back hides exactly what the document decided to hide. Handing the
+			// builder a blinding key is a request, not a result: whether it was applied is only
+			// visible in the bytes, where a hidden amount is a commitment and an open one is a
+			// number. Both directions are checked, because both are silent — an amount published
+			// that the protocol meant kept cannot be taken back, and an amount hidden on an
+			// output a covenant will later read is money nothing can spend.
+			const built = guardBlindedOutputs(signed.transactionHex, {
+				changeBlinded: review.changeBlinded,
+				outputs: review.outputs.map(({ blinded, id }) => ({ blinded, id })),
+			});
+
+			if (!built.ok) {
+				throw new WalletRpcInvalidParamsError(
+					built.reason,
+					{ reject: "built-something-else" satisfies RejectToken },
+					WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
+				);
+			}
+
+			// The deployment the action created, if it created one. Carried on both answers,
+			// because the caller that has to record it is the one that asked for the action and
+			// a transaction it did not broadcast is still one it may broadcast itself.
+			const deployment =
+				review.createdInstance === undefined ? {} : { deployment: review.createdInstance.fields };
+
 			if (!params.broadcast) {
-				return { broadcast: false, ...signed };
+				return { broadcast: false, ...deployment, ...signed };
 			}
 
 			// LWK's Esplora client needs a `window` the service worker does not have, so the
@@ -390,7 +499,7 @@ export const createProcessLiquidConfidentialTransaction = (
 				txHex: signed.transactionHex,
 			});
 
-			return { broadcast: true, ...signed, txid: sent.txid };
+			return { broadcast: true, ...deployment, ...signed, txid: sent.txid };
 		},
 		id: LIQUID_WALLET_RPC_METHODS.PROCESS_CONFIDENTIAL_TRANSACTION,
 		parse: parseRequest,
@@ -428,10 +537,36 @@ export const createProcessLiquidConfidentialTransaction = (
 						contract.free();
 					}
 				},
+				// The other half of the same compiler, asked before a contract is built rather than
+				// after. A deployment wires most compile parameters to a name, which carries the
+				// format's own declared type; some it writes as a bare value, and those have no type
+				// at the position they are written. SimplicityHL declares one nowhere either — a
+				// parameter takes the type of the position it is used at, worked out by the type
+				// checker — so the compiler is the only thing that can say, and it can say it from
+				// the source alone, before there are any arguments to build.
+				contractParamTypes: (source) => JSON.parse(smplx.contractParameterTypes(source)),
 				compilerVersion: SMPLX_COMPILER_VERSION,
 				policyAsset: account.rawPolicyAssetId,
-				scriptPubKeyOf: ({ argumentsJson, source }) =>
-					new smplx.Contract(source, argumentsJson).scriptPubKeyHex(network),
+				// The same compiler again, for the covenant hashes a document works out for itself.
+				// Everything a full compile is given, because a hash of a contract built any
+				// differently is the hash of a different contract — and a manifest stores that hash
+				// as a parameter of the covenant it then locks funds into. The leaves and the
+				// declared build mode were both absent here, so the hash was of a contract with an
+				// empty taproot tree built in whichever mode the module defaults to.
+				scriptPubKeyOf: ({ argumentsJson, extraLeavesJson, includeDebugSymbols, source }) => {
+					const contract = new smplx.Contract(
+						source,
+						argumentsJson,
+						extraLeavesJson,
+						includeDebugSymbols,
+					);
+
+					try {
+						return contract.scriptPubKeyHex(network);
+					} finally {
+						contract.free();
+					}
+				},
 				// Both lists, because only one of them can pay for this and the other one is why a
 				// person is short. Selection spends the explicit ones and reports the hidden ones as
 				// held back, which is the difference between "you do not have enough" and "you have
@@ -440,12 +575,28 @@ export const createProcessLiquidConfidentialTransaction = (
 					...context.walletBackend.getExplicitUtxos(account, account.rawPolicyAssetId),
 					...context.walletBackend.getUtxos(account, account.rawPolicyAssetId),
 				],
+				// The same two lists for any other asset the action turns out to move, asked for by
+				// id. Which assets those are is not knowable here — it is settled inside the review,
+				// after the document's lookups resolve against the deployment — so this is a
+				// question the runtime asks rather than an answer the wallet prepares.
+				holdingsOf: (asset) => [
+					...context.walletBackend.getExplicitUtxos(account, asset),
+					...context.walletBackend.getUtxos(account, asset),
+				],
 				network,
 				accountLabel: `${account.chain?.id ?? context.chain.id} account ${account.accountGroupIndex}`,
+				// The wallet's own scan rather than an endpoint: it has just synced, and a plain
+				// chain-tip route is not universal — the backend this wallet uses for Liquid
+				// testnet answers 404 to it, which is how a locktime came to be declared as zero.
+				readChainTip: async () => context.walletBackend.getTipHeight(account),
 				readFeeRate: dependencies.readFeeRate(context.chain),
 				readTxOut: dependencies.readTxOut(context.chain),
+				// The address this path can spend from rather than the one a person is shown for
+				// receiving. They differ as addresses are used, and an output paid back to this
+				// wallet at a rotating one is money the next action of the same protocol cannot
+				// find: the signing module derives one key, at the first external address.
 				walletScriptPubKeyHex: await dependencies.scriptPubKeyHexOf(
-					context.walletBackend.getReceiveAddress(account).address,
+					context.walletBackend.getSigningAddress(account).address,
 				),
 			});
 

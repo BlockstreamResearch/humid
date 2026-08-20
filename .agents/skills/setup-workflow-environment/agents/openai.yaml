@@ -1,4 +1,0 @@
-interface:
-  display_name: "Setup Workflow Environment"
-  short_description: "Install or repair wfctl environments"
-  default_prompt: "Use $setup-workflow-environment to install or repair this repository workflow safely."

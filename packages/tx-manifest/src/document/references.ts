@@ -69,9 +69,12 @@ export type ReferenceResolution =
  */
 export type ReferenceSiteKind =
 	| "amount"
+	| "asset"
 	| "compileParam"
+	| "dataPart"
 	| "destination"
 	| "expression"
+	| "extraLeaf"
 	| "issuedAmount"
 	| "witnessKey"
 	| "witnessValue";
@@ -82,10 +85,45 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 		accepts: ["fee", "instance", "params", "args", "input-attribute", "bare"],
 		describes: "an amount",
 	},
+	/**
+	 * The asset an input or output carries.
+	 *
+	 * The fee is absent because the fee is a number of the network's own asset, and an asset is
+	 * not a quantity of anything. Every other form is here because the corpus writes all of
+	 * them: this deployment's fields, the request's parameters and arguments, a bare name, and
+	 * an attribute of an input the wallet already resolved — `payout_in.asset`, which says "the
+	 * same asset that one arrived in" without naming it.
+	 */
+	asset: {
+		accepts: ["instance", "params", "args", "input-attribute", "bare"],
+		describes: "an asset",
+	},
 	/** A value compiled into a contract, which therefore decides its address. */
 	compileParam: {
 		accepts: ["instance", "params", "args", "bare"],
 		describes: "a compile parameter",
+	},
+	/**
+	 * A value inside the bytes an output publishes about the action.
+	 *
+	 * The fee is absent, and the reason is not the one that keeps it out of a compile
+	 * parameter. Nothing here is circular: the fee a part could carry only ever lands in one
+	 * of this vocabulary's fixed-width integers, so the payload's length does not move with
+	 * its value, and the wallet's own estimate prices an output by the fact that it exists
+	 * rather than by how many bytes it carries. What is wrong is the number itself. The
+	 * wallet's figure is a model made before anything is signed, and the module that signs
+	 * weighs the finished transaction and charges its own; the two differ by construction. An
+	 * amount computed from the model is absorbed, because the difference lands in change — a
+	 * published record is absorbed by nothing. It would state on chain, permanently, a fee the
+	 * transaction did not pay, and no reader of those bytes could tell.
+	 *
+	 * Everything the expression site accepts other than the fee is here, because a payload
+	 * naming this deployment's fields, the request, or something the wallet read about an
+	 * input is naming a figure already settled when the bytes are written.
+	 */
+	dataPart: {
+		accepts: ["instance", "params", "args", "input-attribute", "bare"],
+		describes: "a data part",
 	},
 	/** Where an output pays, when it names a parameter rather than a keyword. */
 	destination: { accepts: ["params"], describes: "a destination" },
@@ -93,6 +131,20 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 	expression: {
 		accepts: ["fee", "instance", "params", "args", "input-attribute", "bare"],
 		describes: "an expression",
+	},
+	/**
+	 * A value inside one of a covenant's extra taproot leaves.
+	 *
+	 * The leaves are part of the tree the covenant's address is derived from, so this position
+	 * accepts what a compile parameter accepts and for the same reasons. The fee is absent
+	 * because it is worked out from a transaction that pays to the address this decides, which
+	 * is circular. An attribute of a resolved input is absent for a sharper version of the same
+	 * problem: it is read from the chain at the outpoint this covenant is being derived in order
+	 * to check, so a leaf reading one would be checking an address against itself.
+	 */
+	extraLeaf: {
+		accepts: ["instance", "params", "args", "bare"],
+		describes: "an extra taproot leaf",
 	},
 	/**
 	 * How many units an issuance creates, which is not an amount anyone pays.

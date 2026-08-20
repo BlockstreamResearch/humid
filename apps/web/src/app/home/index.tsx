@@ -10,9 +10,11 @@ import { HomeActions } from "./components/HomeActions";
  */
 export default function Home({
 	onOpenDeveloper,
+	onOpenFormatSupport,
 	onOpenManifestInspector,
 }: {
 	onOpenDeveloper: () => void;
+	onOpenFormatSupport: () => void;
 	onOpenManifestInspector: () => void;
 }) {
 	const { hasProvider, isConnected } = useHumidContext();
@@ -46,6 +48,14 @@ export default function Home({
 					onClick={onOpenManifestInspector}
 				>
 					Manifest inspector
+				</Button>
+				<Button
+					variant="ghost"
+					size="sm"
+					className="text-muted-foreground text-xs"
+					onClick={onOpenFormatSupport}
+				>
+					Format support
 				</Button>
 			</div>
 		</div>

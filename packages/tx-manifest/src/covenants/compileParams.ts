@@ -1,5 +1,7 @@
 import type { NormalisationNote } from "../document/normalise";
-import { type ReferenceScope, resolveReference } from "../document/references";
+import { parseReference, type ReferenceScope, resolveReference } from "../document/references";
+import { type DeclaringContract, encodeContractLiteral } from "./contractParamTypes";
+import { encodeCompileParam, encodesDeclaredType, unencodableReason } from "./paramEncoding";
 
 /**
  * A contract's compile-time parameters, in SimplicityHL's own argument JSON shape.
@@ -14,49 +16,6 @@ export type ResolveCompileParamsResult =
 	| { ok: false; reason: string };
 
 /**
- * The manifest's declared parameter types, mapped to the compiler's.
- *
- * Deliberately a closed list: a type nobody has mapped is refused rather than passed
- * through, because a wrong type here produces a valid-looking wrong address rather than
- * an error. The corpus's remaining types — the integer widths, `bytes32`,
- * `liquid.asset_id` and `address` — arrive with the slices that need them.
- */
-const PARAM_TYPES: Record<string, string> = {
-	// The deployed lending contracts take these: `asset_auth` a burn flag, `asset_auth_vault`
-	// three of them. A manifest wiring a value into one is refused without an encoding for it,
-	// so the corpus's own contracts are what say this is needed.
-	bool: "bool",
-	// A covenant script hash is thirty-two bytes. `u256` rather than one of the compiler's
-	// aliases because they are the same type: `Pubkey`, `Message`, `Scalar`, `Fe`,
-	// `ExplicitAsset` and `ExplicitNonce` all resolve to `U256` in simplicityhl 0.6.0
-	// (`src/types.rs` L863-865), so the encoded value does not depend on which name a
-	// contract happens to use for it.
-	bytes32: "u256",
-	pubkey: "Pubkey",
-};
-
-/**
- * How many bytes a declared type occupies, for the types that have a fixed width.
- *
- * A value of the wrong width does not fail here without this — it is hex-prefixed and
- * handed to the compiler, which rejects it somewhere inside its own parser with a
- * message about the parse position. That is a true error about the wrong thing: the
- * fault is in the request, not the contract, and a person reading "expected end of
- * input at line 1 column 143" has to work backwards to find out that they pasted an
- * address where a key belongs.
- */
-const PARAM_BYTES: Record<string, number> = {
-	bytes32: 32,
-	pubkey: 32,
-};
-
-/** What a type of fixed width should look like, for a refusal that can be acted on. */
-const SHAPES: Record<string, string> = {
-	bytes32: "32 bytes as 64 hexadecimal characters",
-	pubkey: "an x-only public key: 32 bytes as 64 hexadecimal characters, no prefix and no address",
-};
-
-/**
  * Resolves the compile-time parameters a contract is built with, from the manifest's
  * wiring and what the request and the deployment supply.
  *
@@ -66,12 +25,26 @@ const SHAPES: Record<string, string> = {
  * references. This map is read as wiring; a reference inside it is resolved at the
  * compile-parameter site, which is what decides that `instance.`, `params.`, `args.` and a
  * bare name are meaningful here and the fee is not.
+ *
+ * What each value is encoded as comes from the type its parameter was declared with and from
+ * nothing else — never from the value's own shape. `paramEncoding` holds the closed list of
+ * types that have an encoding and refuses the rest by name, because the compiler accepts
+ * almost anything shaped like a value and returns a valid address for the wrong contract.
+ *
+ * `declaredAtUse` is the third place a type can come from, and the only one the document
+ * states outright. At one position — a `tapleaf` field of the deployment an action creates —
+ * the wiring is written `{"IS_ACTIVE": {"type": "bool", "value": "false"}}`, so the type sits
+ * beside the value rather than on a parameter declared elsewhere or inside the contract. Where
+ * it is given it wins, because a declaration at the point of use cannot be a different
+ * parameter's by accident, which is the one thing the other two cannot promise.
  */
 export function resolveCompileParams(
 	wiring: Record<string, unknown>,
 	declaredTypes: Record<string, string>,
 	scope: ReferenceScope,
 	notes?: NormalisationNote[],
+	contract?: DeclaringContract,
+	declaredAtUse?: Record<string, string>,
 ): ResolveCompileParamsResult {
 	const resolved: ContractArguments = {};
 
@@ -80,10 +53,20 @@ export function resolveCompileParams(
 			return { ok: false, reason: `Compile parameter ${name} is not a reference.` };
 		}
 
-		const found = resolveReference(reference, "compileParam", scope, notes);
+		const found = resolveCovenantReference(reference, scope, notes);
 
 		if (!found.ok) {
-			return { ok: false, reason: `Compile parameter ${name}: ${found.reason}` };
+			const literal =
+				asStatedValue(name, reference, found.reason, declaredAtUse?.[name]) ??
+				asContractLiteral(name, reference, found.reason, contract);
+
+			if (!literal.ok) {
+				return { ok: false, reason: `Compile parameter ${name}: ${literal.reason}` };
+			}
+
+			resolved[name] = literal.encoded;
+
+			continue;
 		}
 
 		if (typeof found.value !== "string") {
@@ -96,42 +79,144 @@ export function resolveCompileParams(
 		// A compile parameter's type comes from the parameter the manifest declares, so a
 		// reference to something with no declared type has nothing to encode against.
 		const declaredType = declaredTypeOf(reference, declaredTypes);
-		const compilerType = declaredType ? PARAM_TYPES[declaredType] : undefined;
 
-		if (!compilerType) {
-			return {
-				ok: false,
-				reason: `${reference} is declared as ${declaredType ?? "an unstated type"}, which this runtime does not encode yet.`,
-			};
+		if (!encodesDeclaredType(declaredType)) {
+			return { ok: false, reason: `${reference} ${unencodableReason(declaredType)}.` };
 		}
 
-		const width = PARAM_BYTES[declaredType ?? ""];
+		const encoded = encodeCompileParam(declaredType ?? "", found.value, name, reference);
 
-		if (width !== undefined) {
-			const malformed = wrongWidth(found.value, width, declaredType ?? "", name, reference);
-
-			if (malformed) {
-				return { ok: false, reason: malformed };
-			}
+		if (!encoded.ok) {
+			return encoded;
 		}
 
-		// A boolean is written as itself rather than as bytes: the compiler reads `true` and
-		// `false`, and a hex-prefixed one is not an expression of that type.
-		resolved[name] =
-			compilerType === "bool"
-				? { type: compilerType, value: booleanLiteral(found.value) }
-				: { type: compilerType, value: withHexPrefix(found.value) };
+		resolved[name] = encoded.encoded;
 	}
 
 	return { arguments: resolved, ok: true };
 }
 
 /**
+ * One compile-parameter reference, resolved against everything that can supply it.
+ *
+ * A bare name is tried as the request's own first, which is the order every other site reads
+ * one in. What is added here is the third place a covenant's parameter can come from: the
+ * fields of the deployment it belongs to.
+ *
+ * The corpus writes it that way throughout — `{"ASSET_B": "ASSET_B"}` on a swap's offer
+ * covenant, `{"ISSUING_UTXOS_COUNT": "ISSUING_UTXOS_COUNT"}` on a lending protocol's factory —
+ * and both name fields of the deployment rather than parameters of the action being run. A
+ * protocol's constructor supplies those as parameters and every later action reads them back
+ * off the deployment, so a runtime reading only the request compiles a protocol's first action
+ * and refuses every one after it.
+ *
+ * Falling through here encodes nothing on a guess. A field reached this way still has to have
+ * been declared with a type before anything is built out of it.
+ */
+function resolveCovenantReference(
+	reference: string,
+	scope: ReferenceScope,
+	notes?: NormalisationNote[],
+): { ok: false; reason: string } | { ok: true; value: unknown } {
+	const found = resolveReference(reference, "compileParam", scope, notes);
+	const parsed = parseReference(reference);
+
+	if (found.ok || parsed?.form !== "bare") {
+		return found;
+	}
+
+	return scope.instance && parsed.name in scope.instance
+		? { ok: true, value: scope.instance[parsed.name] }
+		: found;
+}
+
+/**
+ * One wiring entry read as the value it is, at the type the document declared beside it.
+ *
+ * Nothing is returned where the document declared no type there, so the caller falls through to
+ * what the contract says. The two are not alternatives to choose between by preference: this one
+ * is a statement in the document being read, and the contract's is a fact about a different
+ * artifact that happens to line up.
+ *
+ * A text shaped like a name that will not encode reports the lookup's own failure, for the same
+ * reason `asContractLiteral` does: text shaped like a name is nearly always meant as one, and
+ * "that is not 32 bytes of hex" would explain the wrong mistake to whoever reads it.
+ */
+function asStatedValue(
+	name: string,
+	text: string,
+	referenceReason: string,
+	declaredType: string | undefined,
+): EncodeLiteralResult | undefined {
+	if (declaredType === undefined) {
+		return undefined;
+	}
+
+	if (!encodesDeclaredType(declaredType)) {
+		return { ok: false, reason: `${name} is declared ${unencodableReason(declaredType)}.` };
+	}
+
+	const encoded = encodeCompileParam(declaredType, text, name, "a value");
+
+	if (encoded.ok) {
+		return encoded;
+	}
+
+	return {
+		ok: false,
+		reason: parseReference(text) === undefined ? encoded.reason : referenceReason,
+	};
+}
+
+/**
+ * One wiring entry that resolved to nothing, read as the value it is instead.
+ *
+ * Some compile parameters are wired to a bare value rather than to a name, and a value is not
+ * a reference — resolving one always fails. The failure is the same one a misspelled field
+ * produces, so the two are told apart by what the contract says rather than by how the text
+ * looks: a parameter the contract declares can take a value, and a parameter it does not
+ * declare is a lookup that failed.
+ *
+ * **A reference is tried first and keeps winning.** A deployment field is what a name means
+ * wherever one exists, so nothing that resolves today is re-read as a value.
+ *
+ * Where text that is shaped like a name cannot be encoded as a value either, the lookup's own
+ * failure is reported. It is the one a reader can act on: text shaped like a name is nearly
+ * always meant as one, and saying that it is also not a valid value would explain the wrong
+ * mistake.
+ */
+function asContractLiteral(
+	name: string,
+	text: string,
+	referenceReason: string,
+	contract: DeclaringContract | undefined,
+): EncodeLiteralResult {
+	if (!contract || contract.declares[name] === undefined) {
+		return { ok: false, reason: referenceReason };
+	}
+
+	const encoded = encodeContractLiteral(name, text, contract);
+
+	if (encoded.ok) {
+		return encoded;
+	}
+
+	return {
+		ok: false,
+		reason: parseReference(text) === undefined ? encoded.reason : referenceReason,
+	};
+}
+
+type EncodeLiteralResult =
+	| { encoded: { type: string; value: string }; ok: true }
+	| { ok: false; reason: string };
+
+/**
  * The declared type of whatever a reference points at.
  *
- * Only the action's own parameters carry declared types today. An instance field or an
- * argument has none, which is why a reference to one is refused here rather than encoded
- * on a guess — encoding a value at the wrong width changes the address silently.
+ * The corpus writes two spellings at this site and no others — a bare name and a `params.`
+ * one — so those are read and anything else has no declared type here rather than a guessed
+ * one. Encoding a value at the wrong width changes the address silently.
  */
 function declaredTypeOf(
 	reference: string,
@@ -140,46 +225,4 @@ function declaredTypeOf(
 	const name = /^\$?(?:params\.)?(?<name>[A-Za-z_][A-Za-z0-9_]*)$/.exec(reference)?.groups?.name;
 
 	return name === undefined ? undefined : declaredTypes[name];
-}
-
-/**
- * A boolean as the compiler writes it.
- *
- * Anything other than the two words it reads is passed through unchanged, so a manifest
- * carrying something else is refused by the compiler naming the type rather than being
- * quietly turned into `false` — which is a different covenant.
- */
-function booleanLiteral(value: string): string {
-	return value === "1" ? "true" : value === "0" ? "false" : value;
-}
-
-function withHexPrefix(value: string): string {
-	return value.startsWith("0x") ? value : `0x${value}`;
-}
-
-/**
- * Whether a value can be what its declared type says, by shape alone.
- *
- * It says which compile parameter, which reference, what arrived and what was needed,
- * because all four are things the person filling the request can act on and none of
- * them survives into the compiler's own message.
- */
-function wrongWidth(
-	value: string,
-	bytes: number,
-	declaredType: string,
-	name: string,
-	reference: string,
-): string | undefined {
-	const digits = value.startsWith("0x") ? value.slice(2) : value;
-
-	if (digits.length === bytes * 2 && /^[0-9a-fA-F]+$/.test(digits)) {
-		return undefined;
-	}
-
-	const found = /^[0-9a-fA-F]*$/.test(digits)
-		? `${digits.length} hexadecimal characters`
-		: `"${value.length > 24 ? `${value.slice(0, 24)}…` : value}"`;
-
-	return `${name} is wired to ${reference}, declared ${declaredType}, which is ${SHAPES[declaredType] ?? `${bytes} bytes`}. Got ${found}.`;
 }

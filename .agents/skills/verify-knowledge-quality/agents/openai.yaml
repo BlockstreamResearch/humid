@@ -1,4 +1,0 @@
-interface:
-  display_name: "Verify Knowledge Quality"
-  short_description: "Review truth and communication independently"
-  default_prompt: "Use $verify-knowledge-quality to run separate authority-truth and reader-communication reviews against one unchanged knowledge content hash."

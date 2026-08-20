@@ -128,6 +128,41 @@ export function createEsploraFeeRateReader(
 	};
 }
 
+/**
+ * How high the chain is, for an action whose covenant is time-locked.
+ *
+ * A contract branch guarded by `check_lock_height` reads the transaction's own locktime, and
+ * a transaction that declares none satisfies no such branch. What the wallet can say for
+ * itself is where the chain is now — the same answer every wallet writes into a locktime, and
+ * one that carries no knowledge of any protocol.
+ */
+export type ReadChainTip = () => Promise<number>;
+
+export function createEsploraChainTipReader(
+	endpoint: EsploraEndpoint,
+	fetchImpl: typeof fetch = fetch,
+): ReadChainTip {
+	const base = endpoint.url.replace(/\/+$/, "");
+
+	return async () => {
+		const response = await fetchImpl(`${base}/blocks/tip/height`, {
+			headers: Object.fromEntries((endpoint.headers ?? []).map(({ name, value }) => [name, value])),
+		});
+
+		if (!response.ok) {
+			throw new Error(`Could not read the chain tip: ${response.status}`);
+		}
+
+		const height = Number(await response.text());
+
+		if (!Number.isInteger(height) || height < 0) {
+			throw new Error("The chain tip came back as something that is not a block height.");
+		}
+
+		return height;
+	};
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }

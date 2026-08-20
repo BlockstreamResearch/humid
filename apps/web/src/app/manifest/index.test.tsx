@@ -27,10 +27,15 @@ describe("the inspector with nothing around it", () => {
 	test("shows no result panels until something is pasted", () => {
 		const html = renderToStaticMarkup(<ManifestInspector />);
 
-		expect(html).not.toContain("What the wallet would refuse");
+		expect(html).not.toContain("What this wallet would do");
 		expect(html).not.toContain("What each field is");
-		expect(html).not.toContain("What was rewritten");
-		expect(html).not.toContain("The contracts this document references");
+	});
+
+	// The file picker asks for an input, not a result, and until a document says which contracts
+	// it references there is nothing to ask for. So it appears with the document rather than
+	// beside the answer, which is where it used to be.
+	test("asks for contract sources only once a document has named some", () => {
+		expect(renderToStaticMarkup(<ManifestInspector />)).not.toContain("Contract sources");
 	});
 
 	test("offers a document to start from, so the empty box is not the only way in", () => {

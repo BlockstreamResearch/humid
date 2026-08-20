@@ -1,4 +1,5 @@
 import { STATIC_WITNESS } from "../evaluation/witness";
+import { identifiedForeignAsset, statedAsset } from "./asset";
 import { asArray, asRecord } from "./json";
 import type { NormalisedManifest } from "./normalise";
 import { loadBearing, inspectConstructs } from "./registry";
@@ -417,35 +418,36 @@ function refuseUnproducibleWitness(manifest: NormalisedManifest): Refusal | unde
 }
 
 /**
- * An input or output in an asset this wallet does not move.
+ * An input or output in an asset this document names and this wallet does not move.
  *
- * Only the policy asset today. An input naming another asset would be funded from L-BTC and
- * an output in another asset would be paid in L-BTC, and neither is a smaller version of
- * what the manifest asked for — it is a different transaction.
+ * Only what the document itself settles. The format lets an asset be written as an id or as a
+ * lookup into this deployment's fields, and a lookup is not an asset yet — the document has
+ * said where the answer will come from and nothing about what it is. Refusing one says the
+ * action moves an asset this wallet cannot, which is a statement about money that reading the
+ * document has not established.
+ *
+ * That distinction is not academic here. Across every published manifest this project has on
+ * file, not one asset is written as an id: they are `lbtc` or they are lookups. So a rule that
+ * refuses any text which is not literally the network's asset refuses on the spelling every
+ * time it fires, and has never once refused an asset.
+ *
+ * What the wallet can and cannot fund is decided against resolved ids by
+ * `refuseUnfundableAsset`, once the deployment's fields have been read.
  */
 function refuseForeignAsset(
 	manifest: NormalisedManifest,
 	policyAsset: string,
 ): Refusal | undefined {
-	const allowed = new Set(["lbtc", policyAsset.toLowerCase()]);
-
 	for (const action of manifest.actions) {
-		for (const kind of ["inputs", "outputs"] as const) {
-			for (const declared of asArray(action.node[kind])) {
-				const entry = asRecord(declared);
-				const asset = entry?.asset;
+		const found = identifiedForeignAsset(action, policyAsset);
 
-				if (typeof asset === "string" && !allowed.has(asset.toLowerCase())) {
-					const id = typeof entry?.id === "string" ? entry.id : "(unnamed)";
-
-					return {
-						reason:
-							`${action.name} moves ${asset} at ${id}, and this wallet moves only the ` +
-							"network's own asset.",
-						reject: "foreign-asset",
-					};
-				}
-			}
+		if (found) {
+			return {
+				reason:
+					`${action.name} moves ${found.asset} at ${found.at}, and this wallet moves only ` +
+					"the network's own asset.",
+				reject: "foreign-asset",
+			};
 		}
 	}
 
@@ -464,8 +466,6 @@ function refuseUnbuildableUtxoType(
 	manifest: NormalisedManifest,
 	policyAsset: string,
 ): Refusal | undefined {
-	const allowed = new Set(["lbtc", policyAsset.toLowerCase()]);
-
 	for (const [name, declared] of Object.entries(manifest.utxoTypes)) {
 		const utxoType = asRecord(declared);
 		const scriptType = asRecord(utxoType?.script)?.type;
@@ -489,12 +489,16 @@ function refuseUnbuildableUtxoType(
 		}
 
 		const asset = utxoType?.asset;
+		const stated = typeof asset === "string" ? statedAsset(asset, policyAsset) : undefined;
 
-		if (typeof asset === "string" && !allowed.has(asset.toLowerCase())) {
+		// The same distinction the asset refusal draws, for the same reason: a covenant whose
+		// asset is a lookup has not yet said what it holds, and every covenant in the published
+		// corpus states its asset that way.
+		if (stated?.kind === "identified") {
 			return {
 				reason:
-					`The ${name} covenant holds ${asset}, and this wallet moves only the network's own ` +
-					"asset.",
+					`The ${name} covenant holds ${stated.id}, and this wallet moves only the network's ` +
+					"own asset.",
 				reject: "unbuildable-utxo-type",
 			};
 		}

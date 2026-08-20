@@ -1,8 +1,9 @@
-import { asArray, asRecord } from "../document/json";
+import { asRecord } from "../document/json";
 import type { NormalisationNote, NormalisedManifest } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
-import { encodeLeafItem } from "../evaluation/encode";
 import { resolveCompileParams } from "./compileParams";
+import type { ContractParamTypes } from "./contractParamTypes";
+import { encodeExtraLeaves } from "./extraLeaves";
 
 /**
  * Compiles a covenant and reports the address it derives.
@@ -19,6 +20,20 @@ export type CompileCovenant = (input: {
 	network: string;
 	source: string;
 }) => Promise<CompiledCovenant> | CompiledCovenant;
+
+/**
+ * What a contract says the types of its own compile parameters are.
+ *
+ * Supplied the same way the compile step is, and for the same reason: the answer comes from the
+ * compiler, and the compiler's lifecycle belongs to the wallet rather than to this package.
+ *
+ * It is separate from compiling because it is needed *before* a compile — a parameter written
+ * as a bare value has no type until the contract states one, and the arguments a compile takes
+ * cannot be built until it does. Asking a compiled contract instead would be circular.
+ */
+export type ContractParamTypesOf = (
+	source: string,
+) => Promise<ContractParamTypes> | ContractParamTypes;
 
 /**
  * What one compile yields: where the covenant is, in both forms a transaction needs.
@@ -72,6 +87,8 @@ export async function deriveCovenantAddress(
 	manifest: NormalisedManifest,
 	input: {
 		compile: CompileCovenant;
+		/** What the contract itself declares, for the parameters a deployment writes as values. */
+		contractParamTypes?: ContractParamTypesOf;
 		contractSources: Record<string, string>;
 		declaredTypes: Record<string, string>;
 		includeDebugSymbols: boolean;
@@ -107,13 +124,39 @@ export async function deriveCovenantAddress(
 		...input.wiring,
 	};
 
-	const params = resolveCompileParams(wiring, input.declaredTypes, input.scope, input.notes);
+	// Read before resolving, because what the contract declares is what decides the parameters
+	// the document writes as values. A contract that will not analyse is reported the way one
+	// that will not compile is: it is the same failure, found one step earlier.
+	let declaring: { declares: ContractParamTypes; source: string } | undefined;
+
+	if (input.contractParamTypes) {
+		try {
+			declaring = { declares: await input.contractParamTypes(source), source: sourcePath };
+		} catch (error) {
+			return {
+				ok: false,
+				reason: `The contract at ${sourcePath} did not compile: ${String(error)}`,
+			};
+		}
+	}
+
+	const params = resolveCompileParams(
+		wiring,
+		input.declaredTypes,
+		input.scope,
+		input.notes,
+		declaring,
+	);
 
 	if (!params.ok) {
 		return params;
 	}
 
-	const leaves = encodeExtraLeaves(asRecord(declared.script), asRecord(declared.state_vars));
+	const leaves = encodeExtraLeaves(asRecord(declared.script)?.extra_leaves, {
+		notes: input.notes,
+		scope: input.scope,
+		stateVars: asRecord(declared.state_vars) ?? {},
+	});
 
 	if (!leaves.ok) {
 		return { ok: false, reason: `Utxo type "${input.utxoType}": ${leaves.reason}` };
@@ -181,31 +224,4 @@ export function covenantMatchesChain(
 			"but the funds are locked by a different contract. " +
 			"This is not the contract the site described.",
 	};
-}
-
-/**
- * The encoded payloads of a utxo type's extra taproot leaves, in declaration order.
- *
- * Order is part of the address, so this preserves it rather than collecting into anything
- * that would not. A leaf that cannot be encoded refuses the whole derivation: a covenant
- * missing one of its leaves is a different covenant, and deriving an address for it would
- * produce a well-formed answer to the wrong question.
- */
-function encodeExtraLeaves(
-	script: Record<string, unknown> | undefined,
-	stateVars: Record<string, unknown> | undefined,
-): { hex: string[]; ok: true } | { ok: false; reason: string } {
-	const hex: string[] = [];
-
-	for (const item of asArray(script?.extra_leaves)) {
-		const encoded = encodeLeafItem(item, stateVars ?? {});
-
-		if (!encoded.ok) {
-			return encoded;
-		}
-
-		hex.push(encoded.hex);
-	}
-
-	return { hex, ok: true };
 }

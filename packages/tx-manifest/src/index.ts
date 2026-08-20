@@ -21,19 +21,23 @@ export { parseLiquidProcessCtParams } from "./request/validation";
 
 // 2. What the chain says, which only a wallet can ask for.
 export {
+	type ReadChainTip,
 	type ReadFeeRate,
 	type ReadTxOut,
+	createEsploraChainTipReader,
 	createEsploraFeeRateReader,
 	createEsploraTxOutReader,
 } from "./chain/chainRead";
 export { txOutAt } from "./chain/txOut";
 export { estimateFeeSats } from "./fee";
 
-// 3. The action, resolved into a reviewed plan or a refusal — and afterwards, the check
-//    that what came back spends only what was asked for.
-export { type ManifestReview, isRefusal, reviewManifestAction } from "./review";
+// 3. The action, resolved into a reviewed plan or a refusal — and afterwards, the two checks
+//    that what came back is what was agreed to: that it spends only what was asked for, and
+//    that it hides exactly the amounts the document decided to hide.
+export { type ManifestReview, type PlannedInput, isRefusal, reviewManifestAction } from "./review";
 export type { RejectToken } from "./document/refuse";
 export { guardSpentInputs } from "./chain/inputGuard";
+export { guardBlindedOutputs } from "./chain/outputGuard";
 export { spentInputs } from "./chain/spentInputs";
 
 // 4. What a person is shown, and where each value on that screen came from.
@@ -55,5 +59,11 @@ export {
 	inspectManifestDocument,
 } from "./document/inspect";
 export type { PartialCheck } from "./document/refuse";
-export type { ConstructReport, ConstructState } from "./document/registry";
+export {
+	type ConstructRegistryEntry,
+	type ConstructReport,
+	type ConstructSiteKind,
+	type ConstructState,
+	describeRegistry,
+} from "./document/registry";
 export type { NormalisationNote } from "./document/normalise";

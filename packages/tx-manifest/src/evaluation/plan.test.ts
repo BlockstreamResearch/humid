@@ -52,6 +52,26 @@ describe("planAction", () => {
 		}
 	});
 
+	// The plan is where an output being change is known while the document's word about hiding
+	// it is still in hand, so it is where the wallet's own rule is applied. The document says
+	// nothing about this one and this network's answer to that is to hide; the change comes back
+	// published instead, so the next action can be funded from it.
+	test("and publishes it, saying which word it set aside to do that", () => {
+		const result = planAction(PAY, request({ amount_sat: 50_000, pubkey: PUBKEY }));
+
+		expect(result).toMatchObject({ ok: true });
+
+		if (result.ok) {
+			const change = result.plan.outputs.find((output) => output.target.kind === "change");
+
+			expect(change?.blinding).toEqual({
+				blinding: "open",
+				decidedBy: "spendable-change",
+				overrode: "chain",
+			});
+		}
+	});
+
 	// Amounts are base units and must survive past 2^53, which a number cannot.
 	test("keeps an amount beyond a double's range exact", () => {
 		const huge = "9007199254740993";
@@ -193,5 +213,86 @@ describe("planAction over expressions", () => {
 		});
 
 		expect(result).toMatchObject({ ok: true });
+	});
+});
+/**
+ * What an op_return's payload may name.
+ *
+ * These bytes are a record a protocol's own reader looks the action up by, and they outlive
+ * the transaction. The wallet's fee is a figure it models before anything is signed; the module
+ * that signs weighs the finished transaction and charges its own. A payload naming the fee
+ * would publish a number the transaction did not pay, permanently, with nothing downstream able
+ * to notice — so the position refuses it rather than writing it.
+ */
+describe("planAction over an op_return payload", () => {
+	function publish(value: unknown, scope: Partial<ReferenceScope> = {}) {
+		return planAction(
+			action({
+				outputs: [
+					{
+						data: { parts: [{ type: "u64", value }] },
+						destination: { type: "op_return" },
+						id: "marker",
+					},
+				],
+			}),
+			{ params: {}, ...scope },
+		);
+	}
+
+	test("refuses a part naming the fee even where the wallet has one", () => {
+		const result = publish("fee", { fee: 500n });
+
+		expect(result).toMatchObject({ ok: false });
+	});
+
+	// The refusal has to name the text, because the person holding it is deciding whether to
+	// trust a site rather than reading their own document.
+	test("names the part and the text it refused", () => {
+		const reason = publish("fee", { fee: 500n });
+
+		expect(reason.ok ? "" : reason.reason).toContain("fee");
+		expect(reason.ok ? "" : reason.reason).toContain("Data part 1");
+	});
+
+	// The fee is the only form this position lost. Everything else a payload is written with is
+	// settled before the bytes are, and the corpus publishes its records out of the deployment.
+	test("publishes a field of this deployment", () => {
+		const result = publish("instance.LOAN_ID", { fee: 500n, instance: { LOAN_ID: 7 } });
+
+		expect(result).toMatchObject({ ok: true });
+
+		if (result.ok) {
+			expect(result.plan.outputs[0]?.target).toEqual({
+				hex: "6a080700000000000000",
+				kind: "data",
+			});
+		}
+	});
+
+	test("publishes a parameter, an argument and a bare name of the request", () => {
+		expect(publish("params.n", { params: { n: 1 } })).toMatchObject({ ok: true });
+		expect(publish("args.n", { args: { n: 1 }, params: {} })).toMatchObject({ ok: true });
+		expect(publish("n", { params: { n: 1 } })).toMatchObject({ ok: true });
+	});
+
+	test("publishes what the wallet read about an input, which is settled before the bytes", () => {
+		const result = publish("p2pk_in.amount_sat", {
+			inputs: { p2pk_in: { amount_sat: 42_000n } },
+			params: {},
+		});
+
+		expect(result).toMatchObject({ ok: true });
+	});
+
+	// An amount is the position where the fee belongs, and it keeps it: the difference between
+	// the modelled figure and the charged one lands in change, which absorbs it.
+	test("an amount at the same output may still name the fee", () => {
+		const result = planAction(
+			action({ outputs: [{ amount_sat: "fee", destination: "wallet", id: "out" }] }),
+			{ fee: 500n, params: {} },
+		);
+
+		expect(result.ok && result.plan.outputs[0]?.sats).toBe(500n);
 	});
 });

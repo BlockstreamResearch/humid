@@ -9,7 +9,7 @@
 	"type": "module",
 	"scripts": {
 		"analyze": "vite build --mode analyze",
-		"build": "tsc && vite build",
+		"build": "bun run check:wasm && tsc && vite build",
 		"build-storybook": "storybook build",
 		"build:wasm": "smplx/crates/wasm/build.sh",
 		"build:watch": "vite build --watch --mode development",
@@ -30,7 +30,8 @@
 		"web:build": "bun --filter='./apps/web' run build",
 		"web:dev": "bun --filter='./apps/web' run dev",
 		"web:preview": "bun --filter='./apps/web' run preview",
-		"web:typecheck": "bun --filter='./apps/web' run typecheck"
+		"web:typecheck": "bun --filter='./apps/web' run typecheck",
+		"check:wasm": "bun run scripts/checkSmplxWasm.ts"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.5.0",

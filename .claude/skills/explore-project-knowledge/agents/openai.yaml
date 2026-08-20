@@ -1,4 +1,0 @@
-interface:
-  display_name: "Explore Project Knowledge"
-  short_description: "Guide people through current project knowledge"
-  default_prompt: "Use $explore-project-knowledge to help me understand this project from a product perspective."

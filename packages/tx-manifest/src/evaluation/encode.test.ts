@@ -2,6 +2,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { encodeDataParts, encodeLeafItem } from "./encode";
+import type { LeafPartResolver } from "./leafParts";
 
 // The vocabulary comes from the cross-source inventory, which read it out of the reference
 // implementation's `encode_leaf_bytes`: type is one of u8/u16/u32/u64 or
@@ -147,11 +148,131 @@ describe("encodeLeafItem", () => {
 			expect(hex({ type: "u8" })).toContain("value");
 		});
 	});
+
+	/**
+	 * The fourth shape: a kind of leaf carrying a list of parts.
+	 *
+	 * `tapdata` is the only kind this compiler builds — a hidden node hashed as
+	 * `sha256(tag ‖ tag ‖ payload)` with `tag = sha256("TapData")` — so the payload is one run of
+	 * bytes and the parts are that run. The expected bytes below are not this runtime's opinion:
+	 * a live protocol writes these two leaves, its own contract rebuilds them from the flag and
+	 * the debt, and its Rust program builder writes the same thirty-two bytes a third time.
+	 */
+	describe("a kind of leaf carrying a payload", () => {
+		const nothing: LeafPartResolver = (reference) => ({
+			ok: false,
+			reason: `nothing carries "${reference}"`,
+		});
+
+		function payload(item: unknown, resolve?: LeafPartResolver) {
+			const result = encodeLeafItem(item, {}, resolve);
+
+			return result.ok ? result.hex : result.reason;
+		}
+
+		test("is the bytes of its one part", () => {
+			expect(payload({ payload: ["0x0102"], type: "tapdata" })).toBe("0102");
+		});
+
+		test("concatenates several parts in the order they are written", () => {
+			expect(payload({ payload: ["0xaa", { type: "u8", value: 1 }], type: "tapdata" })).toBe(
+				"aa01",
+			);
+		});
+
+		/** The flag slot of a live protocol's collateral covenant, active and pending. */
+		test("writes a flag as the thirty-two bytes its contract hashes", () => {
+			expect(payload({ payload: [`0x${"00".repeat(31)}01`], type: "tapdata" })).toBe(
+				`${"00".repeat(31)}01`,
+			);
+		});
+
+		/** The debt slot beside it: eight big-endian bytes right-aligned in thirty-two. */
+		test("writes a debt big-endian, right-aligned in thirty-two bytes", () => {
+			expect(
+				payload({
+					payload: [{ align: "right", endian: "be", pad_to: 32, type: "u64", value: 52_500 }],
+					type: "tapdata",
+				}),
+			).toBe(`${"00".repeat(30)}cd14`);
+		});
+
+		test("a part may name something the caller resolves", () => {
+			expect(
+				payload(
+					{
+						payload: [
+							{ align: "right", endian: "be", pad_to: 32, type: "u64", value: "instance.DEBT" },
+						],
+						type: "tapdata",
+					},
+					() => ({ ok: true, value: "52500" }),
+				),
+			).toBe(`${"00".repeat(30)}cd14`);
+		});
+
+		test("and a whole part may be the name, resolving to the bytes it stands for", () => {
+			expect(
+				payload({ payload: ["instance.TAG"], type: "tapdata" }, () => ({
+					ok: true,
+					value: "0xabcd",
+				})),
+			).toBe("abcd");
+		});
+
+		/**
+		 * Which of the two mistakes this makes. Text the reference grammar accepts is looked up
+		 * and refused when nothing carries it, so it can never become bytes that resemble a value;
+		 * text it rejects is a literal, which `0x` in front settles for good.
+		 */
+		test("a part opening with a digit is a literal and is never looked up", () => {
+			expect(payload({ payload: ["0011"], type: "tapdata" }, nothing)).toBe("0011");
+		});
+
+		test("a part that names something nothing carries refuses, naming the text", () => {
+			expect(payload({ payload: ["MISSING"], type: "tapdata" }, nothing)).toContain("MISSING");
+		});
+
+		test("and refuses rather than guessing when there is nothing to resolve against", () => {
+			expect(payload({ payload: ["MISSING"], type: "tapdata" })).toContain("resolve");
+		});
+
+		test("refuses a kind of leaf this compiler cannot build", () => {
+			expect(payload({ payload: ["0x00"], type: "tapscript" })).toContain("tapscript");
+		});
+
+		test("refuses a leaf declaring a kind and saying nothing", () => {
+			expect(payload({ type: "tapdata" })).toContain("payload");
+		});
+
+		test("refuses a payload that is not a list of parts", () => {
+			expect(payload({ payload: "0x00", type: "tapdata" })).toContain("list of parts");
+		});
+
+		test("refuses an empty payload rather than hashing no bytes", () => {
+			expect(payload({ payload: [], type: "tapdata" })).toContain("empty");
+		});
+
+		test("refuses a part carrying a payload of its own", () => {
+			expect(
+				payload({ payload: [{ payload: ["0x00"], type: "tapdata" }], type: "tapdata" }),
+			).toContain("a part is a value");
+		});
+
+		test("names the part it could not encode, because position is the only name one has", () => {
+			expect(payload({ payload: ["0x00", { type: "u128", value: 1 }], type: "tapdata" })).toContain(
+				"payload part 2",
+			);
+		});
+	});
 });
 
-// The second vocabulary, on an output's `data`. Distinct from the first: no endian, no
-// padding, and only three types. Written separately rather than folded into the first,
-// because a shared encoder would silently accept `endian` here where the format has none.
+// The second vocabulary, on an output's `data`, still reachable under the name the runtime
+// calls it by. It is distinct from the first — a different set of types, the opposite integer
+// default and no padding at all — and it now lives in `metadataParts.ts`, where each entry
+// records what was measured. `metadataParts.test.ts` covers it; what is left here is that the
+// old name still answers, and the two things this block used to assert about the vocabulary
+// that turned out to be true of the other one.
 describe("encodeDataParts", () => {
 	function parts(value: unknown): string {
 		const result = encodeDataParts(value);
@@ -170,16 +291,25 @@ describe("encodeDataParts", () => {
 		).toBe("01abcd");
 	});
 
-	test("u64 is eight bytes, big-endian, as this vocabulary has no endian to choose", () => {
-		expect(parts({ parts: [{ type: "u64", value: 1 }] })).toBe("0000000000000001");
+	// This asserted the reverse, on the reasoning that a hand-written layout reads big-endian and
+	// that the vocabulary had no key to say otherwise. Both halves were wrong: the key exists and
+	// a published document writes it, and a deployed reader of these bytes takes every integer
+	// width here little-endian.
+	test("u64 is eight bytes, little-endian, which is this vocabulary's default", () => {
+		expect(parts({ parts: [{ type: "u64", value: 1 }] })).toBe("0100000000000000");
 	});
 
+	// This named `u32`, which the vocabulary does have. `bytes32` is the honest example: the
+	// first vocabulary has it, no document writes it at this position, so it stays refused.
 	test("refuses a type this vocabulary does not have", () => {
-		expect(parts({ parts: [{ type: "u32", value: 1 }] })).toContain("u32");
+		expect(parts({ parts: [{ type: "bytes32", value: `0x${"11".repeat(32)}` }] })).toContain(
+			"bytes32",
+		);
 	});
 
-	test("refuses the first vocabulary's keys, which mean nothing here", () => {
-		expect(parts({ parts: [{ endian: "be", type: "u8", value: 1 }] })).toContain("endian");
+	test("refuses the first vocabulary's padding keys, which mean nothing here", () => {
+		expect(parts({ parts: [{ pad_to: 4, type: "u8", value: 1 }] })).toContain("pad_to");
+		expect(parts({ parts: [{ align: "left", type: "u8", value: 1 }] })).toContain("align");
 	});
 
 	test("refuses data that is not a parts list", () => {

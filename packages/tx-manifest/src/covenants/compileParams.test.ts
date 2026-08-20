@@ -96,6 +96,98 @@ describe("resolveCompileParams", () => {
 	});
 });
 
+/**
+ * A covenant's parameters come off the deployment it belongs to, and the corpus wires them by
+ * bare name: `{"ASSET_B": "ASSET_B"}` on a swap's offer covenant, `{"ISSUING_UTXOS_COUNT":
+ * "ISSUING_UTXOS_COUNT"}` on a lending protocol's factory. Neither names a parameter of the
+ * action being run — a constructor supplied those once, and every action afterwards reads them
+ * back off the deployment it created.
+ */
+describe("a parameter the deployment holds rather than the request", () => {
+	test("resolves off the deployment when the request has no such name", () => {
+		const result = resolveCompileParams(
+			{ PUB_KEY: "OWNER" },
+			{ OWNER: "pubkey" },
+			scope({}, { OWNER: PUBKEY }),
+		);
+
+		expect(result).toEqual({
+			arguments: { PUB_KEY: { type: "Pubkey", value: `0x${PUBKEY}` } },
+			ok: true,
+		});
+	});
+
+	// A value the request chose is not the deployment's to overwrite, which is the order every
+	// other reader of a bare name uses.
+	test("but the request wins where both hold the name", () => {
+		const other = "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5";
+		const result = resolveCompileParams(
+			{ PUB_KEY: "OWNER" },
+			{ OWNER: "pubkey" },
+			scope({ OWNER: PUBKEY }, { OWNER: other }),
+		);
+
+		expect(result).toMatchObject({ arguments: { PUB_KEY: { value: `0x${PUBKEY}` } } });
+	});
+
+	// Reaching the deployment is not permission to encode what is found there. The value still
+	// has to have been declared with a type, or the address would be built on a guessed width.
+	test("and is still refused when nothing declares its type", () => {
+		const result = resolveCompileParams({ PUB_KEY: "OWNER" }, {}, scope({}, { OWNER: PUBKEY }));
+
+		expect(result).toMatchObject({ ok: false });
+	});
+
+	test("a name neither holds is refused naming the name, as it always was", () => {
+		const result = resolveCompileParams({ PUB_KEY: "OWNER" }, { OWNER: "pubkey" }, scope({}, {}));
+
+		expect(result.ok ? "" : result.reason).toContain("OWNER");
+	});
+});
+
+/**
+ * The types that arrived with this slice, at the site that uses them. What each one encodes to
+ * is proved in `paramEncoding.test.ts`; what is here is that the wiring reaches them.
+ */
+describe("the types a live deployment declares", () => {
+	const ASSET = "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec8ef5b4d5";
+
+	test("an asset id, an amount, a height and a count", () => {
+		const result = resolveCompileParams(
+			{
+				ASSET_B: "ASSET_B",
+				ISSUING_UTXOS_COUNT: "params.count",
+				MAX_FEE: "MAX_FEE",
+				TIMEOUT: "TIMEOUT",
+			},
+			{ ASSET_B: "liquid.asset_id", MAX_FEE: "u64", TIMEOUT: "u32", count: "u8" },
+			scope({ count: "2" }, { ASSET_B: ASSET, MAX_FEE: "5000", TIMEOUT: "900000" }),
+		);
+
+		expect(result).toMatchObject({
+			arguments: {
+				ASSET_B: { type: "u256" },
+				ISSUING_UTXOS_COUNT: { type: "u8", value: "2" },
+				MAX_FEE: { type: "u64", value: "5000" },
+				TIMEOUT: { type: "u32", value: "900000" },
+			},
+			ok: true,
+		});
+	});
+
+	test("and an address, which is refused by name because nothing says what it encodes to", () => {
+		const result = resolveCompileParams(
+			{ PAYEE: "PAYEE" },
+			{ PAYEE: "address" },
+			scope({}, { PAYEE: "ex1pg45gz7zucl2krj42qk0q9udzsgcxd0vxqs3ej6l286fvvgdmqe9s5w0cfg" }),
+		);
+
+		expect(result.ok).toBe(false);
+		expect(result.ok ? "" : result.reason).toContain("address");
+		expect(result.ok ? "" : result.reason).toContain("rendering of a locking script");
+	});
+});
+
 // The deployed lending contracts take boolean parameters — asset_auth a burn flag,
 // asset_auth_vault three of them — so a manifest wiring one has to be encodable.
 describe("boolean compile parameters", () => {
@@ -131,12 +223,21 @@ describe("boolean compile parameters", () => {
 		).toMatchObject({ arguments: { B: { value: "false" } } });
 	});
 
-	// Anything else goes through unchanged so the compiler names the type, rather than being
-	// turned into `false` here — which would be a different covenant at a different address.
-	test("anything else is left for the compiler to refuse by name", () => {
-		expect(
-			resolveCompileParams({ B: "params.burn" }, { burn: "bool" }, scope({ burn: "maybe" })),
-		).toMatchObject({ arguments: { B: { value: "maybe" } } });
+	// Anything else is refused rather than turned into `false`, which would be a different
+	// covenant at a different address. It used to be handed to the compiler, which refused it
+	// too — at a character position, in a message naming neither the compile parameter nor the
+	// reference. Refusing it here says all four things the person filling the request can act
+	// on, the same way a key of the wrong width already did.
+	test("anything else is refused, naming what was wired and what was wanted", () => {
+		const result = resolveCompileParams(
+			{ B: "params.burn" },
+			{ burn: "bool" },
+			scope({ burn: "maybe" }),
+		);
+
+		expect(result.ok).toBe(false);
+		expect(result.ok ? "" : result.reason).toContain("B is wired to params.burn");
+		expect(result.ok ? "" : result.reason).toContain("true or false");
 	});
 });
 
@@ -178,5 +279,88 @@ describe("a value that cannot be its declared type", () => {
 
 		expect(resolve(key).ok).toBe(true);
 		expect(resolve(`0x${key}`).ok).toBe(true);
+	});
+});
+
+/**
+ * The wiring some deployments write: a bare value where every other parameter has a name.
+ *
+ * A value declares nothing at that position, so the only thing that can type it is the contract
+ * it is being compiled into. These prove the two are joined, and that a name still wins wherever
+ * one resolves.
+ */
+describe("a compile parameter written as a value rather than a reference", () => {
+	const CONTRACT = {
+		declares: { ASSET_AMOUNT: "u64", ASSET_ID: "u256", WITH_ASSET_BURN: "bool" },
+		source: "./asset_auth.simf",
+	};
+
+	test("is encoded from the type its contract declares for it", () => {
+		const result = resolveCompileParams(
+			{ ASSET_AMOUNT: "1", WITH_ASSET_BURN: "false" },
+			{},
+			scope({}),
+			undefined,
+			CONTRACT,
+		);
+
+		expect(result).toEqual({
+			arguments: {
+				ASSET_AMOUNT: { type: "u64", value: "1" },
+				WITH_ASSET_BURN: { type: "bool", value: "false" },
+			},
+			ok: true,
+		});
+	});
+
+	/**
+	 * The order that keeps every document already working. A name means a deployment field
+	 * wherever one exists, so a field really called `false` is still read as the field.
+	 */
+	test("but a name that resolves is still read as the name", () => {
+		const result = resolveCompileParams(
+			{ ASSET_AMOUNT: "COUNT" },
+			{ COUNT: "u64" },
+			scope({}, { COUNT: "7" }),
+			undefined,
+			CONTRACT,
+		);
+
+		expect(result).toMatchObject({ arguments: { ASSET_AMOUNT: { value: "7" } } });
+	});
+
+	test("and a name resolving to nothing is reported as the lookup it was, not as a value", () => {
+		const result = resolveCompileParams(
+			{ ASSET_AMOUNT: "MISSING" },
+			{},
+			scope({}),
+			undefined,
+			CONTRACT,
+		);
+
+		expect(result.ok).toBe(false);
+		expect(result.ok ? "" : result.reason).toContain("neither a parameter nor an argument");
+	});
+
+	// Without the contract there is no type, and a value's own shape is never one. This is the
+	// state every caller was in before, and it still refuses rather than reading `1` as a number.
+	test("and refuses entirely when no contract says what the parameter is", () => {
+		const result = resolveCompileParams({ ASSET_AMOUNT: "1" }, {}, scope({}));
+
+		expect(result.ok).toBe(false);
+		expect(result.ok ? "" : result.reason).toContain("ASSET_AMOUNT");
+	});
+
+	test("and refuses a thirty-two byte value, whose byte order its width does not decide", () => {
+		const result = resolveCompileParams(
+			{ ASSET_ID: `0x${"ab".repeat(32)}` },
+			{},
+			scope({}),
+			undefined,
+			CONTRACT,
+		);
+
+		expect(result.ok).toBe(false);
+		expect(result.ok ? "" : result.reason).toContain("byte order");
 	});
 });

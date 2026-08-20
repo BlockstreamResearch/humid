@@ -1,6 +1,0 @@
-interface:
-  display_name: "Shape Project Direction"
-  short_description: "Resolve a large uncertain project direction"
-  default_prompt: "Use this skill to turn a broad, uncertain product or architecture initiative into a durable decision frontier before implementation."
-policy:
-  allow_implicit_invocation: false

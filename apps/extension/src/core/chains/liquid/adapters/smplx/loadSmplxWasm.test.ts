@@ -1,27 +1,25 @@
 // oxlint-disable consistent-function-scoping -- each helper builds the case it sits in, and reading it beside the assertion is the point
-// oxlint-disable no-underscore-dangle -- these are wasm-bindgen's own exported names; renaming them would stop the module loading
-import { beforeAll, describe, expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { describe, expect, test } from "bun:test";
 
 import { estimateFeeSats } from "@humid/tx-manifest";
 import { guardSpentInputs } from "@humid/tx-manifest";
 import { spentInputs } from "@humid/tx-manifest";
-import * as smplxWasmBindings from "smplx-wasm/smplx_wasm_bg.js";
+
+import { smplx as bindings, type SmplxBindings } from "./smplxWasmForTests";
 
 // Exercises the exact bindings `loadSmplxWasm` consumes. The only difference is where
-// the module bytes come from: the extension fetches them through a Vite asset URL, this
-// reads them off disk. Everything after instantiation — the `__wbg_set_wasm` handshake,
-// the start call, and every exported binding — is the same code path.
+// the module bytes come from: the extension fetches them through a Vite asset URL, the
+// shared fixture reads them off disk. Everything after instantiation — the
+// `__wbg_set_wasm` handshake, the start call, and every exported binding — is the same
+// code path.
 //
 // `loadSmplxWasm` itself cannot be imported here: it uses Vite's `?url` import, which
 // only resolves under Vite.
-
-type SmplxBindings = typeof import("smplx-wasm") & {
-	__wbg_set_wasm: (exports: WebAssembly.Exports) => void;
-};
-
-const bindings = smplxWasmBindings as unknown as SmplxBindings;
+//
+// The instantiation moved to `smplxWasmForTests` when a second file needed the module.
+// It has to happen once per process rather than once per file: the glue is a module and
+// therefore a singleton, so a second instantiation repoints it at a different memory
+// while the first one's objects are still reading the old one.
 
 // The reference value: this source compiled natively against simplicityhl 0.6.0 with
 // debug symbols off. Asserting the wasm build reproduces it is what makes recomputing a
@@ -29,24 +27,6 @@ const bindings = smplxWasmBindings as unknown as SmplxBindings;
 // would refuse every legitimately deployed protocol.
 const PROBE_SOURCE = "fn main() { assert!(jet::eq_32(witness::A, witness::B)); }";
 const PROBE_CMR = "43041b02608dc3ba245a2e3dc7aa5bc991fcf6c097c6a165a18e97a486461729";
-
-beforeAll(async () => {
-	const require = createRequire(import.meta.url);
-	const wasmPath = require.resolve("smplx-wasm/smplx_wasm_bg.wasm");
-	const bytes = await readFile(wasmPath);
-
-	const { instance } = await WebAssembly.instantiate(bytes, {
-		"./smplx_wasm_bg.js": bindings as unknown as WebAssembly.ModuleImports,
-	});
-
-	bindings.__wbg_set_wasm(instance.exports);
-
-	const start = instance.exports.__wbindgen_start;
-
-	if (typeof start === "function") {
-		start();
-	}
-});
 
 describe("smplx wasm module", () => {
 	test("reports the SDK version compiled into it", () => {

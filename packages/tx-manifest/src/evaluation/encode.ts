@@ -1,4 +1,6 @@
-import { asArray, asRecord } from "../document/json";
+import { asRecord } from "../document/json";
+import { declaresLeafKind, encodeLeafPayload, type LeafPartResolver } from "./leafParts";
+import { encodeMetadataParts, type PartResolver } from "./metadataParts";
 
 export type EncodedBytes = { hex: string; ok: true } | { ok: false; reason: string };
 
@@ -12,10 +14,15 @@ export type EncodedBytes = { hex: string; ok: true } | { ok: false; reason: stri
  * not recognised, and nothing is inferred from the shape of a value.
  *
  * The two vocabularies are genuinely different and are implemented separately rather than
- * unified. `extra_leaves` has seven types, an endianness and a padding rule; an output's
- * object-form `data` has three types and neither. Folding them together would silently
- * accept `endian` in a position where the format has no such key, which is the shape of a
- * mistake that changes bytes without changing anything visible.
+ * unified. `extra_leaves` has seven types, one endianness rule and a padding rule; an output's
+ * object-form `data` has six types, a different endianness default and no padding at all.
+ * Folding them together would carry a default across that is the reverse of the one measured
+ * on the other side, which is the shape of a mistake that changes bytes without changing
+ * anything visible.
+ *
+ * This file keeps `extra_leaves`. The object-form vocabulary lives in `metadataParts.ts`,
+ * where each of its entries records what was measured; `encodeDataParts` below is the name the
+ * rest of the runtime already calls it by.
  */
 
 /** The integer widths `extra_leaves` accepts, in bytes. */
@@ -31,18 +38,25 @@ const LEAF_BYTE_LENGTHS: Record<string, number | undefined> = {
 /**
  * Encodes one item of a utxo type's `extra_leaves`.
  *
- * Three shapes: a hex literal, a typed value, and a reference to one of the utxo type's own
- * state variables — which resolves to that variable's default as a single byte.
+ * Four shapes: a hex literal, a typed value, a reference to one of the utxo type's own state
+ * variables — which resolves to that variable's default as a single byte — and a kind of leaf
+ * with a list of parts, which `leafParts.ts` reads and which encodes each of its parts back
+ * through here.
  *
  * **Order of operations, stated because it decides addresses.** The value is encoded to its
  * type's natural width, then the endianness is applied, then padding extends it. Padding
  * before reversing would turn a right-aligned pad into a left-aligned one, so the order is
  * not arbitrary; it is also not something any document states, and is recorded as an
  * uncertainty rather than presented as established.
+ *
+ * `resolve` is what lets a value inside a payload name something rather than be something. It
+ * is used at that position and nowhere else: a leaf written as a bare typed value encodes
+ * exactly the bytes it did before, whether a resolver is supplied or not.
  */
 export function encodeLeafItem(
 	item: unknown,
 	stateVars: Record<string, unknown> = {},
+	resolve?: LeafPartResolver,
 ): EncodedBytes {
 	if (typeof item === "string") {
 		return fromHex(item);
@@ -67,6 +81,15 @@ export function encodeLeafItem(
 		return { ok: false, reason: "An extra leaf declares no type, and none is inferred." };
 	}
 
+	if (declaresLeafKind(type, record)) {
+		return encodeLeafPayload(
+			type,
+			record,
+			(part) => encodeLeafItem(part, stateVars, resolve),
+			resolve,
+		);
+	}
+
 	if (!("value" in record)) {
 		return { ok: false, reason: `The ${type} extra leaf carries no value.` };
 	}
@@ -85,73 +108,12 @@ export function encodeLeafItem(
 /**
  * Encodes an output's object-form `data`.
  *
- * `{parts: [{type, value}, …]}`, concatenated in order. Only `bytes`, `u8` and `u64`, and
- * no endianness or padding to choose — so a document carrying one of those keys here is
- * refused rather than quietly encoded as if it had said nothing.
+ * The vocabulary itself is in `metadataParts.ts`. This is the name the runtime already reaches
+ * for, kept so that a caller asking for an output's bytes does not have to know which of the
+ * format's two vocabularies answered.
  */
-export function encodeDataParts(
-	data: unknown,
-	resolve: (reference: string) => { ok: true; value: unknown } | { ok: false; reason: string } = (
-		reference,
-	) => ({ ok: true, value: reference }),
-): EncodedBytes {
-	const declared = asRecord(data)?.parts;
-
-	if (!Array.isArray(declared)) {
-		return { ok: false, reason: "Object-form data carries no parts list." };
-	}
-
-	let hex = "";
-
-	for (const entry of asArray(declared)) {
-		const part = asRecord(entry);
-
-		if (!part) {
-			return { ok: false, reason: "A data part is not a typed value." };
-		}
-
-		for (const key of ["endian", "pad_to", "align"]) {
-			if (key in part) {
-				return {
-					ok: false,
-					reason: `A data part carries ${key}, which this vocabulary does not have.`,
-				};
-			}
-		}
-
-		const type = part.type;
-
-		if (typeof type !== "string" || !(type === "bytes" || type === "u8" || type === "u64")) {
-			return {
-				ok: false,
-				reason: `A data part is declared ${String(type)}, which object-form data does not have.`,
-			};
-		}
-
-		// A part's value can be a reference — every one in the corpus is — so it is resolved
-		// before it is encoded. Encoding the reference text itself would produce bytes that
-		// look like a payload and are the name of one.
-		const resolved =
-			typeof part.value === "string" && !part.value.startsWith("0x")
-				? resolve(part.value)
-				: { ok: true as const, value: part.value };
-
-		if (!resolved.ok) {
-			return { ok: false, reason: `A data part could not be resolved: ${resolved.reason}` };
-		}
-
-		// Big-endian, because there is no key to say otherwise and a length-prefixed binary
-		// layout written by hand reads in that order.
-		const encoded = encodeTyped(type, resolved.value);
-
-		if (!encoded.ok) {
-			return encoded;
-		}
-
-		hex += type === "u64" ? reverse(encoded.hex) : encoded.hex;
-	}
-
-	return { hex, ok: true };
+export function encodeDataParts(data: unknown, resolve?: PartResolver): EncodedBytes {
+	return encodeMetadataParts(data, resolve);
 }
 
 function encodeTyped(type: string, value: unknown): EncodedBytes {

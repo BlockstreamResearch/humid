@@ -67,9 +67,14 @@ export function planAction(
 			return { ok: false, reason: `Output ${id || "(unnamed)"} ${target.reason}` };
 		}
 
+		// Change is flagged here rather than answered later, because this is the one place that
+		// knows an output is the action's own change while the document's word about hiding it is
+		// still in hand. The resolver publishes it and carries the word it set aside; see there
+		// for why that trade was made.
 		const blinding = resolveBlinding({
 			declared: output.confidential,
 			documentDefault,
+			...(target.target.kind === "change" ? { change: true } : {}),
 			...(target.target.kind === "covenant"
 				? { unblindable: "covenant" as const }
 				: target.target.kind === "data"
@@ -83,10 +88,29 @@ export function planAction(
 			continue;
 		}
 
-		// An op_return output carries bytes rather than value. It is provably unspendable, so
-		// it pays nothing and nothing needs to fund it.
+		// An op_return output carries bytes rather than value, and almost always pays nothing.
+		// A document that states an amount at one is burning that amount: paying an asset to a
+		// provably unspendable output is how a token is destroyed, and there is no other way to
+		// do it. Dropping the amount would leave the transaction still holding what the action
+		// declared gone, which is a transaction nothing can balance.
 		if (target.target.kind === "data") {
-			outputs.push({ blinding, id, sats: 0n, target: target.target });
+			if (output.amount_sat === undefined) {
+				outputs.push({ blinding, id, sats: 0n, target: target.target });
+
+				continue;
+			}
+
+			const burned = resolveAmount(output.amount_sat, scope, notes);
+
+			if (!burned.ok) {
+				return {
+					ok: false,
+					reason: `Output ${id || "(unnamed)"} cannot be paid: ${burned.reason}`,
+				};
+			}
+
+			fundingSats += burned.sats;
+			outputs.push({ blinding, id, sats: burned.sats, target: target.target });
 
 			continue;
 		}
@@ -149,10 +173,22 @@ function resolveTarget(
 		return { ok: false, reason: "pays somewhere this runtime does not resolve yet." };
 	}
 
+	// A burn states no payload at all. The output exists to hold value where nothing can spend
+	// it rather than to publish anything, and `6a` on its own is that script: an output whose
+	// first opcode is OP_RETURN cannot be spent by anyone, which is the whole of what a burn
+	// needs. The corpus destroys a one-of-a-kind token exactly this way, twice.
+	if (data === undefined) {
+		return { ok: true, target: { hex: "6a", kind: "data" } };
+	}
+
 	// The payload is the output. An op_return with nothing in it says nothing, and a layout
 	// the runtime could not encode is one the protocol's own reader will not recognise.
+	//
+	// Its own site rather than the expression one, whose forms are those of a check being made
+	// now: a validation may legitimately compare something against the fee, and these bytes are
+	// a record that outlives the transaction. The site states what a payload may name and why.
 	const encoded = encodeDataParts(data, (reference) => {
-		const found = resolveReference(reference, "expression", scope, notes);
+		const found = resolveReference(reference, "dataPart", scope, notes);
 
 		return found.ok ? { ok: true, value: found.value } : { ok: false, reason: found.reason };
 	});

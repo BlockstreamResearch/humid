@@ -31,8 +31,6 @@ import {
 } from "@/ui/UiDialog";
 import { UiScrollArea } from "@/ui/UiScrollArea";
 
-import { ContractIdentityRow } from "./ContractIdentityRow";
-
 type AccountDetailViewProps = {
 	accountGroupId: AccountGroupId;
 	accountName: string;
@@ -113,7 +111,6 @@ export function AccountDetailView({
 					>
 						<SettingsRowContent icon={PlugSocketIcon} label="Connected dapps" />
 					</Link>
-					<ContractIdentityRow accountGroupId={accountGroupId} />
 					<button
 						className={cn(settingsRowClass, "text-destructive hover:bg-destructive/10")}
 						onClick={() => setRemoveOpen(true)}

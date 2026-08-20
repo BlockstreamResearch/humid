@@ -191,6 +191,53 @@ describe("which actions can read a deployment", () => {
 		expect(missing).toEqual([]);
 	});
 
+	/*
+	 * An action that creates the deployment it reads. Every published constructor does this:
+	 * it declares `create_instance`, and the fields it then refers to as `instance.*` are the
+	 * ones it just worked out. Asking the site for that file asks it to send values the
+	 * document computes — and a site that sent its own copy would never learn they disagreed.
+	 */
+	test("a constructor reading the deployment it creates needs no instance file", () => {
+		const { missing, required } = ask(
+			{
+				classes: {
+					Vault: {
+						methods: {
+							Open: { create_instance: { fields: { OWNER: "$params.OWNER" } }, outputs: [reader] },
+						},
+					},
+				},
+				utxo_types,
+			},
+			"Open",
+		);
+
+		expect(required).not.toContain("instance");
+		expect(missing.find((entry) => entry.part === "instance")).toBeUndefined();
+	});
+
+	test("a constructor still needs the file for a field it reads and does not create", () => {
+		const { missing, required } = ask(
+			{
+				classes: {
+					Vault: {
+						methods: {
+							Open: {
+								create_instance: { fields: { KEEPER: "$params.KEEPER" } },
+								outputs: [reader],
+							},
+						},
+					},
+				},
+				utxo_types,
+			},
+			"Open",
+		);
+
+		expect(required).toContain("instance");
+		expect(missing.find((entry) => entry.part === "instance")?.keys).toContain("OWNER");
+	});
+
 	// A free action reaching for a deployment cannot be satisfied by any request, so the
 	// refusal names the document's fault rather than asking for a file that would not help.
 	test("a free action reading a deployment is refused as a fault in the manifest", () => {

@@ -2,13 +2,14 @@ import { ChevronLeftIcon } from "lucide-react";
 import { useState } from "react";
 
 import Dashboard from "@/app/dashboard";
+import FormatSupport from "@/app/format";
 import Home from "@/app/home";
 import ManifestInspector from "@/app/manifest";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-type View = "developer" | "home" | "manifest";
+type View = "developer" | "format" | "home" | "manifest";
 
 export function App() {
 	const [view, setView] = useState<View>("home");
@@ -20,6 +21,7 @@ export function App() {
 					return (
 						<Home
 							onOpenDeveloper={() => setView("developer")}
+							onOpenFormatSupport={() => setView("format")}
 							onOpenManifestInspector={() => setView("manifest")}
 						/>
 					);
@@ -33,7 +35,17 @@ export function App() {
 								Back to app
 							</Button>
 						</div>
-						{view === "developer" ? <Dashboard /> : <ManifestInspector />}
+						{(() => {
+							if (view === "developer") {
+								return <Dashboard />;
+							}
+
+							if (view === "format") {
+								return <FormatSupport />;
+							}
+
+							return <ManifestInspector />;
+						})()}
 					</div>
 				);
 			})()}

@@ -282,6 +282,37 @@ const CONTAINERS = [
 	{ holder: "contract_templates", holds: "actions" },
 ] as const;
 
+/**
+ * What a deployment of this action's contract declares about its own fields.
+ *
+ * A deployment's fields are declared once on the container and filled in per deployment, so the
+ * container is where a field's type is stated — there is nowhere else. They are read through
+ * the same container list the actions were found through rather than through a name of their
+ * own, because the rename that hid every one of these documents renamed both halves at once.
+ *
+ * Empty for a free action, which belongs to no container and therefore to no deployment.
+ */
+export function declaredFields(
+	manifest: NormalisedManifest,
+	action: NormalisedAction,
+): Record<string, unknown> {
+	if (action.boundTo === undefined) {
+		return {};
+	}
+
+	for (const container of CONTAINERS) {
+		const fields = asRecord(
+			asRecord(asRecord(manifest.raw[container.holder])?.[action.boundTo])?.fields,
+		);
+
+		if (fields) {
+			return fields;
+		}
+	}
+
+	return {};
+}
+
 function normaliseAction(
 	name: string,
 	declared: Record<string, unknown>,

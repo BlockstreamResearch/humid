@@ -21,8 +21,19 @@ export const COVENANT_HASH_SEED = "0".repeat(64);
  */
 export const ITERATION_BOUND = 8;
 
-/** Compiles a contract with its arguments and returns the hash of its scriptPubKey. */
-export type HashCovenant = (input: { argumentsJson: string; source: string }) => string;
+/**
+ * Compiles a contract with its arguments and returns the hash of its scriptPubKey.
+ *
+ * The leaves travel beside the arguments because they are part of the tree the scriptPubKey is
+ * derived from, and a hash of a covenant built without them is the hash of a different
+ * covenant. A tapleaf declaring none passes an empty list, which is what a full derivation
+ * already passes in the same case.
+ */
+export type HashCovenant = (input: {
+	argumentsJson: string;
+	extraLeavesJson: string;
+	source: string;
+}) => string;
 
 export type ComputedParamsResult =
 	| { ok: false; reason: string }
@@ -87,8 +98,11 @@ export function resolveComputedParams(
 				return { ok: false, reason: `Computing ${name}: ${resolved.reason}` };
 			}
 
+			// No leaves: a computed parameter carrying `extra_leaves` is refused above, so an
+			// empty list is the whole truth here rather than a value stood in for one.
 			next[name] = input.hashCovenant({
 				argumentsJson: JSON.stringify(resolved.arguments),
+				extraLeavesJson: "[]",
 				source,
 			});
 		}

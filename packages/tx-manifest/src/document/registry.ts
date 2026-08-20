@@ -56,6 +56,15 @@ export type ConstructReport = {
 	/** Where it was found, in the document's own terms. */
 	at: string;
 	key: string;
+	/**
+	 * The kind of position it sits at, as the table itself keys them.
+	 *
+	 * Reported because `at` is written for a person — "action Pay / param amount_sat" — and a
+	 * caller that needs to know two reports concern the same construct has otherwise to parse
+	 * that sentence, which makes a display string into a contract nobody declared. The same key
+	 * at two kinds of position is two constructs and may be in two different states.
+	 */
+	site: ConstructSiteKind;
 	state: ConstructState;
 };
 
@@ -74,11 +83,67 @@ export function describeConstructs(manifest: NormalisedManifest): ConstructRepor
 		const site: ConstructSite = SITES[kind];
 
 		for (const key of Object.keys(node)) {
-			reports.push({ at, key, state: stateOf(site, key) });
+			reports.push({ at, key, site: kind, state: stateOf(site, key) });
 		}
 	});
 
 	return reports;
+}
+
+/** One construct the runtime registers, for a caller holding no document. */
+export type ConstructRegistryEntry = {
+	key: string;
+	/** Why the runtime does not act on it, or undefined where it does. */
+	reason: string | undefined;
+	/** The kind of position, or undefined where the key is answered at every position. */
+	site: ConstructSiteKind | undefined;
+	state: ConstructState;
+};
+
+/**
+ * Every construct this runtime knows, whether or not anyone has pasted a document.
+ *
+ * The companion to {@link describeConstructs} from the other side. That one answers "what is
+ * in this document"; this one answers "what can this runtime honour at all", which no document
+ * can answer, because a construct nobody has published is invisible in every document there
+ * is. All seven that the format defines and this runtime does not implement are in exactly
+ * that position today: no published protocol uses one, so every document ever inspected here
+ * has read clean while the seven stood.
+ *
+ * Unsorted. A caller ordering it knows what its reader came for; the table's own order is the
+ * order somebody typed it in.
+ */
+export function describeRegistry(): ConstructRegistryEntry[] {
+	const entries: ConstructRegistryEntry[] = [];
+
+	for (const [kind, site] of Object.entries(SITES) as [ConstructSiteKind, ConstructSite][]) {
+		for (const [key, construct] of Object.entries(site.constructs)) {
+			entries.push(entryOf(key, kind, construct));
+		}
+	}
+
+	for (const [key, construct] of Object.entries(DOCUMENT_CONVENTIONS)) {
+		entries.push(entryOf(key, undefined, construct));
+	}
+
+	return entries;
+}
+
+function entryOf(
+	key: string,
+	site: ConstructSiteKind | undefined,
+	construct: Construct,
+): ConstructRegistryEntry {
+	if (construct.handled) {
+		return { key, reason: undefined, site, state: construct.loadBearing ? "acted-on" : "shown" };
+	}
+
+	return {
+		key,
+		reason: construct.reason,
+		site,
+		state: construct.loadBearing ? "unimplemented" : "never-read",
+	};
 }
 
 function stateOf(site: ConstructSite, key: string): ConstructState {
@@ -103,20 +168,43 @@ function stateOf(site: ConstructSite, key: string): ConstructState {
  * visible here, so the gap between what the format can say and what the wallet can honour
  * is a table to read rather than an absence to notice.
  */
-type Construct = {
-	/** Whether the runtime acts on it today. An unhandled one becomes a finding. */
-	handled: boolean;
-	/** Whether reading it wrong could change what gets signed. */
-	loadBearing: boolean;
-};
+type Construct =
+	| {
+			/** The runtime acts on it today. */
+			handled: true;
+			/** Whether reading it wrong could change what gets signed. */
+			loadBearing: boolean;
+	  }
+	| {
+			/** The runtime does not act on it, so it becomes a finding. */
+			handled: false;
+			loadBearing: boolean;
+			/**
+			 * Why this runtime does not act on it, for a reader who is not looking at this file.
+			 *
+			 * Required rather than optional, which is the whole of what makes it worth having: a
+			 * construct added here without one does not compile, so the gap cannot be widened in
+			 * silence. Where nobody ever wrote the reason down, the honest text says exactly that —
+			 * an unexplained gap is a fact about this project and reads as one.
+			 */
+			reason: string;
+	  };
 
 const READ: Construct = { handled: true, loadBearing: true };
 const SHOWN: Construct = { handled: true, loadBearing: false };
-const UNIMPLEMENTED: Construct = { handled: false, loadBearing: true };
-const UNREAD: Construct = { handled: false, loadBearing: false };
+
+/** The format defines it, this runtime does not implement it, and being wrong changes money. */
+function unimplemented(reason: string): Construct {
+	return { handled: false, loadBearing: true, reason };
+}
+
+/** Known, deliberately read by nothing, and unable to change what gets signed. */
+function unread(reason: string): Construct {
+	return { handled: false, loadBearing: false, reason };
+}
 
 /**
- * The two keys that belong to JSON documents rather than to this format.
+ * The keys that belong to JSON documents rather than to this format.
  *
  * A comment and a pointer to a schema file can appear at any depth, decide nothing anywhere,
  * and are put there by whatever wrote or edits the document. Listing them at every position
@@ -124,8 +212,19 @@ const UNREAD: Construct = { handled: false, loadBearing: false };
  * someone uses one at, so they are answered once here.
  */
 const DOCUMENT_CONVENTIONS: Record<string, Construct> = {
-	$comment: UNREAD,
-	$schema: UNREAD,
+	$comment: unread(
+		"A comment, put there by whatever wrote or edits the document. It can appear at any depth and decides nothing anywhere.",
+	),
+	// The same statement `$schema` makes, spelled by a document whose own tooling validates
+	// against `$schema` and which wanted the pointer kept without being validated on. Named
+	// here rather than matched by prefix: this is one more key that is known, and a rule
+	// accepting anything opening with `$comment` would accept a key nobody has read.
+	$comment_schema: unread(
+		"A pointer to a schema file, written as a comment so a validator leaves it alone. It decides nothing, exactly as $schema decides nothing.",
+	),
+	$schema: unread(
+		"A pointer to a schema file, put there by whatever wrote or edits the document. It can appear at any depth and decides nothing anywhere.",
+	),
 };
 
 /** What a position says about one key, or what every position says about it. */
@@ -162,33 +261,35 @@ type ConstructSite = {
 const SITES = {
 	action: {
 		constructs: {
-			args: UNIMPLEMENTED,
+			args: unimplemented(
+				"Nothing in this runtime reads it, and no note here says why. The gap is real and unexplained.",
+			),
 			create_instance: READ,
 			description: SHOWN,
 			inputs: READ,
-			// A sentence saying what this action does, written for whoever approves it, beside the
-			// shorter `description`. It decides nothing that gets signed. Not shown: its text
-			// interpolates values from the deployment and the request through a syntax no
-			// specification describes, and a confident sentence about the wrong amounts changes
-			// what a person agrees to.
-			intent: UNREAD,
-			// The older generation's flag beside the block. The newer one dropped it, on the
-			// ground that an action carrying the block is the constructor and a flag adds
-			// nothing; six of the corpus's eleven constructors carry both and five carry only
-			// the block. So it is read for nothing, which is different from being ignored:
-			// what it asserts is asserted better by the block beside it.
-			is_constructor: UNREAD,
-			on_input_resolved: UNIMPLEMENTED,
-			on_post_broadcast: UNIMPLEMENTED,
+			intent: unread(
+				"A sentence saying what this action does, written for whoever approves it, beside the shorter description. Not shown: its text interpolates values from the deployment and the request through a syntax no specification describes, and a confident sentence about the wrong amounts changes what a person agrees to.",
+			),
+			is_constructor: unread(
+				"The older generation's flag beside the create_instance block. The newer one dropped it, on the ground that an action carrying the block is the constructor and a flag adds nothing. Six of the corpus's eleven constructors carry both and five carry only the block, so what it asserts is asserted better by the block beside it.",
+			),
+			on_input_resolved: unimplemented(
+				"A hook the legacy hooks block held, alongside on_validate, before both moved onto the action. Nothing in this runtime runs it, and no note here says why.",
+			),
+			on_post_broadcast: unimplemented(
+				"The counterpart of on_pre_broadcast, which this runtime does run. Nothing here runs this one, and no note says why.",
+			),
 			on_pre_broadcast: READ,
-			// A full SimplicityHL program, not a formula: honouring it means executing a
-			// contract at build time. Out of scope for this change and named rather than absent.
-			on_validate: UNIMPLEMENTED,
+			on_validate: unimplemented(
+				"A full SimplicityHL program rather than a formula: honouring it means executing a contract at build time. Out of scope when the runtime was built, and named here rather than left absent.",
+			),
 			outputs: READ,
 			params: READ,
 			ui: SHOWN,
 			validations: READ,
-			witnesses: UNIMPLEMENTED,
+			witnesses: unimplemented(
+				"An action-level witness block. Witnesses on an input are read, and what is and is not honoured inside one is settled at the witness position; nothing reads this outer block, and no note here says why.",
+			),
 		},
 		unknownIsLoadBearing: true,
 	},
@@ -223,9 +324,9 @@ const SITES = {
 	},
 	manifest: {
 		constructs: {
-			// Reserved for a signature slot that does not exist, and read by no
-			// implementation including the reference one.
-			attestation_version: UNREAD,
+			attestation_version: unread(
+				"Reserved for a signature slot that does not exist, and read by no implementation including the reference one.",
+			),
 			actions: READ,
 			chain: READ,
 			classes: READ,
@@ -248,13 +349,9 @@ const SITES = {
 			// already acts on.
 			simplicity_hl: READ,
 			simplicity_hl_version: READ,
-			// One line in the published specification — "relative path to the top-level .simf
-			// file" — and nothing anywhere says what a runtime does with it. The newer schema
-			// dropped it from the top level entirely, the reference implementation reads no such
-			// field, and no published manifest carries one: a covenant's source is named on the
-			// covenant, where it decides an address. So it decides nothing here, and refusing a
-			// document for carrying it would be refusing for a field the format has abandoned.
-			source: UNREAD,
+			source: unread(
+				'One line in the published specification — "relative path to the top-level .simf file" — and nothing anywhere says what a runtime does with it. The newer schema dropped it from the top level entirely, the reference implementation reads no such field, and no published manifest carries one: a covenant\'s source is named on the covenant, where it decides an address. Refusing a document for carrying it would be refusing for a field the format has abandoned.',
+			),
 			utxo_types: READ,
 		},
 		unknownIsLoadBearing: true,
@@ -263,7 +360,9 @@ const SITES = {
 		constructs: {
 			amount_sat: READ,
 			asset: READ,
-			condition: UNIMPLEMENTED,
+			condition: unimplemented(
+				"A condition deciding whether this output is produced at all. Nothing in this runtime evaluates it, and no note here says why.",
+			),
 			// Whether this output hides what it carries. The wallet hides it with its own
 			// blinding key; one paid to an address the document names refuses, because the key
 			// there belongs to whoever owns the address.
@@ -287,11 +386,13 @@ const SITES = {
 			// The literal used when nothing supplied a value, which is the last of the three
 			// steps and never overwrites one a person chose.
 			default: READ,
-			derived: UNIMPLEMENTED,
+			derived: unimplemented(
+				"A parameter derived from something else rather than supplied or computed. Nothing in this runtime derives it, and no note here says why.",
+			),
 			description: SHOWN,
-			// The reference implementation's own comment calls it informational only for
-			// display, so it does not decide a value and cannot change what is signed.
-			formula: UNREAD,
+			formula: unread(
+				"The reference implementation's own comment calls it informational only, for display, so it does not decide a value and cannot change what is signed.",
+			),
 			// The oldest generation's spelling of a value the wallet supplies. Read together
 			// with the newer one, so a refusal names the thing rather than the spelling.
 			source: READ,
@@ -363,7 +464,16 @@ const SITES = {
 	},
 } satisfies Record<string, ConstructSite>;
 
-type SiteKind = keyof typeof SITES;
+/**
+ * Every kind of position this format has, as the construct table itself keys them.
+ *
+ * Published because a caller reporting on a document needs to say which kind a construct was
+ * found at without reading the sentence written for a person, and because the set is the
+ * table's own rather than a second list that could fall behind it.
+ */
+export type ConstructSiteKind = keyof typeof SITES;
+
+type SiteKind = ConstructSiteKind;
 
 /**
  * Walks a normalised manifest and reports every construct the runtime does not act on.

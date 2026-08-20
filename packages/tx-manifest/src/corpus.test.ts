@@ -8,6 +8,8 @@ import lendingV3 from "./__fixtures__/lending_v3.manifest.json";
 import p2pkGrouped from "./__fixtures__/p2pk-grouped.manifest.json";
 import p2pk from "./__fixtures__/p2pk.manifest.json";
 import zeroconf from "./__fixtures__/zeroconf.manifest.json";
+import { identifiedForeignAsset, refuseUnfundableAsset, statedAsset } from "./document/asset";
+import { asArray, asRecord } from "./document/json";
 import { findAction, normaliseManifest } from "./document/normalise";
 import { refuseUnsupported } from "./document/refuse";
 import { ignored, inspectConstructs, loadBearing } from "./document/registry";
@@ -67,21 +69,26 @@ describe("every refusal a published manifest earns is named, not only described"
 		});
 	}
 
-	// The measurement this bundle exists to move. Every published protocol used to be refused
-	// on a construct this wallet did not implement; none is now. What is left is a different
-	// statement about the wallet rather than about its reading: three protocols move an asset
-	// it does not move, and the oldest generation asks for a witness it cannot produce.
+	// The measurement this bundle exists to move. Every published protocol used to be refused on
+	// a construct this wallet did not implement; then three of them were refused on the asset
+	// they move. Neither holds now, and the second was never true in the first place: the asset
+	// rule compared text against the network's own asset and refused anything else, and every
+	// asset in this corpus is written as a lookup rather than as an id, so it refused the
+	// spelling of a question the document had not answered yet. See the asset describe below.
+	//
+	// What is left is one statement about the wallet rather than about its reading: the oldest
+	// lending generation asks for a witness it cannot produce.
 	test("and no published manifest is refused for a construct any more", () => {
 		const named = Object.fromEntries(
 			(Object.keys(CORPUS) as (keyof typeof CORPUS)[]).map((name) => [name, rejectionOf(name)]),
 		);
 
 		expect(named).toEqual({
-			dex: "foreign-asset",
+			dex: undefined,
 			last_will: undefined,
 			lending: "unproducible-witness",
-			lending_v2: "foreign-asset",
-			lending_v3: "foreign-asset",
+			lending_v2: undefined,
+			lending_v3: undefined,
 			p2pk: undefined,
 			zeroconf: undefined,
 		});
@@ -180,17 +187,22 @@ describe("what this wallet can do with each published protocol", () => {
 		expect(refusalFor("zeroconf")).toBe("");
 	});
 
-	// Recorded as the measurement rather than as an expectation: what stops each of the three
-	// still refused is now the asset it moves or the witness it asks for, and no longer a part
+	// Recorded as the measurement rather than as an expectation. One protocol is still refused
+	// from its document alone, and what stops it is the witness it asks for rather than a part
 	// of the document this wallet had not read.
-	test.each([
-		["dex", "moves"],
-		["lending", "witness"],
-		["lending_v2", "moves"],
-		["lending_v3", "moves"],
-	])("%s refuses, and not on a construct", (name, because) => {
-		expect(refusalFor(name)).toContain(because);
+	test("lending refuses, on the witness it asks for and not on a construct", () => {
+		expect(refusalFor("lending")).toContain("witness");
 	});
+
+	// The three that used to be refused on the asset they move. Named rather than counted: each
+	// is a protocol whose document this wallet now reads to the end, and a document dropping
+	// back out of this list is the asset rule reading a lookup as an id again.
+	test.each([["dex"], ["lending_v2"], ["lending_v3"]])(
+		"%s is read to the end, where its asset used to stop it",
+		(name) => {
+			expect(refusalFor(name)).toBe("");
+		},
+	);
 
 	test("last_will is read and built, where it was refused before this bundle", () => {
 		expect(refusalFor("last_will")).toBe("");
@@ -210,6 +222,138 @@ describe("what this wallet can do with each published protocol", () => {
 		});
 
 		expect(refusal?.reason).toContain("action Spend / input vault_in");
+	});
+});
+
+// AC-06. The rule that used to refuse three of these protocols, and the rule that replaced it.
+//
+// The old check asked whether an action's asset text was the network's own and refused every
+// other string. That is the same question as "does this move an asset this wallet cannot move"
+// only when a document writes its assets as ids — and these documents do not. So the check was
+// answering about the spelling, and its verdict on real money was never reached.
+//
+// These record the corpus fact the rule turned on, and where the protection went instead.
+describe("the asset a document states, and the asset it defers", () => {
+	/** Every asset text a protocol declares, at an input or an output. */
+	function declaredAssets(name: string): string[] {
+		const found: string[] = [];
+
+		for (const action of normalised(name).manifest.actions) {
+			for (const kind of ["inputs", "outputs"] as const) {
+				for (const entry of asArray(action.node[kind])) {
+					const asset = asRecord(entry)?.asset;
+
+					if (typeof asset === "string") {
+						found.push(asset);
+					}
+				}
+			}
+		}
+
+		return found;
+	}
+
+	// The fact the old rule broke on. Every asset in every published protocol is either the
+	// network's own or a lookup resolved against a file the document does not carry. Not one is
+	// an id, so a rule refusing "anything that is not the network's asset" refused a lookup
+	// every single time it fired.
+	test("no published protocol writes an asset as an id, anywhere", () => {
+		const kinds = new Set(
+			Object.keys(CORPUS).flatMap((name) =>
+				declaredAssets(name).map((asset) => statedAsset(asset, POLICY_ASSET).kind),
+			),
+		);
+
+		expect([...kinds].toSorted()).toEqual(["deferred", "network"]);
+	});
+
+	// And so nothing in the corpus earns the document-level refusal, which is what changed.
+	test("and so none of them names an asset this wallet cannot move", () => {
+		const named = Object.fromEntries(
+			Object.keys(CORPUS).map((name) => [
+				name,
+				normalised(name)
+					.manifest.actions.map((action) => identifiedForeignAsset(action, POLICY_ASSET))
+					.find((found) => found !== undefined),
+			]),
+		);
+
+		expect(Object.values(named).every((found) => found === undefined)).toBe(true);
+	});
+
+	// The refusal was moved rather than dropped. A document that does commit to an asset still
+	// earns it from the document alone — written here rather than found in the corpus, because
+	// the corpus contains no such document, which is the whole point above.
+	test("a document that does name a foreign asset is still refused, from the document alone", () => {
+		const { manifest } = normaliseManifest({
+			actions: {
+				Move: {
+					outputs: [
+						{
+							amount_sat: 1000,
+							asset: "feb3d9c9f2a9aaab816c2e93cfd4479f841b8e05596b8418ed0fd56e0b8d2e6d",
+							destination: "wallet",
+							id: "out_one",
+						},
+					],
+				},
+			},
+			chain: "liquid",
+		});
+		const refusal = refuseUnsupported(manifest, {
+			compilerVersion: "0.6.0",
+			contractSources: {},
+			policyAsset: POLICY_ASSET,
+		});
+
+		expect(refusal?.reject).toBe("foreign-asset");
+	});
+
+	// Where the protection went. lending_v3 states its assets as lookups into a deployment, so
+	// the document cannot say what they are — but once a deployment supplies them, this wallet
+	// still will not fund an action in an asset it does not hold, and says so by name.
+	test("and lending_v3 is still refused once its lookups resolve to an asset this wallet lacks", () => {
+		const action = findAction(normalised("lending_v3").manifest, "CreateFactory");
+
+		if (!action) {
+			throw new Error("lending_v3 declares no CreateFactory action");
+		}
+
+		const refusal = refuseUnfundableAsset(action, POLICY_ASSET, {
+			instance: {
+				BORROWER_NFT_ASSET_ID: "feb3d9c9f2a9aaab816c2e93cfd4479f841b8e05596b8418ed0fd56e0b8d2e6d",
+				COLLATERAL_ASSET_ID: "feb3d9c9f2a9aaab816c2e93cfd4479f841b8e05596b8418ed0fd56e0b8d2e6d",
+				FACTORY_ASSET_ID: "feb3d9c9f2a9aaab816c2e93cfd4479f841b8e05596b8418ed0fd56e0b8d2e6d",
+				LENDER_NFT_ASSET_ID: "feb3d9c9f2a9aaab816c2e93cfd4479f841b8e05596b8418ed0fd56e0b8d2e6d",
+				PRINCIPAL_ASSET_ID: "feb3d9c9f2a9aaab816c2e93cfd4479f841b8e05596b8418ed0fd56e0b8d2e6d",
+			},
+			params: {},
+		});
+
+		expect(refusal).toContain("funds an action only in the network's own asset");
+	});
+
+	// And the same action is fundable when the deployment's assets are the network's own, which
+	// is what makes the check above a check rather than a second blanket refusal.
+	test("and it is not refused when those same lookups resolve to the network's own asset", () => {
+		const action = findAction(normalised("lending_v3").manifest, "CreateFactory");
+
+		if (!action) {
+			throw new Error("lending_v3 declares no CreateFactory action");
+		}
+
+		const refusal = refuseUnfundableAsset(action, POLICY_ASSET, {
+			instance: {
+				BORROWER_NFT_ASSET_ID: POLICY_ASSET,
+				COLLATERAL_ASSET_ID: POLICY_ASSET,
+				FACTORY_ASSET_ID: POLICY_ASSET,
+				LENDER_NFT_ASSET_ID: POLICY_ASSET,
+				PRINCIPAL_ASSET_ID: POLICY_ASSET,
+			},
+			params: {},
+		});
+
+		expect(refusal).toBeUndefined();
 	});
 });
 

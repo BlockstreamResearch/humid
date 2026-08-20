@@ -27,7 +27,13 @@ function transaction(...spends: { issuance?: boolean; txid: string; vout: number
 				.toReversed()
 				.join("");
 
-			return `${reversed}${index}00ffffffff`;
+			// An input declaring an issuance carries four more fields after its sequence: the
+			// blinding nonce, the entropy, and two confidential values — here both absent. A
+			// fixture that set the flag and wrote none of them was not a transaction Elements
+			// would produce, and the reader was built to match it.
+			const declared = issuance ? "00".repeat(32) + "aa".repeat(32) + "00" + "00" : "";
+
+			return `${reversed}${index}00ffffffff${declared}`;
 		})
 		.join("");
 

@@ -1,5 +1,5 @@
 /**
- * Reading one output out of a transaction's own bytes.
+ * Reading a transaction's outputs out of its own bytes — one of them, or all of them.
  *
  * The wallet needs three things about a covenant output before it will spend it: the script
  * that locks it, so the rebuilt contract can be compared against it; its amount and asset,
@@ -36,14 +36,80 @@ export type TxOutAt = { ok: true; txOut: ParsedTxOut } | { ok: false; reason: st
  * reports something well-formed and wrong.
  */
 export function txOutAt(transactionHex: string, vout: number): TxOutAt {
-	const bytes = decodeHex(transactionHex);
+	const found = readerAtOutputs(transactionHex);
 
-	if (!bytes) {
-		return { ok: false, reason: "The transaction is not hex." };
+	if (!found.ok) {
+		return { ok: false, reason: found.reason };
 	}
 
 	if (!Number.isInteger(vout) || vout < 0) {
 		return { ok: false, reason: `Not an output index: ${vout}` };
+	}
+
+	if (BigInt(vout) >= found.outputCount) {
+		return { ok: false, reason: `The transaction has no output at index ${vout}.` };
+	}
+
+	for (let index = 0; index < vout; index += 1) {
+		if (!skipOutput(found.reader)) {
+			return { ok: false, reason: `The transaction ends inside output ${index}.` };
+		}
+	}
+
+	const txOut = readOutput(found.reader);
+
+	return txOut === undefined
+		? { ok: false, reason: `The transaction ends inside output ${vout}.` }
+		: { ok: true, txOut };
+}
+
+export type TxOutsOf = { ok: true; txOuts: ParsedTxOut[] } | { ok: false; reason: string };
+
+/**
+ * Every output of a consensus-encoded Elements transaction, in the order it carries them.
+ *
+ * Reading one output answers a question about one outpoint. Reading all of them answers a
+ * question about the transaction, which is what checking a finished transaction against what
+ * was agreed to takes: whether an output landed where it was put, and whether it came back
+ * carrying what it was built to carry, are both questions about positions rather than about a
+ * position. Walking once is also the difference between one pass and one pass per output.
+ */
+export function txOutsOf(transactionHex: string): TxOutsOf {
+	const found = readerAtOutputs(transactionHex);
+
+	if (!found.ok) {
+		return { ok: false, reason: found.reason };
+	}
+
+	const txOuts: ParsedTxOut[] = [];
+
+	for (let index = 0n; index < found.outputCount; index += 1n) {
+		const txOut = readOutput(found.reader);
+
+		if (txOut === undefined) {
+			return { ok: false, reason: `The transaction ends inside output ${index}.` };
+		}
+
+		txOuts.push(txOut);
+	}
+
+	return { ok: true, txOuts };
+}
+
+type AtOutputs = { ok: false; reason: string } | { ok: true; outputCount: bigint; reader: Reader };
+
+/**
+ * A reader positioned at the first output, and how many follow.
+ *
+ * Walks the whole input list to get there, issuance data included — an input that issues an
+ * asset carries four more fields, and a reader that does not know that lands mid-output and
+ * reports something well-formed and wrong.
+ */
+function readerAtOutputs(transactionHex: string): AtOutputs {
+	const bytes = decodeHex(transactionHex);
+
+	if (!bytes) {
+		return { ok: false, reason: "The transaction is not hex." };
 	}
 
 	const reader: Reader = { at: 0, bytes };
@@ -67,20 +133,13 @@ export function txOutAt(transactionHex: string, vout: number): TxOutAt {
 
 	const outputCount = readVarint(reader);
 
-	if (outputCount === undefined) {
-		return { ok: false, reason: "The transaction declares no output count." };
-	}
+	return outputCount === undefined
+		? { ok: false, reason: "The transaction declares no output count." }
+		: { ok: true, outputCount, reader };
+}
 
-	if (BigInt(vout) >= outputCount) {
-		return { ok: false, reason: `The transaction has no output at index ${vout}.` };
-	}
-
-	for (let index = 0; index < vout; index += 1) {
-		if (!skipOutput(reader)) {
-			return { ok: false, reason: `The transaction ends inside output ${index}.` };
-		}
-	}
-
+/** One output, read from wherever the reader currently sits. */
+function readOutput(reader: Reader): ParsedTxOut | undefined {
 	const start = reader.at;
 	const asset = readField(reader, 32);
 	const value = readField(reader, 8);
@@ -93,25 +152,22 @@ export function txOutAt(transactionHex: string, vout: number): TxOutAt {
 		nonce === undefined ||
 		scriptLength === undefined
 	) {
-		return { ok: false, reason: `The transaction ends inside output ${vout}.` };
+		return undefined;
 	}
 
 	const scriptPubKeyHex = readHex(reader, Number(scriptLength));
 
 	if (scriptPubKeyHex === undefined) {
-		return { ok: false, reason: `The transaction ends inside output ${vout}.` };
+		return undefined;
 	}
 
 	return {
-		ok: true,
-		txOut: {
-			// An asset id is written in reverse of how it is displayed, and every consumer here
-			// wants the displayed form.
-			...(asset.explicit ? { rawAssetId: reverseHex(asset.body) } : {}),
-			...(value.explicit ? { amountSats: String(bigEndian(value.body)) } : {}),
-			scriptPubKeyHex,
-			txOutHex: encodeHex(bytes.slice(start, reader.at)),
-		},
+		// An asset id is written in reverse of how it is displayed, and every consumer here
+		// wants the displayed form.
+		...(asset.explicit ? { rawAssetId: reverseHex(asset.body) } : {}),
+		...(value.explicit ? { amountSats: String(bigEndian(value.body)) } : {}),
+		scriptPubKeyHex,
+		txOutHex: encodeHex(reader.bytes.slice(start, reader.at)),
 	};
 }
 

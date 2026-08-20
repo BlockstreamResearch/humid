@@ -51,11 +51,57 @@ function Shown({ label, value }: { label: string; value: Provenanced<string> }) 
  */
 function amount(value: string): string {
 	const sats = BigInt(value);
-	const negative = sats < 0n;
-	const whole = (negative ? -sats : sats).toString().padStart(9, "0");
-	const point = `${whole.slice(0, -8)}.${whole.slice(-8)}`.replace(/\.?0+$/, "");
 
-	return `${negative ? "−" : "+"}${point || "0"} L-BTC`;
+	return `${sats < 0n ? "−" : "+"}${decimal(sats)} L-BTC`;
+}
+
+/**
+ * The fee, written without a sign.
+ *
+ * The balance lines carry one because they say which way money moved; the fee is what this
+ * transaction costs. Sharing the balance formatter printed the cost as a gain — "+0.00000108
+ * L-BTC" directly under "−0.00000108 L-BTC", the same figure twice with opposite signs.
+ */
+export function feeLine(value: string): string {
+	return `${decimal(BigInt(value))} L-BTC`;
+}
+
+/** One L-BTC figure, unsigned, with trailing zeros trimmed. */
+function decimal(sats: bigint): string {
+	const whole = (sats < 0n ? -sats : sats).toString().padStart(9, "0");
+
+	return `${whole.slice(0, -8)}.${whole.slice(-8)}`.replace(/\.?0+$/, "") || "0";
+}
+
+/**
+ * One line of the balance change, in whichever terms this wallet can honestly write it.
+ *
+ * A pure function rather than a branch inside the markup, because this is the one decision on
+ * this surface that can be got wrong quietly: printing a token's units under the network
+ * asset's name reads as money and is not, and there is no rendering test in this project that
+ * would catch it.
+ */
+export function netEffectLine(
+	effect: { asset: string; sats: string },
+	feeAsset: string,
+): { asset?: string; shown: string } {
+	return effect.asset === feeAsset
+		? { shown: amount(effect.sats) }
+		: { asset: effect.asset, shown: units(effect.sats) };
+}
+
+/**
+ * The same figure in an asset this wallet knows nothing else about.
+ *
+ * Base units and a sign, and no name and no decimal point: how many places a protocol's own
+ * token divides into is the protocol's business, and a wallet guessing eight of them would
+ * print a hundredth of a token as a whole one. The id sits beside it, which is the only thing
+ * about that asset this wallet actually established.
+ */
+function units(value: string): string {
+	const sats = BigInt(value);
+
+	return `${sats < 0n ? "−" : "+"}${(sats < 0n ? -sats : sats).toString()}`;
 }
 
 /**
@@ -87,23 +133,68 @@ export function ProcessCtConfirmation({
 			</header>
 
 			<div className="flex-1 space-y-5 overflow-y-auto px-4">
-				{shown.netEffect.map((effect) => (
-					<div className="flex flex-col gap-1" key={effect.asset.value}>
+				{shown.netEffect.map((effect) => {
+					const line = netEffectLine(
+						{ asset: effect.asset.value, sats: effect.sats.value },
+						shown.feeAsset.value,
+					);
+
+					return (
+						<div className="flex flex-col gap-1" key={effect.asset.value}>
+							<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+								This wallet
+							</span>
+							<span className="text-lg font-semibold">{line.shown}</span>
+							{line.asset === undefined ? null : (
+								<span className="text-muted-foreground text-xs break-all">{line.asset}</span>
+							)}
+							<span className="text-muted-foreground text-xs">
+								{describeOrigin(effect.sats.origin)}
+							</span>
+						</div>
+					);
+				})}
+
+				<Shown
+					label="Network fee"
+					value={{ ...shown.feeSats, value: feeLine(shown.feeSats.value) } as Provenanced<string>}
+				/>
+				<Shown label="Acting account" value={shown.account} />
+
+				{/* What this transaction keeps off the chain, one line each, with whose word
+				    decided it. The wallet hid these on someone's behalf, so it says so — and says
+				    which of them the protocol asked for and which it simply never mentioned. */}
+				{shown.hiddenAmounts.map((hidden) => (
+					<div className="flex flex-col gap-1" key={hidden.id.value}>
 						<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-							This wallet
+							Amount hidden on chain
 						</span>
-						<span className="text-lg font-semibold">{amount(effect.sats.value)}</span>
+						<span className="text-sm font-medium break-all">{hidden.id.value}</span>
+						<span className="text-sm">{hidden.decidedBy.value}</span>
 						<span className="text-muted-foreground text-xs">
-							{describeOrigin(effect.sats.origin)}
+							{describeOrigin(hidden.decidedBy.origin)}
 						</span>
 					</div>
 				))}
 
-				<Shown
-					label="Network fee"
-					value={{ ...shown.feeSats, value: amount(shown.feeSats.value) } as Provenanced<string>}
-				/>
-				<Shown label="Acting account" value={shown.account} />
+				{/* And what it publishes that the format would have kept off the chain: a contract
+				    action's own change, which this wallet returns in the open so the money comes
+				    back in a form the next action can be funded from. It says which word it set
+				    aside to do that, because overriding a protocol quietly — here of all places,
+				    where the person was just told to trust this wallet's reading of it — would be
+				    worth less than not having told them anything. */}
+				{shown.publishedAmounts.map((published) => (
+					<div className="flex flex-col gap-1" key={published.id.value}>
+						<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+							Amount published on chain
+						</span>
+						<span className="text-sm font-medium break-all">{published.id.value}</span>
+						<span className="text-sm">{published.reason.value}</span>
+						<span className="text-muted-foreground text-xs">
+							{describeOrigin(published.reason.origin)}
+						</span>
+					</div>
+				))}
 
 				{shown.covenants.map((covenant) => (
 					<div className="flex flex-col gap-1" key={covenant.address.value}>

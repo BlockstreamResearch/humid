@@ -42,6 +42,13 @@ describe("an unrecognised construct in a load-bearing position", () => {
 		expect(refuse({ attestation_version: "1" })).toBe("");
 	});
 
+	// The pointer a deployed document writes as `$comment_schema` rather than `$schema`, so
+	// its own validator leaves it alone. Refusing it refused every action in that document,
+	// at its very first key, for a value nothing reads.
+	test("says nothing about a schema pointer written as a comment", () => {
+		expect(refuse({ $comment_schema: "https://example.invalid/elip205.json" })).toBe("");
+	});
+
 	test("says nothing about an unrecognised key inside a display block", () => {
 		expect(refuse({ actions: { Pay: { ui: { icon: "vault.svg" } } } })).toBe("");
 	});

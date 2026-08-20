@@ -1,5 +1,5 @@
 import { asRecord } from "../document/json";
-import { findAction, type NormalisedManifest } from "../document/normalise";
+import { findAction, type NormalisedAction, type NormalisedManifest } from "../document/normalise";
 import { instanceReferences } from "../document/references";
 import { covenantSites, namedUtxoTypes } from "../document/sites";
 import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./request";
@@ -70,7 +70,14 @@ export function resolveActionRequirements(
 		});
 	}
 
-	const readsDeployment = instanceReferences(manifest, action);
+	// A field the action works out for itself is not one the request can be short of. Every
+	// constructor in the corpus reads back what its own `create_instance` just computed, and
+	// asking the site for that file asks it to send values the document derives — a site that
+	// sent its own copy would never find out the two disagreed.
+	const created = createdFields(action);
+	const readsDeployment = instanceReferences(manifest, action).filter(
+		(occurrence) => !created.has(fieldName(occurrence.text)),
+	);
 
 	if (readsDeployment.length > 0) {
 		required.push("instance");
@@ -89,6 +96,7 @@ export function resolveActionRequirements(
 			});
 		} else if (!request.instance) {
 			missing.push({
+				keys: [...new Set(readsDeployment.map((occurrence) => fieldName(occurrence.text)))],
 				part: "instance",
 				reason: "The action reads this deployment's field values.",
 			});
@@ -147,6 +155,16 @@ function promptedParams(action: Record<string, unknown>): string[] {
 			return !record || !("source" in record || "compute" in record || "derived" in record);
 		})
 		.map(([name]) => name);
+}
+
+/** The deployment fields this action brings into existence, which it may then read. */
+function createdFields(action: NormalisedAction): Set<string> {
+	return new Set(Object.keys(asRecord(asRecord(action.node.create_instance)?.fields) ?? {}));
+}
+
+/** The field one `instance.NAME` reference names. */
+function fieldName(text: string): string {
+	return text.slice(text.indexOf(".") + 1);
 }
 
 /** Whether the action spends a covenant UTXO, which is a lookup into the state file. */

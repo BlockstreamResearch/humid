@@ -61,6 +61,20 @@ describe("inspectConstructs", () => {
 			expect(at(findings, "label")).toBeUndefined();
 		});
 
+		/*
+		 * A deployed document writes its schema pointer as `$comment_schema`, which is the
+		 * statement `$schema` makes with the word "comment" in the key. It decides nothing,
+		 * and being unknown made it refuse the whole document at its first key.
+		 */
+		test("reports a schema pointer written as a comment as ignored, not load-bearing", () => {
+			const finding = at(
+				inspect({ $comment_schema: "https://example.invalid/elip205.json" }),
+				"$comment_schema",
+			);
+
+			expect(finding).toMatchObject({ at: "manifest", declared: true, loadBearing: false });
+		});
+
 		test("collects the ignored ones for reporting", () => {
 			expect(ignored(inspect(flat)).map((finding) => finding.key)).toContain("attestation_version");
 		});

@@ -2,7 +2,11 @@
 import { describe, expect, test } from "bun:test";
 
 import transactions from "../__fixtures__/testnet-transactions.json";
-import { createEsploraFeeRateReader, createEsploraTxOutReader } from "./chainRead";
+import {
+	createEsploraChainTipReader,
+	createEsploraFeeRateReader,
+	createEsploraTxOutReader,
+} from "./chainRead";
 
 // The transaction read asks for /tx/:txid/raw and gets consensus bytes back. The fee read is
 // still JSON, which is Esplora's own shape for /fee-estimates.
@@ -178,5 +182,37 @@ describe("createEsploraFeeRateReader", () => {
 		const read = createEsploraFeeRateReader({ url: "https://esplora.example" }, fetchImpl);
 
 		await expect(read(1)).rejects.toThrow();
+	});
+});
+
+describe("reading how high the chain is", () => {
+	test("answers with the height the endpoint reports", async () => {
+		const read = createEsploraChainTipReader({ url: "https://esplora.example/api/" }, (async (
+			url: string,
+		) => {
+			expect(url).toBe("https://esplora.example/api/blocks/tip/height");
+
+			return { ok: true, text: async () => "2580990\n" };
+		}) as unknown as typeof fetch);
+
+		expect(await read()).toBe(2_580_990);
+	});
+
+	test("refuses a body that is not a height rather than returning zero", async () => {
+		const read = createEsploraChainTipReader({ url: "https://esplora.example/api" }, (async () => ({
+			ok: true,
+			text: async () => "not a height",
+		})) as unknown as typeof fetch);
+
+		expect(read()).rejects.toThrow(/not a block height/u);
+	});
+
+	test("refuses when the endpoint does not answer", async () => {
+		const read = createEsploraChainTipReader({ url: "https://esplora.example/api" }, (async () => ({
+			ok: false,
+			status: 502,
+		})) as unknown as typeof fetch);
+
+		expect(read()).rejects.toThrow(/502/u);
 	});
 });

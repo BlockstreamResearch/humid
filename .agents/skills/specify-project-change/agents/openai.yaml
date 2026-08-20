@@ -1,6 +1,0 @@
-interface:
-  display_name: "Specify Project Change"
-  short_description: "Synthesize one central change specification"
-  default_prompt: "Use $specify-project-change to synthesize the current discussion, project knowledge, and verified source context into the active central specification and refresh its checkpoint."
-policy:
-  allow_implicit_invocation: false

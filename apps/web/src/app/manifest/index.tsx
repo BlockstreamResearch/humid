@@ -16,8 +16,8 @@ import { LIQUID_NETWORKS, liquidNetworkByChainId } from "@/lib/liquid-networks";
 
 import { ConstructTable } from "./components/ConstructTable";
 import { ContractSourceList } from "./components/ContractSourceList";
-import { RefusalPanel } from "./components/RefusalPanel";
 import { RewriteList } from "./components/RewriteList";
+import { Verdict } from "./components/Verdict";
 import { matchContractSources, type SuppliedSource } from "./contractSources";
 import { readDocument } from "./readDocument";
 
@@ -29,21 +29,29 @@ import { readDocument } from "./readDocument";
 const NO_NETWORK = "none";
 
 /**
- * What this wallet makes of a txManifest document, without building anything from it.
+ * What this wallet would do with a txManifest document, without building anything from it.
  *
- * The three panels are the three questions a protocol author cannot answer from outside:
- * which older spellings still work, which fields this wallet acts on rather than tolerates,
- * and what it would refuse before it touches money. All three come from `@humid/tx-manifest`
- * — the same package the wallet itself reads a document with — so this page cannot describe
- * a parser that differs from the one that runs.
+ * The page answers one question and answers it first: would this wallet refuse, and why. It
+ * used to open with an account of everything the reader computed — one region per field of
+ * the reader's return value, in the order that value declares them — which is a dump of a
+ * data structure rather than an answer, and left the person holding the document to work out
+ * which part of it bore on anything.
+ *
+ * So there is a verdict, and everything else is under it. What the reader was never able to
+ * check sits inside the verdict rather than below it, because the absence of a refusal is
+ * only honest beside the list of what was never asked; see {@link Verdict}.
+ *
+ * Everything shown comes from `@humid/tx-manifest` — the same package the wallet itself reads
+ * a document with — so this page cannot describe a parser that differs from the one that runs.
  *
  * It connects to nothing. There is no wallet here, no chain read and no request, which is
- * both the point and the limit: see {@link RefusalPanel} for what that costs.
+ * both the point and the limit.
  *
- * The network is asked for rather than read from anywhere, because a document names a chain
- * family and the two Liquid networks charge in different assets. Unanswered is a real state
- * and the one it opens in — the checks that need that asset are then reported as not run,
- * which is not the same as passing them.
+ * The network and the contract sources are asked for in the input card rather than reported
+ * as results, because that is what they are: a document names a chain family and the two
+ * Liquid networks charge in different assets, and a contract source declares a compiler
+ * version the document also declares. Unanswered is a real state and the one this opens in —
+ * the checks needing those inputs are reported as not run, which is not the same as passing.
  */
 export default function ManifestInspector() {
 	const [text, setText] = useState("");
@@ -57,14 +65,14 @@ export default function ManifestInspector() {
 	// and the second is the one the page reports.
 	const { document, matched } = useMemo(() => {
 		const referenced = readDocument(text, { network });
-		const matched = matchContractSources(
+		const byReferencedPath = matchContractSources(
 			referenced.kind === "read" && referenced.ok ? referenced.contracts : [],
 			suppliedSources,
 		);
 
 		return {
-			document: readDocument(text, { contractSources: matched.sources, network }),
-			matched,
+			document: readDocument(text, { contractSources: byReferencedPath.sources, network }),
+			matched: byReferencedPath,
 		};
 	}, [text, network, suppliedSources]);
 
@@ -120,6 +128,15 @@ export default function ManifestInspector() {
 							Clear
 						</Button>
 					</div>
+					{document.kind === "read" && document.ok && (
+						<ContractSourceList
+							contracts={document.contracts}
+							onClear={() => setSuppliedSources([])}
+							onSupply={setSuppliedSources}
+							supplied={matched.sources}
+							unmatched={matched.unmatched}
+						/>
+					)}
 				</CardContent>
 			</Card>
 
@@ -147,34 +164,19 @@ export default function ManifestInspector() {
 				return (
 					<>
 						<Panel
-							title="What the wallet would refuse"
-							description="Checked before anything is built, and only against the document itself."
+							title="What this wallet would do"
+							description="Decided from the document alone, before anything is built."
 						>
-							<RefusalPanel inspection={document} />
-						</Panel>
-						<Panel
-							title="The contracts this document references"
-							description="Read here in the page, so the compiler check reads both places that declare a version rather than one."
-						>
-							<ContractSourceList
-								contracts={document.contracts}
-								onClear={() => setSuppliedSources([])}
-								onSupply={setSuppliedSources}
-								supplied={matched.sources}
-								unmatched={matched.unmatched}
-							/>
+							<Verdict inspection={document} />
 						</Panel>
 						<Panel
 							title="What each field is"
 							description="Every field this document declares, against the position it sits in."
 						>
-							<ConstructTable constructs={document.constructs} />
-						</Panel>
-						<Panel
-							title="What was rewritten"
-							description="Spellings from earlier generations of the format, renamed on the way in."
-						>
-							<RewriteList rewrites={document.rewrites} />
+							<div className="flex flex-col gap-6">
+								<ConstructTable constructs={document.constructs} />
+								<RewriteList rewrites={document.rewrites} />
+							</div>
 						</Panel>
 					</>
 				);

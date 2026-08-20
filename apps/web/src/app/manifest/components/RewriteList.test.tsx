@@ -5,10 +5,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { RewriteList } from "./RewriteList";
 
-// AC-02 at the surface. The criterion asks for three things per rewrite — where, the name it
-// now carries, the name it had — and for a clean document to say so rather than show nothing,
-// because an empty region and "nothing needed rewriting" look identical and mean different
-// things.
+// AC-06's second half. Three things per rewrite — where, the name it now carries, the name it
+// had — now sitting with the fields rather than in a region of their own. The statement that a
+// document needed no rewriting moved to the verdict, so this renders nothing at all for a clean
+// document: the page says it once, where the answer is.
 
 function render(rewrites: NormalisationNote[]): string {
 	return renderToStaticMarkup(<RewriteList rewrites={rewrites} />);
@@ -23,12 +23,10 @@ describe("what a reader is told about older spellings", () => {
 		expect(html).toContain("action Pay");
 	});
 
-	test("a clean document says nothing was rewritten rather than showing an empty region", () => {
-		const html = render([]);
-
-		expect(html).toContain("Nothing was rewritten");
-		expect(html).toContain("current spelling");
-		expect(html).not.toContain("<table");
+	// The verdict carries this now, in one sentence beside the answer it belongs to. A second
+	// statement here would be the page saying the same thing twice at different weights.
+	test("a clean document draws nothing here at all", () => {
+		expect(render([])).toBe("");
 	});
 
 	test("says what a rewrite means: the document is from an earlier generation", () => {

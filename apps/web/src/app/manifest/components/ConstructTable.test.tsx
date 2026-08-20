@@ -1,16 +1,22 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ConstructReport, ConstructState } from "@humid/tx-manifest";
+import type { ConstructReport, ConstructSiteKind, ConstructState } from "@humid/tx-manifest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { ConstructTable } from "./ConstructTable";
 
-// AC-03 at the surface. The five states and the positions come from the package and are
-// tested there; what is checked here is that a reader is shown the state, the field, where it
-// sits, and — the part a state name alone does not carry — what that state means for them.
+// AC-04 and AC-05 at the surface. The five states and the positions come from the package and
+// are tested there; what is checked here is that a reader is shown the state, the field, where
+// it sits, how many places that is, and — the part a state name alone does not carry — what
+// that state means for them.
 
-function report(state: ConstructState, key: string = state, at = "manifest"): ConstructReport {
-	return { at, key, state };
+function report(
+	state: ConstructState,
+	key: string = state,
+	at = "manifest",
+	site: ConstructSiteKind = "manifest",
+): ConstructReport {
+	return { at, key, site, state };
 }
 
 function render(constructs: ConstructReport[]): string {
@@ -19,7 +25,7 @@ function render(constructs: ConstructReport[]): string {
 
 describe("what a reader is told about each field", () => {
 	test("shows the field, where it sits, and its state", () => {
-		const html = render([report("unimplemented", "args", "action Pay")]);
+		const html = render([report("unimplemented", "args", "action Pay", "action")]);
 
 		expect(html).toContain("args");
 		expect(html).toContain("action Pay");
@@ -41,17 +47,68 @@ describe("what a reader is told about each field", () => {
 		expect(html).not.toContain("<table");
 	});
 
-	test("two fields at different positions are both shown, not collapsed by name", () => {
+	test("draws no heading for a state this document does not use", () => {
+		expect(render([report("acted-on")])).not.toContain("never-read");
+	});
+});
+
+describe("a key that recurs draws one row", () => {
+	test("counts the positions instead of repeating the field", () => {
 		const html = render([
-			report("acted-on", "description", "action Pay"),
-			report("acted-on", "description", "action Receive"),
+			report("unimplemented", "args", "action Pay", "action"),
+			report("unimplemented", "args", "action Refund", "action"),
+			report("unimplemented", "args", "action Close", "action"),
+		]);
+
+		expect(html.match(/args/g)).toHaveLength(1);
+		expect(html).toContain("3 positions");
+	});
+
+	test("still names every position, so nothing is only counted", () => {
+		const html = render([
+			report("unimplemented", "args", "action Pay", "action"),
+			report("unimplemented", "args", "action Refund", "action"),
 		]);
 
 		expect(html).toContain("action Pay");
-		expect(html).toContain("action Receive");
+		expect(html).toContain("action Refund");
 	});
 
-	test("draws no heading for a state this document does not use", () => {
-		expect(render([report("acted-on")])).not.toContain("never-read");
+	test("names the one position outright when a field sits at exactly one", () => {
+		const html = render([report("unimplemented", "args", "action Pay", "action")]);
+
+		expect(html).toContain("action Pay");
+		expect(html).not.toContain("1 positions");
+	});
+});
+
+describe("what is working opens closed", () => {
+	// AC-05. Not hidden and not dropped: the count is visible without clicking and the rows are
+	// one click away. What is removed is meeting six hundred rows that say a field works before
+	// reaching the nine that say anything else.
+	test("puts the states that mean nothing is wrong behind a disclosure", () => {
+		const html = render([report("acted-on", "chain"), report("shown", "description")]);
+
+		expect(html.match(/<details/g)).toHaveLength(2);
+	});
+
+	test("leaves anything unrecognised or unimplemented open", () => {
+		const html = render([
+			report("unrecognised", "wat"),
+			report("unimplemented", "args", "action Pay", "action"),
+			report("never-read", "source"),
+		]);
+
+		expect(html).not.toContain("<details");
+	});
+
+	test("says how much a closed group holds before it is opened", () => {
+		const html = render([
+			report("acted-on", "chain"),
+			report("acted-on", "amount_sat", "action Pay / output a", "output"),
+			report("acted-on", "amount_sat", "action Pay / output b", "output"),
+		]);
+
+		expect(html).toContain("2 fields, at 3 positions");
 	});
 });

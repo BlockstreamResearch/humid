@@ -1,4 +1,0 @@
-interface:
-  display_name: "Verify Project Work"
-  short_description: "Verify every bound source against one spec"
-  default_prompt: "Use $verify-project-work to verify project-only knowledge work or every bound leaf checkout against the central spec and recorded evidence."

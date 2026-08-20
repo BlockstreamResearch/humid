@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { txOutAt } from "@humid/tx-manifest";
+import { spentInputs, txOutAt } from "@humid/tx-manifest";
 import groupedManifest from "@humid/tx-manifest/fixtures/p2pk-grouped.manifest.json";
 import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk.manifest.json";
 
@@ -49,18 +49,28 @@ function requireBlindingKey(what: string, value: string): void {
 }
 const DERIVED = "tex1p_derived";
 const WALLET_ADDRESS = "tex1q_wallet";
+const ROTATING_ADDRESS = "tex1q_rotating";
 const WALLET_SCRIPT = "0014" + "11".repeat(20);
+const ROTATING_SCRIPT = "0014" + "99".repeat(20);
 const BLINDING_KEY = `02${PUBKEY}`;
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 const FUNDING_TXID = "d".repeat(64);
 
 /**
- * An Elements transaction serialised as far as its inputs, which is what the input guard
- * reads. The substituted module builds one from what it was actually told to spend, so the
- * guard is exercised against the shape of the request rather than against a constant that
- * would agree with it whatever happened.
+ * An Elements transaction serialised from what the substituted module was actually told,
+ * inputs and outputs both, so each guard is exercised against the shape of the request rather
+ * than against a constant that would agree with it whatever happened.
+ *
+ * The output half arrived with the blinding guard and is the reason it can run at all: a
+ * substitute that stopped after the inputs returned bytes with no outputs in them, which reads
+ * as a transaction that builds nothing and could never disagree with the wallet about what it
+ * hid. The module's own order is reproduced — the action's outputs where the wallet put them,
+ * then the change it appends, then the fee — because the guard finds the change by position.
  */
-function serialise(spends: { txid: string; vout: number }[]): string {
+function serialise(
+	spends: { txid: string; vout: number }[],
+	built: Built = { changeBlinded: false, outputs: [] },
+): string {
 	const inputs = spends
 		.map(({ txid, vout }) => {
 			const reversed = (txid.match(/../g) ?? []).toReversed().join("");
@@ -70,7 +80,43 @@ function serialise(spends: { txid: string; vout: number }[]): string {
 		})
 		.join("");
 
-	return `0200000001${spends.length.toString(16).padStart(2, "0")}${inputs}`;
+	const outputs = [
+		...built.outputs.map((output) => txOutOf(output.blinded, output.script)),
+		txOutOf(built.changeBlinded, WALLET_SCRIPT),
+		// The fee, which carries no script at all: the network reads the amount it charges.
+		txOutOf(false, ""),
+	];
+
+	return (
+		`0200000001${count(spends.length)}${inputs}` +
+		`${count(outputs.length)}${outputs.join("")}00000000`
+	);
+}
+
+/** What the substituted builder was told to build, in the order it was told. */
+type Built = { changeBlinded: boolean; outputs: { blinded: boolean; script: string }[] };
+
+function count(value: number): string {
+	return value.toString(16).padStart(2, "0");
+}
+
+/**
+ * One output the way the chain writes one.
+ *
+ * An explicit amount is a `01` prefix and eight bytes; a hidden one is a commitment prefix and
+ * thirty-two, with a nonce beside it. Written as bytes rather than as a flag, because the only
+ * thing that can establish what a transaction hides is what it is made of.
+ */
+function txOutOf(blinded: boolean, scriptHex: string): string {
+	const length = count(scriptHex.length / 2);
+
+	if (blinded) {
+		return `0a${"33".repeat(32)}08${"44".repeat(32)}02${"55".repeat(32)}${length}${scriptHex}`;
+	}
+
+	const asset = (POLICY_ASSET.match(/../g) ?? []).toReversed().join("");
+
+	return `01${asset}01${(1000).toString(16).padStart(16, "0")}00${length}${scriptHex}`;
 }
 
 function params(overrides: Record<string, unknown> = {}) {
@@ -93,7 +139,12 @@ function context(): LiquidProcessCtContext {
 		},
 		keyManagerState: {},
 		walletBackend: {
-			getReceiveAddress: () => ({ address: WALLET_ADDRESS, index: 0 }),
+			// The address a person is shown to receive at moves as addresses are used. The one a
+			// contract action can spend from does not: the signing module derives a single key at
+			// the account's first external address. The two differ here so a path taking the wrong
+			// one is visible.
+			getReceiveAddress: () => ({ address: ROTATING_ADDRESS, index: 7 }),
+			getSigningAddress: () => ({ address: WALLET_ADDRESS, index: 0 }),
 			// The two lists the method reads, kept honest about which is which: a contract action
 			// can only spend an explicit output, so the funding one lives in the explicit list and
 			// the confidential one is there to be held back. A method that stopped asking for the
@@ -118,6 +169,9 @@ function context(): LiquidProcessCtContext {
 					vout: 0,
 				},
 			],
+			// The height the wallet's own scan reached, which is what a covenant branch guarded by
+			// a lock height reads out of the transaction it judges.
+			getTipHeight: () => 2_580_990,
 			syncAccount: async () => undefined,
 		},
 	} as unknown as LiquidProcessCtContext;
@@ -160,14 +214,49 @@ type IssuedInput = {
 
 type Recorded = {
 	broadcasts: { txHex: string }[];
+	/**
+	 * The height the builder was told the transaction may not be mined before.
+	 *
+	 * Read from the builder rather than from the review, so a method that stopped passing it
+	 * through fails here rather than agreeing with itself.
+	 */
+	locktimeHeight?: number;
+	/**
+	 * Whether the builder was told to hide the change it returns.
+	 *
+	 * Read from the builder rather than from the review, so a method that stopped passing the
+	 * decision through fails here instead of agreeing with itself.
+	 */
+	changeBlinded: boolean;
+	/** Every contract source the review asked for the declarations of. */
+	declared: string[];
 	issued: IssuedInput[];
 	mnemonicCalls: number;
+	/** Every output as the builder was told it: the asset and whether it hides what it carries. */
+	outputs: { asset: string; blinded: boolean; script: string }[];
 	paid: string[];
+	/** Every address the method asked for the script of, in order. */
+	scriptAsks: string[];
+	/** How each covenant input was described to the builder, beyond its source. */
+	covenantBuilds: { includeDebugSymbols?: boolean; leaves?: string }[];
+	/** The transaction the substituted module handed back, as it handed it back. */
+	signed: string;
 };
+
+/**
+ * What a module does to the transaction between being told and handing it back.
+ *
+ * The identity by default, because a module that does what it is told is the case worth
+ * running everything else against. A test supplies one when it needs the other case — the
+ * module ignoring what it was told, which is precisely what the guards exist to catch and is
+ * unreachable from a substitute that can only be obedient.
+ */
+type ModuleBehaviour = (built: Built) => Built;
 
 function dependencies(
 	recorded: Recorded,
 	issued: IssuanceAccount = ISSUED,
+	behaviour: ModuleBehaviour = (built) => built,
 ): LiquidProcessCtDependencies {
 	return {
 		broadcastTransaction: async ({ txHex }) => {
@@ -178,6 +267,20 @@ function dependencies(
 		loadSmplx: async () =>
 			({
 				compilerVersion: () => "0.6.0",
+				// What a contract declares its compile parameters to be, which the real module
+				// answers by type-checking the source. A substitute cannot type a parameter —
+				// needing the compiler for exactly that is why this seam exists — so it answers
+				// only for a source that declares none, and refuses the rest rather than
+				// inventing a width that would silently be part of an address.
+				contractParameterTypes: (source: string) => {
+					recorded.declared.push(source);
+
+					if (/\bparam::/.test(source)) {
+						throw new Error("This substitute cannot say what a contract declares.");
+					}
+
+					return "{}";
+				},
 				Contract: class {
 					contractAddress() {
 						return DERIVED;
@@ -195,11 +298,20 @@ function dependencies(
 				// it decodes, this decodes.
 				TransactionBuilder: class {
 					change: string | undefined;
+					changeBlinded = false;
+					/** The height the method declared, so a transaction that stops declaring one shows here. */
+					locktimeHeight: number | undefined;
+					/** Each output as it was told, so the transaction it returns carries them. */
+					outputs: { blinded: boolean; script: string }[] = [];
 					spends: { txid: string; vout: number }[] = [];
 					// The change target moved onto the builder, and so did the parse that rejects
 					// one it cannot read. Recorded rather than swallowed, so a method that stopped
 					// stating where change goes fails here instead of sending it to the module's
 					// own default in silence.
+					setLocktimeHeight(height: number) {
+						this.locktimeHeight = height;
+						recorded.locktimeHeight = height;
+					}
 					addChange(scriptPubKeyHex: string, blindingKeyHex?: string) {
 						requireHex("change script", scriptPubKeyHex);
 
@@ -208,11 +320,24 @@ function dependencies(
 						}
 
 						this.change = scriptPubKeyHex;
+						this.changeBlinded = blindingKeyHex !== undefined;
 					}
-					addContractInput(txid: string, vout: number, txOutHex: string) {
+					addContractInput(
+						txid: string,
+						vout: number,
+						txOutHex: string,
+						_source: string,
+						_argumentsJson: string | undefined,
+						_witnessJson: string | undefined,
+						_signatureWitness: string | undefined,
+						_sequence: number | undefined,
+						extraLeavesJson: string | undefined,
+						includeDebugSymbols: boolean | undefined,
+					) {
 						requireHex("covenant input's previous output", txOutHex);
 						requireTxid(txid);
 						this.spends.push({ txid, vout });
+						recorded.covenantBuilds.push({ includeDebugSymbols, leaves: extraLeavesJson });
 					}
 					addContractIssuanceInput(
 						txid: string,
@@ -253,6 +378,15 @@ function dependencies(
 							requireBlindingKey("output blinding key", blindingKeyHex);
 						}
 
+						this.outputs.push({
+							blinded: blindingKeyHex !== undefined,
+							script: scriptPubKeyHex,
+						});
+						recorded.outputs.push({
+							asset: assetHex,
+							blinded: blindingKeyHex !== undefined,
+							script: scriptPubKeyHex,
+						});
 						recorded.paid.push(scriptPubKeyHex);
 					}
 					addWalletInput(txid: string, vout: number, txOut: string) {
@@ -292,17 +426,23 @@ function dependencies(
 						return BLINDING_KEY;
 					}
 					finalizeTransaction(
-						builder: { change?: string; spends: { txid: string; vout: number }[] },
+						builder: Built & { change?: string; spends: { txid: string; vout: number }[] },
 						_feeRateSatsPerKvb: number,
 					) {
 						if (builder.change === undefined) {
 							throw new Error("The transaction was finalised without a change target.");
 						}
 
+						recorded.changeBlinded = builder.changeBlinded;
+						// Kept, so a test asserting the method returns what the module built can say
+						// exactly that rather than assemble the same bytes a second time and compare
+						// two derivations of one thing.
+						recorded.signed = serialise(builder.spends, behaviour(builder));
+
 						return {
 							feeSats: 500n,
 							free: () => undefined,
-							hex: serialise(builder.spends),
+							hex: recorded.signed,
 							txid: "e".repeat(64),
 						};
 					}
@@ -329,7 +469,11 @@ function dependencies(
 		},
 		resolveAccount: async () =>
 			({ accountGroupIndex: 0, chain: {}, rawPolicyAssetId: POLICY_ASSET }) as never,
-		scriptPubKeyHexOf: async () => WALLET_SCRIPT,
+		scriptPubKeyHexOf: async (address: string) => {
+			recorded.scriptAsks.push(address);
+
+			return address === WALLET_ADDRESS ? WALLET_SCRIPT : ROTATING_SCRIPT;
+		},
 		withMnemonic: async (_request, use) => {
 			recorded.mnemonicCalls += 1;
 
@@ -338,11 +482,22 @@ function dependencies(
 	};
 }
 
-function subject(issued: IssuanceAccount = ISSUED) {
-	const recorded: Recorded = { broadcasts: [], issued: [], mnemonicCalls: 0, paid: [] };
+function subject(issued: IssuanceAccount = ISSUED, behaviour?: ModuleBehaviour) {
+	const recorded: Recorded = {
+		broadcasts: [],
+		changeBlinded: false,
+		declared: [],
+		issued: [],
+		covenantBuilds: [],
+		mnemonicCalls: 0,
+		scriptAsks: [],
+		outputs: [],
+		paid: [],
+		signed: "",
+	};
 
 	return {
-		method: createProcessLiquidConfidentialTransaction(dependencies(recorded, issued)),
+		method: createProcessLiquidConfidentialTransaction(dependencies(recorded, issued, behaviour)),
 		recorded,
 	};
 }
@@ -354,7 +509,7 @@ describe("processLiquidConfidentialTransaction", () => {
 		const result = await method(params(), context());
 
 		expect(result).toMatchObject({ broadcast: false, feeSats: "500" });
-		expect(result.transactionHex).toBe(serialise([{ txid: FUNDING_TXID, vout: 0 }]));
+		expect(result.transactionHex).toBe(recorded.signed);
 		expect(recorded.broadcasts).toHaveLength(0);
 	});
 
@@ -363,7 +518,7 @@ describe("processLiquidConfidentialTransaction", () => {
 
 		const result = await method(params({ broadcast: true }), context());
 
-		expect(recorded.broadcasts).toEqual([{ txHex: serialise([{ txid: FUNDING_TXID, vout: 0 }]) }]);
+		expect(recorded.broadcasts).toEqual([{ txHex: recorded.signed }]);
 		expect(result).toMatchObject({ broadcast: true, txid: "f".repeat(64) });
 	});
 
@@ -374,6 +529,23 @@ describe("processLiquidConfidentialTransaction", () => {
 		await method(params(), context());
 
 		expect(recorded.mnemonicCalls).toBe(1);
+	});
+
+	/**
+	 * The wallet supplies the compiler, and this is the second thing the review asks it for: what
+	 * a contract declares its compile parameters to be. It is asked before the contract is built,
+	 * because a parameter a deployment writes as a bare value has no type until the contract
+	 * states one, and the arguments cannot be assembled without it.
+	 *
+	 * Asserted here rather than only at the seam because a seam nothing fills is not delivered.
+	 * Every covenant this wallet reviews goes through the same call.
+	 */
+	test("asks the compiler what each contract declares, passing the source it was given", async () => {
+		const { method, recorded } = subject();
+
+		await method(params(), context());
+
+		expect(recorded.declared).toContain(SOURCE);
 	});
 
 	test("refuses a request missing the contract source, naming it", async () => {
@@ -444,12 +616,120 @@ describe("processLiquidConfidentialTransaction across declaration shapes", () =>
 	});
 });
 
+/**
+ * The order the inputs are actually built in, which is the document's wherever it states one.
+ *
+ * A covenant introspects positions, so this is the last place the order can still be got wrong:
+ * the review works out where each input goes and the builder is what puts it there. Every
+ * covenant used to be added first and the wallet's own outputs after, so a document requiring
+ * one of the wallet's own to go first was refused rather than built — and the published
+ * contracts that fix an input at index zero fix one the wallet supplies.
+ *
+ * Read off the signed transaction's own bytes rather than off the review, because what a module
+ * was told and what it built are two different claims.
+ */
+const COVENANT_TXID = "a".repeat(64);
+const spending = {
+	action: "Receive",
+	params: { pubkey: PUBKEY },
+	state: { utxos: [{ txid: COVENANT_TXID, utxo_type: "p2pk_output", vout: 0 }] },
+};
+
+/** `Receive`, with its inputs told where to go. */
+function requiring(positions: Record<string, number>) {
+	const document = structuredClone(p2pkManifest) as unknown as {
+		actions: { Receive: { inputs: Record<string, unknown>[] } };
+	};
+
+	for (const input of document.actions.Receive.inputs) {
+		const at = positions[String(input.id)];
+
+		if (at !== undefined) {
+			input.required_index = at;
+		}
+	}
+
+	return document;
+}
+
+/** The outpoints the finished transaction spends, in the order it spends them. */
+function orderOf(transactionHex: string) {
+	const found = spentInputs(transactionHex);
+
+	if (!found.ok) {
+		throw new Error(found.reason);
+	}
+
+	return found.spent;
+}
+
+/**
+ * A covenant branch guarded by a lock height reads the transaction's own locktime, and a
+ * transaction declaring none satisfies no such branch. No document in the corpus states one,
+ * because the height a spend becomes valid at is a fact about the chain — so the wallet reads
+ * the chain and tells the module, and this is where that stops being silent if it stops.
+ */
+describe("the height the transaction declares", () => {
+	test("is the chain's own, handed to the module that builds it", async () => {
+		const { method, recorded } = subject();
+
+		await method(params(spending), context());
+
+		expect(recorded.locktimeHeight).toBe(2_580_990);
+	});
+});
+
+describe("the order the transaction's inputs are built in", () => {
+	test("is the wallet's own — covenant first — while the document states nothing", async () => {
+		const result = await subject().method(params(spending), context());
+
+		expect(orderOf(result.transactionHex)).toEqual([
+			{ txid: COVENANT_TXID, vout: 0 },
+			{ txid: FUNDING_TXID, vout: 0 },
+		]);
+	});
+
+	test("and puts the wallet's own input first when the document requires that", async () => {
+		const result = await subject().method(
+			params({ ...spending, manifest: requiring({ fee_input: 0, p2pk_in: 1 }) }),
+			context(),
+		);
+
+		expect(orderOf(result.transactionHex)).toEqual([
+			{ txid: FUNDING_TXID, vout: 0 },
+			{ txid: COVENANT_TXID, vout: 0 },
+		]);
+	});
+
+	// Being able to reorder is not a way to stop refusing: two inputs cannot both be input zero,
+	// and the wallet says so before anything is signed rather than after the network rejects it.
+	test("while a position no order could satisfy is refused, and nothing is signed", async () => {
+		const { method, recorded } = subject();
+
+		await expect(
+			method(params({ ...spending, manifest: requiring({ fee_input: 0, p2pk_in: 0 }) }), context()),
+		).rejects.toThrow(/fee_input/);
+		expect(recorded.mnemonicCalls).toBe(0);
+	});
+});
+
 // AC-11 at the seam it actually protects: the guard reads the finished transaction's own
 // bytes, so a module that spends something nobody asked for is caught even though every
 // other part of the request was well formed.
 describe("processLiquidConfidentialTransaction guards what it signs", () => {
 	function subjectSpending(extra: { txid: string; vout: number }) {
-		const recorded: Recorded = { broadcasts: [], issued: [], mnemonicCalls: 0, paid: [] };
+		const recorded: Recorded = {
+			broadcasts: [],
+			changeBlinded: false,
+			covenantBuilds: [],
+			declared: [],
+			issued: [],
+			mnemonicCalls: 0,
+			scriptAsks: [],
+			outputs: [],
+			paid: [],
+			signed: "",
+		};
 		const dependency = dependencies(recorded);
 
 		return {
@@ -582,6 +862,47 @@ describe("what the person is actually shown", () => {
 		expect(data.shown.netEffect[0]?.sats.origin).toBe("computed");
 		expect(data.shown.protocol.origin).toBe("site");
 	});
+
+	// The wallet hides amounts on someone's behalf, so it says which and on whose word. This
+	// action pays a covenant and returns change, and only one of those can hide anything: a
+	// Simplicity program reads exact amounts through jets that cannot introspect a
+	// commitment, so the covenant output is not on this list and cannot be.
+	//
+	// Neither is the change, and it used to be the only thing on it. The wallet publishes a
+	// contract action's own change now, so this action hides nothing at all.
+	test("and every amount it hides, with whose word decided each one", async () => {
+		const request = await shownRequest();
+		const data = request?.data as ProcessCtConfirmationData;
+
+		expect(data.shown.hiddenAmounts).toEqual([]);
+	});
+
+	// And the amount it publishes instead. The sentence has to lead with the word that was set
+	// aside — here nobody asked, and this network's own answer is to hide — before it says the
+	// wallet published it anyway. A wallet that overrode a protocol without saying so, in the
+	// one place this person was just told to trust its reading, would be worth less than one
+	// that had told them nothing.
+	test("and every amount it publishes that the format would have hidden", async () => {
+		const request = await shownRequest();
+		const data = request?.data as ProcessCtConfirmationData;
+
+		expect(
+			data.shown.publishedAmounts.map((published) => ({
+				id: published.id.value,
+				// The reading is this wallet's, and so is the rule it applied, so it says so.
+				origin: published.reason.origin,
+				reason: published.reason.value,
+			})),
+		).toEqual([
+			{
+				id: "change",
+				origin: "computed",
+				reason:
+					"nothing says otherwise and this network hides an output by default, and this " +
+					"wallet publishes it anyway so your next action can spend it",
+			},
+		]);
+	});
 });
 
 // The transaction builder hex-decodes every output script it is given, so a value that is
@@ -612,6 +933,51 @@ describe("what the outputs actually pay to", () => {
 	});
 });
 
+describe("how a covenant being spent is rebuilt", () => {
+	/*
+	 * The script a covenant locks to is decided by four things: the source, the parameters, the
+	 * extra taproot leaves and the build mode. The review compiles with all four and compares the
+	 * result against the chain; the module that signs compiles again, and used to be told only the
+	 * first two. A document declaring debug symbols therefore reviewed clean and failed at
+	 * execution with a script-pubkey mismatch, after the person had approved it.
+	 */
+	test("is told the leaves and the build mode the review verified it under", async () => {
+		const { method, recorded } = subject();
+
+		// `Receive` spends the covenant rather than paying into one, which is the case where the
+		// module compiles a contract that already exists on chain.
+		await method(params(spending), context());
+
+		expect(recorded.covenantBuilds.length).toBeGreaterThan(0);
+		for (const build of recorded.covenantBuilds) {
+			expect(build.includeDebugSymbols).toBeBoolean();
+			expect(build.leaves).toBeString();
+		}
+	});
+});
+
+describe("where an output paid to this wallet lands", () => {
+	/*
+	 * A contract action can spend only what sits at the account's first external address —
+	 * the signing module derives one key, at that index, and signs every wallet input with it.
+	 * An output paid back to this wallet at any other address is money this path cannot spend
+	 * again, which is what happened live: a factory's auth token landed on a rotating address
+	 * and the next action, which has to spend it, could never find it.
+	 */
+	test("is the address this path can spend from, not the one shown for receiving", async () => {
+		const { method, recorded } = subject();
+
+		// A protocol that hands units back: the output carrying them is destined for the wallet,
+		// which is the case that goes wrong on a rotating address.
+		await method(params({ manifest: issuingManifest() }), context());
+
+		expect(recorded.scriptAsks).toContain(WALLET_ADDRESS);
+		expect(recorded.scriptAsks).not.toContain(ROTATING_ADDRESS);
+		expect(recorded.paid).toContain(WALLET_SCRIPT);
+		expect(recorded.paid).not.toContain(ROTATING_SCRIPT);
+	});
+});
+
 /**
  * The same protocol with its funding input creating an asset.
  *
@@ -623,7 +989,7 @@ function issuingManifest(
 	issuance: Record<string, unknown> = { asset_amount_sat: 1_000, kind: "new" },
 ) {
 	const manifest = structuredClone(p2pkManifest) as unknown as {
-		actions: { Pay: { inputs: Record<string, unknown>[] } };
+		actions: { Pay: { inputs: Record<string, unknown>[]; outputs: Record<string, unknown>[] } };
 	};
 	const [funding] = manifest.actions.Pay.inputs;
 
@@ -632,6 +998,19 @@ function issuingManifest(
 	}
 
 	funding.issuance = issuance;
+	// Where the created units land. An issuance mints them into the transaction, and a
+	// transaction holding units no output accounts for is one the network will not balance —
+	// so every published protocol that issues something also declares where it goes, and a
+	// fixture that did not was asserting against a transaction nobody could have broadcast.
+	funding.on_resolved = { set: { "instance.MINTED_ASSET": "asset" } };
+	manifest.actions.Pay.outputs.push({
+		amount_sat: issuance.asset_amount_sat,
+		asset: "instance.MINTED_ASSET",
+		confidential: false,
+		description: "The units this action created, returned to the wallet that made them.",
+		destination: "wallet",
+		id: "minted_out",
+	});
 
 	return manifest;
 }
@@ -660,11 +1039,11 @@ describe("an input that creates an asset", () => {
 	});
 
 	test("and the transaction it signs spends that same output", async () => {
-		const { method } = subject();
+		const { method, recorded } = subject();
 
 		const result = await method(params({ manifest: issuingManifest() }), context());
 
-		expect(result.transactionHex).toBe(serialise([{ txid: FUNDING_TXID, vout: 0 }]));
+		expect(result.transactionHex).toBe(recorded.signed);
 	});
 
 	test("while an action that creates nothing tells the builder about no issuance", async () => {
@@ -697,13 +1076,31 @@ describe("an input that creates an asset", () => {
 // out for themselves, from the same output. They should agree, and a silent disagreement
 // means one of them is creating a different asset than the other with nothing downstream able
 // to tell which.
+// An output pays in the asset the document states for it. Every output used to be built in
+// this account's policy asset, so a protocol moving its own token would have paid real money
+// to a covenant expecting the token — a transaction the wallet would have signed.
+describe("what asset each output is built in", () => {
+	test("is the one the review worked out, not this account's policy asset", async () => {
+		const { method, recorded } = subject();
+
+		await method(params({ manifest: issuingManifest() }), context());
+
+		const minted = recorded.outputs.filter((output) => output.asset === ISSUED.assetId);
+
+		expect(minted.length).toBe(1);
+		// And the rest of them are still the network's own, so this is a distinction rather than
+		// a second blanket assumption.
+		expect(recorded.outputs.some((output) => output.asset === POLICY_ASSET)).toBe(true);
+	});
+});
+
 describe("when the module disagrees about the asset it issued", () => {
 	test("the two derivations agreeing is what lets the transaction be signed", async () => {
-		const { method } = subject();
+		const { method, recorded } = subject();
 
 		const result = await method(params({ manifest: issuingManifest() }), context());
 
-		expect(result.transactionHex).toBe(serialise([{ txid: FUNDING_TXID, vout: 0 }]));
+		expect(result.transactionHex).toBe(recorded.signed);
 	});
 
 	test("a different asset refuses, and says which value disagreed", async () => {
@@ -749,7 +1146,7 @@ describe("when the module disagrees about the asset it issued", () => {
 	// could pass while the values differ, so both are lowered and the same value written the
 	// other way round is still the same value.
 	test("the same value in another case is not a disagreement", async () => {
-		const { method } = subject({
+		const { method, recorded } = subject({
 			assetId: ISSUED.assetId.toUpperCase(),
 			entropy: ISSUED.entropy.toUpperCase(),
 			reissuanceTokenId: ISSUED.reissuanceTokenId.toUpperCase(),
@@ -757,6 +1154,106 @@ describe("when the module disagrees about the asset it issued", () => {
 
 		const result = await method(params({ manifest: issuingManifest() }), context());
 
-		expect(result.transactionHex).toBe(serialise([{ txid: FUNDING_TXID, vout: 0 }]));
+		expect(result.transactionHex).toBe(recorded.signed);
+	});
+});
+
+/**
+ * The check that the transaction hides what the wallet decided to hide.
+ *
+ * Which outputs hide anything is settled while the document is read, and all that reaches the
+ * module is a blinding key or nothing. Whether it was applied is only visible in the bytes,
+ * and until this guard nothing looked: the method handed the module a key, took back a
+ * transaction, and returned it.
+ *
+ * Both failures are silent and neither is recoverable. An amount published that the protocol
+ * meant kept is on the chain for good. An amount hidden on an output a covenant will later
+ * read is money that cannot be spent, because a Simplicity program reads exact amounts
+ * through jets that cannot introspect a commitment.
+ */
+/** A module that takes every blinding key it is given and builds the output open anyway. */
+const ignoringKeys: ModuleBehaviour = (built) => ({
+	changeBlinded: false,
+	outputs: built.outputs.map((output) => ({ ...output, blinded: false })),
+});
+
+/** A module that hides every output, including the ones a covenant has to read. */
+const hidingEverything: ModuleBehaviour = (built) => ({
+	changeBlinded: true,
+	outputs: built.outputs.map((output) => ({ ...output, blinded: true })),
+});
+
+/**
+ * A module that builds every declared output as it was told and hides the change anyway.
+ *
+ * The direction that matters now. The wallet publishes a contract action's own change so the
+ * money returns in a form the next action can be funded from, and a module hiding it strands
+ * exactly that money — the next action can spend only what is already in the open, and nothing
+ * downstream of the module would say so.
+ */
+const hidingTheChange: ModuleBehaviour = (built) => ({ ...built, changeBlinded: true });
+
+describe("what the transaction actually hides", () => {
+	test("is what the wallet decided: the covenant output open, the change published", async () => {
+		const { method, recorded } = subject();
+
+		await method(params(), context());
+
+		// A covenant output can never hide what it carries, whatever a document says, and this
+		// is the wallet acting on that rather than stating it.
+		expect(recorded.outputs).toEqual([
+			{ asset: POLICY_ASSET, blinded: false, script: DERIVED_SCRIPT },
+		]);
+		// And the change is handed over without a blinding key, which the document did not ask
+		// for and this network's own default is against. It is the one place the wallet answers
+		// over the format, and it buys change the next action can actually be funded from.
+		expect(recorded.changeBlinded).toBe(false);
+	});
+
+	// The module this used to catch, kept because what it now proves is the change reaching the
+	// guard. It publishes every amount it is given a key for, and that is precisely what the
+	// wallet asked for here: the covenant output could never hide, and the change is published
+	// deliberately. An expectation that had not followed the decision would refuse this.
+	test("and a module that publishes everything is now exactly what the wallet asked for", async () => {
+		const { method, recorded } = subject(ISSUED, ignoringKeys);
+
+		const result = await method(params(), context());
+
+		expect(result).toMatchObject({ broadcast: false });
+		expect(recorded.changeBlinded).toBe(false);
+	});
+
+	test("and a module that hid the change the wallet published returns nothing", async () => {
+		const { method } = subject(ISSUED, hidingTheChange);
+
+		const failure = await method(params(), context()).then(
+			() => undefined,
+			(error: unknown) => error as { data?: { reject?: string }; message?: string },
+		);
+
+		expect(failure?.data?.reject).toBe("built-something-else");
+		expect(failure?.message).toContain("hides the amount on the change");
+	});
+
+	test("and a module that hid what the wallet left open returns nothing", async () => {
+		const { method } = subject(ISSUED, hidingEverything);
+
+		const failure = await method(params(), context()).then(
+			() => undefined,
+			(error: unknown) => error as { data?: { reject?: string }; message?: string },
+		);
+
+		expect(failure?.data?.reject).toBe("built-something-else");
+		expect(failure?.message).toContain("hides the amount on p2pk_out");
+	});
+
+	// The refusal happens after signing and before anything leaves, which is the only place
+	// it can: the bytes do not exist until the module has built them.
+	test("and nothing is broadcast when the guard refuses", async () => {
+		const { method, recorded } = subject(ISSUED, hidingTheChange);
+
+		await method(params({ broadcast: true }), context()).catch(() => undefined);
+
+		expect(recorded.broadcasts).toHaveLength(0);
 	});
 });

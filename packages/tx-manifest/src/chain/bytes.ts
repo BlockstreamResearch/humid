@@ -121,3 +121,16 @@ export function readVarint(reader: Reader): bigint | undefined {
 
 	return value;
 }
+
+/** One byte, leaving the reader after it. */
+export function readUint8(reader: Reader): number | undefined {
+	if (reader.at + 1 > reader.bytes.length) {
+		return undefined;
+	}
+
+	const byte = reader.bytes[reader.at];
+
+	reader.at += 1;
+
+	return byte;
+}

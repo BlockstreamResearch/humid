@@ -104,3 +104,29 @@ function walletSource(spec: Record<string, unknown>): string | undefined {
 
 	return source?.type === "wallet_key" ? "key" : undefined;
 }
+
+/**
+ * The literal values a document states for its own parameters.
+ *
+ * A default is what "nobody supplied one" means, and some of them are constants the document
+ * tells every reader not to override. Reading a deployment somebody else created, a site holds
+ * the values that deployment was recorded with and has no reason to carry the document's own
+ * constants back to it — so they are read here, from the document, rather than asked for.
+ *
+ * Only literals. A computed parameter belongs to the moment its action runs, and a value from
+ * the wallet's own key is not a default at all; neither is a constant of the document.
+ */
+export function literalDefaults(action: NormalisedAction): Record<string, string> {
+	const declared = asRecord(action.node.params);
+	const defaults: Record<string, string> = {};
+
+	for (const [name, entry] of Object.entries(declared ?? {})) {
+		const spec = asRecord(entry);
+
+		if (typeof spec?.default === "string" || typeof spec?.default === "number") {
+			defaults[name] = String(spec.default);
+		}
+	}
+
+	return defaults;
+}

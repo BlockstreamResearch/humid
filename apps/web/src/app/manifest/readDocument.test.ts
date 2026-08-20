@@ -79,19 +79,20 @@ describe("what the textarea currently holds", () => {
 // on, so what matters is not that a value arrives but that the same documents come back refused
 // here as there — and that no network still means no answer rather than a passing one.
 
-describe("the two checks that need the network's own asset", () => {
-	function read(manifest: unknown, network?: typeof LIQUID_MAINNET) {
-		const result = readDocument(JSON.stringify(manifest), { network });
+/** Reads a document with a network supplied, or deliberately without one. */
+function readWithNetwork(manifest: unknown, network?: typeof LIQUID_MAINNET) {
+	const result = readDocument(JSON.stringify(manifest), { network });
 
-		if (result.kind !== "read" || !result.ok) {
-			throw new Error("expected a readable document");
-		}
-
-		return result;
+	if (result.kind !== "read" || !result.ok) {
+		throw new Error("expected a readable document");
 	}
 
+	return result;
+}
+
+describe("the two checks that need the network's own asset", () => {
 	test("with no network chosen, both stay reported as not run", () => {
-		const result = read(dexManifest);
+		const result = readWithNetwork(dexManifest);
 
 		expect(result.skipped).toContain("foreign-asset");
 		expect(result.skipped).toContain("unbuildable-utxo-type");
@@ -99,7 +100,7 @@ describe("the two checks that need the network's own asset", () => {
 	});
 
 	test("with a network chosen, neither is reported as not run any more", () => {
-		const result = read(zeroconfManifest, LIQUID_MAINNET);
+		const result = readWithNetwork(zeroconfManifest, LIQUID_MAINNET);
 
 		// Nothing is left unrun: this document declares no covenant contracts, so the compiler
 		// check has only the document's own declaration to read and has read it.
@@ -107,33 +108,86 @@ describe("the two checks that need the network's own asset", () => {
 		expect(result.partial).toEqual([]);
 	});
 
-	// The three the wallet refuses on the asset they move. Named rather than counted: a document
-	// dropping out of this list is the page and the wallet disagreeing again, which is the whole
+	// The three the wallet used to refuse on the asset they move, and no longer does. Each states
+	// its assets as lookups into a deployment the document does not carry, so reading the
+	// document cannot say which asset they are. Named rather than counted: a document dropping
+	// back into a refusal here is the page and the wallet disagreeing again, which is the whole
 	// failure this page exists to prevent.
 	test.each([
 		["dex", dexManifest],
 		["lending_v2", lendingV2Manifest],
 		["lending_v3", lendingV3Manifest],
-	])("%s is refused on the asset it moves", (_name, manifest) => {
-		expect(read(manifest, LIQUID_MAINNET).refusal?.reject).toBe("foreign-asset");
+	])("%s is no longer refused on the asset it moves", (_name, manifest) => {
+		expect(readWithNetwork(manifest, LIQUID_MAINNET).refusal).toBeUndefined();
+	});
+
+	// The refusal moved rather than went, and the page has to keep reaching it. A document that
+	// commits to an asset outright still earns it from the document alone.
+	test("a document that names an asset outright is still refused on it", () => {
+		const refusal = readWithNetwork(
+			{
+				actions: {
+					Move: {
+						outputs: [
+							{
+								amount_sat: 1000,
+								asset: "feb3d9c9f2a9aaab816c2e93cfd4479f841b8e05596b8418ed0fd56e0b8d2e6d",
+								destination: "wallet",
+								id: "out_one",
+							},
+						],
+					},
+				},
+				chain: "liquid",
+				compose_version: "1.0",
+			},
+			LIQUID_MAINNET,
+		).refusal;
+
+		expect(refusal?.reject).toBe("foreign-asset");
 	});
 
 	test.each([
 		["last_will", lastWillManifest],
 		["zeroconf", zeroconfManifest],
 	])("%s is not refused, and is not claimed to be unchecked either", (_name, manifest) => {
-		const result = read(manifest, LIQUID_MAINNET);
+		const result = readWithNetwork(manifest, LIQUID_MAINNET);
 
 		expect(result.refusal).toBeUndefined();
 		expect(result.skipped).not.toContain("foreign-asset");
 	});
 
-	// Both networks carry a different asset and the answer happens to be the same, because these
-	// documents name assets no Liquid network charges in. Asserted so that stops being invisible
-	// if it ever changes.
+	// Both networks carry a different asset and the answer is the same across this corpus,
+	// because no document in it names an asset at all. Asserted so that stops being invisible if
+	// it ever changes.
 	test("testnet reaches the same verdict as mainnet on the published corpus", () => {
-		expect(read(dexManifest, LIQUID_TESTNET).refusal?.reject).toBe("foreign-asset");
-		expect(read(lastWillManifest, LIQUID_TESTNET).refusal).toBeUndefined();
+		expect(readWithNetwork(dexManifest, LIQUID_TESTNET).refusal).toBeUndefined();
+		expect(readWithNetwork(lastWillManifest, LIQUID_TESTNET).refusal).toBeUndefined();
+	});
+
+	// And which network is chosen still decides the answer, which is the reason this check needs
+	// one at all. The same document is built on the network that charges in that asset and
+	// refused on the one that does not.
+	test("but a document naming one network's asset is refused on the other", () => {
+		const document = {
+			actions: {
+				Move: {
+					outputs: [
+						{
+							amount_sat: 1000,
+							asset: LIQUID_TESTNET.policyAsset,
+							destination: "wallet",
+							id: "out_one",
+						},
+					],
+				},
+			},
+			chain: "liquid",
+			compose_version: "1.0",
+		};
+
+		expect(readWithNetwork(document, LIQUID_TESTNET).refusal).toBeUndefined();
+		expect(readWithNetwork(document, LIQUID_MAINNET).refusal?.reject).toBe("foreign-asset");
 	});
 });
 
@@ -141,37 +195,38 @@ describe("the two checks that need the network's own asset", () => {
 // places a version is declared. The other is inside each contract source, and this is the page
 // saying which of those it read rather than letting the half it did read stand for both.
 
-describe("the compiler check, which is declared in two places", () => {
-	function read(manifest: unknown, contractSources?: Record<string, string>) {
-		const result = readDocument(JSON.stringify(manifest), { contractSources });
+/** Reads a document with the contract sources a caller carries, or without them. */
+function readWithSources(manifest: unknown, contractSources?: Record<string, string>) {
+	const result = readDocument(JSON.stringify(manifest), { contractSources });
 
-		if (result.kind !== "read" || !result.ok) {
-			throw new Error("expected a readable document");
-		}
-
-		return result;
+	if (result.kind !== "read" || !result.ok) {
+		throw new Error("expected a readable document");
 	}
 
+	return result;
+}
+
+describe("the compiler check, which is declared in two places", () => {
 	test("names the contract sources the document references, supplied or not", () => {
-		expect(read(lastWillManifest).contracts).toEqual(["./last_will.simf"]);
+		expect(readWithSources(lastWillManifest).contracts).toEqual(["./last_will.simf"]);
 	});
 
 	test("with no sources, says the contracts went unread rather than reporting the check run", () => {
-		const result = read(lastWillManifest);
+		const result = readWithSources(lastWillManifest);
 
 		expect(result.skipped).not.toContain("foreign-compiler");
 		expect(result.partial).toEqual([{ reject: "foreign-compiler", unread: ["./last_will.simf"] }]);
 	});
 
 	test("with every referenced source supplied, the check is answered in full", () => {
-		const result = read(lastWillManifest, { "./last_will.simf": "fn main() {}" });
+		const result = readWithSources(lastWillManifest, { "./last_will.simf": "fn main() {}" });
 
 		expect(result.partial).toEqual([]);
 		expect(result.refusal).toBeUndefined();
 	});
 
 	test("refuses a source asking for a version this wallet does not ship, naming the file", () => {
-		const result = read(lastWillManifest, {
+		const result = readWithSources(lastWillManifest, {
 			"./last_will.simf": 'simc "9.9.9"\nfn main() {}',
 		});
 
@@ -182,7 +237,7 @@ describe("the compiler check, which is declared in two places", () => {
 	});
 
 	test("a source that asks for the version this wallet ships is not refused", () => {
-		const result = read(lastWillManifest, {
+		const result = readWithSources(lastWillManifest, {
 			"./last_will.simf": `simc "${SMPLX_COMPILER_VERSION}"\nfn main() {}`,
 		});
 

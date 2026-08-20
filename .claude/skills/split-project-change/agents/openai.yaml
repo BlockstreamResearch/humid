@@ -1,6 +1,0 @@
-interface:
-  display_name: "Split Project Change"
-  short_description: "Split a change into checkpointed issues"
-  default_prompt: "Use $split-project-change to split the approved central specification into dependency-aware issues with one ready checkpoint each."
-policy:
-  allow_implicit_invocation: false

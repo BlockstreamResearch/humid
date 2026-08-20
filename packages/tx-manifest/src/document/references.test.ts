@@ -99,6 +99,37 @@ describe("resolveReference", () => {
 			expect(resolveReference("pubkey", "destination", SCOPE).ok).toBe(false);
 		});
 
+		// The bytes an output publishes about the action are a record that outlives the
+		// transaction, and the wallet's fee is a figure it models before anything is signed —
+		// the module that signs weighs the finished transaction and charges its own. Naming the
+		// fee here would publish, permanently, a number the transaction did not pay.
+		test("a data part may not come from the fee", () => {
+			const result = resolveReference("fee", "dataPart", SCOPE);
+
+			expect(result.ok).toBe(false);
+			expect(result.ok ? "" : result.reason).toContain("a data part");
+		});
+
+		// The fee is the only form it lost against the expression site it used to share. Every
+		// other name a payload can carry is settled by the time the bytes are written.
+		test("a data part may come from anything settled before the bytes are", () => {
+			expect(resolveReference("instance.OWNER", "dataPart", SCOPE).ok).toBe(true);
+			expect(resolveReference("params.pubkey", "dataPart", SCOPE).ok).toBe(true);
+			expect(resolveReference("args.note", "dataPart", SCOPE).ok).toBe(true);
+			expect(resolveReference("shared", "dataPart", SCOPE).ok).toBe(true);
+			expect(resolveReference("p2pk_in.amount_sat", "dataPart", SCOPE).ok).toBe(true);
+		});
+
+		// A validation is a check being made now rather than a record being written, so the
+		// site the payload used to share keeps the fee. Narrowing that one would have taken it.
+		test("a validation's expression may still come from the fee", () => {
+			expect(resolveReference("fee", "expression", SCOPE)).toEqual({
+				form: "fee",
+				ok: true,
+				value: 500n,
+			});
+		});
+
 		test("says which site refused it, so a refusal can be read", () => {
 			const result = resolveReference("fee", "compileParam", SCOPE);
 
