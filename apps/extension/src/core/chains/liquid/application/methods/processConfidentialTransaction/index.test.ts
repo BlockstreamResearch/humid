@@ -222,6 +222,13 @@ type Recorded = {
 	 */
 	locktimeHeight?: number;
 	/**
+	 * The sequence the builder was told every input carries.
+	 *
+	 * Read from the builder rather than from the review, so a method that stopped passing a
+	 * declared sequence through fails here rather than agreeing with itself.
+	 */
+	sequence?: number;
+	/**
 	 * Whether the builder was told to hide the change it returns.
 	 *
 	 * Read from the builder rather than from the review, so a method that stopped passing the
@@ -301,6 +308,8 @@ function dependencies(
 					changeBlinded = false;
 					/** The height the method declared, so a transaction that stops declaring one shows here. */
 					locktimeHeight: number | undefined;
+					/** The sequence the method declared, so one that stops being passed shows here. */
+					sequence: number | undefined;
 					/** Each output as it was told, so the transaction it returns carries them. */
 					outputs: { blinded: boolean; script: string }[] = [];
 					spends: { txid: string; vout: number }[] = [];
@@ -311,6 +320,10 @@ function dependencies(
 					setLocktimeHeight(height: number) {
 						this.locktimeHeight = height;
 						recorded.locktimeHeight = height;
+					}
+					setSequence(sequence: number) {
+						this.sequence = sequence;
+						recorded.sequence = sequence;
 					}
 					addChange(scriptPubKeyHex: string, blindingKeyHex?: string) {
 						requireHex("change script", scriptPubKeyHex);
@@ -330,7 +343,6 @@ function dependencies(
 						_argumentsJson: string | undefined,
 						_witnessJson: string | undefined,
 						_signatureWitness: string | undefined,
-						_sequence: number | undefined,
 						extraLeavesJson: string | undefined,
 						includeDebugSymbols: boolean | undefined,
 					) {
@@ -1014,6 +1026,63 @@ function issuingManifest(
 
 	return manifest;
 }
+
+/** The same protocol with its funding input declaring a sequence. */
+function sequencedManifest(sequence: unknown) {
+	const manifest = structuredClone(p2pkManifest) as unknown as {
+		actions: { Pay: { inputs: Record<string, unknown>[] } };
+	};
+	const [funding] = manifest.actions.Pay.inputs;
+
+	if (!funding) {
+		throw new Error("the fixture's Pay action declares no inputs");
+	}
+
+	funding.sequence = sequence;
+
+	return manifest;
+}
+
+// The module takes one sequence for the transaction and writes it onto every input that
+// declares none, so a declaration either collapses to one value the whole transaction can
+// carry or it is refused. Dropping one builds a transaction the protocol did not ask for,
+// which the chain rejects on broadcast far from anything that explains it.
+describe("the sequence the transaction declares", () => {
+	// 0xFFFFFFFE carries BIP68's disable bit, so it constrains no input and only enables the
+	// transaction's own locktime. That is what every such declaration in the corpus is for.
+	test("is handed to the module when the action declares one that constrains nothing", async () => {
+		const { method, recorded } = subject();
+
+		await method(params({ manifest: sequencedManifest(4_294_967_294) }), context());
+
+		expect(recorded.sequence).toBe(4_294_967_294);
+	});
+
+	test("and is left unset where the action declares nothing", async () => {
+		const { method, recorded } = subject();
+
+		await method(params(), context());
+
+		expect(recorded.sequence).toBeUndefined();
+	});
+
+	// A relative timelock is measured against the age of the input carrying it, so writing one
+	// onto the outputs funding the transaction time-locks those too. Refused rather than built
+	// as something else.
+	test("but a relative timelock is refused, because it cannot be carried by one input alone", async () => {
+		const { method } = subject();
+
+		const failure = await method(
+			params({ manifest: sequencedManifest({ relative_blocks: 6 }) }),
+			context(),
+		).then(
+			() => undefined,
+			(error: unknown) => error as { data?: { reject?: string } },
+		);
+
+		expect(failure?.data?.reject).toBe("unimplemented-construct");
+	});
+});
 
 // The asset an action creates is worked out while the document is read, from an output the
 // wallet commits to before anything else runs. Until now none of that reached the module, so

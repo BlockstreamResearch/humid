@@ -848,7 +848,7 @@ describe("a transaction balances against the fee that is charged", () => {
 		const builder = new bindings.TransactionBuilder();
 
 		try {
-			builder.addWalletInput(TXID, 0, txOut(funded, signer.scriptPubKeyHex()), undefined);
+			builder.addWalletInput(TXID, 0, txOut(funded, signer.scriptPubKeyHex()));
 			builder.addOutput(signer.scriptPubKeyHex(), paid, POLICY_ASSET);
 
 			builder.addChange(signer.scriptPubKeyHex());
@@ -924,18 +924,10 @@ describe("what an issuance adds to the input carrying it", () => {
 
 			if (issuing) {
 				builder
-					.addWalletIssuanceInput(
-						TXID,
-						0,
-						txOut(100_000n, script),
-						1_000n,
-						0n,
-						undefined,
-						undefined,
-					)
+					.addWalletIssuanceInput(TXID, 0, txOut(100_000n, script), 1_000n, 0n, undefined)
 					.free();
 			} else {
-				builder.addWalletInput(TXID, 0, txOut(100_000n, script), undefined);
+				builder.addWalletInput(TXID, 0, txOut(100_000n, script));
 			}
 
 			builder.addOutput(script, 10_000n, ISSUING_POLICY_ASSET);

@@ -37,7 +37,7 @@ import {
 	withHookValues,
 } from "../evaluation/hooks";
 import { type PlaceableInput, placeInputs } from "../evaluation/inputOrder";
-import { type InputRule, resolveInputRules } from "../evaluation/inputRules";
+import { type InputRule, resolveInputRules, transactionSequence } from "../evaluation/inputRules";
 import {
 	declaredIssuance,
 	issuanceAttributes,
@@ -299,6 +299,18 @@ export type ManifestReview = {
 	inputOrder: PlannedInput[];
 	/** What each input must carry beyond its source, when the action says so. */
 	inputRules: InputRule[];
+	/**
+	 * The sequence every input of this transaction carries, when the action declares one.
+	 *
+	 * One value rather than one per input, because that is what the signing module takes: it
+	 * writes this onto every input that declares none, the wallet's own funding inputs
+	 * included. An action whose declarations cannot collapse to one value is refused rather
+	 * than built, so this being present means every declaration in it agreed.
+	 *
+	 * Absent where the action declares nothing, which leaves every input at the module's own
+	 * default and the transaction's locktime unenforced.
+	 */
+	sequence?: number;
 	/** The wallet's own outputs that fund this, chosen by the wallet. */
 	selected: SelectableUtxo[];
 };
@@ -858,6 +870,16 @@ export async function reviewManifestAction(
 		return { reason: inputRules.reason, refused: true, reject: "document-fault" };
 	}
 
+	// The signing module takes one sequence for the transaction and writes it onto every input
+	// that declares none, so what the action declares per input has to collapse to a single
+	// value or be refused here. Refused before the person is asked rather than at signing: a
+	// declaration this wallet cannot carry is permanent, and nothing about the request fixes it.
+	const sequence = transactionSequence(inputRules.rules);
+
+	if (!sequence.ok) {
+		return { reason: sequence.reason, refused: true, reject: "unimplemented-construct" };
+	}
+
 	// The protocol's own rules about this action, checked once its amounts are known — a rule
 	// comparing an amount cannot be checked before there is one.
 	const failed = checkValidations(action, { ...scope, fee: estimatedFee }, notes);
@@ -1236,6 +1258,7 @@ export async function reviewManifestAction(
 		outputs,
 		inputOrder: placement.order,
 		inputRules: inputRules.rules,
+		...(sequence.value === undefined ? {} : { sequence: sequence.value }),
 		protocol: manifest.protocol ?? "",
 		// Each asset's own outputs together, in the order the action declares the inputs that
 		// need them, with the output an issuance is derived from first within its asset — each

@@ -145,3 +145,60 @@ function resolveFromAddress(
 		? { ok: true, value: found.value }
 		: { ok: false, reason: `${declared} is not an address.` };
 }
+
+/** BIP68's disable bit. A sequence at or above it imposes no relative timelock. */
+const SEQUENCE_TIMELOCK_DISABLED_FROM = 0x8000_0000;
+
+export type TransactionSequenceResult =
+	| { ok: false; reason: string }
+	| { ok: true; value: number | undefined };
+
+/**
+ * The one sequence this transaction can carry, out of what its inputs declare.
+ *
+ * The signing module takes a sequence for the transaction and writes it onto every input
+ * that declares none, so a per-input sequence is not expressible: whatever is carried lands
+ * on the wallet's own funding inputs too. Two declarations that disagree cannot both be
+ * honoured, and dropping either builds a transaction the protocol did not ask for.
+ *
+ * A relative timelock cannot be carried at all. BIP68 measures one against the age of the
+ * input it sits on, so putting an action's timelock onto an output the wallet has just
+ * received makes the transaction invalid until that output has aged as well — a different
+ * transaction from the one declared, failing on broadcast rather than here.
+ *
+ * A sequence with the disable bit set constrains no input and only enables the transaction's
+ * own locktime, which is what every such declaration in the published corpus is for, so that
+ * one carries onto every input without changing what any of them require.
+ */
+export function transactionSequence(rules: InputRule[]): TransactionSequenceResult {
+	const declared = rules.filter((rule) => rule.sequence !== undefined);
+	const first = declared[0];
+
+	if (first?.sequence === undefined) {
+		return { ok: true, value: undefined };
+	}
+
+	const disagreeing = declared.find((rule) => rule.sequence !== first.sequence);
+
+	if (disagreeing) {
+		return {
+			ok: false,
+			reason:
+				`Input ${first.id} asks for sequence ${first.sequence} and input ${disagreeing.id} ` +
+				`for ${disagreeing.sequence}. This wallet sets one sequence for the whole ` +
+				"transaction and cannot give two inputs different ones.",
+		};
+	}
+
+	if (first.sequence < SEQUENCE_TIMELOCK_DISABLED_FROM) {
+		return {
+			ok: false,
+			reason:
+				`Input ${first.id} asks for a relative timelock, and this wallet sets one sequence ` +
+				"for the whole transaction — which would time-lock the outputs funding it as well, " +
+				"against their own age rather than this input's.",
+		};
+	}
+
+	return { ok: true, value: first.sequence };
+}

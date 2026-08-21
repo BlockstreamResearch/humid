@@ -235,6 +235,15 @@ export const createProcessLiquidConfidentialTransaction = (
 						builder.setLocktimeHeight(review.locktimeHeight);
 					}
 
+					// One sequence for the transaction, because that is what the module takes: it
+					// writes this onto every input that declares none. The review has already
+					// collapsed what the action declares into the single value this can be, or
+					// refused the action. Skipped where nothing was declared, which leaves every
+					// input at the module's own default.
+					if (review.sequence !== undefined) {
+						builder.setSequence(review.sequence);
+					}
+
 					try {
 						// Which inputs create an asset, keyed by the output each one is derived
 						// from. That outpoint is the only join both sides promise: the manifest
@@ -330,7 +339,6 @@ export const createProcessLiquidConfidentialTransaction = (
 											issuance.assetAmountSats,
 											issuance.inflationAmountSats,
 											undefined,
-											sequenceFor(review, covenant.id),
 											covenant.extraLeavesJson,
 											covenant.includeDebugSymbols,
 										),
@@ -353,7 +361,6 @@ export const createProcessLiquidConfidentialTransaction = (
 										covenant.argumentsJson,
 										witness,
 										covenant.signatureWitness,
-										sequenceFor(review, covenant.id),
 										covenant.extraLeavesJson,
 										covenant.includeDebugSymbols,
 									);
@@ -373,7 +380,6 @@ export const createProcessLiquidConfidentialTransaction = (
 										utxo.txOut,
 										issuance.assetAmountSats,
 										issuance.inflationAmountSats,
-										undefined,
 										undefined,
 									),
 								);
@@ -617,17 +623,6 @@ export const createProcessLiquidConfidentialTransaction = (
 	});
 
 export const processLiquidConfidentialTransaction = createProcessLiquidConfidentialTransaction();
-
-/**
- * The relative timelock this covenant input must carry, when its action declared one.
- *
- * A covenant can require the timelock rather than merely permit it, and the chain rejects a
- * transaction built without one — so a declaration dropped here fails on broadcast, far from
- * anything that explains it.
- */
-function sequenceFor(review: ManifestReview, id: string): number | undefined {
-	return review.inputRules.find((rule) => rule.id === id)?.sequence;
-}
 
 /** One output, written the same way on both sides of a comparison. */
 function outpointKey(txid: string, vout: number): string {
