@@ -36,7 +36,7 @@ beforeAll(async () => {
 });
 
 function scriptPubKeyFor(argumentsJson: string, includeDebugSymbols = DEBUG_SYMBOLS): string {
-	const contract = new smplx.Contract(source, argumentsJson, "[]", includeDebugSymbols);
+	const contract = new smplx.Covenant(source, argumentsJson, "[]", includeDebugSymbols);
 
 	try {
 		return contract.scriptPubKeyHex("liquid");
@@ -51,9 +51,9 @@ describe("a deployed covenant's parameters", () => {
 	});
 
 	test("and the address that script is written as", () => {
-		const contract = new smplx.Contract(source, ARGUMENTS, "[]", DEBUG_SYMBOLS);
+		const contract = new smplx.Covenant(source, ARGUMENTS, "[]", DEBUG_SYMBOLS);
 
-		expect(contract.contractAddress("liquid")).toBe(
+		expect(contract.covenantAddress("liquid")).toBe(
 			"ex1pg45gz7zucl2krj42qk0q9udzsgcxd0vxqs3ej6l286fvvgdmqe9s5w0cfg",
 		);
 

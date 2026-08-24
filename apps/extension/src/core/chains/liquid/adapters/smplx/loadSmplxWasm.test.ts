@@ -34,28 +34,28 @@ describe("smplx wasm module", () => {
 	});
 
 	test("compiles a contract to the same CMR as a native build", () => {
-		const contract = new bindings.Contract(PROBE_SOURCE);
+		const contract = new bindings.Covenant(PROBE_SOURCE);
 
 		expect(contract.commitmentMerkleRoot()).toBe(PROBE_CMR);
 	});
 
 	test("derives a covenant address", () => {
-		const contract = new bindings.Contract(PROBE_SOURCE);
-		const address = contract.contractAddress("liquid-testnet");
+		const contract = new bindings.Covenant(PROBE_SOURCE);
+		const address = contract.covenantAddress("liquid-testnet");
 
 		expect(address.startsWith("tex1p")).toBe(true);
 	});
 
 	test("refuses a source that does not compile", () => {
-		const contract = new bindings.Contract("fn main() { this is not simplicityhl }");
+		const contract = new bindings.Covenant("fn main() { this is not simplicityhl }");
 
 		expect(() => contract.commitmentMerkleRoot()).toThrow();
 	});
 
 	test("rejects an unknown network by name", () => {
-		const contract = new bindings.Contract(PROBE_SOURCE);
+		const contract = new bindings.Covenant(PROBE_SOURCE);
 
-		expect(() => contract.contractAddress("not-a-network")).toThrow();
+		expect(() => contract.covenantAddress("not-a-network")).toThrow();
 	});
 });
 
@@ -74,7 +74,7 @@ describe("contract parameters", () => {
 	const BOB = "0xc6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5";
 
 	test("compiles a parameterised contract", () => {
-		const contract = new bindings.Contract(P2PK_SOURCE, args(ALICE));
+		const contract = new bindings.Covenant(P2PK_SOURCE, args(ALICE));
 
 		expect(contract.commitmentMerkleRoot()).toMatch(/^[0-9a-f]{64}$/);
 	});
@@ -92,12 +92,12 @@ describe("contract parameters", () => {
 	// address was the same — which is the point: it is the one that ties a derivation to money
 	// rather than to a previous run of the same code.
 	test("derives the covenant address the live runs put money at", () => {
-		const contract = new bindings.Contract(
+		const contract = new bindings.Covenant(
 			P2PK_SOURCE,
 			args("0xc9fda1adfd5af94ccbe2a6cd72433fc6dc1731fe3f8b3fee90ca96367ca71041"),
 		);
 
-		expect(contract.contractAddress("liquid-testnet")).toBe(
+		expect(contract.covenantAddress("liquid-testnet")).toBe(
 			"tex1plmdx307xcw7hfewf7pmmfum0l6tkr35keugxzczc2azmqw4uzlasst2a40",
 		);
 
@@ -105,25 +105,25 @@ describe("contract parameters", () => {
 	});
 
 	test("different parameters produce different covenant addresses", () => {
-		const alice = new bindings.Contract(P2PK_SOURCE, args(ALICE));
-		const bob = new bindings.Contract(P2PK_SOURCE, args(BOB));
+		const alice = new bindings.Covenant(P2PK_SOURCE, args(ALICE));
+		const bob = new bindings.Covenant(P2PK_SOURCE, args(BOB));
 
-		expect(alice.contractAddress("liquid-testnet")).not.toBe(bob.contractAddress("liquid-testnet"));
+		expect(alice.covenantAddress("liquid-testnet")).not.toBe(bob.covenantAddress("liquid-testnet"));
 	});
 
 	test("the same parameters produce the same covenant address", () => {
-		const first = new bindings.Contract(P2PK_SOURCE, args(ALICE));
-		const second = new bindings.Contract(P2PK_SOURCE, args(ALICE));
+		const first = new bindings.Covenant(P2PK_SOURCE, args(ALICE));
+		const second = new bindings.Covenant(P2PK_SOURCE, args(ALICE));
 
-		expect(first.contractAddress("liquid-testnet")).toBe(second.contractAddress("liquid-testnet"));
+		expect(first.covenantAddress("liquid-testnet")).toBe(second.covenantAddress("liquid-testnet"));
 	});
 
 	test("refuses malformed argument JSON when the contract is constructed", () => {
-		expect(() => new bindings.Contract(P2PK_SOURCE, "{ not json")).toThrow();
+		expect(() => new bindings.Covenant(P2PK_SOURCE, "{ not json")).toThrow();
 	});
 
 	test("refuses a parameterised contract given no parameters", () => {
-		const contract = new bindings.Contract(P2PK_SOURCE);
+		const contract = new bindings.Covenant(P2PK_SOURCE);
 
 		expect(() => contract.commitmentMerkleRoot()).toThrow();
 	});
@@ -353,7 +353,7 @@ describe("covenant inputs and the dry-run", () => {
 
 	/** The covenant's own output, so the program is spending exactly what it locks. */
 	function covenantTxOut(sats: bigint): string {
-		const contract = new bindings.Contract(P2PK_SOURCE, ARGS);
+		const contract = new bindings.Covenant(P2PK_SOURCE, ARGS);
 		const script = contract.scriptPubKeyHex("liquid-testnet");
 		const assetLe = (POLICY_ASSET.match(/../g) ?? []).toReversed().join("");
 		const value = sats.toString(16).padStart(16, "0");
@@ -365,7 +365,7 @@ describe("covenant inputs and the dry-run", () => {
 	test("takes a covenant input", () => {
 		const builder = new bindings.TransactionBuilder();
 
-		builder.addContractInput(TXID, 0, covenantTxOut(100_000n), P2PK_SOURCE, ARGS);
+		builder.addCovenantInput(TXID, 0, covenantTxOut(100_000n), P2PK_SOURCE, ARGS);
 
 		expect(builder.inputCount()).toBe(1);
 		builder.free();
@@ -375,7 +375,7 @@ describe("covenant inputs and the dry-run", () => {
 		const builder = new bindings.TransactionBuilder();
 
 		expect(() =>
-			builder.addContractInput(TXID, 0, covenantTxOut(1n), P2PK_SOURCE, ARGS, "{ not json"),
+			builder.addCovenantInput(TXID, 0, covenantTxOut(1n), P2PK_SOURCE, ARGS, "{ not json"),
 		).toThrow();
 		expect(builder.inputCount()).toBe(0);
 		builder.free();
@@ -385,15 +385,15 @@ describe("covenant inputs and the dry-run", () => {
 	// execute when its signature witness has not been produced yet?
 	test("records what a zero-witness dry-run of a signature covenant actually does", () => {
 		const builder = new bindings.TransactionBuilder();
-		const contract = new bindings.Contract(P2PK_SOURCE, ARGS);
+		const contract = new bindings.Covenant(P2PK_SOURCE, ARGS);
 
-		builder.addContractInput(TXID, 0, covenantTxOut(100_000n), P2PK_SOURCE, ARGS);
+		builder.addCovenantInput(TXID, 0, covenantTxOut(100_000n), P2PK_SOURCE, ARGS);
 		builder.addOutput(contract.scriptPubKeyHex("liquid-testnet"), 90_000n, POLICY_ASSET);
 
 		let outcome = "ran";
 
 		try {
-			builder.dryRunContractInput(0, "liquid-testnet");
+			builder.dryRunCovenantInput(0, "liquid-testnet");
 		} catch (error) {
 			outcome = String(error);
 		}
@@ -413,7 +413,7 @@ describe("covenant inputs and the dry-run", () => {
 
 		builder.addWalletInput(TXID, 0, walletTxOut);
 
-		expect(() => builder.dryRunContractInput(0, "liquid-testnet")).toThrow();
+		expect(() => builder.dryRunCovenantInput(0, "liquid-testnet")).toThrow();
 
 		builder.free();
 		signer.free();
@@ -422,7 +422,7 @@ describe("covenant inputs and the dry-run", () => {
 	test("refuses to dry-run an input that does not exist", () => {
 		const builder = new bindings.TransactionBuilder();
 
-		expect(() => builder.dryRunContractInput(4, "liquid-testnet")).toThrow();
+		expect(() => builder.dryRunCovenantInput(4, "liquid-testnet")).toThrow();
 		builder.free();
 	});
 });
@@ -453,13 +453,13 @@ describe("signing a covenant that authenticates its spender", () => {
 		const args = JSON.stringify({
 			PUB_KEY: { type: "Pubkey", value: `0x${signer.schnorrPublicKey()}` },
 		});
-		const covenantScript = new bindings.Contract(P2PK_SOURCE, args).scriptPubKeyHex(
+		const covenantScript = new bindings.Covenant(P2PK_SOURCE, args).scriptPubKeyHex(
 			"liquid-testnet",
 		);
 
 		try {
 			for (let i = 0; i < covenantInputs; i += 1) {
-				builder.addContractInput(
+				builder.addCovenantInput(
 					TXID,
 					i,
 					txOut(200_000n, covenantScript),
@@ -536,9 +536,9 @@ describe("extra taproot leaves", () => {
 	const LEAF = (byte: string) => `0x${byte.repeat(64)}`;
 
 	function addressWith(...leaves: string[]) {
-		const contract = new bindings.Contract(SOURCE, undefined, JSON.stringify(leaves));
+		const contract = new bindings.Covenant(SOURCE, undefined, JSON.stringify(leaves));
 
-		return contract.contractAddress("liquid-testnet");
+		return contract.covenantAddress("liquid-testnet");
 	}
 
 	test("no extra leaves derives the address the module always derived", () => {
@@ -670,14 +670,14 @@ describe("golden covenant addresses", () => {
 		pubkey?: string;
 	}): string {
 		const args = JSON.stringify({ PUB_KEY: { type: "Pubkey", value: input.pubkey ?? ALICE } });
-		const contract = new bindings.Contract(
+		const contract = new bindings.Covenant(
 			UPSTREAM_P2PK,
 			args,
 			input.leaves ? JSON.stringify(input.leaves) : undefined,
 			input.debug,
 		);
 
-		return contract.contractAddress(input.network ?? "liquid-testnet");
+		return contract.covenantAddress(input.network ?? "liquid-testnet");
 	}
 
 	test("the parameterised contract, on testnet", () => {
@@ -790,7 +790,7 @@ describe("the simplicity-lending contracts", () => {
 
 	for (const [name, cmr] of Object.entries(GOLDEN)) {
 		test(`${name} compiles to a fixed commitment merkle root`, async () => {
-			const contract = new bindings.Contract(
+			const contract = new bindings.Covenant(
 				await source(name),
 				JSON.stringify(ARGUMENTS[name]),
 				undefined,
@@ -812,16 +812,16 @@ describe("the simplicity-lending contracts", () => {
 		};
 
 		expect(
-			new bindings.Contract(text, JSON.stringify(other), undefined, undefined).contractAddress(
+			new bindings.Covenant(text, JSON.stringify(other), undefined, undefined).covenantAddress(
 				"liquid-testnet",
 			),
 		).not.toBe(
-			new bindings.Contract(
+			new bindings.Covenant(
 				text,
 				JSON.stringify(ARGUMENTS.lending),
 				undefined,
 				undefined,
-			).contractAddress("liquid-testnet"),
+			).covenantAddress("liquid-testnet"),
 		);
 	});
 });

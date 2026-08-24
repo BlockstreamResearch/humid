@@ -58,7 +58,7 @@ function scriptPubKeyOf(
 	extraLeavesJson: string,
 	includeDebugSymbols = DEBUG_SYMBOLS,
 ): string {
-	const contract = new smplx.Contract(lending, argumentsJson, extraLeavesJson, includeDebugSymbols);
+	const contract = new smplx.Covenant(lending, argumentsJson, extraLeavesJson, includeDebugSymbols);
 
 	try {
 		return contract.scriptPubKeyHex("liquid");

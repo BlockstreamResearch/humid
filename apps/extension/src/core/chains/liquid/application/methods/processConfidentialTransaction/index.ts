@@ -328,7 +328,7 @@ export const createProcessLiquidConfidentialTransaction = (
 									// says so.
 									agreeOrRefuse(
 										issuance,
-										builder.addContractIssuanceInput(
+										builder.addCovenantIssuanceInput(
 											covenant.txid,
 											covenant.vout,
 											covenant.txOutHex,
@@ -353,7 +353,7 @@ export const createProcessLiquidConfidentialTransaction = (
 										includeDebugSymbols: covenant.includeDebugSymbols,
 										leaves: covenant.extraLeavesJson,
 									});
-									builder.addContractInput(
+									builder.addCovenantInput(
 										covenant.txid,
 										covenant.vout,
 										covenant.txOutHex,
@@ -527,7 +527,7 @@ export const createProcessLiquidConfidentialTransaction = (
 					network: target,
 					source,
 				}) => {
-					const contract = new smplx.Contract(
+					const contract = new smplx.Covenant(
 						source,
 						argumentsJson,
 						extraLeavesJson,
@@ -536,7 +536,7 @@ export const createProcessLiquidConfidentialTransaction = (
 
 					try {
 						return {
-							address: contract.contractAddress(target),
+							address: contract.covenantAddress(target),
 							scriptPubKeyHex: contract.scriptPubKeyHex(target),
 						};
 					} finally {
@@ -550,7 +550,7 @@ export const createProcessLiquidConfidentialTransaction = (
 				// parameter takes the type of the position it is used at, worked out by the type
 				// checker — so the compiler is the only thing that can say, and it can say it from
 				// the source alone, before there are any arguments to build.
-				contractParamTypes: (source) => JSON.parse(smplx.contractParameterTypes(source)),
+				contractParamTypes: (source) => JSON.parse(smplx.covenantParameterTypes(source)),
 				compilerVersion: SMPLX_COMPILER_VERSION,
 				policyAsset: account.rawPolicyAssetId,
 				// The same compiler again, for the covenant hashes a document works out for itself.
@@ -560,7 +560,7 @@ export const createProcessLiquidConfidentialTransaction = (
 				// declared build mode were both absent here, so the hash was of a contract with an
 				// empty taproot tree built in whichever mode the module defaults to.
 				scriptPubKeyOf: ({ argumentsJson, extraLeavesJson, includeDebugSymbols, source }) => {
-					const contract = new smplx.Contract(
+					const contract = new smplx.Covenant(
 						source,
 						argumentsJson,
 						extraLeavesJson,

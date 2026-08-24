@@ -279,7 +279,7 @@ function dependencies(
 				// needing the compiler for exactly that is why this seam exists — so it answers
 				// only for a source that declares none, and refuses the rest rather than
 				// inventing a width that would silently be part of an address.
-				contractParameterTypes: (source: string) => {
+				covenantParameterTypes: (source: string) => {
 					recorded.declared.push(source);
 
 					if (/\bparam::/.test(source)) {
@@ -288,8 +288,8 @@ function dependencies(
 
 					return "{}";
 				},
-				Contract: class {
-					contractAddress() {
+				Covenant: class {
+					covenantAddress() {
 						return DERIVED;
 					}
 					// Held across the wasm boundary, so the method releases it. A substitute
@@ -335,7 +335,7 @@ function dependencies(
 						this.change = scriptPubKeyHex;
 						this.changeBlinded = blindingKeyHex !== undefined;
 					}
-					addContractInput(
+					addCovenantInput(
 						txid: string,
 						vout: number,
 						txOutHex: string,
@@ -351,7 +351,7 @@ function dependencies(
 						this.spends.push({ txid, vout });
 						recorded.covenantBuilds.push({ includeDebugSymbols, leaves: extraLeavesJson });
 					}
-					addContractIssuanceInput(
+					addCovenantIssuanceInput(
 						txid: string,
 						vout: number,
 						txOutHex: string,

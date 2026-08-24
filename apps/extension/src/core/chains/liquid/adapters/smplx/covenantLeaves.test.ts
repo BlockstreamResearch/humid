@@ -64,7 +64,7 @@ beforeAll(async () => {
 });
 
 function scriptPubKeyFor(leaves: string[]): string {
-	const contract = new smplx.Contract(
+	const contract = new smplx.Covenant(
 		lending,
 		ACTIVE_COLLATERAL,
 		JSON.stringify(leaves),

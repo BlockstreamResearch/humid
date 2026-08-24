@@ -4,7 +4,7 @@ import { encodeContractLiteral } from "./contractParamTypes";
 
 /**
  * The types below are the compiler's own answer for the vendored contracts, read from
- * `contractParameterTypes` and pinned here so this file can be exercised without a compiler.
+ * `covenantParameterTypes` and pinned here so this file can be exercised without a compiler.
  * The adapter's own test proves the compiler still says this.
  */
 const ASSET_AUTH = {

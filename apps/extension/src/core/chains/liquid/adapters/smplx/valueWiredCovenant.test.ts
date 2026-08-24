@@ -62,7 +62,7 @@ beforeAll(async () => {
 });
 
 function scriptPubKeyFor(source: string, argumentsJson: string): string {
-	const contract = new smplx.Contract(source, argumentsJson, "[]", DEBUG_SYMBOLS);
+	const contract = new smplx.Covenant(source, argumentsJson, "[]", DEBUG_SYMBOLS);
 	const script = contract.scriptPubKeyHex("liquid");
 
 	contract.free();
@@ -72,7 +72,7 @@ function scriptPubKeyFor(source: string, argumentsJson: string): string {
 
 describe("what the contracts declare their parameters to be", () => {
 	test("asset_auth declares a count, an id and a flag", () => {
-		expect(JSON.parse(smplx.contractParameterTypes(assetAuth))).toEqual({
+		expect(JSON.parse(smplx.covenantParameterTypes(assetAuth))).toEqual({
 			ASSET_AMOUNT: "u64",
 			ASSET_ID: "u256",
 			WITH_ASSET_BURN: "bool",
@@ -80,7 +80,7 @@ describe("what the contracts declare their parameters to be", () => {
 	});
 
 	test("asset_auth_vault declares three flags among its eight", () => {
-		expect(JSON.parse(smplx.contractParameterTypes(assetAuthVault))).toEqual({
+		expect(JSON.parse(smplx.covenantParameterTypes(assetAuthVault))).toEqual({
 			FINALIZED_VAULT_COV_HASH: "u256",
 			IS_ACTIVE: "bool",
 			KEEPER_AUTH_ASSET_AMOUNT: "u64",
@@ -99,12 +99,12 @@ describe("what the contracts declare their parameters to be", () => {
 	 */
 	test("and are readable from the source alone, with no arguments supplied", async () => {
 		expect(
-			JSON.parse(smplx.contractParameterTypes(await contractSource("lending.simf"))),
+			JSON.parse(smplx.covenantParameterTypes(await contractSource("lending.simf"))),
 		).toMatchObject({ LOAN_EXPIRATION_TIME: "u32", PRINCIPAL_AMOUNT: "u64" });
 	});
 
 	test("a source that is not a program is refused rather than answered", () => {
-		expect(() => smplx.contractParameterTypes("fn main() { this is not simplicity }")).toThrow();
+		expect(() => smplx.covenantParameterTypes("fn main() { this is not simplicity }")).toThrow();
 	});
 });
 

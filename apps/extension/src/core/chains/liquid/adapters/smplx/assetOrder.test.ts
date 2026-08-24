@@ -67,15 +67,15 @@ function txOut(scriptPubKeyHex: string): string {
 /** Builds the covenant with the given asset bytes and runs it against a transaction. */
 function outcomeOf(assetHex: string): { address: string; ran: boolean } {
 	const argumentsJson = argumentsWith(assetHex);
-	const contract = new smplx.Contract(source, argumentsJson, "[]", false);
+	const contract = new smplx.Covenant(source, argumentsJson, "[]", false);
 	const scriptPubKeyHex = contract.scriptPubKeyHex("liquid-testnet");
-	const address = contract.contractAddress("liquid-testnet");
+	const address = contract.covenantAddress("liquid-testnet");
 	const builder = new smplx.TransactionBuilder();
 
 	try {
-		builder.addContractInput(TXID, 0, txOut(scriptPubKeyHex), source, argumentsJson, WITNESSES);
+		builder.addCovenantInput(TXID, 0, txOut(scriptPubKeyHex), source, argumentsJson, WITNESSES);
 		builder.addOutput(scriptPubKeyHex, AMOUNT, STATED);
-		builder.dryRunContractInput(0, "liquid-testnet");
+		builder.dryRunCovenantInput(0, "liquid-testnet");
 
 		return { address, ran: true };
 	} catch {
