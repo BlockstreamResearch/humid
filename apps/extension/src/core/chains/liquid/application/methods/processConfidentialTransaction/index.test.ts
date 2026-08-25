@@ -4,6 +4,8 @@ import { spentInputs, txOutAt } from "@humid/tx-manifest";
 import groupedManifest from "@humid/tx-manifest/fixtures/p2pk-grouped.manifest.json";
 import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk.manifest.json";
 
+import type { SmplxWasmModule } from "@/core/chains/liquid/adapters/smplx/loadSmplxWasm";
+
 import {
 	createProcessLiquidConfidentialTransaction,
 	type LiquidProcessCtContext,
@@ -260,6 +262,45 @@ type Recorded = {
  */
 type ModuleBehaviour = (built: Built) => Built;
 
+/**
+ * The names the substitute answers to, checked against the module it stands in for.
+ *
+ * Nothing else checks them. The substitute is cast where it is handed over, so a rename that
+ * reached only one side of this seam passed both `tsc` and the whole suite — which is how
+ * `addCovenantIssuanceInput` came to be exercised by nothing at all.
+ */
+type StandsInFor<Real> = <Substitute extends Real>(substitute: Substitute) => Substitute;
+
+/** The members a substitute must declare, named as the real type names them. */
+type Named<Real, Members extends keyof Real> = { [Member in Members]: unknown };
+
+type SubstituteModule = {
+	covenantParameterTypes: (source: string) => string;
+	Covenant: new (
+		...args: never[]
+	) => Named<InstanceType<SmplxWasmModule["Covenant"]>, "address" | "free" | "scriptPubKeyHex">;
+	TransactionBuilder: new () => Named<
+		InstanceType<SmplxWasmModule["TransactionBuilder"]>,
+		| "addChange"
+		| "addCovenantInput"
+		| "addCovenantIssuanceInput"
+		| "addOutput"
+		| "addWalletInput"
+		| "addWalletIssuanceInput"
+		| "free"
+		| "setLocktimeHeight"
+		| "setSequence"
+	>;
+	WalletSigner: new (
+		...args: never[]
+	) => Named<
+		InstanceType<SmplxWasmModule["WalletSigner"]>,
+		"blindingPublicKey" | "finalizeTransaction" | "free" | "scriptPubKeyHex"
+	>;
+};
+
+const standsInForSmplx: StandsInFor<SubstituteModule> = (substitute) => substitute;
+
 function dependencies(
 	recorded: Recorded,
 	issued: IssuanceAccount = ISSUED,
@@ -272,7 +313,7 @@ function dependencies(
 			return { txid: "f".repeat(64) };
 		},
 		loadSmplx: async () =>
-			({
+			standsInForSmplx({
 				compilerVersion: () => "0.6.0",
 				// What a contract declares its compile parameters to be, which the real module
 				// answers by type-checking the source. A substitute cannot type a parameter —
@@ -463,7 +504,7 @@ function dependencies(
 						return WALLET_SCRIPT;
 					}
 				},
-			}) as never,
+			}) as unknown as SmplxWasmModule,
 		readFeeRate: () => async () => 1000,
 		// Answers with bytes and reads them back through the same parser the real reader uses,
 		// so this cannot hand over an output the chain could not have produced.
