@@ -30,7 +30,7 @@ const PROBE_CMR = "43041b02608dc3ba245a2e3dc7aa5bc991fcf6c097c6a165a18e97a486461
 
 describe("smplx wasm module", () => {
 	test("reports the SDK version compiled into it", () => {
-		expect(bindings.sdkVersion()).toBe("0.0.9");
+		expect(bindings.sdkVersion()).toBe("0.0.10");
 	});
 
 	test("compiles a contract to the same CMR as a native build", () => {
@@ -41,7 +41,7 @@ describe("smplx wasm module", () => {
 
 	test("derives a covenant address", () => {
 		const contract = new bindings.Covenant(PROBE_SOURCE);
-		const address = contract.covenantAddress("liquid-testnet");
+		const address = contract.address("liquid-testnet");
 
 		expect(address.startsWith("tex1p")).toBe(true);
 	});
@@ -55,7 +55,7 @@ describe("smplx wasm module", () => {
 	test("rejects an unknown network by name", () => {
 		const contract = new bindings.Covenant(PROBE_SOURCE);
 
-		expect(() => contract.covenantAddress("not-a-network")).toThrow();
+		expect(() => contract.address("not-a-network")).toThrow();
 	});
 });
 
@@ -97,7 +97,7 @@ describe("contract parameters", () => {
 			args("0xc9fda1adfd5af94ccbe2a6cd72433fc6dc1731fe3f8b3fee90ca96367ca71041"),
 		);
 
-		expect(contract.covenantAddress("liquid-testnet")).toBe(
+		expect(contract.address("liquid-testnet")).toBe(
 			"tex1plmdx307xcw7hfewf7pmmfum0l6tkr35keugxzczc2azmqw4uzlasst2a40",
 		);
 
@@ -108,14 +108,14 @@ describe("contract parameters", () => {
 		const alice = new bindings.Covenant(P2PK_SOURCE, args(ALICE));
 		const bob = new bindings.Covenant(P2PK_SOURCE, args(BOB));
 
-		expect(alice.covenantAddress("liquid-testnet")).not.toBe(bob.covenantAddress("liquid-testnet"));
+		expect(alice.address("liquid-testnet")).not.toBe(bob.address("liquid-testnet"));
 	});
 
 	test("the same parameters produce the same covenant address", () => {
 		const first = new bindings.Covenant(P2PK_SOURCE, args(ALICE));
 		const second = new bindings.Covenant(P2PK_SOURCE, args(ALICE));
 
-		expect(first.covenantAddress("liquid-testnet")).toBe(second.covenantAddress("liquid-testnet"));
+		expect(first.address("liquid-testnet")).toBe(second.address("liquid-testnet"));
 	});
 
 	test("refuses malformed argument JSON when the contract is constructed", () => {
@@ -538,7 +538,7 @@ describe("extra taproot leaves", () => {
 	function addressWith(...leaves: string[]) {
 		const contract = new bindings.Covenant(SOURCE, undefined, JSON.stringify(leaves));
 
-		return contract.covenantAddress("liquid-testnet");
+		return contract.address("liquid-testnet");
 	}
 
 	test("no extra leaves derives the address the module always derived", () => {
@@ -677,7 +677,7 @@ describe("golden covenant addresses", () => {
 			input.debug,
 		);
 
-		return contract.covenantAddress(input.network ?? "liquid-testnet");
+		return contract.address(input.network ?? "liquid-testnet");
 	}
 
 	test("the parameterised contract, on testnet", () => {
@@ -812,16 +812,13 @@ describe("the simplicity-lending contracts", () => {
 		};
 
 		expect(
-			new bindings.Covenant(text, JSON.stringify(other), undefined, undefined).covenantAddress(
+			new bindings.Covenant(text, JSON.stringify(other), undefined, undefined).address(
 				"liquid-testnet",
 			),
 		).not.toBe(
-			new bindings.Covenant(
-				text,
-				JSON.stringify(ARGUMENTS.lending),
-				undefined,
-				undefined,
-			).covenantAddress("liquid-testnet"),
+			new bindings.Covenant(text, JSON.stringify(ARGUMENTS.lending), undefined, undefined).address(
+				"liquid-testnet",
+			),
 		);
 	});
 });

@@ -69,7 +69,7 @@ function outcomeOf(assetHex: string): { address: string; ran: boolean } {
 	const argumentsJson = argumentsWith(assetHex);
 	const contract = new smplx.Covenant(source, argumentsJson, "[]", false);
 	const scriptPubKeyHex = contract.scriptPubKeyHex("liquid-testnet");
-	const address = contract.covenantAddress("liquid-testnet");
+	const address = contract.address("liquid-testnet");
 	const builder = new smplx.TransactionBuilder();
 
 	try {

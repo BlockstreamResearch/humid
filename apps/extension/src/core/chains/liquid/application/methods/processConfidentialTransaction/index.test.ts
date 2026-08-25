@@ -289,7 +289,7 @@ function dependencies(
 					return "{}";
 				},
 				Covenant: class {
-					covenantAddress() {
+					address() {
 						return DERIVED;
 					}
 					// Held across the wasm boundary, so the method releases it. A substitute

@@ -536,7 +536,7 @@ export const createProcessLiquidConfidentialTransaction = (
 
 					try {
 						return {
-							address: contract.covenantAddress(target),
+							address: contract.address(target),
 							scriptPubKeyHex: contract.scriptPubKeyHex(target),
 						};
 					} finally {

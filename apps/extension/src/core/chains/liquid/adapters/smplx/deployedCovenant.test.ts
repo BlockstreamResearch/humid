@@ -53,7 +53,7 @@ describe("a deployed covenant's parameters", () => {
 	test("and the address that script is written as", () => {
 		const contract = new smplx.Covenant(source, ARGUMENTS, "[]", DEBUG_SYMBOLS);
 
-		expect(contract.covenantAddress("liquid")).toBe(
+		expect(contract.address("liquid")).toBe(
 			"ex1pg45gz7zucl2krj42qk0q9udzsgcxd0vxqs3ej6l286fvvgdmqe9s5w0cfg",
 		);
 
