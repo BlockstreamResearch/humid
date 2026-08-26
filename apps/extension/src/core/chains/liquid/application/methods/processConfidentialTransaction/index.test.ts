@@ -275,7 +275,7 @@ type StandsInFor<Real> = <Substitute extends Real>(substitute: Substitute) => Su
 type Named<Real, Members extends keyof Real> = { [Member in Members]: unknown };
 
 type SubstituteModule = {
-	covenantParameterTypes: (source: string) => string;
+	covenantParameterTypes: SmplxWasmModule["covenantParameterTypes"];
 	Covenant: new (
 		...args: never[]
 	) => Named<InstanceType<SmplxWasmModule["Covenant"]>, "address" | "free" | "scriptPubKeyHex">;
