@@ -1,9 +1,14 @@
 {
 	"compilerOptions": {
 		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-		"target": "ES2022",
+		/* ES2023 rather than the Vite template's ES2022: @humid/tx-manifest uses toSorted and
+		   toReversed, and this app is the first thing here to import its TypeScript rather than
+		   only a JSON fixture from it. The repository root is on ESNext; this is raised to the
+		   least that reads the package rather than to that, so what this app may use stays a
+		   deliberate choice. */
+		"target": "ES2023",
 		"useDefineForClassFields": true,
-		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
 		"module": "ESNext",
 		"types": ["vite/client"],
 		"skipLibCheck": true,

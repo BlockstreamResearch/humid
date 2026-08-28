@@ -18,6 +18,8 @@ import {
 } from "@/helpers/background";
 import { sleep } from "@/helpers/promise";
 
+import { serializeError } from "./serializeError";
+
 export type PegasusMsgProtocolMap = {
 	[MsgProtocolRequestMethods.Request]: ExtensionMessage;
 	[MsgProtocolResponseMethods.RequestResponse]: ExtensionMessage<unknown>;
@@ -178,26 +180,6 @@ export function registerBackgroundRpc(
 			});
 		}
 	});
-}
-
-/**
- * Preserve a structured RPC error across the message boundary. A thrown `WalletRpcError` carries a
- * numeric `code` and a `data.reason` the dapp branches on (e.g. skip retrying a user rejection);
- * collapsing it to `error.message` — as this used to — dropped both, leaving the dapp a bare string
- * it could not classify. Kept structural (no wallet-rpc import) so any error with code/data survives.
- */
-function serializeError(error: unknown): unknown {
-	if (error instanceof Error) {
-		const structured = error as Error & { code?: unknown; data?: unknown };
-
-		return {
-			message: error.message,
-			...(typeof structured.code === "number" ? { code: structured.code } : {}),
-			...(structured.data === undefined ? {} : { data: structured.data }),
-		};
-	}
-
-	return error;
 }
 
 function resolveRequestHandler(

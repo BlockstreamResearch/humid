@@ -2,6 +2,7 @@ import browser from "webextension-polyfill";
 
 import { createAccountRegistry } from "@/core/accounts/application/account-registry";
 import type { AccountModelState } from "@/core/accounts/application/account-registry/model/account-model";
+import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
 import type {
 	ActivityPage,
 	EstimateMaxSendInput,
@@ -16,6 +17,10 @@ import type {
 import type { Caip25Scopes } from "@/core/caip25";
 import { addUnlockedChainRecord } from "@/core/chains/application/chain-store/addChainRecord";
 import { getUnlockedChainStoreState } from "@/core/chains/application/chain-store/secureChainStore";
+import {
+	type LiquidContractIdentity,
+	readLiquidContractIdentity,
+} from "@/core/chains/liquid/application/contractIdentity";
 import {
 	buildLiquidDappAccountScope,
 	resolveAccountGroupIdsForIdentifiers,
@@ -274,6 +279,35 @@ const init = async () => {
 
 	const getReceiveAddress = async (): Promise<ReceiveAddress> =>
 		liquidChainGroup.accountRuntime.getReceiveAddress((await resolveSelectedLiquidAccount()).input);
+
+	// The address and key contract actions are signed with, for the selected account. Not
+	// the same as the receive address above: the contract SDK signs with one key at a fixed
+	// path and returns change to that key's own unblinded address, so a covenant action can
+	// only spend what sits there. Reading it is what makes that limit visible.
+	const readContractIdentity = async (
+		accountGroupId?: AccountGroupId,
+	): Promise<LiquidContractIdentity> => {
+		const { input } = await resolveSelectedLiquidAccount();
+
+		// The settings page is per-account, and the account it shows is not necessarily the
+		// selected one. Reading the selected account's identity there would put one
+		// account's address and key on another account's screen, with nothing to say so —
+		// and the values are what someone then funds and locks a covenant to.
+		const group =
+			accountGroupId === undefined
+				? undefined
+				: input.keyManagerState.accountModel.accountGroups[accountGroupId];
+
+		if (accountGroupId !== undefined && !group) {
+			throw new Error(`No account group ${accountGroupId}.`);
+		}
+
+		return readLiquidContractIdentity({
+			accountGroupIndex: group ? (group.groupIndex ?? 0) : input.accountGroupIndex,
+			chain: input.chain,
+			keyManagerState: input.keyManagerState,
+		});
+	};
 
 	// In-extension send: preview then execute against the SELECTED account (resolved exactly like
 	// getReceiveAddress). Both call the chain group's runtime, which calls the same backend fns the
@@ -580,6 +614,7 @@ const init = async () => {
 				getActivity,
 				getPortfolio,
 				getReceiveAddress,
+				readContractIdentity,
 				inspectTransfer,
 				purgeAccountPortfolio,
 				purgeAccountWalletConnectSessions,

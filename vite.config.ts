@@ -7,6 +7,8 @@ import { defineConfig } from "vite";
 import { checker } from "vite-plugin-checker";
 import webExtension, { readJsonFile } from "vite-plugin-web-extension";
 
+import { manifestVersion } from "./scripts/manifestVersion.ts";
+
 // Paths passed to `readJsonFile` are resolved against process.cwd() (the workspace root), so they
 // carry the `apps/extension/` prefix. Paths *inside* the manifest (and the additionalInputs below)
 // are resolved against Vite's `root` (set to "apps/extension"), so those stay bare `src/...`.
@@ -21,7 +23,7 @@ function generateManifest() {
 	return {
 		name: pkg.name,
 		description: pkg.description,
-		version: pkg.version,
+		...manifestVersion(pkg.version),
 		...manifest,
 	};
 }

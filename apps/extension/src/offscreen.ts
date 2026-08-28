@@ -47,6 +47,12 @@ browser.runtime.onMessage.addListener((message) => {
 				return { ok: true, op: "broadcast", txid };
 			}
 
+			if (message.op === "broadcastTransaction") {
+				const { txid } = await getScanClient().broadcastTransaction(message.input);
+
+				return { ok: true, op: "broadcastTransaction", txid };
+			}
+
 			const result = await getScanClient().scanAndRead(message.input);
 
 			return { ...result, ok: true, op: "scanAndRead" };

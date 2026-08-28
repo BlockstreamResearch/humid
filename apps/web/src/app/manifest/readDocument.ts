@@ -1,0 +1,75 @@
+import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
+import { inspectManifestDocument, type InspectManifestResult } from "@humid/tx-manifest";
+
+import type { LiquidNetwork } from "@/lib/liquid-networks";
+
+/** Nothing has been pasted yet, which is not a fault to report. */
+export type EmptyDocument = { kind: "empty" };
+
+/** The text is not JSON at all, which the parser reports better than we could. */
+export type UnreadableDocument = { kind: "unreadable"; reason: string };
+
+export type ReadDocument =
+	| EmptyDocument
+	| UnreadableDocument
+	| ({ kind: "read" } & InspectManifestResult);
+
+export type ReadOptions = {
+	/**
+	 * The sources of the contracts this document references, under those paths.
+	 *
+	 * A compiler version is declared twice, and one of the two declarations lives inside the
+	 * contract source. Absent them the reader answers for the document's own declaration and
+	 * reports which sources it did not read, which is a third answer and not a pass.
+	 */
+	contractSources?: Record<string, string>;
+	/**
+	 * The network the reader should mean, when a person has said which.
+	 *
+	 * Two of the checks compare against the network's own asset, and the two Liquid networks
+	 * carry different ones. Nothing in a document decides this, so absent an answer the reader
+	 * is given no asset and reports those checks as not run.
+	 */
+	network?: LiquidNetwork;
+};
+
+/**
+ * Turns whatever is in the textarea into one of three outcomes.
+ *
+ * The split between "not JSON" and "JSON but not a manifest" is deliberate: a person pasting
+ * a truncated document and a person pasting the wrong file need different sentences, and
+ * only the first is a syntax problem. The second is the package's own judgement and is
+ * carried through unchanged rather than restated here.
+ */
+export function readDocument(text: string, options: ReadOptions = {}): ReadDocument {
+	const trimmed = text.trim();
+
+	if (trimmed === "") {
+		return { kind: "empty" };
+	}
+
+	let parsed: unknown;
+
+	try {
+		parsed = JSON.parse(trimmed);
+	} catch (error) {
+		return {
+			kind: "unreadable",
+			reason: error instanceof Error ? error.message : "This is not JSON.",
+		};
+	}
+
+	// The compiler version always, because this page and the wallet read it from the same place.
+	// The asset only when a person has named a network, and the contract sources only when they
+	// have handed them over. Never a stand-in for any of them: that would turn "not checked"
+	// into "checked and fine", and the package says what it could not reach so the page prints
+	// it — including the half-answer, where the version arrived and the sources did not.
+	return {
+		kind: "read",
+		...inspectManifestDocument(parsed, {
+			compilerVersion: SMPLX_COMPILER_VERSION,
+			contractSources: options.contractSources,
+			policyAsset: options.network?.policyAsset,
+		}),
+	};
+}

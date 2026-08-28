@@ -11,6 +11,7 @@ import type { PegasusMsgProtocolMap } from "@/background";
 import { ConfirmProvider } from "@/common/Confirmation";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
+import { processCtConfirmationRenderer } from "@/core/chains/liquid/application/methods/processConfidentialTransaction/ProcessCtConfirmation";
 import { dappAddChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappAddChainConfirmation";
 import { dappConnectConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappConnectConfirmation";
 import { dappSwitchChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappSwitchChainConfirmation";
@@ -28,12 +29,14 @@ if (!rootElement) {
 	throw new Error("Notification root element was not found");
 }
 
-// Confirmations shown in the notification window: the generic host + the dapp renderers (connect,
-// add-chain, switch-chain).
+// Confirmations shown in the notification window: the generic host + the dapp renderers
+// (connect, add-chain, switch-chain) and the contract action, which is the one that shows
+// values alongside where each of them came from.
 const confirmationRenderers = [
 	dappConnectConfirmationRenderer,
 	dappAddChainConfirmationRenderer,
 	dappSwitchChainConfirmationRenderer,
+	processCtConfirmationRenderer,
 ];
 
 createRoot(rootElement).render(

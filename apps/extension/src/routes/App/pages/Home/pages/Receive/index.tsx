@@ -1,16 +1,25 @@
+import { useState } from "react";
+
 import { UiSpinner } from "@/ui/UiSpinner";
 
 import { useHome } from "../../HomeContext";
 import { ReceiveView } from "./components/ReceiveView";
+import { useContractIdentity } from "./useContractIdentity";
 import { useReceiveAddress } from "./useReceiveAddress";
 
 /**
- * Receive tab: derives the account's receive address for the selected chain (LWK, on
- * demand) and shows it as a QR + copyable string. Reached from the Receive action.
+ * Receive tab: derives the account's confidential address for the selected chain (LWK, on
+ * demand) and shows it as a QR + copyable string, beside the unconfidential address and the
+ * key contract actions are signed with. Reached from the Receive action.
  */
 export function ReceivePage() {
 	const { accountGroup, chain } = useHome();
 	const query = useReceiveAddress({ accountGroupId: accountGroup.id, chainId: chain.id });
+	const [contractOpened, setContractOpened] = useState(false);
+	const identity = useContractIdentity({
+		accountGroupId: accountGroup.id,
+		enabled: contractOpened,
+	});
 
 	if (query.isPending) {
 		return (
@@ -36,6 +45,14 @@ export function ReceivePage() {
 			address={query.data.address}
 			accountName={accountGroup.name}
 			chainName={chain.name}
+			contractIdentity={identity.data}
+			// What a person is told is chosen here rather than carried up from wherever it broke:
+			// the thrown message names a module, a network kind or a derivation path, and there is
+			// exactly one thing they can do about any failure of this read.
+			contractError={
+				identity.isError ? "Could not read the contract identity. Try again." : undefined
+			}
+			onContractOpened={() => setContractOpened(true)}
 		/>
 	);
 }

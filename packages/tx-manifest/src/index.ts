@@ -1,0 +1,69 @@
+/**
+ * Reads a txManifest protocol document and resolves one of its actions into the exact
+ * transaction a wallet must sign.
+ *
+ * What is here holds no keys, opens no network connection of its own and remembers
+ * nothing between calls: a wallet supplies the chain reads and the signing, and the same
+ * request twice produces the same plan. That is what makes it a package rather than part
+ * of one wallet — and it is enforced rather than intended, by `stateless.test.ts`.
+ *
+ * This surface is what a wallet needs and nothing else. Everything a wallet does with
+ * this package falls into four steps, and they are listed here in that order rather than
+ * alphabetically, because the order is the point: read the request, read the chain,
+ * review the action, show a person what it does. A module absent from here is private
+ * even though its directory is not hidden — the way to make one public is to add it,
+ * deliberately, when something outside actually needs it.
+ */
+
+// 1. What the site sent, checked into a shape the rest can rely on.
+export type { ParsedLiquidProcessCtParams } from "./request/request";
+export { parseLiquidProcessCtParams } from "./request/validation";
+
+// 2. What the chain says, which only a wallet can ask for.
+export {
+	type ReadChainTip,
+	type ReadFeeRate,
+	type ReadTxOut,
+	createEsploraChainTipReader,
+	createEsploraFeeRateReader,
+	createEsploraTxOutReader,
+} from "./chain/chainRead";
+export { txOutAt } from "./chain/txOut";
+export { estimateFeeSats } from "./fee";
+
+// 3. The action, resolved into a reviewed plan or a refusal — and afterwards, the two checks
+//    that what came back is what was agreed to: that it spends only what was asked for, and
+//    that it hides exactly the amounts the document decided to hide.
+export { type ManifestReview, type PlannedInput, isRefusal, reviewManifestAction } from "./review";
+export type { RejectToken } from "./document/refuse";
+export { guardSpentInputs } from "./chain/inputGuard";
+export { guardBlindedOutputs } from "./chain/outputGuard";
+export { spentInputs } from "./chain/spentInputs";
+
+// 4. What a person is shown, and where each value on that screen came from.
+export { type ShownConfirmation, describeOrigin, toShownConfirmation } from "./confirmation";
+export { type Provenanced, computed, fromSite, verified } from "./confirmation/provenance";
+
+// 5. What this package makes of a document, for a reader who is not a wallet.
+//    The four steps above are one flow and this is not part of it: it builds nothing and is
+//    here so that a developer can find out what a document means to this runtime without
+//    connecting a wallet to ask. One function rather than the three readers behind it, so
+//    the answer stays a thing this package says rather than three internals a caller
+//    assembles into an answer of its own.
+export {
+	type InspectManifestOptions,
+	type InspectManifestResult,
+	type ManifestFault,
+	type ManifestInspection,
+	DOCUMENT_ONLY_REFUSALS,
+	inspectManifestDocument,
+} from "./document/inspect";
+export type { PartialCheck } from "./document/refuse";
+export {
+	type ConstructRegistryEntry,
+	type ConstructReport,
+	type ConstructSiteKind,
+	type ConstructState,
+	describeRegistry,
+} from "./document/registry";
+export type { NormalisationNote } from "./document/normalise";
