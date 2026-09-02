@@ -1,4 +1,6 @@
 import { asRecord } from "../document/json";
+import type { NormalisedAction, NormalisedManifest } from "../document/normalise";
+import { instanceReferences } from "../document/references";
 import { covenantSites, namedUtxoTypes } from "../document/sites";
 import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./request";
 
@@ -17,25 +19,14 @@ import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } fro
  */
 export function resolveActionRequirements(
 	request: ParsedLiquidProcessCtParams,
+	manifest: NormalisedManifest,
+	declared: NormalisedAction,
 ): ActionRequirements {
-	const action = asRecord(asRecord(request.manifest.actions)?.[request.action]);
-
-	if (!action) {
-		return {
-			missing: [
-				{
-					part: "params",
-					reason: `The manifest declares no action named "${request.action}".`,
-				},
-			],
-			required: [],
-		};
-	}
-
+	const action = declared.node;
 	const required: ActionRequirements["required"] = [];
 	const missing: MissingPart[] = [];
 
-	const sources = referencedContractSources(request.manifest, action);
+	const sources = referencedContractSources(manifest, action);
 
 	if (sources.length > 0) {
 		required.push("contractSources");
@@ -66,6 +57,35 @@ export function resolveActionRequirements(
 		});
 	}
 
+	const reads = instanceReferences(manifest, declared, request.params);
+
+	if (reads.length > 0) {
+		// An action declared outside a class has no deployment, so this is not a file the request
+		// forgot — it is a document asking for something that does not exist. Named as a fault
+		// rather than as a missing part, because sending the file would not answer it.
+		if (declared.boundTo === undefined) {
+			missing.push({
+				part: "instance",
+				keys: reads.map((occurrence) => occurrence.at),
+				reason:
+					`The action "${declared.name}" reads a deployment's field values and is declared ` +
+					"outside any class, so there is no deployment for it to read.",
+			});
+		} else {
+			required.push("instance");
+
+			if (!request.instance) {
+				missing.push({
+					keys: reads.map((occurrence) => occurrence.at),
+					part: "instance",
+					reason:
+						`The action "${declared.name}" is a method of ${declared.boundTo} and reads the ` +
+						"field values of one deployment of it.",
+				});
+			}
+		}
+	}
+
 	if (spendsCovenant(action)) {
 		required.push("state");
 
@@ -82,10 +102,10 @@ export function resolveActionRequirements(
 
 /** Contract source paths the action reaches, through the utxo types it names. */
 function referencedContractSources(
-	manifest: Record<string, unknown>,
+	manifest: NormalisedManifest,
 	action: Record<string, unknown>,
 ): string[] {
-	const utxoTypes = asRecord(manifest.utxo_types) ?? {};
+	const utxoTypes = manifest.utxoTypes;
 	const paths = new Set<string>();
 
 	for (const name of namedUtxoTypes(action)) {

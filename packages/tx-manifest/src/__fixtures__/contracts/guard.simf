@@ -1,0 +1,8 @@
+// A covenant whose only parameter is another covenant's script hash. It is what makes the
+// deployment's fields a dependency rather than a list: the guard cannot be compiled until the
+// reserve has been, and the document states no order in which to do that.
+fn main() {
+    let reserve: u256 = param::RESERVE_COV_HASH;
+
+    jet::verify(jet::eq_256(jet::output_script_hash(0), reserve));
+}

@@ -1,5 +1,6 @@
 import { asArray, asRecord } from "../document/json";
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import type { NormalisationNote } from "../document/normalise";
+import { type ReferenceScope, resolveReference } from "../document/references";
 
 /**
  * A concrete amount the wallet worked out for one of the action's outputs.
@@ -27,16 +28,18 @@ export type PlanResult = { ok: false; reason: string } | { ok: true; plan: Plann
 /**
  * Turns the action's declared outputs into concrete amounts.
  *
- * Knowingly minimal at this stage: it resolves a literal and a `params.` reference and
- * refuses everything else by name. The format's amounts can also be arithmetic over other
+ * Knowingly minimal at this stage: it resolves a literal and a reference the amount position
+ * accepts — this deployment's fields, the request's parameters and arguments, and a bare name —
+ * and refuses everything else by name. The format's amounts can also be arithmetic over other
  * outputs, the fee and chain state, and evaluating those is a dependency graph with a fee
- * re-pass — a later slice's whole subject, which this module grows to take on rather than
- * being replaced by. Until then it refuses loudly instead of falling through, so an amount
- * this cannot evaluate is a refusal naming the output rather than a number nobody chose.
+ * re-pass — a later slice's whole subject, which this module grows to take on rather than being
+ * replaced by. Until then it refuses loudly instead of falling through, so an amount this cannot
+ * evaluate is a refusal naming the output rather than a number nobody chose.
  */
 export function planAction(
-	request: ParsedLiquidProcessCtParams,
 	action: Record<string, unknown>,
+	scope: ReferenceScope,
+	notes?: NormalisationNote[],
 ): PlanResult {
 	const outputs: PlannedOutput[] = [];
 	let fundingSats = 0n;
@@ -64,7 +67,7 @@ export function planAction(
 			continue;
 		}
 
-		const amount = resolveAmount(request, output.amount_sat);
+		const amount = resolveAmount(output.amount_sat, scope, notes);
 
 		if (amount === undefined) {
 			return {
@@ -102,25 +105,42 @@ function resolveTarget(destination: unknown): PlannedOutput["target"] | undefine
 	return typeof utxoType === "string" ? { kind: "covenant", utxoType } : undefined;
 }
 
-/** A literal, or a `params.` reference to one. Anything else is refused by the caller. */
-function resolveAmount(request: ParsedLiquidProcessCtParams, amount: unknown): bigint | undefined {
+/**
+ * A literal, or a reference to one that the amount position accepts.
+ *
+ * Recursive by one step on purpose: a reference resolves to whatever was supplied for it, and
+ * what was supplied is itself a literal rather than a second reference. A value that resolves to
+ * another reference is refused rather than chased, because a chain of them is an evaluation
+ * order and that belongs to the slice that owns evaluation.
+ */
+function resolveAmount(
+	amount: unknown,
+	scope: ReferenceScope,
+	notes?: NormalisationNote[],
+): bigint | undefined {
 	if (typeof amount === "number" && Number.isSafeInteger(amount)) {
 		return BigInt(amount);
 	}
 
-	if (typeof amount === "string") {
-		const literal = /^\d+$/.test(amount) ? BigInt(amount) : undefined;
-
-		if (literal !== undefined) {
-			return literal;
-		}
-
-		const referenced = /^\$?params\.(?<name>[A-Za-z0-9_]+)$/.exec(amount)?.groups?.name;
-
-		return referenced === undefined
-			? undefined
-			: resolveAmount(request, request.params[referenced]);
+	if (typeof amount !== "string") {
+		return undefined;
 	}
 
-	return undefined;
+	if (/^\d+$/.test(amount)) {
+		return BigInt(amount);
+	}
+
+	const found = resolveReference(amount, "amount", scope, notes);
+
+	if (!found.ok) {
+		return undefined;
+	}
+
+	const value = found.value;
+
+	if (typeof value === "number" && Number.isSafeInteger(value)) {
+		return BigInt(value);
+	}
+
+	return typeof value === "string" && /^\d+$/.test(value) ? BigInt(value) : undefined;
 }

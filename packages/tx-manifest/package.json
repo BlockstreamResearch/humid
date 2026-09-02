@@ -10,6 +10,7 @@
 		"./fixtures/*": "./src/__fixtures__/*"
 	},
 	"dependencies": {
+		"@noble/hashes": "^1.7.1",
 		"zod": "^4.0.0"
 	}
 }

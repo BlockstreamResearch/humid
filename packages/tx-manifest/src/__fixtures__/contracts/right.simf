@@ -1,0 +1,6 @@
+// The other half of the pair. See `left.simf`.
+fn main() {
+    let other: u256 = param::OTHER_COV_HASH;
+
+    jet::verify(jet::eq_256(jet::output_script_hash(1), other));
+}

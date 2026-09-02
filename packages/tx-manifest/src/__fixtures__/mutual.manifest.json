@@ -1,0 +1,38 @@
+{
+	"$comment": "A synthetic protocol whose deployment declares two covenant hashes, each built from the other. There is no order in which the pair can be compiled, so there is no answer for the iteration to settle on — which is what this fixture is for. Nothing in the published corpus does this; a document that did would produce an address nobody had checked, and a runtime that returned the last round's values rather than refusing would pay to it.",
+	"manifest_version": "1.0",
+	"protocol": "mutual",
+	"chain": "liquid",
+	"utxo_types": {
+		"left": {
+			"script": {
+				"type": "simplicity",
+				"source": "./left.simf",
+				"compile_params": { "OTHER_COV_HASH": "RIGHT_COV_HASH" }
+			}
+		}
+	},
+	"actions": {
+		"Knot": {
+			"description": "Deploy the pair. Declared at the top level rather than inside a class, so the same field resolution is exercised for an action bound to no deployment.",
+			"inputs": [{ "id": "funding", "utxo_source": "wallet" }],
+			"outputs": [
+				{ "id": "left_out", "destination": { "utxo_type": "left" }, "amount_sat": "1000" }
+			],
+			"create_instance": {
+				"fields": {
+					"LEFT_COV_HASH": {
+						"type": "tapleaf",
+						"simf": "./left.simf",
+						"params": { "OTHER_COV_HASH": { "type": "bytes32", "value": "RIGHT_COV_HASH" } }
+					},
+					"RIGHT_COV_HASH": {
+						"type": "tapleaf",
+						"simf": "./right.simf",
+						"params": { "OTHER_COV_HASH": { "type": "bytes32", "value": "LEFT_COV_HASH" } }
+					}
+				}
+			}
+		}
+	}
+}

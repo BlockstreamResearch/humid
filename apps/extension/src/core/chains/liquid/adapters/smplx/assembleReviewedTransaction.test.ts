@@ -15,6 +15,19 @@ import type { SmplxWasmModule } from "./loadSmplxWasm";
 // accepted anything could not let a call the real module refuses pass unnoticed.
 
 const COVENANT_SCRIPT = `5120${"11".repeat(32)}`;
+/**
+ * What the review says the covenant was built from, carried through rather than re-resolved.
+ *
+ * All four, because a module spending this covenant compiles the contract again to satisfy it and
+ * a compile differing in any one of them produces a different script.
+ */
+const COVENANT_BUILD = {
+	argumentsJson: '{"PUB_KEY":{"type":"Pubkey","value":"0x00"}}',
+	extraLeavesJson: "[]",
+	includeDebugSymbols: false,
+	source: "fn main() { }",
+	sourcePath: "./p2pk.simf",
+};
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 const CHANGE_SCRIPT = `0014${"44".repeat(20)}`;
 const ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
@@ -63,6 +76,7 @@ function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
 		covenants: [
 			{
 				address: "tex1p_derived",
+				...COVENANT_BUILD,
 				role: "created",
 				scriptPubKeyHex: COVENANT_SCRIPT,
 				utxoType: "p2pk_output",
@@ -70,6 +84,7 @@ function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
 			},
 		],
 		feeRateSatsPerKvb: 1000,
+		normalisation: [],
 		outputs: [{ asset: ASSET, id: "p2pk_out", sats: 50_000n, scriptPubKeyHex: COVENANT_SCRIPT }],
 		protocol: "p2pk-simplicity",
 		selected: [
@@ -271,6 +286,7 @@ describe("assembleReviewedTransaction", () => {
 				covenants: [
 					{
 						address: "tex1p_derived",
+						...COVENANT_BUILD,
 						role: "spent",
 						scriptPubKeyHex: COVENANT_SCRIPT,
 						utxoType: "p2pk_output",
