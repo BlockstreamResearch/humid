@@ -15,6 +15,18 @@
 export type OutPoint = { txid: string; vout: number };
 
 export type TxOutAtOutPoint = {
+	/**
+	 * Base-unit amount, when the output states one rather than committing to it.
+	 *
+	 * Absent for a confidential output, and absent for a reader that does not report it. Never
+	 * a stand-in: an amount nobody read is left unsaid rather than written as zero, because a
+	 * covenant said to hold zero and one whose holding was never established are the same
+	 * value and not the same fact, and only one of them can be safely netted against an
+	 * action's cost.
+	 */
+	amountSats?: string;
+	/** The asset id the output states, under the same rule and for the same reason. */
+	rawAssetId?: string;
 	/** The output's scriptPubKey in hex — the locking condition itself. */
 	scriptPubKeyHex: string;
 };

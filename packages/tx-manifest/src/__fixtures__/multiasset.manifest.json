@@ -1,0 +1,95 @@
+{
+    "manifest_version": "0.1.0",
+    "attestation_version": "1",
+    "protocol": "multiasset-test",
+    "description": "A two-asset protocol, for exercising per-asset funding, issuance and blinding. Not a published document: it is the smallest thing that states each of those at once.",
+    "chain": "liquid",
+    "utxo_types": {
+        "p2pk_output": {
+            "description": "A Liquid UTXO locked to PUBKEY via the compiled p2pk.simf program.",
+            "script": {
+                "type": "simplicity",
+                "source": "./p2pk.simf"
+            },
+            "asset": "lbtc"
+        }
+    },
+    "actions": {
+        "PayToken": {
+            "description": "Pays a token to a covenant and returns the token's surplus to the wallet.",
+            "params": {
+                "pubkey": { "type": "pubkey", "description": "The spender's x-only key." },
+                "token": { "type": "asset", "description": "The asset being paid." },
+                "amount_sat": { "type": "u64", "description": "How much of it." },
+                "fee_sat": { "type": "u64", "description": "What the covenant is paid in money." }
+            },
+            "inputs": [
+                {
+                    "id": "token_in",
+                    "utxo_source": "wallet",
+                    "asset": "params.token"
+                }
+            ],
+            "outputs": [
+                {
+                    "id": "token_out",
+                    "destination": "wallet",
+                    "amount_sat": "params.amount_sat",
+                    "asset": "params.token",
+                    "confidential": false
+                },
+                {
+                    "id": "p2pk_out",
+                    "destination": {
+                        "utxo_type": "p2pk_output",
+                        "compile_params": { "PUB_KEY": "params.pubkey" }
+                    },
+                    "amount_sat": "params.fee_sat",
+                    "asset": "lbtc"
+                },
+                {
+                    "id": "token_change",
+                    "destination": "change",
+                    "asset": "params.token"
+                },
+                {
+                    "id": "change_out",
+                    "destination": "change",
+                    "asset": "lbtc"
+                }
+            ]
+        },
+        "Mint": {
+            "description": "Creates a new asset and pays every unit of it to the wallet.",
+            "params": {
+                "pubkey": { "type": "pubkey", "description": "The spender's x-only key." },
+                "supply": { "type": "u64", "description": "How many units to create." }
+            },
+            "inputs": [
+                {
+                    "id": "mint_in",
+                    "utxo_source": "wallet",
+                    "asset": "lbtc",
+                    "issuance": {
+                        "kind": "new",
+                        "asset_amount_sat": "params.supply"
+                    }
+                }
+            ],
+            "outputs": [
+                {
+                    "id": "minted_out",
+                    "destination": "wallet",
+                    "amount_sat": "params.supply",
+                    "asset": "mint_in.asset",
+                    "confidential": false
+                },
+                {
+                    "id": "change_out",
+                    "destination": "change",
+                    "asset": "lbtc"
+                }
+            ]
+        }
+    }
+}

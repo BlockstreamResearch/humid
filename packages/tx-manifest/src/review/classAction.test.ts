@@ -33,6 +33,16 @@ const DERIVED_SCRIPT = `5120${"11".repeat(32)}`;
 const ELSEWHERE_SCRIPT = `5120${"22".repeat(32)}`;
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 
+/**
+ * What the chain reports a spent covenant holds, beside where it pays.
+ *
+ * Stated rather than omitted because a covenant output on this network cannot be confidential
+ * and still work — a Simplicity program reads exact amounts through jets that cannot
+ * introspect a commitment — so a reader that left these out would stand in for something no
+ * legitimate deployment produces, and the review refuses it rather than assuming a balance.
+ */
+const COVENANT_HOLDING = { amountSats: "50000", rawAssetId: POLICY_ASSET };
+
 const SOURCES = Object.fromEntries(
 	["vault", "reserve", "guard", "left", "right"].map((name) => [
 		`./${name}.simf`,
@@ -100,7 +110,10 @@ function review(
 				network: "liquid",
 				policyAsset: POLICY_ASSET,
 				readFeeRate: async () => 1000,
-				readTxOut: async () => ({ scriptPubKeyHex: overrides.onChain ?? DERIVED_SCRIPT }),
+				readTxOut: async () => ({
+					...COVENANT_HOLDING,
+					scriptPubKeyHex: overrides.onChain ?? DERIVED_SCRIPT,
+				}),
 				scriptPubKeyOf: ({ argumentsJson, includeDebugSymbols, source }) => {
 					hashed.push({ includeDebugSymbols, source });
 
@@ -236,7 +249,16 @@ describe("a class method against a deployment that exists", () => {
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed) ? [] : reviewed.outputs).toEqual([
-			{ asset: POLICY_ASSET, id: "withdrawn", sats: 50_000n, scriptPubKeyHex: WALLET_SCRIPT },
+			// An output paid to this wallet is not change, so the format's own order decides it —
+			// and on this network silence means hidden.
+			{
+				asset: POLICY_ASSET,
+				blinded: true,
+				decidedBy: "chain",
+				id: "withdrawn",
+				sats: 50_000n,
+				scriptPubKeyHex: WALLET_SCRIPT,
+			},
 		]);
 	});
 });
@@ -291,7 +313,7 @@ describe("the constructor of the same class", () => {
 				readTxOut: async () => {
 					asked += 1;
 
-					return { scriptPubKeyHex: DERIVED_SCRIPT };
+					return { ...COVENANT_HOLDING, scriptPubKeyHex: DERIVED_SCRIPT };
 				},
 				scriptPubKeyOf: () => DERIVED_SCRIPT,
 				walletScriptPubKeyHex: WALLET_SCRIPT,
@@ -407,7 +429,7 @@ describe("what a review still refuses", () => {
 				network: "liquid",
 				policyAsset: POLICY_ASSET,
 				readFeeRate: async () => 1000,
-				readTxOut: async () => ({ scriptPubKeyHex: DERIVED_SCRIPT }),
+				readTxOut: async () => ({ ...COVENANT_HOLDING, scriptPubKeyHex: DERIVED_SCRIPT }),
 				scriptPubKeyOf: () => DERIVED_SCRIPT,
 				walletScriptPubKeyHex: WALLET_SCRIPT,
 			},
@@ -616,7 +638,7 @@ describe("when the hash compiler fails", () => {
 				network: "liquid",
 				policyAsset: POLICY_ASSET,
 				readFeeRate: async () => 1000,
-				readTxOut: async () => ({ scriptPubKeyHex: DERIVED_SCRIPT }),
+				readTxOut: async () => ({ ...COVENANT_HOLDING, scriptPubKeyHex: DERIVED_SCRIPT }),
 				scriptPubKeyOf: () => DERIVED_SCRIPT,
 				walletScriptPubKeyHex: WALLET_SCRIPT,
 			},
