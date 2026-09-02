@@ -10,6 +10,7 @@
 	"sortTailwindcss": true,
 	"ignorePatterns": [
 		"lwk/**",
+		"**/__fixtures__/**",
 		"AGENTS.md",
 		"CLAUDE.md",
 		"README.md",
