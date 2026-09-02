@@ -1,0 +1,165 @@
+{
+	"$comment": "The same synthetic protocol as `../vaultlet.manifest.json`, written the way the corpus's current generation writes one: the container is `contract_templates.<name>.actions` and the constructor is marked `is_constructor`. Nothing else differs, and nothing derived from either document may differ either — that is what the pair is here to say.",
+	"manifest_version": "1.0",
+	"protocol": "vaultlet",
+	"description": "A time-locked vault with a reserve covenant behind it.",
+	"chain": "liquid",
+	"utxo_types": {
+		"vault": {
+			"description": "Where the vault's funds sit. Its address commits to the reserve covenant's script hash, so the reserve cannot be changed without moving the vault.",
+			"script": {
+				"type": "simplicity",
+				"source": "./vault.simf",
+				"compile_params": {
+					"OWNER_PUB_KEY": "OWNER_PUB_KEY",
+					"VAULT_ASSET_ID": "VAULT_ASSET_ID",
+					"RESERVE_COV_HASH": "RESERVE_COV_HASH",
+					"SLOT_COUNT": "2",
+					"WITH_BURN": "false"
+				}
+			}
+		},
+		"reserve": {
+			"description": "Where the vault pays out after its timeout. Its parameters are written in the deprecated `compile_params.` namespace, which one generation of the format uses where the next writes `instance.`.",
+			"script": {
+				"type": "simplicity",
+				"source": "./reserve.simf",
+				"compile_params": {
+					"OWNER_PUB_KEY": "instance.OWNER_PUB_KEY",
+					"TIMEOUT": "compile_params.TIMEOUT"
+				}
+			}
+		},
+		"guard": {
+			"description": "A covenant whose only parameter is the reserve's script hash. It is what makes this document's deployment fields a dependency rather than a list.",
+			"script": {
+				"type": "simplicity",
+				"source": "./guard.simf",
+				"compile_params": {
+					"RESERVE_COV_HASH": "RESERVE_COV_HASH"
+				}
+			}
+		}
+	},
+	"contract_templates": {
+		"vaultlet_contract": {
+			"description": "One deployed vault.",
+			"fields": {
+				"OWNER_PUB_KEY": {
+					"type": "pubkey",
+					"description": "The owner's x-only key."
+				},
+				"VAULT_ASSET_ID": {
+					"type": "liquid.asset_id",
+					"description": "The asset the vault holds."
+				},
+				"VAULT_AMOUNT": {
+					"type": "u64",
+					"description": "How much of it the vault was funded with."
+				},
+				"TIMEOUT": {
+					"type": "u32",
+					"description": "Absolute block height the reserve becomes spendable at."
+				},
+				"RESERVE_COV_HASH": {
+					"type": "bytes32",
+					"description": "sha256 of the reserve covenant's scriptPubKey. Computed by OpenVault."
+				},
+				"GUARD_COV_HASH": {
+					"type": "bytes32",
+					"description": "sha256 of the guard covenant's scriptPubKey, which is itself built from RESERVE_COV_HASH. Computed by OpenVault."
+				}
+			},
+			"actions": {
+				"OpenVault": {
+					"description": "Fund a new vault and record the deployment it creates.",
+					"is_constructor": true,
+					"params": {
+						"OWNER_PUB_KEY": {
+							"type": "pubkey"
+						},
+						"VAULT_ASSET_ID": {
+							"type": "liquid.asset_id"
+						},
+						"VAULT_AMOUNT": {
+							"type": "u64"
+						},
+						"TIMEOUT": {
+							"type": "u32"
+						}
+					},
+					"inputs": [
+						{
+							"id": "funding",
+							"utxo_source": "wallet"
+						}
+					],
+					"outputs": [
+						{
+							"id": "vault_out",
+							"destination": {
+								"utxo_type": "vault"
+							},
+							"amount_sat": "params.VAULT_AMOUNT"
+						},
+						{
+							"id": "vault_change",
+							"destination": "change",
+							"optional": true
+						}
+					],
+					"create_instance": {
+						"fields": {
+							"OWNER_PUB_KEY": "$params.OWNER_PUB_KEY",
+							"VAULT_ASSET_ID": "params.VAULT_ASSET_ID",
+							"VAULT_AMOUNT": "params.VAULT_AMOUNT",
+							"TIMEOUT": "params.TIMEOUT",
+							"RESERVE_COV_HASH": {
+								"type": "tapleaf",
+								"simf": "./reserve.simf",
+								"params": {
+									"OWNER_PUB_KEY": {
+										"type": "pubkey",
+										"value": "OWNER_PUB_KEY"
+									},
+									"TIMEOUT": {
+										"type": "u32",
+										"value": "TIMEOUT"
+									}
+								}
+							},
+							"GUARD_COV_HASH": {
+								"type": "tapleaf",
+								"simf": "./guard.simf",
+								"params": {
+									"RESERVE_COV_HASH": {
+										"type": "bytes32",
+										"value": "RESERVE_COV_HASH"
+									}
+								}
+							}
+						}
+					}
+				},
+				"Withdraw": {
+					"description": "Spend the vault back to the owner's wallet. Every value it compiles the vault with comes off the deployment; this action declares no parameters of its own.",
+					"inputs": [
+						{
+							"id": "vault_in",
+							"utxo_source": {
+								"utxo_type": "vault"
+							}
+						}
+					],
+					"outputs": [
+						{
+							"id": "withdrawn",
+							"destination": "wallet",
+							"amount_sat": "instance.VAULT_AMOUNT"
+						}
+					]
+				}
+			}
+		}
+	}
+}

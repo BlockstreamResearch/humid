@@ -1,0 +1,9 @@
+// Where the vault pays out after its timeout. Nothing about this contract depends on any
+// other covenant, so its script hash is the fixed point of one round.
+fn main() {
+    let owner: Pubkey = param::OWNER_PUB_KEY;
+    let timeout: u32 = param::TIMEOUT;
+
+    jet::check_lock_height(timeout);
+    jet::bip_0340_verify((owner, jet::sig_all_hash()), witness::SIGNATURE);
+}
