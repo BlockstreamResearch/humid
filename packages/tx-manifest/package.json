@@ -2,7 +2,7 @@
 	"name": "@humid/tx-manifest",
 	"version": "1.0.0",
 	"private": true,
-	"description": "Reads the request a site sends to perform one action of a txManifest protocol, and works out which parts of that request the chosen action requires. Wallet-agnostic: it holds no keys, reaches no network and remembers nothing between calls.",
+	"description": "Reads the request a site sends to perform one action of a txManifest protocol, and establishes what the wallet knows about that action before anyone approves it: the covenants it touches, rebuilt and compared against what the chain says, or a refusal naming what could not be established. Wallet-agnostic: it holds no keys, reaches no network and remembers nothing between calls.",
 	"type": "module",
 	"types": "./src/index.ts",
 	"exports": {
