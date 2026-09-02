@@ -1,0 +1,431 @@
+{
+  "$schema": "../../schema/txmanifest.schema.json",
+  "$comment": "Ported from Mosaik's tessera.simf (github.com/kaleidoswap/mosaik, crates/tessera/contracts/tessera.simf). Upstream substitutes the four offer terms as inline TESSERA_PARAM literals; here they are ordinary compile params. Change tessera.simf and every offer address changes — the terms live in the tapleaf. NOTE: the Refund method is not executable until upnext/12 (absolute nLockTime) lands; see its description.",
+  "manifest_version": "0.1.0",
+  "protocol": "tessera-dex",
+  "description": "Tessera — a keyless atomic swap offer on Liquid, the primitive a Mosaik DEX is built from. One UTXO is one all-or-nothing offer: it holds asset A and is spendable by ANYONE who pays AMOUNT_B of ASSET_B to the maker (Settle), or, after TIMEOUT, by anyone who returns asset A to the maker (Refund). No signature on either path — the covenant is pure transaction introspection, and the maker is identified only by a scriptPubKey hash. Modelled as a class: one instance per offer.",
+  "chain": "liquid",
+  "utxo_types": {
+    "tessera_offer": {
+      "description": "The offer UTXO: holds OFFER_AMOUNT of the maker's asset A, spendable via the keyless Settle or Refund paths. Its address commits to the four offer terms (ASSET_B, AMOUNT_B, MAKER_SPK, TIMEOUT) plus MAX_FEE — so the terms cannot change once funded. It does NOT commit to asset A or its amount: the covenant never inspects them on the settle path (see the note in tessera.simf), which is why OFFER_ASSET_ID/OFFER_AMOUNT are instance fields but not compile params.",
+      "script": {
+        "type": "simplicity",
+        "source": "./tessera.simf",
+        "compile_params": {
+          "ASSET_B": "ASSET_B",
+          "AMOUNT_B": "AMOUNT_B",
+          "MAKER_SPK": "MAKER_SPK",
+          "TIMEOUT": "TIMEOUT",
+          "MAX_FEE": "MAX_FEE"
+        }
+      },
+      "asset": "OFFER_ASSET_ID",
+      "confidential": false
+    },
+    "maker_payout": {
+      "description": "The maker's payout address — a p2pk covenant over MAKER_PUB_KEY (see maker_payout.simf for why the payout leg is a covenant and not a plain wallet address). MAKER_SPK is the sha256 of this address's scriptPubKey. Asset-agnostic: it holds ASSET_B after a Settle, or asset A after a Refund, since the program only checks a signature. The 'asset' below is the Settle case, and the Refund output overrides it.",
+      "script": {
+        "type": "simplicity",
+        "source": "./maker_payout.simf",
+        "compile_params": {
+          "PUB_KEY": "MAKER_PUB_KEY"
+        }
+      },
+      "asset": "ASSET_B",
+      "confidential": false
+    }
+  },
+  "contract_templates": {
+    "tessera_offer_contract": {
+      "description": "One Tessera swap offer. Created by MakeOffer, then consumed by exactly one of Settle (a taker fills it) or Refund (it expired). ClaimPayout is the maker's follow-up sweep of their proceeds.",
+      "fields": {
+        "OFFER_ASSET_ID": {
+          "type": "liquid.asset_id",
+          "description": "Asset A — what the maker is selling, locked in the offer UTXO."
+        },
+        "OFFER_AMOUNT": {
+          "type": "u64",
+          "description": "How much of asset A is locked in the offer."
+        },
+        "ASSET_B": {
+          "type": "liquid.asset_id",
+          "description": "Asset B — what the maker wants in return."
+        },
+        "AMOUNT_B": {
+          "type": "u64",
+          "description": "Exactly how much of asset B the maker must be paid to settle."
+        },
+        "MAKER_PUB_KEY": {
+          "type": "pubkey",
+          "description": "The maker's x-only key. Not used by the swap covenant — it defines the payout address, and later authorises ClaimPayout."
+        },
+        "MAKER_SPK": {
+          "type": "bytes32",
+          "description": "sha256 of the maker payout scriptPubKey. This, not a key, is what the covenant enforces payment to. Computed by MakeOffer."
+        },
+        "TIMEOUT": {
+          "type": "u32",
+          "description": "Absolute block height at which the offer becomes refundable."
+        },
+        "MAX_FEE": {
+          "type": "u64",
+          "description": "Most a refund sweep may skim from the returned asset to pay the network fee."
+        }
+      },
+      "actions": {
+        "MakeOffer": {
+          "description": "Publish an offer: lock asset A into the Tessera covenant and write the instance file recording the terms. From here the offer is live and anyone may fill it — no further action from the maker.",
+          "intent": "publish a swap offer: {params.OFFER_AMOUNT} of {params.OFFER_ASSET_ID:symbol} for {params.AMOUNT_B} of {params.ASSET_B:symbol}",
+          "params": {
+            "OFFER_ASSET_ID": {
+              "type": "liquid.asset_id",
+              "description": "Asset A — the asset id you are selling."
+            },
+            "OFFER_AMOUNT": {
+              "type": "u64",
+              "description": "How much of asset A to lock in the offer."
+            },
+            "ASSET_B": {
+              "type": "liquid.asset_id",
+              "description": "Asset B — the asset id you want to be paid in."
+            },
+            "AMOUNT_B": {
+              "type": "u64",
+              "description": "Exactly how much of asset B you must receive. A taker pays this or the covenant rejects the spend — there are no partial fills."
+            },
+            "MAKER_PUB_KEY": {
+              "type": "pubkey",
+              "description": "Your x-only public key — it defines where takers must pay you. Must be one of your own wallet's keys so you can later sweep the proceeds with ClaimPayout."
+            },
+            "TIMEOUT": {
+              "type": "u32",
+              "description": "Absolute block height after which the offer may be refunded back to you. Pick a height comfortably in the future — until it passes, the only way out of the offer is for someone to fill it."
+            },
+            "MAX_FEE": {
+              "type": "u64",
+              "default": "5000",
+              "description": "Most a refund sweep may skim from your returned asset to pay the network fee. Since anyone may sweep, this bounds what a griefer can burn."
+            }
+          },
+          "inputs": [
+            {
+              "id": "offer_asset_in",
+              "description": "Wallet UTXO providing asset A, sized >= OFFER_AMOUNT.",
+              "utxo_source": "wallet",
+              "asset": "params.OFFER_ASSET_ID",
+              "amount_sat": {
+                "min_amount": "params.OFFER_AMOUNT"
+              },
+              "ui": {
+                "label": "the asset you are selling",
+                "role": "offer_asset"
+              }
+            },
+            {
+              "id": "fee_input",
+              "description": "Wallet L-BTC UTXO covering the network fee.",
+              "utxo_source": "wallet",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "input used for paying fees",
+                "role": "fee"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "offer_out",
+              "description": "The funded offer — a live Tessera covenant UTXO holding asset A.",
+              "destination": {
+                "utxo_type": "tessera_offer"
+              },
+              "asset": "params.OFFER_ASSET_ID",
+              "amount_sat": "params.OFFER_AMOUNT",
+              "confidential": false,
+              "ui": {
+                "label": "asset locked into the swap offer",
+                "role": "covenant"
+              }
+            },
+            {
+              "id": "offer_change",
+              "description": "Asset A change back to the maker's wallet.",
+              "destination": "change",
+              "asset": "params.OFFER_ASSET_ID",
+              "optional": true,
+              "ui": {
+                "label": "unsold remainder returned to you",
+                "role": "change"
+              }
+            },
+            {
+              "id": "fee_change",
+              "description": "L-BTC change from the fee input.",
+              "destination": "change",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "fee change returned to you",
+                "role": "change"
+              }
+            }
+          ],
+          "create_instance": {
+            "fields": {
+              "OFFER_ASSET_ID": "$params.OFFER_ASSET_ID",
+              "OFFER_AMOUNT": "$params.OFFER_AMOUNT",
+              "ASSET_B": "$params.ASSET_B",
+              "AMOUNT_B": "$params.AMOUNT_B",
+              "MAKER_PUB_KEY": "$params.MAKER_PUB_KEY",
+              "TIMEOUT": "$params.TIMEOUT",
+              "MAX_FEE": "$params.MAX_FEE",
+              "MAKER_SPK": {
+                "type": "tapleaf",
+                "simf": "./maker_payout.simf",
+                "params": {
+                  "PUB_KEY": {
+                    "type": "pubkey",
+                    "value": "MAKER_PUB_KEY"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Settle": {
+          "description": "Fill the offer: pay the maker AMOUNT_B of asset B and take asset A. Permissionless — anyone holding asset B can run this, the covenant carries no signature and does not care who you are. It only checks that output 0 pays exactly AMOUNT_B of ASSET_B to MAKER_SPK.",
+          "intent": "fill the offer: pay {instance.AMOUNT_B} of {instance.ASSET_B:symbol} and take {instance.OFFER_AMOUNT} of {instance.OFFER_ASSET_ID:symbol}",
+          "inputs": [
+            {
+              "id": "offer_in",
+              "description": "The Tessera offer UTXO being filled, located via the state file. amount_sat is declared because covenant inputs are never chain-fetched: the engine takes an input's amount from --inputs-file, then the state file, then this spec — and silently falls back to 0 if all three are absent. MakeOffer funds the offer with exactly OFFER_AMOUNT, so the instance always knows it.",
+              "utxo_source": {
+                "utxo_type": "tessera_offer"
+              },
+              "asset": "instance.OFFER_ASSET_ID",
+              "amount_sat": "instance.OFFER_AMOUNT",
+              "witnesses": {
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<u32, u32>",
+                  "value": "Left(0)",
+                  "description": "Settle path (PATH::LEFT). The u32 payload is the index of the output paying the maker — output 0 below. Output index is set by declaration order, so maker_payout_out must stay first."
+                }
+              },
+              "ui": {
+                "label": "the swap offer being filled",
+                "role": "covenant"
+              }
+            },
+            {
+              "id": "payment_in",
+              "description": "Taker's wallet UTXO providing asset B, sized >= AMOUNT_B.",
+              "utxo_source": "wallet",
+              "asset": "instance.ASSET_B",
+              "amount_sat": {
+                "min_amount": "instance.AMOUNT_B"
+              },
+              "ui": {
+                "label": "your payment to the maker",
+                "role": "payment"
+              }
+            },
+            {
+              "id": "fee_input",
+              "description": "Taker's wallet L-BTC UTXO covering the network fee.",
+              "utxo_source": "wallet",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "input used for paying fees",
+                "role": "fee"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "maker_payout_out",
+              "description": "MUST be output 0 — the leg the covenant checks, and the index committed to by the PATH witness above. Exactly AMOUNT_B of asset B to the maker's payout address; anything else and the spend is rejected.",
+              "destination": {
+                "utxo_type": "maker_payout"
+              },
+              "asset": "instance.ASSET_B",
+              "amount_sat": "instance.AMOUNT_B",
+              "required_index": 0,
+              "confidential": false,
+              "ui": {
+                "label": "payment to the maker",
+                "role": "maker_payout"
+              }
+            },
+            {
+              "id": "taker_out",
+              "description": "Asset A released from the offer to the taker — the whole locked amount, since Tessera has no partial fills.",
+              "destination": "wallet",
+              "asset": "instance.OFFER_ASSET_ID",
+              "amount_sat": "offer_in.amount_sat",
+              "ui": {
+                "label": "asset you bought from the offer",
+                "role": "settlement"
+              }
+            },
+            {
+              "id": "payment_change",
+              "description": "Asset B change back to the taker's wallet.",
+              "destination": "change",
+              "asset": "instance.ASSET_B",
+              "optional": true,
+              "ui": {
+                "label": "payment change returned to you",
+                "role": "change"
+              }
+            },
+            {
+              "id": "fee_change",
+              "description": "L-BTC change from the fee input.",
+              "destination": "change",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "fee change returned to you",
+                "role": "change"
+              }
+            }
+          ]
+        },
+        "Refund": {
+          "description": "Sweep an expired offer back to the maker. Permissionless and keyless like Settle: after TIMEOUT anyone may run this, but the covenant forces the asset back to MAKER_SPK, so a stranger's only power is to pay the fee on the maker's behalf (or, at worst, burn MAX_FEE). NOT EXECUTABLE YET: the refund path calls jet::check_lock_height(TIMEOUT), an absolute CLTV, and the engine cannot set a transaction nLockTime — see meta/tasks/upnext/12-engine-absolute-locktime.md. Same limitation as the lending example's liquidation path. Modelled here so the covenant's second path is documented and ready once task 12 lands; the sequence below already enables locktime.",
+          "intent": "refund the expired offer: return {instance.OFFER_AMOUNT} of {instance.OFFER_ASSET_ID:symbol} to the maker",
+          "inputs": [
+            {
+              "id": "offer_in",
+              "description": "The expired Tessera offer UTXO, located via the state file. The sequence below is ENABLE_LOCKTIME_NO_RBF (0xFFFFFFFE): anything other than 0xFFFFFFFF enables the transaction nLockTime that check_lock_height reads. The engine warns that this has the BIP68 disable bit set — that is expected and correct here, since Tessera's timeout is an absolute height, not a relative one.",
+              "utxo_source": {
+                "utxo_type": "tessera_offer"
+              },
+              "asset": "instance.OFFER_ASSET_ID",
+              "amount_sat": "instance.OFFER_AMOUNT",
+              "sequence": 4294967294,
+              "witnesses": {
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<u32, u32>",
+                  "value": "Right(0)",
+                  "description": "Refund path (PATH::RIGHT). The u32 payload is the index of the output returning the asset to the maker — output 0 below."
+                }
+              },
+              "ui": {
+                "label": "the expired swap offer",
+                "role": "covenant"
+              }
+            },
+            {
+              "id": "fee_input",
+              "description": "Wallet L-BTC UTXO covering the network fee. Paying the fee from a separate input (rather than skimming the locked asset) means the refund output returns the full locked amount, which satisfies the covenant's `out + MAX_FEE >= in` check with nothing skimmed.",
+              "utxo_source": "wallet",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "input used for paying fees",
+                "role": "fee"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "maker_refund_out",
+              "description": "MUST be output 0 — the index committed to by the PATH witness. The full locked asset A back to the maker's payout address. Note the asset override: this is asset A, not the maker_payout type's default ASSET_B.",
+              "destination": {
+                "utxo_type": "maker_payout"
+              },
+              "asset": "instance.OFFER_ASSET_ID",
+              "amount_sat": "offer_in.amount_sat",
+              "confidential": false,
+              "ui": {
+                "label": "unsold asset returned to the maker",
+                "role": "maker_payout"
+              }
+            },
+            {
+              "id": "fee_change",
+              "description": "L-BTC change from the fee input.",
+              "destination": "change",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "fee change returned to you",
+                "role": "change"
+              }
+            }
+          ]
+        },
+        "ClaimPayout": {
+          "description": "The maker sweeps their proceeds out of the payout covenant into their wallet. Run this after a taker settles the offer. Unlike every other method here, this one is a plain signature check — the swap is already over.",
+          "intent": "sweep your swap proceeds into your wallet",
+          "inputs": [
+            {
+              "id": "payout_in",
+              "description": "The maker_payout covenant UTXO holding the proceeds. With --state (the normal flow, since Settle writes one) the amount and asset are read straight off the UTXO record and the values below are ignored entirely. They exist only as the fallback for pinning the outpoint with --input and no state file, and they describe the post-Settle claim: the payout holds exactly AMOUNT_B of ASSET_B. After a Refund it holds asset A instead — that claim needs --state, which is fine, since Refund is not executable yet anyway.",
+              "utxo_source": {
+                "utxo_type": "maker_payout"
+              },
+              "asset": "instance.ASSET_B",
+              "amount_sat": "instance.AMOUNT_B",
+              "witnesses": {
+                "SIGNATURE": {
+                  "type": "Signature",
+                  "sig_type": "sig_hash_all",
+                  "source": {
+                    "type": "wallet",
+                    "key": "instance.MAKER_PUB_KEY"
+                  },
+                  "description": "BIP340 Schnorr signature over the whole transaction, from the maker's key."
+                }
+              },
+              "ui": {
+                "label": "your swap proceeds",
+                "role": "maker_payout"
+              }
+            },
+            {
+              "id": "fee_input",
+              "description": "Wallet L-BTC UTXO covering the network fee.",
+              "utxo_source": "wallet",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "input used for paying fees",
+                "role": "fee"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "claimed_out",
+              "description": "The swept proceeds, sent to the maker's wallet. Reads the amount off payout_in, so whatever actually landed in the payout address is what gets swept.",
+              "destination": "wallet",
+              "asset": "payout_in.asset",
+              "amount_sat": "payout_in.amount_sat",
+              "ui": {
+                "label": "proceeds swept to your wallet",
+                "role": "settlement"
+              }
+            },
+            {
+              "id": "fee_change",
+              "description": "L-BTC change from the fee input.",
+              "destination": "change",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "fee change returned to you",
+                "role": "change"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

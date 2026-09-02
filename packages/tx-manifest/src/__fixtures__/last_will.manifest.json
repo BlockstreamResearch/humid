@@ -1,0 +1,257 @@
+{
+    "manifest_version": "0.1.0",
+    "attestation_version": "1",
+    "protocol": "last-will",
+    "description": "Last Will — a recursive covenant with three spending paths: inherit (after a 180-day timelock), cold-key break-out, and hot-key refresh. Modelled as a class: one instance per will.",
+    "chain": "liquid",
+    "utxo_types": {
+        "last_will": {
+            "description": "Funds locked under the last-will covenant.",
+            "script": {
+                "type": "simplicity",
+                "source": "./last_will.simf",
+                "compile_params": {
+                    "INHERITOR_PUB_KEY": "INHERITOR_PUB_KEY",
+                    "HOT_PUB_KEY": "HOT_PUB_KEY",
+                    "COLD_PUB_KEY": "COLD_PUB_KEY",
+                    "INHERIT_BLOCKS": "INHERIT_BLOCKS"
+                }
+            },
+            "asset": "lbtc",
+            "confidential": false
+        }
+    },
+    "classes": {
+        "last_will_contract": {
+            "description": "A last-will covenant. One instance per will: created by Fund, then spent via ColdBreak, Refresh, or Inherit.",
+            "fields": {
+                "INHERITOR_PUB_KEY": {
+                    "type": "pubkey"
+                },
+                "HOT_PUB_KEY": {
+                    "type": "pubkey"
+                },
+                "COLD_PUB_KEY": {
+                    "type": "pubkey"
+                },
+                "INHERIT_BLOCKS": {
+                    "type": "u16"
+                }
+            },
+            "methods": {
+                "Fund": {
+                    "is_constructor": true,
+                    "description": "Set up the will: lock funds into the covenant and write the instance file recording the three keys.",
+                    "params": {
+                        "INHERITOR_PUB_KEY": {
+                            "type": "pubkey",
+                            "description": "The heir's x-only public key. They can claim the funds 180 days after the last move."
+                        },
+                        "HOT_PUB_KEY": {
+                            "type": "pubkey",
+                            "description": "Owner's hot key. Auto-filled from your wallet signing key."
+                        },
+                        "COLD_PUB_KEY": {
+                            "type": "pubkey",
+                            "description": "Owner's cold key. Your wallet's oracle key — the covenant escape hatch."
+                        },
+                        "INHERIT_BLOCKS": {
+                            "type": "u16",
+                            "default": "25920",
+                            "description": "Blocks of inactivity before the heir may claim. ~180 days ≈ 25920 (1-minute Liquid blocks). Max 65535."
+                        },
+                        "amount_sat": {
+                            "type": "u64",
+                            "description": "Amount in satoshis to place under the will."
+                        }
+                    },
+                    "inputs": [
+                        {
+                            "id": "funding_input",
+                            "description": "Wallet UTXO providing the funds.",
+                            "utxo_source": "wallet",
+                            "asset": "lbtc",
+                            "amount_sat": {
+                                "min_amount": "params.amount_sat"
+                            }
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "id": "will_out",
+                            "description": "The funded last-will output.",
+                            "destination": {
+                                "utxo_type": "last_will"
+                            },
+                            "amount_sat": "params.amount_sat",
+                            "asset": "lbtc"
+                        },
+                        {
+                            "id": "change_out",
+                            "description": "Change returned to the funding wallet.",
+                            "destination": "change",
+                            "asset": "lbtc",
+                            "optional": true
+                        }
+                    ],
+                    "validations": [
+                        {
+                            "id": "amount_nonzero",
+                            "rule": {
+                                "type": "arithmetic",
+                                "expr": "params.amount_sat > 0"
+                            },
+                            "error": {
+                                "code": "INVALID_AMOUNT",
+                                "message": "Amount must be greater than zero"
+                            }
+                        }
+                    ],
+                    "create_instance": {
+                        "class": "last_will_contract",
+                        "fields": {
+                            "INHERITOR_PUB_KEY": "$params.INHERITOR_PUB_KEY",
+                            "HOT_PUB_KEY": "$params.HOT_PUB_KEY",
+                            "COLD_PUB_KEY": "$params.COLD_PUB_KEY",
+                            "INHERIT_BLOCKS": "$params.INHERIT_BLOCKS"
+                        }
+                    }
+                },
+                "ColdBreak": {
+                    "description": "Owner breaks out of the covenant with the cold key. Funds return to the wallet and the covenant ends.",
+                    "inputs": [
+                        {
+                            "id": "will_in",
+                            "description": "The last-will covenant UTXO, located via the state file.",
+                            "utxo_source": {
+                                "utxo_type": "last_will"
+                            },
+                            "witnesses": {
+                                "SPEND_PATH": {
+                                    "type": "simplicityhl",
+                                    "simplicity_type": "Either<(), Either<(), ()>>",
+                                    "value": "Right(Left(()))",
+                                    "description": "Selects the cold-spend path."
+                                },
+                                "COLD_SIG": {
+                                    "type": "Signature",
+                                    "sig_type": "sig_hash_all",
+                                    "source": {
+                                        "type": "wallet",
+                                        "key": "compile_params.COLD_PUB_KEY"
+                                    },
+                                    "description": "BIP340 signature from the cold key."
+                                }
+                            }
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "id": "to_wallet",
+                            "description": "The reclaimed funds, sent to your wallet.",
+                            "destination": "wallet",
+                            "asset": "lbtc",
+                            "amount_sat": "will_in.amount_sat - fee"
+                        }
+                    ]
+                },
+                "Refresh": {
+                    "description": "Owner moves the funds with the hot key, repeating the covenant. Output 0 must be the same last-will covenant; output 1 is the explicit fee.",
+                    "inputs": [
+                        {
+                            "id": "will_in",
+                            "description": "The last-will covenant UTXO, located via the state file.",
+                            "utxo_source": {
+                                "utxo_type": "last_will"
+                            },
+                            "witnesses": {
+                                "SPEND_PATH": {
+                                    "type": "simplicityhl",
+                                    "simplicity_type": "Either<(), Either<(), ()>>",
+                                    "value": "Right(Right(()))",
+                                    "description": "Selects the hot-key refresh path."
+                                },
+                                "HOT_SIG": {
+                                    "type": "Signature",
+                                    "sig_type": "sig_hash_all",
+                                    "source": {
+                                        "type": "wallet",
+                                        "key": "compile_params.HOT_PUB_KEY"
+                                    },
+                                    "description": "BIP340 signature from the hot key."
+                                }
+                            }
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "id": "will_again",
+                            "description": "The re-locked last-will output (same covenant address). Must be output 0.",
+                            "destination": {
+                                "utxo_type": "last_will"
+                            },
+                            "asset": "lbtc",
+                            "amount_sat": "will_in.amount_sat - fee",
+                            "required_index": 0
+                        }
+                    ]
+                },
+                "Inherit": {
+                    "description": "The heir claims the funds 180 days after the last move. Requires the inheritor's signature and a relative timelock.",
+                    "inputs": [
+                        {
+                            "id": "will_in",
+                            "description": "The last-will covenant UTXO, located via the state file.",
+                            "utxo_source": {
+                                "utxo_type": "last_will"
+                            },
+                            "sequence": {
+                                "relative_blocks": "compile_params.INHERIT_BLOCKS"
+                            },
+                            "witnesses": {
+                                "SPEND_PATH": {
+                                    "type": "simplicityhl",
+                                    "simplicity_type": "Either<(), Either<(), ()>>",
+                                    "value": "Left(())",
+                                    "description": "Selects the inherit path."
+                                },
+                                "INHERITOR_SIG": {
+                                    "type": "Signature",
+                                    "sig_type": "sig_hash_all",
+                                    "source": {
+                                        "type": "wallet",
+                                        "key": "compile_params.INHERITOR_PUB_KEY"
+                                    },
+                                    "description": "BIP340 signature from the heir's key."
+                                }
+                            }
+                        },
+                        {
+                            "id": "fee_input",
+                            "description": "Wallet L-BTC UTXO to pay the network fee.",
+                            "utxo_source": "wallet",
+                            "asset": "lbtc",
+                            "optional": true
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "id": "to_heir",
+                            "description": "The inherited funds, sent to the heir's wallet.",
+                            "destination": "wallet",
+                            "asset": "lbtc",
+                            "amount_sat": "will_in.amount_sat"
+                        },
+                        {
+                            "id": "fee_change",
+                            "description": "L-BTC change from the fee input.",
+                            "destination": "change",
+                            "asset": "lbtc",
+                            "optional": true
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}

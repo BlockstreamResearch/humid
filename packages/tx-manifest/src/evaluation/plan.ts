@@ -1,7 +1,8 @@
 import { asArray, asRecord } from "../document/json";
 import type { NormalisationNote, NormalisedAction } from "../document/normalise";
-import { type ReferenceScope, resolveReference } from "../document/references";
+import type { ReferenceScope } from "../document/references";
 import { type BlindingDecision, resolveBlinding } from "./blinding";
+import { evaluateExpression } from "./evaluate";
 
 /**
  * A concrete amount the wallet worked out for one of the action's outputs.
@@ -35,13 +36,10 @@ export type PlanResult = { ok: false; reason: string } | { ok: true; plan: Plann
 /**
  * Turns the action's declared outputs into concrete amounts.
  *
- * Knowingly minimal at this stage: it resolves a literal and a reference the amount position
- * accepts — this deployment's fields, the request's parameters and arguments, and a bare name —
- * and refuses everything else by name. The format's amounts can also be arithmetic over other
- * outputs, the fee and chain state, and evaluating those is a dependency graph with a fee
- * re-pass — a later slice's whole subject, which this module grows to take on rather than being
- * replaced by. Until then it refuses loudly instead of falling through, so an amount this cannot
- * evaluate is a refusal naming the output rather than a number nobody chose.
+ * Each amount is a literal or an expression evaluated at the amount site, which accepts this
+ * deployment's fields, the request's parameters and arguments, a bare name and an attribute of
+ * an input the wallet already resolved. What cannot be evaluated is a refusal naming the output
+ * and saying what was wrong with the arithmetic, rather than a number nobody chose.
  */
 export function planAction(
 	action: NormalisedAction,
@@ -104,19 +102,19 @@ export function planAction(
 
 		const amount = resolveAmount(output.amount_sat, scope, notes);
 
-		if (amount === undefined) {
-			return {
-				ok: false,
-				reason: `Output ${id || "(unnamed)"} has an amount this runtime does not evaluate yet.`,
-			};
+		if (!amount.ok) {
+			return { ok: false, reason: `Output ${id || "(unnamed)"} cannot be paid: ${amount.reason}` };
 		}
 
-		if (amount <= 0n) {
+		// The evaluator returns a signed value because an expression may legitimately go negative
+		// on the way; an output that lands there pays nothing, and it is refused here, which is
+		// where the question is about an amount rather than about arithmetic.
+		if (amount.sats <= 0n) {
 			return { ok: false, reason: `Output ${id || "(unnamed)"} would pay nothing.` };
 		}
 
-		fundingSats += amount;
-		outputs.push({ blinding, id, sats: amount, target });
+		fundingSats += amount.sats;
+		outputs.push({ blinding, id, sats: amount.sats, target });
 	}
 
 	if (outputs.length === 0) {
@@ -154,41 +152,26 @@ function resolveTarget(destination: unknown, data: unknown): PlannedOutput["targ
 }
 
 /**
- * A literal, or a reference to one that the amount position accepts.
+ * A literal, a reference the amount position accepts, or arithmetic over either.
  *
- * Recursive by one step on purpose: a reference resolves to whatever was supplied for it, and
- * what was supplied is itself a literal rather than a second reference. A value that resolves to
- * another reference is refused rather than chased, because a chain of them is an evaluation
- * order and that belongs to the slice that owns evaluation.
+ * One reader for all three rather than a fast path for the simple ones: a document writing
+ * `"1000"` and one writing `"500 + 500"` are stating the same amount, and two readers is two
+ * places for them to stop agreeing.
  */
 function resolveAmount(
 	amount: unknown,
 	scope: ReferenceScope,
 	notes?: NormalisationNote[],
-): bigint | undefined {
+): { ok: false; reason: string } | { ok: true; sats: bigint } {
 	if (typeof amount === "number" && Number.isSafeInteger(amount)) {
-		return BigInt(amount);
+		return { ok: true, sats: BigInt(amount) };
 	}
 
 	if (typeof amount !== "string") {
-		return undefined;
+		return { ok: false, reason: "the document states no amount this runtime can read." };
 	}
 
-	if (/^\d+$/.test(amount)) {
-		return BigInt(amount);
-	}
+	const evaluated = evaluateExpression(amount, "amount", scope, notes);
 
-	const found = resolveReference(amount, "amount", scope, notes);
-
-	if (!found.ok) {
-		return undefined;
-	}
-
-	const value = found.value;
-
-	if (typeof value === "number" && Number.isSafeInteger(value)) {
-		return BigInt(value);
-	}
-
-	return typeof value === "string" && /^\d+$/.test(value) ? BigInt(value) : undefined;
+	return evaluated.ok ? { ok: true, sats: evaluated.value } : evaluated;
 }

@@ -279,6 +279,39 @@ describe("the constructor of the same class", () => {
 		expect(reviewed.createdInstance?.rounds).toBe(3);
 	});
 
+	// A field the document works out rather than states: the format writes arithmetic and a
+	// literal into the same slot, and a runtime that recorded the arithmetic as its own text
+	// would compile the covenant against the string rather than the number.
+	test("works out a field the document computes rather than recording its text", async () => {
+		const document = structuredClone(groupedVaultlet) as Record<string, unknown>;
+		const classes = document.classes as Record<string, { methods: Record<string, unknown> }>;
+		const constructor = classes.vaultlet_contract?.methods.OpenVault as Record<string, unknown>;
+		const created = constructor.create_instance as { fields: Record<string, unknown> };
+
+		created.fields.VAULT_AMOUNT = "params.VAULT_AMOUNT * 2";
+
+		const { result } = review(openVault(document));
+		const reviewed = await result;
+
+		expect(isRefusal(reviewed)).toBe(false);
+
+		if (!isRefusal(reviewed)) {
+			expect(reviewed.createdInstance?.fields.VAULT_AMOUNT).toBe("100000");
+		}
+	});
+
+	// The other half of the same rule, and the one that keeps it safe: a literal is left
+	// exactly as written. Thirty-two zero bytes is a perfectly good expression that evaluates
+	// to `0`, which is a different value at every position that compiles it.
+	test("and leaves a literal alone, however much it looks like arithmetic", async () => {
+		const { result } = review(openVault(groupedVaultlet));
+		const reviewed = await result;
+
+		expect(isRefusal(reviewed) ? "" : reviewed.createdInstance?.fields.VAULT_ASSET_ID).toBe(
+			ASSET_STATED,
+		);
+	});
+
 	/**
 	 * What a person is shown for a contract with no history. Not "unverified", which is what a
 	 * check that failed would be, and not "verified", which would claim a comparison nobody could
