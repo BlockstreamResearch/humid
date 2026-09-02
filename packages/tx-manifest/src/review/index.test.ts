@@ -39,6 +39,7 @@ const readFeeRate = async () => 1000;
 
 /** What every case shares; individual tests override only what they exercise. */
 const deps = {
+	accountLabel: "liquid:testnet account 0",
 	compile,
 	scriptPubKeyOf,
 	fundingUtxos,

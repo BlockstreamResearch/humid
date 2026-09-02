@@ -95,6 +95,7 @@ function review(
 				...request,
 			} as ParsedLiquidProcessCtParams,
 			{
+				accountLabel: "liquid:testnet account 0",
 				compile: (input) => {
 					compiled.push({
 						argumentsJson: input.argumentsJson,
@@ -337,6 +338,7 @@ describe("the constructor of the same class", () => {
 				...openVault(groupedVaultlet),
 			} as ParsedLiquidProcessCtParams,
 			{
+				accountLabel: "liquid:testnet account 0",
 				compile: () => ({ address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT }),
 				contractParamTypes: () => DECLARED,
 				fundingUtxos: FUNDING,
@@ -457,6 +459,7 @@ describe("what a review still refuses", () => {
 				...withdraw(groupedVaultlet),
 			} as ParsedLiquidProcessCtParams,
 			{
+				accountLabel: "liquid:testnet account 0",
 				compile: () => ({ address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT }),
 				fundingUtxos: FUNDING,
 				network: "liquid",
@@ -663,6 +666,7 @@ describe("when the hash compiler fails", () => {
 				...withdraw(groupedVaultlet),
 			} as ParsedLiquidProcessCtParams,
 			{
+				accountLabel: "liquid:testnet account 0",
 				compile: () => {
 					throw new Error("wasm module not loaded");
 				},

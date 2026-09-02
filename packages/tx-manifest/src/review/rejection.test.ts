@@ -32,6 +32,7 @@ const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 
 const deps = {
+	accountLabel: "liquid:testnet account 0",
 	compile: () => ({ address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT }),
 	fundingUtxos: [
 		{ amount: "1000000", spendable: true, txOut: "00", txid: "c".repeat(64), vout: 0 },
