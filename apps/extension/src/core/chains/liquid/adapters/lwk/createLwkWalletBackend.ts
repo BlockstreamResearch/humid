@@ -1,9 +1,10 @@
 import type { LiquidWalletBackend } from "../../application/backends/LiquidWalletBackend";
 import { getWalletActivityForAsset } from "./wallet/getActivity";
 import { getWalletBalanceForAsset } from "./wallet/getBalance";
-import { getWalletReceiveAddress } from "./wallet/getReceiveAddress";
-import { getWalletUtxosForAsset } from "./wallet/getUTXOs";
+import { getWalletReceiveAddress, getWalletSigningAddress } from "./wallet/getReceiveAddress";
+import { getExplicitWalletUtxosForAsset, getWalletUtxosForAsset } from "./wallet/getUTXOs";
 import { getWalletDescriptorEntries } from "./wallet/getWalletDescriptor";
+import { readChainTipHeight } from "./wallet/readChainTipHeight";
 import { createLwkLiquidAccount } from "./wallet/resolveAccount";
 import { estimateMaxSend, inspectTransfer, sendTransfer } from "./wallet/sendTransfer";
 import { inspectMessageSigning, signMessage } from "./wallet/signMessage";
@@ -16,7 +17,10 @@ export function createLwkWalletBackend(): LiquidWalletBackend {
 		getActivity: getWalletActivityForAsset,
 		getBalance: getWalletBalanceForAsset,
 		getReceiveAddress: getWalletReceiveAddress,
+		getSigningAddress: getWalletSigningAddress,
 		getDescriptorEntries: getWalletDescriptorEntries,
+		getExplicitUtxos: getExplicitWalletUtxosForAsset,
+		getTipHeight: readChainTipHeight,
 		getUtxos: getWalletUtxosForAsset,
 		inspectMessageSigning,
 		inspectTransfer,

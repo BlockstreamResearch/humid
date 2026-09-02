@@ -69,7 +69,11 @@ export async function createLwkLiquidAccount(
 			// Threaded through so dapp read methods can key the persisted portfolio snapshot; may be
 			// undefined for internal callers that resolve the default account without a group.
 			accountGroupId: input.accountGroupId,
+			accountGroupIndex,
 			accountIdentifier,
+			// The source this account's seed actually came from, so anything that later needs its
+			// key material derives from the same one rather than from the local root by default.
+			...(input.keySourceId === undefined ? {} : { keySourceId: input.keySourceId }),
 			chain: input.chain,
 			chainId: input.chain.id,
 			descriptor: descriptor.toString(),

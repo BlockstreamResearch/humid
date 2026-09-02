@@ -22,7 +22,16 @@ export { parseLiquidProcessCtParams } from "./request/validation";
 
 // 2. What the chain says, which only a wallet can ask for. A port rather than an
 // implementation: this package states the question and holds no endpoint of its own.
-export type { ReadFeeRate, ReadTxOut } from "./chain/chainRead";
+export type { EsploraEndpoint, ReadChainTip, ReadFeeRate, ReadTxOut } from "./chain/chainRead";
+// And the readers a wallet configured with an Esplora backend can use as they stand. The port
+// above is still the contract — these are one implementation of it, published because every
+// wallet reaching this package already has an endpoint and would otherwise write the same
+// three readers again, differently.
+export {
+	createEsploraChainTipReader,
+	createEsploraFeeRateReader,
+	createEsploraTxOutReader,
+} from "./chain/chainRead";
 
 // 3. The action, resolved into an exact plan of what the wallet would do — or a refusal.
 // This runs before the permission gate, where a standing permission cannot skip it, which is
@@ -33,7 +42,18 @@ export type { ReadFeeRate, ReadTxOut } from "./chain/chainRead";
 // The compiler and the shapes this plan is written in are reachable through this function
 // rather than named again beside it. A wallet supplying a compiler already holds its shape,
 // and a second public name for one is a second thing to keep in step.
-export { type ManifestReview, isRefusal, reviewManifestAction } from "./review";
+export {
+	type ManifestReview,
+	type PlannedInput,
+	type ReviewedCovenantInput,
+	isRefusal,
+	reviewManifestAction,
+} from "./review";
+// What a covenant input's contract is told outright, which travels on the plan above. Named
+// because whoever drives a builder from that plan has to hand these to the compiler, and a
+// caller taking them apart by shape rather than by type is writing this vocabulary a second
+// time.
+export type { StaticWitness } from "./evaluation/witness";
 // Every refusal carries one of these beside its sentence, so a caller can tell "this wallet
 // will never build that" from "your state file is out of date" — the same wire code and
 // opposite advice. The vocabulary is published; the table that produces it is not.

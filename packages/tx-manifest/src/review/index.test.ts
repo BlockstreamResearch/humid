@@ -61,7 +61,13 @@ const chainHolding = (scriptPubKeyHex: string) => async (): Promise<TxOutAtOutPo
 	amountSats: COVENANT_HOLDS,
 	rawAssetId: POLICY_ASSET,
 	scriptPubKeyHex,
+	// The bytes a spend of this covenant would carry to the builder. Stated rather than left
+	// out: a chain read that reported no bytes is one no wallet ships.
+	txOutHex: COVENANT_TXOUT,
 });
+
+/** One explicit output, written the way the chain writes one. */
+const COVENANT_TXOUT = `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`;
 
 /** What every covenant in these cases is holding, in the asset the network charges fees in. */
 const COVENANT_HOLDS = "50000";
@@ -132,6 +138,7 @@ describe("reviewManifestAction", () => {
 					return {
 						amountSats: COVENANT_HOLDS,
 						rawAssetId: POLICY_ASSET,
+						txOutHex: COVENANT_TXOUT,
 						scriptPubKeyHex: DERIVED_SCRIPT,
 					};
 				},
@@ -190,7 +197,7 @@ describe("reviewManifestAction", () => {
 				readTxOut: async (outpoint) => {
 					asked.push(outpoint);
 
-					return { scriptPubKeyHex: DERIVED_SCRIPT };
+					return { scriptPubKeyHex: DERIVED_SCRIPT, txOutHex: COVENANT_TXOUT };
 				},
 			});
 

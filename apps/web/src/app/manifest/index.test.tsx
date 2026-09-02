@@ -42,13 +42,12 @@ describe("the inspector with nothing around it", () => {
 		expect(renderToStaticMarkup(<ManifestInspector />)).toContain("Load the p2pk example");
 	});
 
-	// The one thing the page asks for, and it opens without an answer: a default here would be a
-	// guess that decides whether a document is refused.
-	test("asks which SimplicityHL version, and opens with none given", () => {
+	// It no longer asks. The compiler version is one constant this repository ships and the
+	// extension reads the same one, so a box here could only disagree with the wallet — and
+	// left blank, as it opened, it reported a check as unrun that the wallet could answer.
+	test("does not ask which SimplicityHL version, because it reads the shipped one", () => {
 		const html = renderToStaticMarkup(<ManifestInspector />);
 
-		expect(html).toContain("SimplicityHL version");
-		expect(html).toContain("Not given");
-		expect(html).toContain("reported as not run");
+		expect(html).not.toContain("SimplicityHL version");
 	});
 });

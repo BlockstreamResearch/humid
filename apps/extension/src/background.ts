@@ -17,6 +17,10 @@ import type { Caip25Scopes } from "@/core/caip25";
 import { addUnlockedChainRecord } from "@/core/chains/application/chain-store/addChainRecord";
 import { getUnlockedChainStoreState } from "@/core/chains/application/chain-store/secureChainStore";
 import {
+	type LiquidContractIdentity,
+	readLiquidContractIdentity,
+} from "@/core/chains/liquid/application/contractIdentity";
+import {
 	buildLiquidDappAccountScope,
 	resolveAccountGroupIdsForIdentifiers,
 } from "@/core/chains/liquid/application/dappAccountScope";
@@ -274,6 +278,44 @@ const init = async () => {
 
 	const getReceiveAddress = async (): Promise<ReceiveAddress> =>
 		liquidChainGroup.accountRuntime.getReceiveAddress((await resolveSelectedLiquidAccount()).input);
+
+	// The address and key contract actions are signed with, for one account. Not the same as
+	// the receive address above: the contract module signs with one key at a fixed path and
+	// returns change to that key's own unblinded address, so a contract action can only spend
+	// what sits there. Reading it is what makes that limit visible rather than hidden.
+	const readContractIdentity = async (accountGroupId?: string): Promise<LiquidContractIdentity> => {
+		const { input } = await resolveSelectedLiquidAccount();
+
+		// The screen this serves is per-account, and the account it shows is not necessarily the
+		// selected one. Reading the selected account's identity there would put one account's
+		// address and key on another account's screen with nothing to say so — and those values
+		// are what somebody then funds and locks a covenant to.
+		const group =
+			accountGroupId === undefined
+				? undefined
+				: Object.values(input.keyManagerState.accountModel.accountGroups).find(
+						(candidate) => candidate.id === accountGroupId,
+					);
+
+		if (accountGroupId !== undefined && !group) {
+			throw new Error(`No account group ${accountGroupId}.`);
+		}
+
+		// The source that group's own seed comes from, not the selected account's. Both halves
+		// move together or neither does: an index read against the wrong seed is a different
+		// account's address and key, shown with nothing to say so — and the transaction that
+		// later signs for the real account cannot spend what was sent there.
+		const keySourceId = group
+			? input.keyManagerState.accountModel.wallets[group.walletId]?.keySourceId
+			: input.keySourceId;
+
+		return readLiquidContractIdentity({
+			accountGroupIndex: group ? (group.groupIndex ?? 0) : input.accountGroupIndex,
+			chain: input.chain,
+			keyManagerState: input.keyManagerState,
+			...(keySourceId === undefined ? {} : { keySourceId }),
+		});
+	};
 
 	// In-extension send: preview then execute against the SELECTED account (resolved exactly like
 	// getReceiveAddress). Both call the chain group's runtime, which calls the same backend fns the
@@ -580,6 +622,7 @@ const init = async () => {
 				getActivity,
 				getPortfolio,
 				getReceiveAddress,
+				readContractIdentity,
 				inspectTransfer,
 				purgeAccountPortfolio,
 				purgeAccountWalletConnectSessions,

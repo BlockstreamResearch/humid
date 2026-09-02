@@ -2,6 +2,7 @@ import browser from "webextension-polyfill";
 
 import type {
 	BroadcastInput,
+	BroadcastTxInput,
 	ReadActivityInput,
 	ScanInput,
 	SyncWorkerClient,
@@ -52,6 +53,7 @@ async function ensureOffscreenDocument(offscreen: ChromeOffscreenApi): Promise<v
 /** A scan/read/broadcast request payload for the offscreen document (the target is added on send). */
 type OffscreenRequestPayload =
 	| { input: BroadcastInput; op: "broadcast" }
+	| { input: BroadcastTxInput; op: "broadcastTransaction" }
 	| { input: ScanInput; op: "scan" | "scanAndRead" }
 	| { input: ReadActivityInput; op: "readActivity" };
 
@@ -75,6 +77,17 @@ async function requestScan(payload: OffscreenRequestPayload): Promise<OffscreenS
  */
 export function createOffscreenScanClient(): SyncWorkerClient {
 	return {
+		async broadcastTransaction(input) {
+			const response = await requestScan({ input, op: "broadcastTransaction" });
+
+			if (!response.ok) throw new Error(response.error);
+
+			if (response.op !== "broadcastTransaction") {
+				throw new Error("Unexpected offscreen scan response.");
+			}
+
+			return { txid: response.txid };
+		},
 		async broadcast(input) {
 			const response = await requestScan({ input, op: "broadcast" });
 

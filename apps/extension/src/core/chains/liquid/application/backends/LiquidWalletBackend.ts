@@ -32,7 +32,29 @@ export type LiquidWalletAccount = {
 	 * group (the default account) leave it undefined, and the snapshot lookup is simply skipped.
 	 */
 	accountGroupId?: AccountGroupId;
+	/**
+	 * The BIP-85 index this account's keys derive at, threaded from the resolve input.
+	 *
+	 * Group 0 is the master seed's own account; group N derives a child mnemonic at N. Carried
+	 * out of resolution so a caller that needs the account's own key material can derive it
+	 * without re-deciding which group it is looking at — two places deciding that is two places
+	 * that can decide it differently.
+	 */
+	accountGroupIndex?: number;
 	accountIdentifier: string;
+	/**
+	 * Which of the wallet's key sources this account's seed came from.
+	 *
+	 * Carried out of resolution beside the group index, and for the same reason: a caller that
+	 * needs the account's own key material has to derive it from the source this account was
+	 * resolved against. A session may authorise a group whose seed is not the local root, and a
+	 * signer built without this would sign from the local root instead — a valid signature, by
+	 * the wrong key, over a transaction a person approved for a different account.
+	 *
+	 * Absent for an account resolved against the local root, which is what leaving it unset
+	 * already means everywhere it is read.
+	 */
+	keySourceId?: KeySourceId;
 	chain: LiquidChainRecord;
 	chainId: LiquidChainId;
 	/** The watch-only descriptor string — safe to hand to the scan worker (no keys). */
@@ -123,11 +145,37 @@ export type LiquidWalletBackend = {
 	getActivity: (account: LiquidWalletAccount, rawAssetId: string) => LiquidActivityEntry[];
 	getBalance: (account: LiquidWalletAccount, rawAssetId: string) => string;
 	getReceiveAddress: (account: LiquidWalletAccount) => { address: string; index: number };
+	/**
+	 * The address a contract action can spend from, which is not the one shown for receiving.
+	 *
+	 * The signing module derives a single key at the account's first external address and signs
+	 * every wallet input with it, so that address is the whole of what a contract action can be
+	 * funded from. An output paid back to this wallet anywhere else is money this path cannot
+	 * spend again — and every protocol that hands a token back expects to spend it next.
+	 */
+	getSigningAddress: (account: LiquidWalletAccount) => { address: string; index: number };
 	getDescriptorEntries: (
 		account: LiquidWalletAccount,
 		params: LiquidGetWalletDescriptorParams,
 	) => Promise<LiquidWalletDescriptorEntry[]>;
 	getUtxos: (account: LiquidWalletAccount, rawAssetId: string) => LiquidUTXO[];
+	/**
+	 * The wallet's unspent outputs that hide nothing.
+	 *
+	 * Separate from `getUtxos` because the chain library does not report these as the wallet's
+	 * at all, and because only one path can use them: a contract action cannot spend an output
+	 * whose amount is hidden, since the signing module is handed an outpoint and its bytes and
+	 * nothing that could unblind it.
+	 */
+	getExplicitUtxos: (account: LiquidWalletAccount, rawAssetId: string) => LiquidUTXO[];
+	/**
+	 * How high the chain is, as the wallet's own scan reached it.
+	 *
+	 * A covenant branch guarded by a lock height reads the transaction's locktime, and the
+	 * wallet has to declare one. Answered from the scan rather than from an endpoint, because a
+	 * plain chain-tip route is not universal across the backends this wallet supports.
+	 */
+	getTipHeight: (account: LiquidWalletAccount) => number;
 	inspectTransfer: (
 		account: LiquidWalletAccount,
 		params: LiquidSendTransferParams,
