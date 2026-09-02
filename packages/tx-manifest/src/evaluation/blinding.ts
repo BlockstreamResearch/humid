@@ -110,3 +110,47 @@ function byPrecedence(input: { declared?: unknown; documentDefault?: unknown }):
 	// so there is no second branch to write rather than a branch left unwritten.
 	return { blinding: "hidden", decidedBy: "chain" };
 }
+
+/** How a refusal says whose word made this output one the wallet cannot build. */
+export function describeBlinding(decision: BlindingDecision): string {
+	return sentenceFor(decision.decidedBy);
+}
+
+/**
+ * What a person is told when this wallet published a contract's change.
+ *
+ * It leads with the word that was set aside, in that word's own sentence, and then says
+ * plainly that the wallet published the amount anyway and what that bought. Anything shorter
+ * would let the wallet override a protocol in exactly the place the person was told to trust
+ * the wallet's reading of it.
+ */
+export function describePublishedChange(overrode?: BlindingWord): string {
+	return overrode === undefined
+		? sentenceFor("spendable-change")
+		: `${sentenceFor(overrode)}, and this wallet publishes it anyway so your next action can spend it`;
+}
+
+/** The one sentence each word gets, so a word cannot be described two ways in two places. */
+function sentenceFor(word: BlindingWord): string {
+	switch (word) {
+		case "document": {
+			return "this protocol hides its outputs by default";
+		}
+
+		case "output": {
+			return "this protocol asks for it to be hidden";
+		}
+
+		case "spendable-change": {
+			return "this wallet publishes a contract's change so your next action can spend it";
+		}
+
+		case "unblindable": {
+			return "this output's own contract has to read the amount";
+		}
+
+		default: {
+			return "nothing says otherwise and this network hides an output by default";
+		}
+	}
+}

@@ -1,6 +1,7 @@
 import { baseUnits } from "../chain/baseUnits";
 import type { ReadFeeRate, ReadTxOut } from "../chain/chainRead";
 import { byOutpoint, outpointKey } from "../chain/outpoint";
+import { type ConfirmationModel, confirmationModel, type ReviewedPlan } from "../confirmation";
 import {
 	type CompileCovenant,
 	type ContractParamTypesOf,
@@ -48,6 +49,7 @@ import { planAction } from "../evaluation/plan";
 import { checkPositions, type StatedPosition } from "../evaluation/positions";
 import { checkValidations } from "../evaluation/validate";
 import { resolveStaticWitnesses } from "../evaluation/witness";
+import { estimateFeeSats } from "../fee";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { resolveActionRequirements } from "../request/requirements";
 import { type AssetHoldings, fundAssets } from "./assetFunding";
@@ -114,6 +116,21 @@ export type ReviewedOutput = {
 };
 
 /**
+ * What one asset this transaction moves does to the wallet's own balance.
+ *
+ * One of these per asset rather than one figure for the transaction, because a figure for the
+ * transaction can only be written by adding assets together, and assets do not add. A person
+ * approving a swap is agreeing to two different sentences at once, and both have to be on the
+ * screen for either to be true.
+ */
+export type AssetMovement = {
+	/** The asset, by the id the chain knows it as. */
+	asset: string;
+	/** Base units this wallet's balance changes by, negative when it is paying out. */
+	sats: bigint;
+};
+
+/**
  * Everything the wallet established, worked out and decided — before anyone approves it.
  *
  * An exact plan rather than a transaction: nothing here is a builder, a handle or an encoding,
@@ -156,6 +173,14 @@ export type ManifestReview = {
 	 * action reads none. Absent for an action declared at the top level.
 	 */
 	boundTo?: string;
+	/**
+	 * Everything the person is shown, with every value's origin attached.
+	 *
+	 * Built here rather than at the surface because this is where what the wallet established
+	 * is known — a surface handed plain values would have to guess which of them were the
+	 * site's word, and guessing is the failure the provenance exists to prevent.
+	 */
+	confirmation: ConfirmationModel;
 	covenants: CovenantFinding[];
 	/**
 	 * The deployment this action brings into existence, when it creates one.
@@ -168,6 +193,14 @@ export type ManifestReview = {
 	 * fields are covenant script hashes — compiler output that nothing but a wallet can produce.
 	 */
 	createdInstance?: CreatedInstance;
+	/**
+	 * What the wallet worked out this will cost, from the shape of the transaction it planned.
+	 *
+	 * An estimate rather than the charged figure, and the two differ: the fee that is charged
+	 * comes from the weight of the signed transaction, which does not exist until after the
+	 * person agrees. The difference returns to them as change.
+	 */
+	estimatedFeeSats: bigint;
 	/** What the wallet will pay, established from the chain rather than from the request. */
 	feeRateSatsPerKvb: number;
 	/**
@@ -178,6 +211,14 @@ export type ManifestReview = {
 	 * the transaction actually spends or to one considered and dropped.
 	 */
 	issuances: PlannedIssuance[];
+	/**
+	 * What this action does to the wallet's balance, one asset at a time.
+	 *
+	 * Worked out here because here is where what the covenants hold, what the outputs cost and
+	 * what the wallet put in are all known at once. A surface handed the outputs alone would
+	 * have to add up assets to reach a single number, which is a sum that cannot be written.
+	 */
+	movements: AssetMovement[];
 	/** Legacy spellings the document used, so the generation it came from can be reported. */
 	normalisation: NormalisationNote[];
 	outputs: ReviewedOutput[];
@@ -239,6 +280,14 @@ export function isRefusal(result: ReviewManifestActionResult): result is ReviewR
 export async function reviewManifestAction(
 	request: ParsedLiquidProcessCtParams,
 	input: {
+		/**
+		 * How the wallet names the account that is acting, in that wallet's own terms.
+		 *
+		 * Supplied rather than derived, because which account is acting is the caller's fact and
+		 * this package holds no keys and no accounts. It is shown because it is otherwise the one
+		 * thing on the screen nobody stated: the wallet chose it by choosing the outputs.
+		 */
+		accountLabel: string;
 		compile: CompileCovenant;
 		/**
 		 * The version of SimplicityHL standing behind `compile`, when the caller knows it.
@@ -944,6 +993,14 @@ export async function reviewManifestAction(
 	const outputs: ReviewedOutput[] = [];
 	/** Where each declared output lands, which is not its declared position once one is dropped. */
 	const outputAt = new Map<string, number>();
+	/**
+	 * What each asset's outputs pay back to this wallet, which its balance change adds back.
+	 *
+	 * An output the action declares is counted as paid out by the ledger whoever it pays, so one
+	 * paying this wallet has to be added again or the balance reads as a loss the wallet never
+	 * took. Change is not among them: change is already the difference between the two.
+	 */
+	const returned = new Map<string, bigint>();
 
 	for (const [at, planned] of plan.plan.outputs.entries()) {
 		const asset = ledger.outputs[at] ?? policyAsset;
@@ -994,6 +1051,10 @@ export async function reviewManifestAction(
 				refused: true,
 				reject: "covenant-mismatch",
 			};
+		}
+
+		if (planned.target.kind === "wallet") {
+			returned.set(asset, (returned.get(asset) ?? 0n) + planned.sats);
 		}
 
 		outputAt.set(planned.id, outputs.length);
@@ -1179,20 +1240,71 @@ export async function reviewManifestAction(
 
 	const selected = placement.order;
 
-	return {
+	/**
+	 * What a transaction of this shape costs at the rate the chain quoted.
+	 *
+	 * Worked out from the shape that was actually planned rather than from a draft of one. The
+	 * reference implementation plans twice — once against a fee of zero to learn the shape, then
+	 * against what that shape costs — because an amount there may be written as a function of the
+	 * fee. Nothing in this runtime can be: an expression naming the fee is refused where it is
+	 * evaluated, so the shape does not depend on the figure and one pass settles both.
+	 *
+	 * An estimate, and it is not what gets charged. The signing module does not estimate — it
+	 * signs and weighs the result — so before approval there is a model and after it a
+	 * measurement. The difference returns to the person as change, which is why the model
+	 * over-states rather than under-states.
+	 */
+	const estimatedFeeSats = estimateFeeSats(
+		{
+			covenantInputs: covenants.filter((found) => found.role === "spent").length,
+			// A surcharge on an input already counted rather than an input of its own: an
+			// issuance sits on one, and the outputs it derives from were committed to above.
+			issuingInputs: issued.issuances.length,
+			outputs: outputs.length,
+			walletInputs: selected.length,
+		},
+		feeRateSatsPerKvb,
+	);
+
+	// What each asset does to this wallet's balance: what the transaction brings in it, less
+	// what the action pays out of it, plus what comes back — and the fee, in the one asset the
+	// network charges it in. Change is not added: it is already the difference between the two.
+	const movements: AssetMovement[] = ledger.entries.map((entry) => ({
+		asset: entry.asset,
+		sats:
+			entry.held -
+			entry.needed +
+			(returned.get(entry.asset) ?? 0n) -
+			(entry.asset === policyAsset ? estimatedFeeSats : 0n),
+	}));
+
+	const reviewed: ReviewedPlan = {
 		action: request.action,
 		...(action.boundTo === undefined ? {} : { boundTo: action.boundTo }),
 		changeBlinded,
 		...(changeOverrode === undefined ? {} : { changeOverrode }),
 		covenants,
 		...(created === undefined ? {} : { createdInstance: created.instance }),
+		estimatedFeeSats,
 		feeRateSatsPerKvb,
 		issuances: issued.issuances,
+		movements,
 		normalisation: notes,
 		outputs,
 		policyAsset,
 		protocol: manifest.protocol ?? "",
 		selected,
+	};
+
+	// The model is a reading of everything above, so it is derived from the finished plan rather
+	// than written beside it. The plan is complete without it and never carries a stand-in for
+	// it: there is no moment where a `ManifestReview` exists holding a confirmation nobody built.
+	return {
+		...reviewed,
+		confirmation: confirmationModel(reviewed, manifest, action, {
+			accountLabel: input.accountLabel,
+			policyAsset: input.policyAsset,
+		}),
 	};
 }
 
