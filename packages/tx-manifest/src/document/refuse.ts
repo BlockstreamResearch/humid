@@ -2,6 +2,7 @@ import { STATIC_WITNESS } from "../evaluation/witness";
 import { asArray, asRecord } from "./json";
 import type { NormalisedManifest } from "./normalise";
 import { inspectConstructs, loadBearing } from "./registry";
+import { contractSourcePaths } from "./sites";
 
 /**
  * What a refusal is called, so that a program can tell two of them apart.
@@ -104,6 +105,138 @@ export function refuseUnsupported(
 		refuseUnproducibleWitness(manifest) ??
 		refuseUnbuildableUtxoType(manifest)
 	);
+}
+
+/**
+ * The refusals a document can be checked for on its own, and the ones it cannot.
+ *
+ * The split is a fact about which inputs each check needs, not a judgement about which matter.
+ * Everything in the second list is decided against money, a chain, a fee rate or a filled
+ * request, so a reader who has only the document has not been told those are fine — they have
+ * been told nothing about them, and any surface reporting the first list has to say so or it
+ * reads as a verdict it did not reach.
+ *
+ * `unreadable-build-mode` is in the first list although `refuseUnsupported` does not raise it:
+ * the mode is read by the normaliser and refused on by the review once it has found an action,
+ * and what makes it document-decidable is that the document is the only thing it reads.
+ * `foreign-asset` is in the second although a document names assets, because this wallet funds
+ * each asset on its own and the assets a document states are lookups resolved against a
+ * deployment and a request — which is where that refusal is raised.
+ */
+export const DOCUMENT_ONLY_REJECTS = [
+	"foreign-chain",
+	"unimplemented-construct",
+	"unrecognised-construct",
+	"foreign-compiler",
+	"unproducible-witness",
+	"unbuildable-utxo-type",
+	"unreadable-build-mode",
+] as const satisfies readonly RejectToken[];
+
+export const NEEDS_MORE_THAN_THE_DOCUMENT_REJECTS = [
+	"foreign-asset",
+	"incomplete-request",
+	"no-such-action",
+	"no-utxo-to-spend",
+	"chain-read-failed",
+	"covenant-mismatch",
+	"no-fee-rate",
+	"no-funds-at-signing-address",
+	"shortfall",
+	"unbuildable-position",
+	"document-fault",
+	"built-something-else",
+] as const satisfies readonly RejectToken[];
+
+/**
+ * A check that ran against less than declares it, and what went unread.
+ *
+ * Between "not checked" and "checked" there is a third answer, and leaving it out is how a
+ * surface comes to report a check as done when half of it never happened. Only the compiler
+ * check can be in this state today, because it is the only one declared in two places.
+ */
+export type PartialCheck = {
+	reject: RejectToken;
+	/** What the caller did not supply, named the way the document names it. */
+	unread: string[];
+};
+
+/**
+ * The same refusals as {@link refuseUnsupported}, for a reader who is not a wallet.
+ *
+ * All but one need nothing beyond the document. The compiler check needs the version a wallet
+ * ships, and a caller holding none gets it skipped rather than answered — passing a stand-in
+ * would turn "not checked" into "checked and fine", which is the one thing this must not do.
+ *
+ * That check has a third outcome, because it reads two places: the document's own declared
+ * version, and a `simc` directive inside each contract source. Given the version and not the
+ * sources it answers for the first and cannot answer for the second, so it reports which
+ * sources went unread rather than letting a half-answer stand as a whole one. A document
+ * referencing no contracts has nothing unread and is answered in full.
+ *
+ * The build mode is checked here although `refuseUnsupported` leaves it to the review, which
+ * refuses on it once it has found an action. Nothing about that reading needs an action — the
+ * normaliser has already done it — and omitting it here would report a document as clean that
+ * the wallet refuses the moment it is asked to do anything with it.
+ *
+ * Deliberately not a parameter of `refuseUnsupported`: a wallet always holds a request, and an
+ * optional field on the wallet's own path is an invitation to omit one there.
+ */
+export function refuseFromDocumentAlone(
+	manifest: NormalisedManifest,
+	input: {
+		compilerVersion?: string;
+		contractSources?: Record<string, string>;
+	},
+): { partial: PartialCheck[]; refusal: Refusal | undefined; skipped: RejectToken[] } {
+	const skipped: RejectToken[] = [];
+	const partial: PartialCheck[] = [];
+
+	const compiler =
+		input.compilerVersion === undefined
+			? undefined
+			: refuseForeignCompiler(manifest, {
+					compilerVersion: input.compilerVersion,
+					contractSources: input.contractSources ?? {},
+				});
+
+	if (input.compilerVersion === undefined) {
+		skipped.push("foreign-compiler");
+	} else {
+		const supplied = input.contractSources ?? {};
+		const unread = contractSourcePaths(manifest).filter((path) => !(path in supplied));
+
+		if (unread.length > 0) {
+			partial.push({ reject: "foreign-compiler", unread });
+		}
+	}
+
+	return {
+		partial,
+		refusal:
+			refuseForeignChain(manifest) ??
+			refuseUnrecognisedConstruct(manifest) ??
+			compiler ??
+			refuseUnproducibleWitness(manifest) ??
+			refuseUnbuildableUtxoType(manifest) ??
+			refuseUnreadableBuildMode(manifest),
+		skipped,
+	};
+}
+
+/**
+ * A declared build mode that is neither on nor off says nothing this wallet can follow.
+ *
+ * The reading itself belongs to the normaliser, which does it for every document whether or
+ * not anyone asks; this is that reading stated as the refusal the review raises from it, so a
+ * document inspected offline and the same document handed to a wallet agree.
+ */
+function refuseUnreadableBuildMode(manifest: NormalisedManifest): Refusal | undefined {
+	if (manifest.buildMode.ok) {
+		return undefined;
+	}
+
+	return { reason: manifest.buildMode.reason, reject: "unreadable-build-mode" };
 }
 
 /**
