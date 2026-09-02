@@ -47,6 +47,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
+      # This checkout has no submodules and Storybook imports neither wasm package, so the
+      # two local `file:` dependencies are given a package at their path rather than built.
+      # Without one at `smplx/crates/wasm/pkg`, `bun install` cannot resolve the workspace.
+      - name: Prepare unused wasm dependencies
+        run: |
+          mkdir -p lwk/lwk_wasm/pkg smplx/crates/wasm/pkg
+          printf '{"name":"lwk_wasm","version":"0.0.0","type":"module"}\n' > lwk/lwk_wasm/pkg/package.json
+          printf '{"name":"smplx-wasm","version":"0.0.0","type":"module"}\n' > smplx/crates/wasm/pkg/package.json
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
