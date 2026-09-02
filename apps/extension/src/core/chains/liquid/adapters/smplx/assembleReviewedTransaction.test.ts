@@ -88,6 +88,10 @@ const FEE_OUT = outputBytes("", { sats: 300n });
 const COVENANT_OUT = outputBytes(COVENANT_SCRIPT, { sats: 50_000n });
 /** What is left over, returned to the script the caller named. */
 const CHANGE_OUT = outputBytes(CHANGE_SCRIPT, { sats: 900n });
+/** What a spend of the covenant pays back to this wallet. */
+const RECEIVED_OUT = outputBytes(WALLET_SCRIPT, { sats: 50_000n });
+/** The transaction the covenant this wallet spends sits in. */
+const COVENANT_TXID = "e".repeat(64);
 
 function signedHex(spends: Parameters<typeof txIn>[0][], outs: string[]): string {
 	const inputCount = spends.length.toString(16).padStart(2, "0");
@@ -111,6 +115,19 @@ const TXOUT_HEX = `01${"49".repeat(32)}0100000000000186a000160014${"00".repeat(2
 
 type Recorded = {
 	changes: { blindingKey: string | null | undefined; script: string }[];
+	/** Every covenant input added, with all nine values the module is given for it. */
+	covenants: {
+		argumentsJson: string | undefined;
+		extraLeavesJson: string | undefined;
+		includeDebugSymbols: boolean | undefined;
+		issued?: { assetAmountSats: bigint; inflationAmountSats: bigint };
+		signatureWitness: string | undefined;
+		source: string;
+		txOutHex: string;
+		txid: string;
+		vout: number;
+		witnessJson: string | undefined;
+	}[];
 	freed: number;
 	/** How many issuance reports were released, which must match how many were handed over. */
 	freedReports: number;
@@ -128,6 +145,8 @@ type Recorded = {
 		sats: bigint;
 		script: string;
 	}[];
+	locktimes: number[];
+	sequences: number[];
 	spends: { txOut: string; txid: string; vout: number }[];
 };
 
@@ -200,6 +219,71 @@ function substitute(
 					reissuanceTokenId: reports.reissuanceToken ?? ISSUED.reissuanceToken,
 				};
 			}
+			addCovenantInput(
+				txid: string,
+				vout: number,
+				txOutHex: string,
+				source: string,
+				argumentsJson?: string,
+				witnessJson?: string,
+				signatureWitness?: string,
+				extraLeavesJson?: string,
+				includeDebugSymbols?: boolean,
+			) {
+				recorded.covenants.push({
+					argumentsJson,
+					extraLeavesJson,
+					includeDebugSymbols,
+					signatureWitness,
+					source,
+					txOutHex,
+					txid,
+					vout,
+					witnessJson,
+				});
+			}
+			addCovenantIssuanceInput(
+				txid: string,
+				vout: number,
+				txOutHex: string,
+				source: string,
+				argumentsJson: string | undefined,
+				witnessJson: string | undefined,
+				signatureWitness: string | undefined,
+				assetAmountSats: bigint,
+				inflationAmountSats: bigint,
+				_issuerContractHex: string | undefined,
+				extraLeavesJson?: string,
+				includeDebugSymbols?: boolean,
+			) {
+				recorded.covenants.push({
+					argumentsJson,
+					extraLeavesJson,
+					includeDebugSymbols,
+					issued: { assetAmountSats, inflationAmountSats },
+					signatureWitness,
+					source,
+					txOutHex,
+					txid,
+					vout,
+					witnessJson,
+				});
+
+				return {
+					assetId: reports.asset ?? ISSUED.asset,
+					entropy: reports.entropy ?? ISSUED.entropy,
+					free: () => {
+						recorded.freedReports += 1;
+					},
+					reissuanceTokenId: reports.reissuanceToken ?? ISSUED.reissuanceToken,
+				};
+			}
+			setLocktimeHeight(height: number) {
+				recorded.locktimes.push(height);
+			}
+			setSequence(sequence: number) {
+				recorded.sequences.push(sequence);
+			}
 			// Held across the wasm boundary, so the module under test releases it. A substitute
 			// without this passes only because nothing checked that it was released.
 			free() {
@@ -212,7 +296,43 @@ function substitute(
 /** What this module needs of the SDK, which is what it states for itself. */
 type SmplxModule = { TransactionBuilder: new () => AssemblingBuilder };
 
+/**
+ * The wallet's own output every case funds from, and the order that has only it in it.
+ *
+ * `selected` says which outputs the transaction spends and `inputOrder` says in which order,
+ * and once a covenant is in the transaction the two are different lists. A helper that derived
+ * one from the other would make it impossible to write the case where they disagree.
+ */
+const WALLET_UTXO = {
+	amount: "1000000",
+	spendable: true,
+	txOut: TXOUT_HEX,
+	txid: "c".repeat(64),
+	vout: 0,
+};
+
+/**
+ * The plan, with the order defaulted from the selection unless a case states one.
+ *
+ * A case about which of the wallet's outputs get added says so by overriding `selected`, and
+ * the order it is added in follows. A case about the order itself states `inputOrder` outright,
+ * which is the only way to write one where the two disagree.
+ */
 function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
+	const built = plan(overrides);
+
+	return overrides.inputOrder === undefined
+		? {
+				...built,
+				inputOrder: [
+					...built.covenantInputs.map((covenant) => ({ covenant, source: "covenant" as const })),
+					...built.selected.map((utxo) => ({ source: "wallet" as const, utxo })),
+				],
+			}
+		: built;
+}
+
+function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 	return {
 		action: "Pay",
 		// What a person would be shown, which this module never reads: it builds from the plan.
@@ -229,6 +349,8 @@ function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
 			protocol: fromSite("p2pk-simplicity"),
 			publishedAmounts: [],
 		},
+		covenantInputs: [],
+		inputOrder: [{ source: "wallet", utxo: WALLET_UTXO }],
 		covenants: [
 			{
 				address: "tex1p_derived",
@@ -258,9 +380,7 @@ function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
 		],
 		policyAsset: ASSET,
 		protocol: "p2pk-simplicity",
-		selected: [
-			{ amount: "1000000", spendable: true, txOut: TXOUT_HEX, txid: "c".repeat(64), vout: 0 },
-		],
+		selected: [WALLET_UTXO],
 		...overrides,
 	};
 }
@@ -286,10 +406,13 @@ function subject(
 ) {
 	const recorded: Recorded = {
 		changes: [],
+		covenants: [],
 		freed: 0,
 		freedReports: 0,
 		issues: [],
+		locktimes: [],
 		outputs: [],
+		sequences: [],
 		spends: [],
 	};
 
@@ -420,10 +543,13 @@ describe("assembleReviewedTransaction", () => {
 		test("releases the builder when an output the module will not take throws", async () => {
 			const recorded: Recorded = {
 				changes: [],
+				covenants: [],
 				freed: 0,
 				freedReports: 0,
 				issues: [],
+				locktimes: [],
 				outputs: [],
+				sequences: [],
 				spends: [],
 			};
 			const smplx = substitute(recorded);
@@ -447,10 +573,13 @@ describe("assembleReviewedTransaction", () => {
 		test("releases the builder when the change script is refused", async () => {
 			const recorded: Recorded = {
 				changes: [],
+				covenants: [],
 				freed: 0,
 				freedReports: 0,
 				issues: [],
+				locktimes: [],
 				outputs: [],
+				sequences: [],
 				spends: [],
 			};
 			let finalized = 0;
@@ -807,36 +936,253 @@ describe("assembleReviewedTransaction", () => {
 		});
 	});
 
-	describe("what it will not build", () => {
-		// Receive spends the covenant, and this wallet has neither the amount reference its
-		// output needs nor the signing witness its spend needs. Building the rest of it would be
-		// a transaction the covenant refuses at execution, after a person approved it.
-		test("refuses an action that spends a covenant rather than building part of it", async () => {
-			const { assemble, recorded } = subject({
-				action: "Receive",
-				covenants: [
-					{
-						address: "tex1p_derived",
-						...COVENANT_BUILD,
-						role: "spent",
-						scriptPubKeyHex: COVENANT_SCRIPT,
-						utxoType: "p2pk_output",
-						verified: "matches-chain",
-					},
+	describe("an action that spends a covenant", () => {
+		/** What the review established about the covenant, as a builder is handed it. */
+		const covenantInput = {
+			argumentsJson: COVENANT_BUILD.argumentsJson,
+			extraLeavesJson: COVENANT_BUILD.extraLeavesJson,
+			id: "p2pk_in",
+			includeDebugSymbols: COVENANT_BUILD.includeDebugSymbols,
+			signatureWitness: "SIGNATURE",
+			source: COVENANT_BUILD.source,
+			txOutHex: TXOUT_HEX,
+			txid: COVENANT_TXID,
+			utxoType: "p2pk_output",
+			vout: 1,
+		};
+		const spendingPlan = (overrides: Partial<ManifestReview> = {}): Partial<ManifestReview> => ({
+			action: "Receive",
+			covenantInputs: [covenantInput],
+			covenants: [
+				{
+					address: "tex1p_derived",
+					...COVENANT_BUILD,
+					role: "spent",
+					scriptPubKeyHex: COVENANT_SCRIPT,
+					utxoType: "p2pk_output",
+					verified: "matches-chain",
+				},
+			],
+			outputs: [
+				{
+					asset: ASSET,
+					blinded: false,
+					decidedBy: "unblindable",
+					id: "received_out",
+					sats: 50_000n,
+					scriptPubKeyHex: WALLET_SCRIPT,
+				},
+			],
+			...overrides,
+		});
+		/** The finished transaction for a spend: the covenant input first, then the wallet's. */
+		const spent = () =>
+			signed(
+				[
+					{ txid: COVENANT_TXID, vout: 1 },
+					{ txid: "c".repeat(64), vout: 0 },
 				],
-			});
+				[RECEIVED_OUT, CHANGE_OUT, FEE_OUT],
+			);
 
-			const result = await assemble();
+		// All nine values, because every one of them decides the script the covenant locks to or
+		// what satisfies it. Sending the source and the parameters alone builds a different
+		// contract than the one the review checked against the chain, and the covenant refuses
+		// its own spend at execution — after a person has approved.
+		test("hands the module everything the review verified the covenant under", async () => {
+			const { assemble, recorded } = subject(spendingPlan(), spent);
 
-			expect(result).toMatchObject({ ok: false });
-			expect(recorded.spends).toEqual([]);
-			expect(recorded.outputs).toEqual([]);
-
-			if (!result.ok) {
-				expect(result.reason).toContain("p2pk_output");
-			}
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.covenants).toEqual([
+				{
+					argumentsJson: COVENANT_BUILD.argumentsJson,
+					extraLeavesJson: "[]",
+					includeDebugSymbols: false,
+					signatureWitness: "SIGNATURE",
+					source: COVENANT_BUILD.source,
+					txOutHex: TXOUT_HEX,
+					txid: COVENANT_TXID,
+					vout: 1,
+					witnessJson: undefined,
+				},
+			]);
 		});
 
+		// A covenant with more than one branch is told which to run by a witness the document
+		// states outright. It crosses as the compiler's own shape — a type and a literal, both
+		// text — because the compiler is what parses SimplicityHL and this module is not.
+		test("passes the stated witness values through as the compiler's own shape", async () => {
+			const { assemble, recorded } = subject(
+				spendingPlan({
+					covenantInputs: [
+						{
+							...covenantInput,
+							witnessValues: [
+								{ name: "BRANCH", simplicityType: "Either<(), ()>", value: "Left(())" },
+							],
+						},
+					],
+				}),
+				spent,
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.covenants[0]?.witnessJson).toBe(
+				JSON.stringify({ BRANCH: { type: "Either<(), ()>", value: "Left(())" } }),
+			);
+		});
+
+		// Only the signer can make a signature, and naming the witness is what asks for one.
+		// A covenant that needs none must not be told to fill one that does not exist.
+		test("asks for no signature where the document declares none", async () => {
+			const { assemble, recorded } = subject(
+				spendingPlan({
+					covenantInputs: [{ ...covenantInput, signatureWitness: undefined }],
+				}),
+				spent,
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.covenants[0]?.signatureWitness).toBeUndefined();
+		});
+
+		// A contract asserting its own index will not run against a transaction built the other
+		// way, and nothing after signing could say why. So the order is the plan's, not this
+		// module's habit of adding every covenant first.
+		test("adds the inputs in the order the plan states, not covenants first", async () => {
+			const { assemble, recorded } = subject(
+				spendingPlan({
+					inputOrder: [
+						{ source: "wallet", utxo: WALLET_UTXO },
+						{ covenant: covenantInput, source: "covenant" },
+					],
+				}),
+				() =>
+					signed(
+						[
+							{ txid: "c".repeat(64), vout: 0 },
+							{ txid: COVENANT_TXID, vout: 1 },
+						],
+						[RECEIVED_OUT, CHANGE_OUT, FEE_OUT],
+					),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.spends).toHaveLength(1);
+			expect(recorded.covenants).toHaveLength(1);
+		});
+
+		// An action whose covenant already holds everything its outputs cost is funded entirely
+		// by the covenant it spends. Refusing that for holding none of the wallet's own outputs
+		// would refuse the ordinary case of a protocol paying itself out.
+		test("builds an action funded entirely by the covenant it spends", async () => {
+			const { assemble, recorded } = subject(
+				spendingPlan({
+					inputOrder: [{ covenant: covenantInput, source: "covenant" }],
+					selected: [],
+				}),
+				() => signed([{ txid: COVENANT_TXID, vout: 1 }], [RECEIVED_OUT, CHANGE_OUT, FEE_OUT]),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.spends).toEqual([]);
+			expect(recorded.covenants).toHaveLength(1);
+		});
+
+		test("refuses when there is nothing funding it at all", async () => {
+			const { assemble } = subject(spendingPlan({ inputOrder: [], selected: [] }));
+
+			expect(await assemble()).toMatchObject({ ok: false });
+		});
+
+		// The lock height and the sequence are facts about the transaction rather than about any
+		// one input, and a branch guarded by a lock height reads the locktime this sets.
+		test("declares the locktime and the sequence the plan carries", async () => {
+			const { assemble, recorded } = subject(
+				spendingPlan({ locktimeHeight: 3_210_987, sequence: 4_294_967_294 }),
+				spent,
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.locktimes).toEqual([3_210_987]);
+			expect(recorded.sequences).toEqual([4_294_967_294]);
+		});
+
+		test("declares neither where the plan carries neither", async () => {
+			const { assemble, recorded } = subject(spendingPlan(), spent);
+
+			await assemble();
+
+			expect(recorded.locktimes).toEqual([]);
+			expect(recorded.sequences).toEqual([]);
+		});
+
+		// The guard reads the finished transaction's own bytes rather than this module's account
+		// of what it asked for. A covenant input the action required and the bytes do not carry
+		// is a transaction nobody agreed to.
+		test("refuses when the finished transaction does not spend the covenant", async () => {
+			const { assemble } = subject(spendingPlan(), () =>
+				signed([{ txid: "c".repeat(64), vout: 0 }], [RECEIVED_OUT, CHANGE_OUT, FEE_OUT]),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: false, reject: "built-something-else" });
+		});
+
+		test("releases the builder even when the guard refuses what came back", async () => {
+			const { assemble, recorded } = subject(spendingPlan(), () =>
+				signed([{ txid: "c".repeat(64), vout: 0 }], [RECEIVED_OUT, CHANGE_OUT, FEE_OUT]),
+			);
+
+			await assemble();
+
+			expect(recorded.freed).toBe(1);
+		});
+
+		// A covenant can issue an asset on the input that spends it, and the module has one call
+		// that does both. Added twice it would spend the same output twice, which is not a
+		// transaction at all.
+		test("adds a covenant that also issues exactly once, through the one call that does both", async () => {
+			const { assemble, recorded } = subject(
+				spendingPlan({
+					issuances: [{ ...plannedIssuance(), outpoint: { txid: COVENANT_TXID, vout: 1 } }],
+				}),
+				() =>
+					signed(
+						[
+							{ issuance: true, txid: COVENANT_TXID, vout: 1 },
+							{ txid: "c".repeat(64), vout: 0 },
+						],
+						[RECEIVED_OUT, CHANGE_OUT, FEE_OUT],
+					),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.covenants).toHaveLength(1);
+			expect(recorded.covenants[0]?.issued).toEqual({
+				assetAmountSats: 1000n,
+				inflationAmountSats: 0n,
+			});
+			expect(recorded.issues).toEqual([]);
+			// The report is a handle across the wasm boundary, so it is released whatever it said.
+			expect(recorded.freedReports).toBe(1);
+		});
+
+		test("refuses when the module derives a different asset than the wallet did", async () => {
+			const { assemble, recorded } = subject(
+				spendingPlan({
+					issuances: [{ ...plannedIssuance(), outpoint: { txid: COVENANT_TXID, vout: 1 } }],
+				}),
+				spent,
+				{ reports: { asset: "d".repeat(64) } },
+			);
+
+			expect(await assemble()).toMatchObject({ ok: false, reject: "built-something-else" });
+			expect(recorded.freedReports).toBe(1);
+			expect(recorded.freed).toBe(1);
+		});
+	});
+
+	describe("what it will not build", () => {
 		test("refuses when nothing of the wallet's funds it", async () => {
 			const { assemble } = subject({ selected: [] });
 

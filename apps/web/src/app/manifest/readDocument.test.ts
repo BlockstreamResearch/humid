@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
 import dexManifest from "@humid/tx-manifest/fixtures/current/dex.manifest.json";
 import lastWillManifest from "@humid/tx-manifest/fixtures/current/last_will.manifest.json";
 import lendingV2Manifest from "@humid/tx-manifest/fixtures/current/lending_v2.manifest.json";
@@ -61,26 +62,14 @@ describe("what the textarea currently holds", () => {
 		expect(result.unreachable).toContain("foreign-asset");
 	});
 
-	test("never asks for the check it holds no value for", () => {
+	// The compiler version is no longer something this page waits to be told. It reads the one
+	// constant this repository ships, which is the one the extension reads, so the check runs
+	// on a document that references no contracts rather than being reported as unrun.
+	test("answers the compiler check from the version this repository ships", () => {
 		const result = read('{ "chain": "liquid" }');
 
-		// This page holds no wallet, so it holds no compiler version until a person types one —
-		// and it reports that rather than supplying a stand-in, which would turn "not checked"
-		// into "checked and fine". This document references no contracts, so nothing is partial.
-		expect(result.skipped).toEqual(["foreign-compiler"]);
+		expect(result.skipped).toEqual([]);
 		expect(result.partial).toEqual([]);
-	});
-
-	test("stops reporting the compiler check as unrun once a version is given", () => {
-		expect(read('{ "chain": "liquid" }', { compilerVersion: "0.4.0" }).skipped).toEqual([]);
-	});
-
-	// A blank box is not an answer. Treating one as a version would refuse every document that
-	// declares any version at all, which is the failure this page exists to prevent.
-	test("a blank version is no version, not an empty one", () => {
-		expect(read('{ "chain": "liquid" }', { compilerVersion: "  " }).skipped).toEqual([
-			"foreign-compiler",
-		]);
 	});
 });
 
@@ -93,8 +82,8 @@ describe("the compiler check, which is declared in two places", () => {
 		expect(read(document).contracts).toEqual(["./last_will.simf"]);
 	});
 
-	test("with a version and no sources, says the contracts went unread", () => {
-		const result = read(document, { compilerVersion: "0.4.0" });
+	test("with no sources, says the contracts went unread", () => {
+		const result = read(document);
 
 		expect(result.skipped).not.toContain("foreign-compiler");
 		expect(result.partial).toEqual([{ reject: "foreign-compiler", unread: ["./last_will.simf"] }]);
@@ -102,7 +91,6 @@ describe("the compiler check, which is declared in two places", () => {
 
 	test("with every referenced source supplied, the check is answered in full", () => {
 		const result = read(document, {
-			compilerVersion: "0.4.0",
 			contractSources: { "./last_will.simf": "fn main() {}" },
 		});
 
@@ -112,19 +100,20 @@ describe("the compiler check, which is declared in two places", () => {
 
 	test("refuses a source asking for a version the reader was told it does not have", () => {
 		const result = read(document, {
-			compilerVersion: "0.4.0",
 			contractSources: { "./last_will.simf": 'simc "9.9.9"\nfn main() {}' },
 		});
 
 		expect(result.refusal?.reject).toBe("foreign-compiler");
 		expect(result.refusal?.reason).toContain("./last_will.simf");
-		expect(result.refusal?.reason).toContain("0.4.0");
+		// The version this page and the wallet both read, rather than one a person typed.
+		expect(result.refusal?.reason).toContain(SMPLX_COMPILER_VERSION);
 	});
 
 	test("a source asking for the version it was told about is not refused", () => {
 		const result = read(document, {
-			compilerVersion: "0.4.0",
-			contractSources: { "./last_will.simf": 'simc "0.4.0"\nfn main() {}' },
+			contractSources: {
+				"./last_will.simf": `simc "${SMPLX_COMPILER_VERSION}"\nfn main() {}`,
+			},
 		});
 
 		expect(result.refusal).toBeUndefined();

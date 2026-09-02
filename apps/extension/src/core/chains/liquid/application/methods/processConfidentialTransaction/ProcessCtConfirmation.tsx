@@ -7,6 +7,15 @@ import { UiButton } from "@/ui/UiButton/base";
 export const PROCESS_CT_CONFIRMATION_KIND = "liquid.processConfidentialTransaction";
 
 export type ProcessCtConfirmationData = {
+	/**
+	 * Whether agreeing also sends this transaction, which is what the request asked for.
+	 *
+	 * On the payload rather than left to the screen, because it is the request's word and not
+	 * this surface's: two different things are being agreed to — a signature handed back, or a
+	 * signature broadcast — and one button labelled for both would be describing something this
+	 * screen does not know.
+	 */
+	broadcast: boolean;
 	kind: typeof PROCESS_CT_CONFIRMATION_KIND;
 	shown: ShownConfirmation;
 };
@@ -61,6 +70,13 @@ function everyRow(value: unknown, row: (entry: unknown) => boolean): boolean {
  */
 export function isProcessCtConfirmationData(value: unknown): value is ProcessCtConfirmationData {
 	if (!isRecord(value) || value.kind !== PROCESS_CT_CONFIRMATION_KIND) {
+		return false;
+	}
+
+	// Checked rather than defaulted. A payload that omits it is one this surface cannot say
+	// which of the two questions it is asking, and defaulting to the quieter answer would put
+	// "Sign" on a screen that is about to broadcast.
+	if (typeof value.broadcast !== "boolean") {
 		return false;
 	}
 
@@ -224,9 +240,10 @@ export function ProcessCtUnreadable({ onDecline }: { onDecline: () => void }) {
  * deliberately: a first screen reads as the summary and a second as the detail, and the
  * distinction that matters here is not importance but authorship.
  *
- * What this screen asks for is authorisation and nothing beyond it. Whether the signed
- * transaction is then handed back or sent is decided where it is sent, and a button here that
- * said so would be describing something this surface does not do.
+ * What this screen asks for is authorisation, and it says which of the two authorisations it
+ * is: handing the signed transaction back to the site, or sending it. The request states that
+ * and the screen repeats it, because a person agreeing to a signature that goes nowhere and a
+ * person agreeing to money moving are agreeing to different things.
  */
 export function ProcessCtConfirmation({
 	data,
@@ -244,7 +261,9 @@ export function ProcessCtConfirmation({
 			<header className="p-4 pb-3 text-center">
 				<h2 className="cn-font-heading text-xl font-bold">Perform a contract action?</h2>
 				<p className="text-muted-foreground mt-1 text-sm">
-					Nothing is signed until you agree, and what you agree to is what gets signed.
+					{data.broadcast
+						? "Nothing is signed until you agree, and what you agree to is what gets signed and sent."
+						: "Nothing is signed until you agree, and what you agree to is what gets signed. This one is handed back to the site rather than sent."}
 				</p>
 			</header>
 
@@ -358,7 +377,7 @@ export function ProcessCtConfirmation({
 					Decline
 				</UiButton>
 				<UiButton type="button" className="flex-1" onClick={onConfirm}>
-					Sign
+					{data.broadcast ? "Sign and send" : "Sign"}
 				</UiButton>
 			</div>
 		</div>

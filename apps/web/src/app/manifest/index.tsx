@@ -3,8 +3,6 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 import { ConstructTable } from "./components/ConstructTable";
@@ -32,15 +30,18 @@ import { readDocument } from "./readDocument";
  * It connects to nothing. There is no wallet here, no chain read and no request, which is both
  * the point and the limit.
  *
- * The compiler version and the contract sources are asked for in the input card rather than
- * reported as results, because that is what they are: this page holds no wallet, so it holds
- * neither the version one ships nor the sources a document references. Unanswered is a real
- * state and the one this opens in — a check needing one of them is reported as not run, which
+ * The compiler version is no longer asked for. It is one constant this repository ships and the
+ * extension reads the same one, so a field here could only disagree with the wallet — and left
+ * blank, as it opened, it reported a check as not run that the wallet could have answered.
+ *
+ * The contract sources are still asked for in the input card rather than reported as results,
+ * because that is what they are: a compiler version is declared twice and the second
+ * declaration lives inside the source, which this page has no way to fetch. Unanswered is a
+ * real state and the one this opens in — the check needing them is reported as not run, which
  * is not the same as passing.
  */
 export default function ManifestInspector() {
 	const [text, setText] = useState("");
-	const [compilerVersion, setCompilerVersion] = useState("");
 	const [suppliedSources, setSuppliedSources] = useState<SuppliedSource[]>([]);
 
 	// Read twice, because a file arrives under the name it has on a disk and the reader wants it
@@ -48,20 +49,17 @@ export default function ManifestInspector() {
 	// are. The first read asks that question, which no supplied source can change the answer to,
 	// and the second is the one the page reports.
 	const { document, matched } = useMemo(() => {
-		const referenced = readDocument(text, { compilerVersion });
+		const referenced = readDocument(text);
 		const byReferencedPath = matchContractSources(
 			referenced.kind === "read" && referenced.ok ? referenced.contracts : [],
 			suppliedSources,
 		);
 
 		return {
-			document: readDocument(text, {
-				compilerVersion,
-				contractSources: byReferencedPath.sources,
-			}),
+			document: readDocument(text, { contractSources: byReferencedPath.sources }),
 			matched: byReferencedPath,
 		};
-	}, [text, compilerVersion, suppliedSources]);
+	}, [text, suppliedSources]);
 
 	return (
 		<div className="mx-auto flex min-h-svh w-full max-w-4xl flex-col gap-6 p-4 md:p-6">
@@ -74,22 +72,6 @@ export default function ManifestInspector() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="flex flex-col gap-3">
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="manifest-compiler">SimplicityHL version</Label>
-						<Input
-							id="manifest-compiler"
-							value={compilerVersion}
-							onChange={(event) => setCompilerVersion(event.target.value)}
-							placeholder="Not given"
-							spellCheck={false}
-							className="w-72 font-mono"
-						/>
-						<p className="text-muted-foreground text-xs">
-							The single version a reading wallet ships. This page holds no wallet, so there is
-							nothing here to read it from — and left blank, the compiler check is reported as not
-							run rather than answered against a stand-in.
-						</p>
-					</div>
 					<Textarea
 						value={text}
 						onChange={(event) => setText(event.target.value)}

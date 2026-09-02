@@ -28,13 +28,16 @@ function utxo(amount: string, txid: string, overrides: Partial<SelectableUtxo> =
 	return { amount, spendable: true, txOut: "00", txid, vout: 0, ...overrides };
 }
 
+/** One explicit output, written the way the chain writes one. */
+const COVENANT_TXOUT = `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`;
+
 const deps = {
 	accountLabel: "liquid:testnet account 0",
 	compile: () => ({ address: "tex1p_derived", scriptPubKeyHex: DERIVED_SCRIPT }),
 	network: "liquid",
 	policyAsset: POLICY_ASSET,
 	readFeeRate: async () => 1000,
-	readTxOut: async () => ({ scriptPubKeyHex: DERIVED_SCRIPT }),
+	readTxOut: async () => ({ scriptPubKeyHex: DERIVED_SCRIPT, txOutHex: COVENANT_TXOUT }),
 	scriptPubKeyOf: () => DERIVED_SCRIPT,
 	walletScriptPubKeyHex: WALLET_SCRIPT,
 };
@@ -855,7 +858,11 @@ describe("a covenant that does not state what it holds", () => {
 				...deps,
 				fundingUtxos: [utxo("1000000", MONEY_TXID)],
 				holdingsOf: () => [utxo("4000", TOKEN_TXID)],
-				readTxOut: async () => ({ ...txOut, scriptPubKeyHex: DERIVED_SCRIPT }),
+				readTxOut: async () => ({
+					...txOut,
+					scriptPubKeyHex: DERIVED_SCRIPT,
+					txOutHex: COVENANT_TXOUT,
+				}),
 			},
 		);
 	}
@@ -1153,6 +1160,7 @@ describe("an action that pins an input to one address", () => {
 					amountSats: "10000",
 					rawAssetId: POLICY_ASSET,
 					scriptPubKeyHex: DERIVED_SCRIPT,
+					txOutHex: COVENANT_TXOUT,
 				}),
 				fundingUtxos: [utxo("1000000", MONEY_TXID)],
 				holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),

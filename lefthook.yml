@@ -4,8 +4,15 @@ pre-commit:
   commands:
     lint:
       run: bun run lint
+    # Three projects, not one. The root config covers only `apps/extension/src`, and
+    # `apps/web`'s own config is a solution file — `tsc --noEmit` against it checks
+    # nothing and exits 0, so only `tsc -b` follows its references.
     typecheck:
       run: bun run typecheck
+    typecheck-packages:
+      run: bun run typecheck:packages
+    typecheck-web:
+      run: bun run web:typecheck
     validate-i18n:
       run: bun run validate:i18n
     format:

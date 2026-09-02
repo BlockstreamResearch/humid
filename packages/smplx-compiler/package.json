@@ -1,0 +1,11 @@
+{
+	"name": "@humid/smplx-compiler",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Which SimplicityHL compiler the shipped signing module builds contracts with. One statement, guarded against the submodule it describes, for every surface that has to compare a protocol's declared version against this wallet's.",
+	"type": "module",
+	"types": "./src/compilerVersion.ts",
+	"exports": {
+		".": "./src/compilerVersion.ts"
+	}
+}
