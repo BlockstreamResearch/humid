@@ -265,10 +265,24 @@ export function assetLedger(
 		outputs.push(resolved.id);
 
 		if (output.target.kind === "change") {
-			// The first one wins. A document declaring two change outputs for one asset is
-			// declaring one place for its surplus twice, and splitting a surplus between them
-			// would be the wallet deciding something the document did not say.
-			entry.change ??= { blinded: output.blinding.blinding === "hidden", id };
+			// A document declaring two change outputs for one asset has named one place for its
+			// surplus twice, and there is no reading of that the wallet is entitled to pick. Both
+			// of the obvious ones are decisions the document did not make: taking the first
+			// silently drops a declaration that may hide what the second publishes, or pay it
+			// somewhere else entirely, and splitting the surplus between them invents a division
+			// nothing asked for. So it is refused, and the refusal names both.
+			if (entry.change) {
+				return {
+					ok: false,
+					reason:
+						`${action.name} declares change for ${resolved.id} twice, at ` +
+						`${entry.change.id || "(unnamed)"} and ${id || "(unnamed)"}. One surplus cannot ` +
+						"go to two places, and this wallet will not choose between them.",
+					reject: "document-fault",
+				};
+			}
+
+			entry.change = { blinded: output.blinding.blinding === "hidden", id };
 
 			continue;
 		}

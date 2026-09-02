@@ -1,4 +1,9 @@
-import type { ManifestReview } from "@humid/tx-manifest";
+import {
+	guardBuiltOutputs,
+	guardSpentInputs,
+	type ManifestReview,
+	type RejectToken,
+} from "@humid/tx-manifest";
 
 import type { SmplxWasmModule } from "./loadSmplxWasm";
 
@@ -74,7 +79,7 @@ export type FinalizeTransaction = (
 ) => AssembledTransaction | Promise<AssembledTransaction>;
 
 export type AssembleResult =
-	| { ok: false; reason: string }
+	| { ok: false; reason: string; reject: RejectToken }
 	| { ok: true; transaction: AssembledTransaction };
 
 /**
@@ -146,15 +151,24 @@ export async function assembleReviewedTransaction(
 			reason:
 				`"${review.action}" spends the ${spent.utxoType} covenant, and this wallet cannot ` +
 				"yet satisfy a covenant input. It will not build part of the transaction and call it whole.",
+			reject: "unimplemented-construct",
 		};
 	}
 
 	if (review.selected.length === 0) {
-		return { ok: false, reason: `"${review.action}" has no wallet output funding it.` };
+		return {
+			ok: false,
+			reason: `"${review.action}" has no wallet output funding it.`,
+			reject: "shortfall",
+		};
 	}
 
 	if (review.outputs.length === 0) {
-		return { ok: false, reason: `"${review.action}" pays nothing, so there is nothing to build.` };
+		return {
+			ok: false,
+			reason: `"${review.action}" pays nothing, so there is nothing to build.`,
+			reject: "document-fault",
+		};
 	}
 
 	// An output the document wants hidden needs a key to hide it with, and one that cannot be
@@ -169,6 +183,7 @@ export async function assembleReviewedTransaction(
 			reason:
 				`The output ${unblindable.id || "(unnamed)"} must hide what it carries, and no ` +
 				"blinding key was supplied to hide it with.",
+			reject: "unimplemented-construct",
 		};
 	}
 
@@ -176,6 +191,7 @@ export async function assembleReviewedTransaction(
 		return {
 			ok: false,
 			reason: `"${review.action}" returns change that must hide what it carries, and no blinding key was supplied to hide it with.`,
+			reject: "unimplemented-construct",
 		};
 	}
 
@@ -210,6 +226,7 @@ export async function assembleReviewedTransaction(
 					`Input ${issuance.inputId} issues an asset from ${issuance.outpoint.txid}:` +
 					`${issuance.outpoint.vout}, which another input of this transaction already ` +
 					"issues from. One output cannot create two assets.",
+				reject: "document-fault",
 			};
 		}
 
@@ -229,6 +246,7 @@ export async function assembleReviewedTransaction(
 			reason:
 				`Input ${stranded.inputId} issues an asset from an output this transaction does not ` +
 				"spend, so the asset would never exist.",
+			reject: "document-fault",
 		};
 	}
 
@@ -239,6 +257,7 @@ export async function assembleReviewedTransaction(
 		return {
 			ok: false,
 			reason: `"${review.action}" spends one of this wallet's outputs more than once.`,
+			reject: "document-fault",
 		};
 	}
 
@@ -285,6 +304,7 @@ export async function assembleReviewedTransaction(
 							`Input ${issuance.inputId} creates an asset the signing module does not ` +
 							`agree about: the ${difference.what} the wallet derived is ${difference.mine} ` +
 							`and the module reports ${difference.theirs}.`,
+						reject: "built-something-else",
 					};
 				}
 			} finally {
@@ -318,9 +338,28 @@ export async function assembleReviewedTransaction(
 			review.changeBlinded ? input.blindingPublicKeyHex : undefined,
 		);
 
-		return { ok: true, transaction: await input.finalize(builder, review.feeRateSatsPerKvb) };
+		const transaction = await input.finalize(builder, review.feeRateSatsPerKvb);
+
+		// What came back is now checked against what was agreed to, out of the finished
+		// transaction's own bytes. Everything above is a request made of the module — an input
+		// added, an output built with a blinding key or without one — and a request is not a
+		// result: whether the module honoured it is visible only here.
+		//
+		// A refusal returns no transaction at all rather than one with a note attached. By this
+		// point the document has been read, the action resolved and the person may already have
+		// approved, so there is nothing left to ask them; what failed is the agreement between
+		// this wallet and the module underneath it.
+		const mismatch = disagreementWith(review, transaction, input.changeScriptPubKeyHex);
+
+		return mismatch === undefined
+			? { ok: true, transaction }
+			: { ok: false, reason: mismatch, reject: "built-something-else" };
 	} catch (error) {
-		return { ok: false, reason: `This transaction could not be assembled: ${String(error)}` };
+		return {
+			ok: false,
+			reason: `This transaction could not be assembled: ${String(error)}`,
+			reject: "built-something-else",
+		};
 	} finally {
 		builder.free();
 	}
@@ -359,4 +398,66 @@ function firstDisagreement(
  */
 function outpointKey(outpoint: { txid: string; vout: number }): string {
 	return `${outpoint.txid.trim().toLowerCase()}:${outpoint.vout}`;
+}
+
+/**
+ * Where the finished transaction and the reviewed plan disagree, if they disagree at all.
+ *
+ * Two questions, both answered from the raw consensus bytes and neither from the module's own
+ * account of what it did — that account is the one source that cannot answer whether the module
+ * did something it was not asked to, because it is the same component reporting on itself. The
+ * one figure taken from the module is the fee, and it is taken in order to be checked: what it
+ * says it charged is compared against what it actually wrote.
+ *
+ * What it spends must be exactly the set the wallet committed to: every covenant input the
+ * action requires and every wallet output the wallet itself selected, each once. An input that
+ * also creates an asset is one of these like any other — Elements marks issuance in the top
+ * bits of the index rather than in a field of its own, and it is compared as the outpoint it
+ * spends, which is what the asset was derived from in the first place.
+ *
+ * What it pays must be the outputs the review settled, in order, each to the script the review
+ * derived and — where the output is open, and therefore where it can be read at all — for the
+ * amount and in the asset the review worked out. Then the builder's own two and nothing else:
+ * the change, to the script this module was told to use and hiding what the review decided, and
+ * the fee.
+ */
+function disagreementWith(
+	review: ManifestReview,
+	transaction: AssembledTransaction,
+	changeScriptPubKeyHex: string,
+): string | undefined {
+	const spent = guardSpentInputs(transaction.hex, {
+		// Empty rather than derived, and the emptiness is the claim: an action spending a
+		// covenant is refused above, before a builder exists, so a covenant input in these bytes
+		// is one nothing here asked for and the guard says so.
+		covenantInputs: [],
+		walletInputs: review.selected.map(({ txid, vout }) => ({ txid, vout })),
+	});
+
+	if (!spent.ok) {
+		return spent.reason;
+	}
+
+	const built = guardBuiltOutputs(transaction.hex, {
+		changeBlinded: review.changeBlinded,
+		changeScriptPubKeyHex,
+		feeSats: transaction.feeSats,
+		// The network's own asset, carried on the review rather than read off the transaction:
+		// taking it from whatever the fee output says would make the check circular, and the one
+		// thing worth knowing about a fee is that it pays the network in the money it takes.
+		policyAsset: review.policyAsset,
+		// Every field the review settled for each output, because every one of them is a way the
+		// finished transaction can differ from the plan while still looking like it. Only the
+		// asset the network charges fees in has change the builder appends; a surplus in any
+		// other asset is an exact figure the review already built as one of these.
+		outputs: review.outputs.map(({ asset, blinded, id, sats, scriptPubKeyHex }) => ({
+			asset,
+			blinded,
+			id,
+			sats,
+			scriptPubKeyHex,
+		})),
+	});
+
+	return built.ok ? undefined : built.reason;
 }

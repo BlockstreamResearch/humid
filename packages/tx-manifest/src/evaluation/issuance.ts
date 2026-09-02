@@ -1,7 +1,9 @@
+import { MAX_BASE_UNITS } from "../chain/baseUnits";
 import { type DerivedIssuance, deriveNewIssuance, type Outpoint } from "../chain/issuance";
 import { asRecord } from "../document/json";
 import type { NormalisationNote } from "../document/normalise";
-import { type ReferenceScope, resolveReference } from "../document/references";
+import type { ReferenceScope } from "../document/references";
+import { evaluateExpression } from "./evaluate";
 
 /**
  * What one input's issuance block asks for, once its amounts are worked out.
@@ -172,13 +174,12 @@ export function issuanceAttributes(issuance: PlannedIssuance): Record<string, un
 }
 
 /**
- * A literal count, or a lookup the issued-amount site accepts.
+ * A literal count, a lookup the issued-amount site accepts, or arithmetic over either.
  *
- * The site accepts what a compile parameter accepts and no more: this deployment's fields,
- * the request's parameters and arguments, and a bare name. The fee is not among them because
- * the fee comes from the shape of the transaction, and how much of an asset exists cannot
- * depend on what it costs to say so; an attribute of a resolved input is not among them
- * because this issuance is what makes that input's asset what it is.
+ * The site accepts what a compile parameter accepts and no more: this deployment's fields, the
+ * request's parameters and arguments, and a bare name. An attribute of a resolved input is not
+ * among them, because this issuance is what makes that input's asset what it is — reading one
+ * here would be reading the answer out of the question.
  */
 function amountOf(
 	declared: unknown,
@@ -195,21 +196,29 @@ function amountOf(
 		return { ok: false, reason: "it is neither a number nor a name." };
 	}
 
-	const found = resolveReference(declared, "issuedAmount", scope, notes);
+	const evaluated = evaluateExpression(declared, "issuedAmount", scope, notes);
 
-	if (!found.ok) {
-		return { ok: false, reason: found.reason };
-	}
-
-	const resolved = asCount(found.value);
-
-	return resolved === undefined
-		? { ok: false, reason: `${declared} resolved to something that is not a count of units.` }
-		: { ok: true, value: resolved };
+	return evaluated.ok ? { ok: true, value: evaluated.value } : evaluated;
 }
 
-/** A whole number of base units, however the document or the request spelled it. */
+/**
+ * A whole number of base units, however the document or the request spelled it.
+ *
+ * Bounded by what a value in this encoding can hold, and bounded here rather than downstream.
+ * A literal is not evaluated — that is what keeps a hash from being read as arithmetic — so
+ * nothing else on this path would notice a supply of a hundred digits, and a bigint carries one
+ * happily all the way to the wasm boundary, where it becomes somebody else's exception rather
+ * than this wallet's refusal.
+ */
 function asCount(value: unknown): bigint | undefined {
+	const counted = toBigInt(value);
+
+	return counted !== undefined && counted >= -MAX_BASE_UNITS && counted <= MAX_BASE_UNITS
+		? counted
+		: undefined;
+}
+
+function toBigInt(value: unknown): bigint | undefined {
 	if (typeof value === "bigint") {
 		return value;
 	}

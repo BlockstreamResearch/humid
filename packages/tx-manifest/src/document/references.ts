@@ -81,7 +81,10 @@ export type ReferenceSiteKind =
 	| "asset"
 	| "compileParam"
 	| "destination"
-	| "issuedAmount";
+	| "expression"
+	| "issuedAmount"
+	| "witnessKey"
+	| "witnessValue";
 
 const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: string }> = {
 	/** An output's amount, or an input's minimum. */
@@ -109,6 +112,18 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 	/** Where an output pays, when it names a parameter rather than a keyword. */
 	destination: { accepts: ["params"], describes: "a destination" },
 	/**
+	 * One term of an expression: a validation's condition, a computed parameter, a hook's value.
+	 *
+	 * The widest position there is, because an expression is written wherever a value can be
+	 * worked out rather than stated, and every form the narrower positions accept somewhere is
+	 * accepted here. It is still a position rather than a hole: a term illegal here is refused
+	 * as a position error rather than as arithmetic.
+	 */
+	expression: {
+		accepts: ["instance", "params", "args", "input-attribute", "bare"],
+		describes: "an expression",
+	},
+	/**
 	 * How many units an issuance creates, which is not an amount anyone pays.
 	 *
 	 * An attribute of a resolved input is absent because the issuance is what makes that
@@ -118,6 +133,23 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 	issuedAmount: {
 		accepts: ["instance", "params", "args", "bare"],
 		describes: "an issued amount",
+	},
+	/** The key a witness is produced from, and the address an input must be funded from. */
+	witnessKey: {
+		accepts: ["instance", "params", "args", "bare"],
+		describes: "a witness key",
+	},
+	/**
+	 * A name appearing inside the typed value a witness states.
+	 *
+	 * An attribute of a resolved input is absent because no published protocol reads one here,
+	 * and admitting a form nothing exercises is admitting one nothing checks. A bare name is
+	 * absent because the language's own words — `Left`, `Right`, `u32` — are bare names, and a
+	 * position that resolved them would rewrite the branch the document chose.
+	 */
+	witnessValue: {
+		accepts: ["instance", "params", "args"],
+		describes: "part of a witness value",
 	},
 };
 

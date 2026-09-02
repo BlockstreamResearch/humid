@@ -297,6 +297,63 @@ describe("an action that creates an asset", () => {
 		}
 	});
 
+	// An input's own hook runs the moment that input resolves, which is what makes it able to
+	// say what the input turned out to hold. Inside it, `asset` is a bare word meaning this
+	// input — the one it just issued — because the input writing it is the input being
+	// resolved, so there is nothing to qualify it with.
+	test("an input's own hook can name the asset that input just created", async () => {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const mintAction = (document.actions as Record<string, Record<string, unknown>>).Mint ?? {};
+		const inputs = mintAction.inputs as Record<string, unknown>[];
+		const outputs = mintAction.outputs as Record<string, unknown>[];
+
+		(inputs[0] ?? {}).on_resolved = { set: { "params.minted": "asset" } };
+		// Read back through a name the document did not carry before the hook wrote it, so an
+		// assignment that was dropped resolves to nothing rather than to the same id twice.
+		(outputs[0] ?? {}).asset = "params.minted";
+
+		const result = await reviewManifestAction(
+			request({ action: "Mint", manifest: document, params: { pubkey: PUBKEY, supply: 21 } }),
+			{ ...deps, fundingUtxos: [utxo("1000", "a".repeat(64)), utxo("1000000", MONEY_TXID)] },
+		);
+
+		expect(isRefusal(result)).toBe(false);
+
+		if (!isRefusal(result)) {
+			const minted = result.outputs.find((output) => output.id === "minted_out");
+
+			expect(minted?.asset).toBe(result.issuances[0]?.asset ?? "");
+		}
+	});
+
+	// A literal is not evaluated — that is what keeps a hash from being read as arithmetic — so
+	// nothing else on this path would notice a supply of a hundred digits, and a bigint carries
+	// one happily to the wasm boundary, where it becomes somebody else's exception rather than
+	// this wallet's refusal.
+	test("refuses a supply beyond what a transaction can carry", async () => {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const actions = document.actions as Record<string, Record<string, unknown>>;
+		const inputs = actions.Mint?.inputs as Record<string, unknown>[];
+
+		// Written into the document as a literal rather than supplied as a parameter: a literal
+		// is not evaluated — that is what keeps a hash from being read as arithmetic — so this
+		// is the path nothing else on it would notice.
+		((inputs[0] ?? {}).issuance as Record<string, unknown>).asset_amount_sat =
+			"99999999999999999999999999";
+
+		const result = await reviewManifestAction(
+			request({ action: "Mint", manifest: document, params: { pubkey: PUBKEY, supply: 21 } }),
+			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID)] },
+		);
+
+		expect(isRefusal(result)).toBe(true);
+
+		if (isRefusal(result)) {
+			expect(result.reject).toBe("document-fault");
+			expect(result.reason).toContain("mint_in");
+		}
+	});
+
 	// Smallest first in the network's own asset: an issuance needs an output's identity rather
 	// than its value, so taking the smallest leaves the most behind to pay the fee with.
 	test("and reserves the smallest of them, leaving the most to pay with", async () => {
@@ -800,6 +857,312 @@ describe("a covenant that does not state what it holds", () => {
 			// The covenant brings 600 of the 700 the money output costs, so the wallet finds the
 			// rest and the fee — never the whole 700 again, and never any of the token.
 			expect(result.selected.map((chosen) => chosen.txid)).toEqual([TOKEN_TXID, MONEY_TXID]);
+		}
+	});
+});
+
+/**
+ * What an action requires of where its money comes from, when it requires anything.
+ *
+ * `from_address` resolves to whatever the request or the deployment carries and is compared
+ * against the `scriptPubKeyHex` the wallet records for its own outputs — hex against hex.
+ * Nothing in this package decodes an address, so these tests state scripts on both sides; a
+ * deployment recording a bech32 address against a wallet recording a script would simply not
+ * match, and the action would be refused rather than funded from somewhere else.
+ */
+describe("an action that pins an input to one address", () => {
+	const BORROWER_SCRIPT = `0014${"77".repeat(20)}`;
+	const OTHER_SCRIPT = `0014${"88".repeat(20)}`;
+
+	/** The published action with `from_address` written onto the inputs the case needs. */
+	function pinned(pins: Record<string, string>): Record<string, unknown> {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const actions = document.actions as Record<string, Record<string, unknown>>;
+
+		for (const action of Object.values(actions)) {
+			for (const entry of (action.inputs ?? []) as Record<string, unknown>[]) {
+				const pin = pins[String(entry.id)];
+
+				if (pin !== undefined) {
+					entry.from_address = pin;
+				}
+			}
+		}
+
+		return document;
+	}
+
+	// The whole of what the per-input rule buys. The token input is pinned; the policy-asset
+	// outputs that pay the fee are not, and no input declares them at all. Constraining every
+	// asset by the one pin found — which is what a single pin did — refuses this action for
+	// holding no fee money at the borrower's address, which the document never asked about.
+	test("constrains only the asset that input funds, and leaves the others alone", async () => {
+		const result = await reviewManifestAction(
+			request({
+				manifest: pinned({ token_in: "params.borrower" }),
+				params: {
+					amount_sat: 1000,
+					borrower: BORROWER_SCRIPT,
+					fee_sat: 700,
+					pubkey: PUBKEY,
+					token: TOKEN,
+				},
+			}),
+			{
+				...deps,
+				// The wallet's money sits at a script of its own, and nothing says it should not.
+				fundingUtxos: [utxo("1000000", MONEY_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
+				holdingsOf: (asset) =>
+					asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
+			},
+		);
+
+		expect(isRefusal(result)).toBe(false);
+
+		if (!isRefusal(result)) {
+			expect(result.selected.map((chosen) => chosen.txid)).toContain(MONEY_TXID);
+		}
+	});
+
+	// And the pin is a pin: an output in the pinned asset that is not there cannot fund it.
+	test("and refuses when the pinned asset is held somewhere else", async () => {
+		const result = await reviewManifestAction(
+			request({
+				manifest: pinned({ token_in: "params.borrower" }),
+				params: {
+					amount_sat: 1000,
+					borrower: BORROWER_SCRIPT,
+					fee_sat: 700,
+					pubkey: PUBKEY,
+					token: TOKEN,
+				},
+			}),
+			{
+				...deps,
+				fundingUtxos: [utxo("1000000", MONEY_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
+				holdingsOf: (asset) =>
+					asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: OTHER_SCRIPT })] : [],
+			},
+		);
+
+		expect(isRefusal(result)).toBe(true);
+
+		if (isRefusal(result)) {
+			expect(result.reject).toBe("no-funds-at-signing-address");
+			// The asset it is short of *there*, which is a different sentence from being short of
+			// it at all and sends a person somewhere else.
+			expect(result.reason).toContain(TOKEN);
+			expect(result.reason).toContain("token_in");
+		}
+	});
+
+	// One selection is made per asset, so two inputs in one asset pinned to two scripts cannot
+	// both be honoured — and honouring either silently is the wallet choosing which half of the
+	// document to believe.
+	test("refuses two inputs in one asset pinned to different scripts", async () => {
+		const document = pinned({ token_in: "params.borrower" }) as Record<string, unknown>;
+		const actions = document.actions as Record<string, Record<string, unknown>>;
+		const inputs = actions.PayToken?.inputs as Record<string, unknown>[];
+
+		inputs.push({
+			asset: "params.token",
+			from_address: "params.lender",
+			id: "token_top_up",
+			utxo_source: "wallet",
+		});
+
+		const result = await reviewManifestAction(
+			request({
+				manifest: document,
+				params: {
+					amount_sat: 1000,
+					borrower: BORROWER_SCRIPT,
+					fee_sat: 700,
+					lender: OTHER_SCRIPT,
+					pubkey: PUBKEY,
+					token: TOKEN,
+				},
+			}),
+			{
+				...deps,
+				fundingUtxos: [utxo("1000000", MONEY_TXID)],
+				holdingsOf: (asset) =>
+					asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
+			},
+		);
+
+		expect(isRefusal(result)).toBe(true);
+
+		if (isRefusal(result)) {
+			expect(result.reject).toBe("no-funds-at-signing-address");
+			// Both, and the reason they cannot both be honoured. Naming only the second would be
+			// the refusal a wallet that had quietly let the last pin win happens to produce.
+			expect(result.reason).toContain("token_in");
+			expect(result.reason).toContain("token_top_up");
+			expect(result.reason).toContain("one selection");
+		}
+	});
+
+	// A pin belongs to one declared input. An issuance on an input the document pins nothing
+	// for is not misplaced by a pin somewhere else in the same action — and checking every
+	// reserved output against every pin refuses exactly this action.
+	test("leaves an issuance alone when the pin is on a different input in another asset", async () => {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const actions = document.actions as Record<string, Record<string, unknown>>;
+		const mint = actions.Mint ?? {};
+		const inputs = mint.inputs as Record<string, unknown>[];
+		const outputs = mint.outputs as Record<string, unknown>[];
+
+		// A second input, in the token rather than in the money, and it alone is pinned.
+		inputs.push({
+			asset: "params.token",
+			from_address: "params.borrower",
+			id: "token_in",
+			utxo_source: "wallet",
+		});
+		outputs.push({
+			amount_sat: "params.token_amount",
+			asset: "params.token",
+			confidential: false,
+			destination: "wallet",
+			id: "token_out",
+		});
+
+		const result = await reviewManifestAction(
+			request({
+				action: "Mint",
+				manifest: document,
+				params: {
+					borrower: BORROWER_SCRIPT,
+					pubkey: PUBKEY,
+					supply: 21,
+					token: TOKEN,
+					token_amount: 4000,
+				},
+			}),
+			{
+				...deps,
+				// The issuing input is funded from money held elsewhere, which nothing pinned.
+				fundingUtxos: [utxo("1000000", MONEY_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
+				holdingsOf: (asset) =>
+					asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
+			},
+		);
+
+		expect(isRefusal(result)).toBe(false);
+	});
+
+	// A pin on an input the wallet funds nothing for is a requirement about a choice this wallet
+	// never makes. Passing it over is how an action gets funded from somewhere ruled out.
+	test("refuses a pin on an input the wallet does not fund", async () => {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const actions = document.actions as Record<string, Record<string, unknown>>;
+		const inputs = actions.PayToken?.inputs as Record<string, unknown>[];
+
+		inputs.push({
+			from_address: "params.borrower",
+			id: "covenant_in",
+			utxo_source: { utxo_type: "p2pk_output" },
+		});
+
+		const result = await reviewManifestAction(
+			request({
+				manifest: document,
+				params: {
+					amount_sat: 1000,
+					borrower: BORROWER_SCRIPT,
+					fee_sat: 700,
+					pubkey: PUBKEY,
+					token: TOKEN,
+				},
+				state: { utxos: [{ txid: "e".repeat(64), utxo_type: "p2pk_output", vout: 0 }] },
+			}),
+			{
+				...deps,
+				readTxOut: async () => ({
+					amountSats: "10000",
+					rawAssetId: POLICY_ASSET,
+					scriptPubKeyHex: DERIVED_SCRIPT,
+				}),
+				fundingUtxos: [utxo("1000000", MONEY_TXID)],
+				holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),
+			},
+		);
+
+		expect(isRefusal(result)).toBe(true);
+
+		if (isRefusal(result)) {
+			expect(result.reject).toBe("document-fault");
+			expect(result.reason).toContain("covenant_in");
+		}
+	});
+
+	// The output an issuance is derived from is chosen before any pin can be resolved, because
+	// the asset id depends on that output. Where the two disagree the action is refused rather
+	// than moved: another output would mint a different asset than the one already computed.
+	test("refuses an issuance derived from an output outside that input's own pin", async () => {
+		const result = await reviewManifestAction(
+			request({
+				action: "Mint",
+				manifest: pinned({ mint_in: "params.borrower" }),
+				params: { borrower: BORROWER_SCRIPT, pubkey: PUBKEY, supply: 21 },
+			}),
+			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID, { scriptPubKeyHex: OTHER_SCRIPT })] },
+		);
+
+		expect(isRefusal(result)).toBe(true);
+
+		if (isRefusal(result)) {
+			expect(result.reject).toBe("no-funds-at-signing-address");
+			expect(result.reason).toContain("mint_in");
+		}
+	});
+
+	test("and accepts one derived from an output that is there", async () => {
+		const result = await reviewManifestAction(
+			request({
+				action: "Mint",
+				manifest: pinned({ mint_in: "params.borrower" }),
+				params: { borrower: BORROWER_SCRIPT, pubkey: PUBKEY, supply: 21 },
+			}),
+			{
+				...deps,
+				fundingUtxos: [utxo("1000000", MONEY_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })],
+			},
+		);
+
+		expect(isRefusal(result)).toBe(false);
+	});
+});
+
+describe("a document that names one surplus twice", () => {
+	// Both readings of a second change declaration are decisions the document did not make:
+	// taking the first drops one that may hide what the other publishes, and splitting the
+	// surplus invents a division nothing asked for.
+	test("is refused rather than resolved in the wallet's favour", async () => {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const actions = document.actions as Record<string, Record<string, unknown>>;
+		const outputs = actions.PayToken?.outputs as Record<string, unknown>[];
+
+		outputs.push({
+			asset: "params.token",
+			confidential: true,
+			destination: "change",
+			id: "token_change_again",
+		});
+
+		const result = await reviewManifestAction(request({ manifest: document }), {
+			...deps,
+			fundingUtxos: [utxo("1000000", MONEY_TXID)],
+			holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),
+		});
+
+		expect(isRefusal(result)).toBe(true);
+
+		if (isRefusal(result)) {
+			expect(result.reject).toBe("document-fault");
+			expect(result.reason).toContain("token_change");
+			expect(result.reason).toContain("token_change_again");
 		}
 	});
 });
