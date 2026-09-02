@@ -52,3 +52,30 @@ export {
 	guardBuiltOutputs,
 	guardSpentInputs,
 } from "./chain/guards";
+
+// 5. What this package makes of a document, for a reader who is not a wallet.
+//    The four steps above are one flow and this is not part of it: it builds nothing, signs
+//    nothing and reaches nothing, and is here so that a developer can find out what a document
+//    means to this runtime without connecting a wallet to ask. One function rather than the
+//    readers behind it, so the answer stays a thing this package says rather than several
+//    internals a caller assembles into an answer of its own.
+export {
+	type InspectManifestOptions,
+	type InspectManifestResult,
+	type ManifestFault,
+	type ManifestInspection,
+	DOCUMENT_ONLY_REFUSALS,
+	inspectManifestDocument,
+} from "./document/inspect";
+export type { PartialCheck } from "./document/refuse";
+export type { NormalisationNote } from "./document/normalise";
+// The construct table itself, which no document can show: a construct nobody has published is
+// invisible in every document there is, so what this runtime does not implement is only
+// answerable from the table. Read-only, and the same table every refusal above is decided by.
+export {
+	type ConstructRegistryEntry,
+	type ConstructReport,
+	type ConstructSiteKind,
+	type ConstructState,
+	describeRegistry,
+} from "./document/registry";
