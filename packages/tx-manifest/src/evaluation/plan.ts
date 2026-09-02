@@ -1,6 +1,7 @@
 import { asArray, asRecord } from "../document/json";
-import type { NormalisationNote } from "../document/normalise";
+import type { NormalisationNote, NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
+import { type BlindingDecision, resolveBlinding } from "./blinding";
 
 /**
  * A concrete amount the wallet worked out for one of the action's outputs.
@@ -9,12 +10,18 @@ import { type ReferenceScope, resolveReference } from "../document/references";
  * 2^53 is representable in a transaction and not in a double.
  */
 export type PlannedOutput = {
+	/** Whether this output hides what it carries, and whose word decided that. */
+	blinding: BlindingDecision;
 	/** The manifest's id for this output, for anything that has to name it. */
 	id: string;
 	/** Absent for change, whose amount is whatever is left after the fee. */
 	sats?: bigint;
-	/** Where it pays: a covenant type the wallet derived, the wallet, or change. */
-	target: { kind: "change" } | { kind: "covenant"; utxoType: string } | { kind: "wallet" };
+	/** Where it pays: a covenant type the wallet derived, the wallet, change, or nowhere. */
+	target:
+		| { kind: "change" }
+		| { kind: "covenant"; utxoType: string }
+		| { kind: "data"; hex: string }
+		| { kind: "wallet" };
 };
 
 export type PlannedSpend = {
@@ -37,14 +44,16 @@ export type PlanResult = { ok: false; reason: string } | { ok: true; plan: Plann
  * evaluate is a refusal naming the output rather than a number nobody chose.
  */
 export function planAction(
-	action: Record<string, unknown>,
+	action: NormalisedAction,
 	scope: ReferenceScope,
 	notes?: NormalisationNote[],
+	/** The document's file-level blinding default, which no published manifest states. */
+	documentDefault?: unknown,
 ): PlanResult {
 	const outputs: PlannedOutput[] = [];
 	let fundingSats = 0n;
 
-	for (const declared of asArray(action.outputs)) {
+	for (const declared of asArray(action.node.outputs)) {
 		const output = asRecord(declared);
 
 		if (!output) {
@@ -52,7 +61,7 @@ export function planAction(
 		}
 
 		const id = typeof output.id === "string" ? output.id : "";
-		const target = resolveTarget(output.destination);
+		const target = resolveTarget(output.destination, output.data);
 
 		if (!target) {
 			return {
@@ -61,8 +70,34 @@ export function planAction(
 			};
 		}
 
+		// Decided here rather than answered later, because this is the one place that knows an
+		// output is the action's own change while the document's word about hiding it is still
+		// in hand. The resolver publishes that one and carries the word it set aside; see there
+		// for why the trade was made.
+		const blinding = resolveBlinding({
+			declared: output.confidential,
+			documentDefault,
+			...(target.kind === "change" ? { change: true } : {}),
+			...(target.kind === "covenant"
+				? { unblindable: "covenant" as const }
+				: target.kind === "data"
+					? { unblindable: "data" as const }
+					: {}),
+		});
+
 		if (target.kind === "change") {
-			outputs.push({ id, target });
+			outputs.push({ blinding, id, target });
+
+			continue;
+		}
+
+		// An op_return carries bytes rather than value and almost always pays nothing. A
+		// document that states an amount at one is burning it: paying an asset to a provably
+		// unspendable output is how a token is destroyed, and there is no other way to do it.
+		// Dropping the amount would leave the transaction still holding what the action
+		// declared gone, which is a transaction nothing can balance.
+		if (target.kind === "data" && output.amount_sat === undefined) {
+			outputs.push({ blinding, id, sats: 0n, target });
 
 			continue;
 		}
@@ -81,7 +116,7 @@ export function planAction(
 		}
 
 		fundingSats += amount;
-		outputs.push({ id, sats: amount, target });
+		outputs.push({ blinding, id, sats: amount, target });
 	}
 
 	if (outputs.length === 0) {
@@ -91,7 +126,7 @@ export function planAction(
 	return { ok: true, plan: { fundingSats, outputs } };
 }
 
-function resolveTarget(destination: unknown): PlannedOutput["target"] | undefined {
+function resolveTarget(destination: unknown, data: unknown): PlannedOutput["target"] | undefined {
 	if (destination === "change") {
 		return { kind: "change" };
 	}
@@ -100,9 +135,22 @@ function resolveTarget(destination: unknown): PlannedOutput["target"] | undefine
 		return { kind: "wallet" };
 	}
 
-	const utxoType = asRecord(destination)?.utxo_type;
+	const record = asRecord(destination);
+	const utxoType = record?.utxo_type;
 
-	return typeof utxoType === "string" ? { kind: "covenant", utxoType } : undefined;
+	if (typeof utxoType === "string") {
+		return { kind: "covenant", utxoType };
+	}
+
+	// A burn states no payload at all. The output exists to hold value where nothing can spend
+	// it rather than to publish anything, and `6a` on its own is that script: an output whose
+	// first opcode is OP_RETURN cannot be spent by anyone, which is the whole of what a burn
+	// needs. An op_return that does carry a payload is a published record, and encoding one is
+	// a vocabulary of typed parts this slice does not read — so it is refused by name below
+	// rather than published as an empty burn that would destroy the value instead.
+	return record?.type === "op_return" && data === undefined
+		? { hex: "6a", kind: "data" }
+		: undefined;
 }
 
 /**
