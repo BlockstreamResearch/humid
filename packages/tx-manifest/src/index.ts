@@ -1,17 +1,30 @@
 /**
- * Reads the request a site sends to perform one action of a txManifest protocol.
+ * Reads the request a site sends to perform one action of a txManifest protocol, and
+ * establishes what the wallet knows about that action before anyone approves it.
  *
  * What is here holds no keys, opens no network connection of its own and remembers nothing
- * between calls: a wallet supplies the chain reads and the signing, and the same request twice
- * is answered the same way. That is what makes it a package rather than part of one wallet.
+ * between calls: a wallet supplies the chain reads and the compiler, and the same request
+ * twice is answered the same way. That is what makes it a package rather than part of one
+ * wallet.
  *
- * This surface is what a wallet needs and nothing else. A module absent from here is private
- * even though its directory is not hidden — the way to make one public is to add it,
- * deliberately, when something outside actually needs it.
+ * This surface is what a wallet needs and nothing else, listed in the order a wallet uses it
+ * rather than alphabetically, because the order is the point: read the request, then review
+ * the action against what the chain says. A module absent from here is private even though
+ * its directory is not hidden — the way to make one public is to add it, deliberately, when
+ * something outside actually needs it.
  */
 
-// What the site sent, checked into a shape the rest can rely on. What a particular action
+// 1. What the site sent, checked into a shape the rest can rely on. What a particular action
 // then needs from that request is worked out inside the package rather than answered here:
 // a caller holding the answer has nothing to do with it until there is something to build.
 export type { ParsedLiquidProcessCtParams } from "./request/request";
 export { parseLiquidProcessCtParams } from "./request/validation";
+
+// 2. What the chain says, which only a wallet can ask for. A port rather than an
+// implementation: this package states the question and holds no endpoint of its own.
+export type { ReadTxOut } from "./chain/chainRead";
+
+// 3. The action, resolved into what the wallet established about it — or a refusal. This runs
+// before the permission gate, where a standing permission cannot skip it, which is why
+// everything it cannot establish refuses rather than warns.
+export { type ManifestReview, isRefusal, reviewManifestAction } from "./review";

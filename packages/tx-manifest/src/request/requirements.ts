@@ -1,4 +1,5 @@
-import { asArray, asRecord } from "../document/json";
+import { asRecord } from "../document/json";
+import { covenantSites, namedUtxoTypes } from "../document/sites";
 import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./request";
 
 /**
@@ -98,69 +99,9 @@ function referencedContractSources(
 	return [...paths];
 }
 
-/**
- * The utxo types this action reaches, in the order it names them.
- *
- * An input spends a covenant and an output creates one, and both name it the same way — as
- * a `utxo_type` beside the parameters it is compiled with. An input sourced from the wallet
- * names none, which is what makes it a wallet input rather than a covenant one.
- */
-function namedUtxoTypes(action: Record<string, unknown>): string[] {
-	const named = new Set<string>();
-
-	for (const site of covenantSites(action)) {
-		named.add(site.utxoType);
-	}
-
-	return [...named];
-}
-
 /** Whether the action spends a covenant UTXO, which is a lookup into the state file. */
 function spendsCovenant(action: Record<string, unknown>): boolean {
 	return covenantSites(action).some((site) => site.role === "spent");
-}
-
-/**
- * Every place in the action where a covenant appears, and which side it is on.
- *
- * Inputs spend a covenant and outputs create one. The distinction is what decides whether
- * the request needs a state file: a covenant that already exists has to be located, and a
- * covenant this action creates has nowhere to be looked up.
- */
-function covenantSites(action: Record<string, unknown>): CovenantSite[] {
-	const sites: CovenantSite[] = [];
-
-	for (const entry of asArray(action.inputs)) {
-		const utxoType = namedUtxoType(asRecord(entry)?.utxo_source);
-
-		if (utxoType !== undefined) {
-			sites.push({ role: "spent", utxoType });
-		}
-	}
-
-	for (const entry of asArray(action.outputs)) {
-		const utxoType = namedUtxoType(asRecord(entry)?.destination);
-
-		if (utxoType !== undefined) {
-			sites.push({ role: "created", utxoType });
-		}
-	}
-
-	return sites;
-}
-
-type CovenantSite = { role: "created" | "spent"; utxoType: string };
-
-/**
- * The utxo type one input source or output destination names, if it names one.
- *
- * The keywords — `wallet`, `change` — are written where the object would be, so anything
- * that is not an object naming a `utxo_type` is not a covenant site.
- */
-function namedUtxoType(value: unknown): string | undefined {
-	const utxoType = asRecord(value)?.utxo_type;
-
-	return typeof utxoType === "string" ? utxoType : undefined;
 }
 
 /**
