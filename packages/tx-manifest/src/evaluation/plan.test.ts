@@ -1,28 +1,22 @@
 import { describe, expect, test } from "bun:test";
 
 import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import type { ReferenceScope } from "../document/references";
 import { planAction } from "./plan";
 
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const MANIFEST = p2pkManifest as unknown as Record<string, unknown>;
 const PAY = (MANIFEST.actions as Record<string, Record<string, unknown>>).Pay;
 
-function request(params: Record<string, unknown>): ParsedLiquidProcessCtParams {
-	return {
-		action: "Pay",
-		broadcast: false,
-		contractSources: {},
-		manifest: MANIFEST,
-		params,
-	};
+function scope(params: Record<string, unknown>): ReferenceScope {
+	return { params };
 }
 
 describe("planAction", () => {
 	// Pay declares two outputs: the covenant, whose amount is params.amount_sat, and an
 	// optional change output.
 	test("resolves the covenant amount from the request's parameters", () => {
-		const result = planAction(request({ amount_sat: 50_000, pubkey: PUBKEY }), PAY);
+		const result = planAction(PAY, scope({ amount_sat: 50_000, pubkey: PUBKEY }));
 
 		expect(result).toMatchObject({ ok: true });
 
@@ -37,7 +31,7 @@ describe("planAction", () => {
 	});
 
 	test("leaves change without an amount, because it is whatever survives the fee", () => {
-		const result = planAction(request({ amount_sat: 50_000, pubkey: PUBKEY }), PAY);
+		const result = planAction(PAY, scope({ amount_sat: 50_000, pubkey: PUBKEY }));
 
 		expect(result).toMatchObject({ ok: true });
 
@@ -52,7 +46,7 @@ describe("planAction", () => {
 	// Amounts are base units and must survive past 2^53, which a number cannot.
 	test("keeps an amount beyond a double's range exact", () => {
 		const huge = "9007199254740993";
-		const result = planAction(request({ amount_sat: huge, pubkey: PUBKEY }), PAY);
+		const result = planAction(PAY, scope({ amount_sat: huge, pubkey: PUBKEY }));
 
 		expect(result).toMatchObject({ ok: true });
 
@@ -63,35 +57,36 @@ describe("planAction", () => {
 
 	test("refuses an amount it cannot evaluate rather than assuming one", () => {
 		const result = planAction(
-			request({ amount_sat: "will_in.amount_sat - fee", pubkey: PUBKEY }),
 			PAY,
+			scope({ amount_sat: "will_in.amount_sat - fee", pubkey: PUBKEY }),
 		);
 
 		expect(result).toMatchObject({ ok: false });
 	});
 
 	test("refuses when the referenced parameter was not supplied", () => {
-		const result = planAction(request({ pubkey: PUBKEY }), PAY);
+		const result = planAction(PAY, scope({ pubkey: PUBKEY }));
 
 		expect(result).toMatchObject({ ok: false });
 	});
 
 	test("refuses an output that would pay nothing", () => {
-		const result = planAction(request({ amount_sat: 0, pubkey: PUBKEY }), PAY);
+		const result = planAction(PAY, scope({ amount_sat: 0, pubkey: PUBKEY }));
 
 		expect(result).toMatchObject({ ok: false });
 	});
 
 	test("refuses a destination it does not resolve", () => {
-		const result = planAction(request({ amount_sat: 1, pubkey: PUBKEY }), {
-			outputs: [{ amount_sat: 1, destination: { if: "something" }, id: "odd" }],
-		});
+		const result = planAction(
+			{ outputs: [{ amount_sat: 1, destination: { if: "something" }, id: "odd" }] },
+			scope({ amount_sat: 1, pubkey: PUBKEY }),
+		);
 
 		expect(result).toMatchObject({ ok: false });
 	});
 
 	test("refuses an action with no outputs", () => {
-		const result = planAction(request({ amount_sat: 1, pubkey: PUBKEY }), { outputs: [] });
+		const result = planAction({ outputs: [] }, scope({ amount_sat: 1, pubkey: PUBKEY }));
 
 		expect(result).toMatchObject({ ok: false });
 	});

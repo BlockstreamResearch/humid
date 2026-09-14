@@ -26,6 +26,8 @@ const ELSEWHERE_SCRIPT = `5120${"22".repeat(32)}`;
 const COMPILED = { address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT };
 
 const compile = () => COMPILED;
+/** The same compiler again, for the hashes a document works out for itself. */
+const scriptPubKeyOf = () => DERIVED_SCRIPT;
 
 /** The wallet's own side of the transaction: where it pays, what it holds, what a fee costs. */
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
@@ -38,6 +40,7 @@ const readFeeRate = async () => 1000;
 /** What every case shares; individual tests override only what they exercise. */
 const deps = {
 	compile,
+	scriptPubKeyOf,
 	fundingUtxos,
 	network: "liquid",
 	policyAsset: POLICY_ASSET,
@@ -90,8 +93,13 @@ describe("reviewManifestAction", () => {
 				expect(result.covenants).toEqual([
 					{
 						address: DERIVED,
+						argumentsJson: JSON.stringify({ PUB_KEY: { type: "Pubkey", value: `0x${PUBKEY}` } }),
+						extraLeavesJson: "[]",
+						includeDebugSymbols: false,
 						role: "created",
 						scriptPubKeyHex: DERIVED_SCRIPT,
+						source: SOURCE,
+						sourcePath: SOURCE_PATH,
 						utxoType: "p2pk_output",
 						verified: "not-yet-on-chain",
 					},
