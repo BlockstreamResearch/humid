@@ -9,6 +9,14 @@ import { asArray, asRecord } from "./json";
  * function happens to be asking.
  */
 export type CovenantSite = {
+	/**
+	 * The manifest's id for this input or output.
+	 *
+	 * Carried because what the chain reports at a spent covenant's outpoint is a fact about
+	 * that input, and an action's own amounts and assets refer to an input by this name. Empty
+	 * where the document names none, which nothing can then refer to.
+	 */
+	id: string;
 	role: "created" | "spent";
 	utxoType: string;
 	/** The compile parameters wired in at this site, unresolved. */
@@ -22,7 +30,7 @@ export function covenantSites(action: Record<string, unknown>): CovenantSite[] {
 		const site = covenantReference(asRecord(entry)?.utxo_source);
 
 		if (site) {
-			sites.push({ ...site, role: "spent" });
+			sites.push({ ...site, id: identifierOf(entry), role: "spent" });
 		}
 	}
 
@@ -30,7 +38,7 @@ export function covenantSites(action: Record<string, unknown>): CovenantSite[] {
 		const site = covenantReference(asRecord(entry)?.destination);
 
 		if (site) {
-			sites.push({ ...site, role: "created" });
+			sites.push({ ...site, id: identifierOf(entry), role: "created" });
 		}
 	}
 
@@ -59,4 +67,10 @@ function covenantReference(
 	}
 
 	return { utxoType, wiring: asRecord(record?.compile_params) ?? {} };
+}
+
+function identifierOf(entry: unknown): string {
+	const id = asRecord(entry)?.id;
+
+	return typeof id === "string" ? id : "";
 }

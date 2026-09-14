@@ -15,9 +15,12 @@ import { namedUtxoTypes } from "./sites";
  * `bare` is whichever of the last two has the name, and `input-attribute` is something about a
  * transaction input the wallet would have had to read the chain to know.
  *
- * `input-attribute` is parsed and accepted nowhere in this slice. It is here so that a dotted
- * name in an unknown namespace is recognised as the lookup it is and refused for what it is,
- * rather than falling through to something that happens to resolve.
+ * `input-attribute` names something about a transaction input that only the wallet can know:
+ * what the chain reported at the outpoint it spends, or — where the input issues an asset —
+ * what that issuance turned out to create. It resolves against inputs this action already
+ * resolved and against nothing else, so a name for an input that was never resolved is
+ * refused as the lookup it is rather than falling through to something that happens to
+ * resolve.
  */
 export type ReferenceForm = "args" | "bare" | "input-attribute" | "instance" | "params";
 
@@ -40,6 +43,14 @@ export type ParsedReference = {
  */
 export type ReferenceScope = {
 	args?: Record<string, unknown>;
+	/**
+	 * What the wallet established about each named input, keyed by the manifest's id.
+	 *
+	 * Written by the review as each input resolves rather than supplied by a caller: an
+	 * input's asset and amount are things the wallet read or derived, and a caller holding
+	 * them would be telling the wallet what it just worked out.
+	 */
+	inputs?: Record<string, Record<string, unknown>>;
 	/** This deployment's field values. */
 	instance?: Record<string, unknown>;
 	params: Record<string, unknown>;
@@ -65,11 +76,31 @@ export type ReferenceResolution =
  * in another, and the difference is not detectable from the string. Listing the accepted forms
  * per site makes the wrong ones unrepresentable rather than a mistake to be caught downstream.
  */
-export type ReferenceSiteKind = "amount" | "compileParam" | "destination";
+export type ReferenceSiteKind =
+	| "amount"
+	| "asset"
+	| "compileParam"
+	| "destination"
+	| "issuedAmount";
 
 const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: string }> = {
 	/** An output's amount, or an input's minimum. */
-	amount: { accepts: ["instance", "params", "args", "bare"], describes: "an amount" },
+	amount: {
+		accepts: ["instance", "params", "args", "input-attribute", "bare"],
+		describes: "an amount",
+	},
+	/**
+	 * The asset an input or output carries.
+	 *
+	 * Every form the corpus writes at this position: this deployment's fields, the request's
+	 * parameters and arguments, a bare name, and an attribute of an input the wallet already
+	 * resolved — `payout_in.asset`, which says "the same asset that one arrived in" without
+	 * naming it.
+	 */
+	asset: {
+		accepts: ["instance", "params", "args", "input-attribute", "bare"],
+		describes: "an asset",
+	},
 	/** A value compiled into a contract, which therefore decides its address. */
 	compileParam: {
 		accepts: ["instance", "params", "args", "bare"],
@@ -77,6 +108,17 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 	},
 	/** Where an output pays, when it names a parameter rather than a keyword. */
 	destination: { accepts: ["params"], describes: "a destination" },
+	/**
+	 * How many units an issuance creates, which is not an amount anyone pays.
+	 *
+	 * An attribute of a resolved input is absent because the issuance is what makes that
+	 * input's asset what it is, so reading one here would be reading the answer out of the
+	 * question.
+	 */
+	issuedAmount: {
+		accepts: ["instance", "params", "args", "bare"],
+		describes: "an issued amount",
+	},
 };
 
 /** The namespaces a prefixed reference can name, and what each canonically resolves as. */
@@ -192,12 +234,16 @@ function lookUp(
 		}
 
 		case "input-attribute": {
-			return {
-				ok: false,
-				reason:
-					`"${reference.name}.${reference.attribute ?? ""}" reads an attribute of a ` +
-					"transaction input, which this runtime does not resolve yet.",
-			};
+			const input = scope.inputs?.[reference.name];
+
+			if (!input) {
+				return {
+					ok: false,
+					reason: `"${reference.name}" is not an input this action resolved.`,
+				};
+			}
+
+			return read(input, reference.attribute ?? "", `input ${reference.name}`);
 		}
 
 		case "instance": {

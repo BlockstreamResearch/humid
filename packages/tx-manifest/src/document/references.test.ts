@@ -113,17 +113,32 @@ describe("what a position refuses", () => {
 		expect(found.ok ? "" : found.reason).toContain("cannot be used as a destination");
 	});
 
-	test("an attribute of a transaction input is recognised and refused by name", () => {
+	test("an attribute of a transaction input is recognised as the lookup it is", () => {
 		expect(parseReference("vault_in.amount_sat")).toEqual({
 			attribute: "amount_sat",
 			form: "input-attribute",
 			name: "vault_in",
 		});
+	});
 
+	// It reads what the wallet established about that input and nothing else: the chain's word
+	// at the outpoint it spends, or — where the input issues — what that issuance created.
+	test("and resolves against the inputs this action actually resolved", () => {
+		const found = resolveReference("vault_in.amount_sat", "amount", {
+			...SCOPE,
+			inputs: { vault_in: { amount_sat: 50_000n } },
+		});
+
+		expect(found).toEqual({ form: "input-attribute", ok: true, value: 50_000n });
+	});
+
+	// A name for an input nothing resolved is refused as the lookup it is, rather than falling
+	// through to something that happens to have that name.
+	test("and refuses an input this action never resolved, by name", () => {
 		const found = resolveReference("vault_in.amount_sat", "amount", SCOPE);
 
 		expect(found.ok).toBe(false);
-		expect(found.ok ? "" : found.reason).toContain("vault_in.amount_sat");
+		expect(found.ok ? "" : found.reason).toContain("vault_in");
 	});
 
 	/**

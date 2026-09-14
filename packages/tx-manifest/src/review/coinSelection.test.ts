@@ -104,4 +104,103 @@ describe("selectCoins", () => {
 			expect(result.selected.map((selected) => selected.txid)).toEqual([big.txid]);
 		}
 	});
+
+	/**
+	 * A confidential output cannot fund a contract action.
+	 *
+	 * Unblinding one needs the secrets that go with it, and nothing in this package or in the
+	 * module that signs is ever handed one — an outpoint and its bytes is the whole of what
+	 * they get. Selecting one produces a transaction that fails inside the signing module, far
+	 * from the output that caused it.
+	 */
+	describe("what it will not spend", () => {
+		test("never selects a confidential output, however much it holds", () => {
+			const result = selectCoins(
+				[
+					{
+						amount: "1000000",
+						confidential: true,
+						spendable: true,
+						txOut: "00",
+						txid: "a".repeat(64),
+						vout: 0,
+					},
+					{ amount: "5000", spendable: true, txOut: "00", txid: "b".repeat(64), vout: 0 },
+				],
+				4000n,
+				0n,
+			);
+
+			expect(result.ok).toBe(true);
+			expect(result.ok ? result.selected.map((chosen) => chosen.txid) : []).toEqual([
+				"b".repeat(64),
+			]);
+		});
+
+		// A person looking at a balance that covers the amount has to be told why it does not
+		// count, rather than told they are short of money they can see.
+		test("and refuses when the balance only covers it with them, saying so", () => {
+			const result = selectCoins(
+				[
+					{
+						amount: "1000000",
+						confidential: true,
+						spendable: true,
+						txOut: "00",
+						txid: "a".repeat(64),
+						vout: 0,
+					},
+					{ amount: "500", spendable: true, txOut: "00", txid: "b".repeat(64), vout: 0 },
+				],
+				4000n,
+				0n,
+			);
+
+			expect(result.ok).toBe(false);
+
+			if (!result.ok) {
+				expect(result.reason).toContain("1000000");
+				expect(result.reason).toContain("confidential outputs");
+				expect(result.reason).toContain("unblinded address");
+			}
+		});
+
+		// Nothing is said about money that was never there to begin with.
+		test("but says nothing about confidential outputs when there are none", () => {
+			const result = selectCoins(
+				[{ amount: "500", spendable: true, txOut: "00", txid: "b".repeat(64), vout: 0 }],
+				4000n,
+				0n,
+			);
+
+			expect(result.ok ? "" : result.reason).not.toContain("confidential");
+		});
+
+		// An output is the same output however many times it is described. Two of them selected
+		// is one output spent twice, which is not a transaction at all.
+		test("takes an outpoint once, however many objects describe it", () => {
+			const duplicated = {
+				amount: "900",
+				spendable: true,
+				txOut: "00",
+				txid: "a".repeat(64),
+				vout: 0,
+			};
+			const result = selectCoins(
+				[
+					duplicated,
+					{ ...duplicated },
+					{ amount: "900", spendable: true, txOut: "00", txid: "b".repeat(64), vout: 0 },
+				],
+				1700n,
+				0n,
+			);
+
+			expect(result.ok).toBe(true);
+			expect(result.ok ? result.selected.map((chosen) => chosen.txid) : []).toEqual([
+				"a".repeat(64),
+				"b".repeat(64),
+			]);
+		});
+	});
 });

@@ -1,6 +1,19 @@
+import { byOutpoint } from "../chain/outpoint";
+
 /** One wallet output the selector may spend, as the wallet already describes it. */
 export type SelectableUtxo = {
 	amount: string;
+	/**
+	 * Whether this output's amount and asset are hidden on chain.
+	 *
+	 * A confidential one cannot fund a contract action: unblinding it needs the secrets that
+	 * go with it, and nothing in this package or in the module that signs is ever handed one —
+	 * an outpoint and its bytes is the whole of what they get. Selecting one produces a
+	 * transaction that fails inside the signing module, far from the output that caused it,
+	 * so it is excluded here where the reason can still be said. Optional because a caller
+	 * assembling a list by hand has nothing to hide.
+	 */
+	confidential?: boolean;
 	spendable: boolean;
 	txOut: string;
 	txid: string;
@@ -33,7 +46,11 @@ export function selectCoins(
 	}
 
 	const needed = targetSats + headroomSats;
-	const spendable = available.filter((utxo) => utxo.spendable).toSorted(byLargestFirst);
+	// One entry per outpoint before anything is counted or chosen, so that both halves of the
+	// answer below are about outputs rather than about descriptions of them.
+	const distinct = byOutpoint(available.filter((utxo) => utxo.spendable));
+	const spendable = distinct.filter((utxo) => !utxo.confidential).toSorted(byLargestFirst);
+	const withheldFrom = distinct.filter((utxo) => utxo.confidential);
 
 	const selected: SelectableUtxo[] = [];
 	let totalSats = 0n;
@@ -50,11 +67,30 @@ export function selectCoins(
 	if (totalSats < needed) {
 		return {
 			ok: false,
-			reason: `This account holds ${totalSats} of the ${needed} needed to perform the action and pay its fee.`,
+			reason:
+				`This account holds ${totalSats} of the ${needed} needed to perform the action and pay its fee.` +
+				withheldSentence(withheldFrom),
 		};
 	}
 
 	return { ok: true, selected, totalSats };
+}
+
+/**
+ * What is there and cannot be used, said only when there is some.
+ *
+ * A person looking at a balance that covers the amount has to be told why it does not count,
+ * rather than told they are short of money they can see on their own screen. Written from
+ * outputs already reduced to one entry each: a total that counted a description twice would
+ * quote them a figure larger than they hold, in the same sentence that told them it was
+ * unusable.
+ */
+export function withheldSentence(confidential: SelectableUtxo[]): string {
+	const withheld = confidential.reduce((sum, utxo) => sum + toSats(utxo.amount), 0n);
+
+	return withheld > 0n
+		? ` A further ${withheld} is in confidential outputs, which a contract action cannot spend — send it to this account's unblinded address to use it.`
+		: "";
 }
 
 /**

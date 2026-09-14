@@ -48,9 +48,22 @@ const deps = {
 	walletScriptPubKeyHex: WALLET_SCRIPT,
 };
 
+/**
+ * What the chain says sits at an outpoint, as a reader that reports everything.
+ *
+ * The amount and the asset are stated rather than left out, because a covenant output on this
+ * network cannot be confidential and still work — a Simplicity program reads exact amounts
+ * through jets that cannot introspect a commitment — so a reader that omitted them would be
+ * standing in for something no legitimate deployment produces, and the review refuses it.
+ */
 const chainHolding = (scriptPubKeyHex: string) => async (): Promise<TxOutAtOutPoint> => ({
+	amountSats: COVENANT_HOLDS,
+	rawAssetId: POLICY_ASSET,
 	scriptPubKeyHex,
 });
+
+/** What every covenant in these cases is holding, in the asset the network charges fees in. */
+const COVENANT_HOLDS = "50000";
 
 function request(
 	overrides: Partial<ParsedLiquidProcessCtParams> = {},
@@ -115,7 +128,11 @@ describe("reviewManifestAction", () => {
 				readTxOut: async () => {
 					asked += 1;
 
-					return { scriptPubKeyHex: DERIVED_SCRIPT };
+					return {
+						amountSats: COVENANT_HOLDS,
+						rawAssetId: POLICY_ASSET,
+						scriptPubKeyHex: DERIVED_SCRIPT,
+					};
 				},
 			});
 
@@ -263,8 +280,13 @@ describe("reviewManifestAction", () => {
 
 			if (!isRefusal(result)) {
 				expect(result.outputs).toEqual([
+					// A covenant output is answered before the format's precedence is consulted: a
+					// Simplicity program reads exact amounts through jets that cannot introspect a
+					// commitment, so a hidden one is an output its own contract could never check.
 					{
 						asset: POLICY_ASSET,
+						blinded: false,
+						decidedBy: "unblindable",
 						id: "p2pk_out",
 						sats: 1000n,
 						scriptPubKeyHex: DERIVED_SCRIPT,

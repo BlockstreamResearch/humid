@@ -1,12 +1,20 @@
 import { describe, expect, test } from "bun:test";
 
 import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
+import type { NormalisedAction } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
 import { planAction } from "./plan";
 
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const MANIFEST = p2pkManifest as unknown as Record<string, unknown>;
-const PAY = (MANIFEST.actions as Record<string, Record<string, unknown>>).Pay;
+const PAY = action(
+	"Pay",
+	(MANIFEST.actions as Record<string, Record<string, unknown>>).Pay as Record<string, unknown>,
+);
+
+function action(name: string, node: Record<string, unknown>): NormalisedAction {
+	return { isConstructor: false, name, node };
+}
 
 function scope(params: Record<string, unknown>): ReferenceScope {
 	return { params };
@@ -22,7 +30,10 @@ describe("planAction", () => {
 
 		if (result.ok) {
 			expect(result.plan.fundingSats).toBe(50_000n);
+			// A covenant output could never hide what it carries, whatever the document says,
+			// so its blinding is answered before the format's own order is consulted.
 			expect(result.plan.outputs).toContainEqual({
+				blinding: { blinding: "open", decidedBy: "unblindable" },
 				id: "p2pk_out",
 				sats: 50_000n,
 				target: { kind: "covenant", utxoType: "p2pk_output" },
@@ -78,7 +89,7 @@ describe("planAction", () => {
 
 	test("refuses a destination it does not resolve", () => {
 		const result = planAction(
-			{ outputs: [{ amount_sat: 1, destination: { if: "something" }, id: "odd" }] },
+			action("Odd", { outputs: [{ amount_sat: 1, destination: { if: "something" }, id: "odd" }] }),
 			scope({ amount_sat: 1, pubkey: PUBKEY }),
 		);
 
@@ -86,7 +97,10 @@ describe("planAction", () => {
 	});
 
 	test("refuses an action with no outputs", () => {
-		const result = planAction({ outputs: [] }, scope({ amount_sat: 1, pubkey: PUBKEY }));
+		const result = planAction(
+			action("Empty", { outputs: [] }),
+			scope({ amount_sat: 1, pubkey: PUBKEY }),
+		);
 
 		expect(result).toMatchObject({ ok: false });
 	});
