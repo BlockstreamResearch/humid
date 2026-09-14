@@ -8,7 +8,15 @@ import { HomeActions } from "./components/HomeActions";
  * The product Home: an identity-first hero (network, "signed in as", balance) with a row of primary
  * actions. A thin consumer of {@link useHumidContext} — all wallet plumbing lives in the context.
  */
-export default function Home({ onOpenDeveloper }: { onOpenDeveloper: () => void }) {
+export default function Home({
+	onOpenDeveloper,
+	onOpenFormatSupport,
+	onOpenManifestInspector,
+}: {
+	onOpenDeveloper: () => void;
+	onOpenFormatSupport: () => void;
+	onOpenManifestInspector: () => void;
+}) {
 	const { hasProvider, isConnected } = useHumidContext();
 
 	return (
@@ -21,7 +29,10 @@ export default function Home({ onOpenDeveloper }: { onOpenDeveloper: () => void 
 			<HeroCard />
 			{hasProvider && isConnected ? <HomeActions /> : null}
 
-			<div className="mt-auto flex justify-center pt-6">
+			{/* The offline pages sit beside Developer rather than inside it: the cards there are all
+			    ways of driving a wallet and disappear when none is installed, which is exactly when
+			    reading a document — or the table the wallet reads one by — is most useful. */}
+			<div className="mt-auto flex flex-wrap justify-center gap-1 pt-6">
 				<Button
 					variant="ghost"
 					size="sm"
@@ -29,6 +40,22 @@ export default function Home({ onOpenDeveloper }: { onOpenDeveloper: () => void 
 					onClick={onOpenDeveloper}
 				>
 					Developer
+				</Button>
+				<Button
+					variant="ghost"
+					size="sm"
+					className="text-muted-foreground text-xs"
+					onClick={onOpenManifestInspector}
+				>
+					Manifest inspector
+				</Button>
+				<Button
+					variant="ghost"
+					size="sm"
+					className="text-muted-foreground text-xs"
+					onClick={onOpenFormatSupport}
+				>
+					Format support
 				</Button>
 			</div>
 		</div>

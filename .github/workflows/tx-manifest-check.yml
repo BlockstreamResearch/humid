@@ -1,6 +1,7 @@
 name: tx-manifest / smplx check
 
-# The gate for the tx-manifest package and the smplx adapter, and only for those.
+# The gate for the tx-manifest package, the smplx adapter and the offline developer
+# tooling in the web app, and only for those.
 #
 # Deliberately not `bun run check`. On a clean frozen install against the pinned
 # submodules, the repository-wide typecheck fails in existing UI code on duplicate React
@@ -73,6 +74,25 @@ jobs:
             apps/extension/src/core/chains/liquid/adapters/smplx/compileCovenantWithSmplx.test.ts \
             apps/extension/src/core/chains/liquid/adapters/smplx/assembleReviewedTransaction.test.ts
 
+      # The web half of this slice: the manifest inspector and the format support page, which
+      # read the manifest runtime's TypeScript rather than only a JSON fixture from it.
+      #
+      # `tsconfig.tooling.json` narrows what is checked, not what is read: it starts from these
+      # two directories and follows every UI component and package they import under the app's
+      # own settings, with nothing stubbed or skipped. The whole-app and root typechecks still
+      # fail on the duplicate type families described above, and are restored in the activation
+      # slice — gating on them here would report that against every change to this tooling.
+      - name: Typecheck the manifest tooling
+        run: bun --filter='./apps/web' run typecheck:tooling
+
+      # The production module graph, bundled. It is what says the two new views are reachable
+      # through the App/Home navigation and that everything they pull in resolves for a browser.
+      # Vite directly rather than the app's `build` script, which runs the whole-app typecheck
+      # first: bundling succeeds where that typecheck does not, and this step is about the bundle.
+      - name: Build the web app
+        working-directory: apps/web
+        run: bunx vite build
+
       # Both are repository-wide and both pass on this branch, so they are run as they are
       # rather than narrowed to these paths.
       - name: Lint
@@ -81,5 +101,11 @@ jobs:
       - name: Check formatting
         run: bun run format:check
 
+      # `apps/web` carries the server-rendered assertions for the inspector and the format
+      # page. They render each view to a string with no wallet, no provider and no document,
+      # which is the strongest available check that those pages stand alone — so they have to
+      # run here rather than only in a full-repository gate this job deliberately skips.
       - name: Test
-        run: bun test packages/tx-manifest apps/extension/src/core/chains/liquid/adapters/smplx
+        run: |
+          bun test packages/tx-manifest apps/web \
+            apps/extension/src/core/chains/liquid/adapters/smplx

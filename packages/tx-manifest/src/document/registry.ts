@@ -10,8 +10,10 @@ import type { NormalisedManifest } from "./normalise";
  * here, so the gap between what the format can say and what this wallet can honour is a table
  * to read rather than an absence to notice.
  *
- * Nothing here is a public surface. What a caller outside this package gets is the refusal a
- * load-bearing gap earns, not the table that produced it.
+ * What a wallet gets from this table is the refusal a load-bearing gap earns, not the table
+ * that produced it. What a developer holding no wallet gets is the table itself, read-only,
+ * through {@link describeConstructs} and {@link describeRegistry} — both computed from this
+ * one declaration, so neither can describe a runtime that differs from the one that runs.
  */
 
 /** One construct the runtime met and did not act on. */
@@ -33,6 +35,136 @@ export function ignored(findings: ConstructFinding[]): ConstructFinding[] {
 /** What a refusal has to be built on. */
 export function loadBearing(findings: ConstructFinding[]): ConstructFinding[] {
 	return findings.filter((finding) => finding.loadBearing);
+}
+
+/**
+ * What the runtime does with one construct, as a name rather than as two flags.
+ *
+ * The flags are the right shape for deciding — `loadBearing` is the whole of what a refusal
+ * turns on — and the wrong shape for showing, because the four combinations are four
+ * different sentences and none of them is "true" or "false". `unrecognised` is the fifth
+ * outcome and not one of the four: it is the state of a key no site lists, which the flags
+ * carry as `declared: false` rather than as a combination of their own.
+ */
+export type ConstructState =
+	/** Read, and what it says changes what gets signed. */
+	| "acted-on"
+	/** Read, and shown to a person; it decides nothing. */
+	| "shown"
+	/** The format defines it and this runtime does not implement it. */
+	| "unimplemented"
+	/** Known, and deliberately read by nothing, here or in the reference implementation. */
+	| "never-read"
+	/** No site lists it, so no specification this runtime knows describes it here. */
+	| "unrecognised";
+
+/** One construct the document declares, and what this runtime makes of it. */
+export type ConstructReport = {
+	/** Where it was found, in the document's own terms. */
+	at: string;
+	key: string;
+	/**
+	 * The kind of position it sits at, as the table itself keys them.
+	 *
+	 * Reported because `at` is written for a person — "action Pay / param amount_sat" — and a
+	 * caller that needs to know two reports concern the same construct has otherwise to parse
+	 * that sentence, which makes a display string into a contract nobody declared. The same key
+	 * at two kinds of position is two constructs and may be in two different states.
+	 */
+	site: ConstructSiteKind;
+	state: ConstructState;
+};
+
+/**
+ * Every construct the document declares, each against what the runtime does with it.
+ *
+ * The companion to {@link inspectConstructs} rather than a replacement: that one answers
+ * "what must this refuse on", which is why it returns only what is unhandled, and this one
+ * answers "what is in this document", which needs the handled ones too. Both walk the same
+ * table, so neither can drift from the other.
+ */
+export function describeConstructs(manifest: NormalisedManifest): ConstructReport[] {
+	const reports: ConstructReport[] = [];
+
+	walkSites(manifest, (node, kind, at) => {
+		const site: ConstructSite = SITES[kind];
+
+		for (const key of Object.keys(node)) {
+			reports.push({ at, key, site: kind, state: stateOf(site, key) });
+		}
+	});
+
+	return reports;
+}
+
+/** One construct the runtime registers, for a caller holding no document. */
+export type ConstructRegistryEntry = {
+	key: string;
+	/** Why the runtime does not act on it, or undefined where it does. */
+	reason: string | undefined;
+	/** The kind of position, or undefined where the key is answered at every position. */
+	site: ConstructSiteKind | undefined;
+	state: ConstructState;
+};
+
+/**
+ * Every construct this runtime knows, whether or not anyone has pasted a document.
+ *
+ * The companion to {@link describeConstructs} from the other side. That one answers "what is
+ * in this document"; this one answers "what can this runtime honour at all", which no document
+ * can answer, because a construct nobody has published is invisible in every document there
+ * is. Every construct the format defines and this runtime does not implement is in exactly
+ * that position today: no published protocol uses one, so every document ever inspected here
+ * has read clean while they stood.
+ *
+ * Unsorted. A caller ordering it knows what its reader came for; the table's own order is the
+ * order somebody typed it in.
+ */
+export function describeRegistry(): ConstructRegistryEntry[] {
+	const entries: ConstructRegistryEntry[] = [];
+
+	for (const [kind, site] of Object.entries(SITES) as [ConstructSiteKind, ConstructSite][]) {
+		for (const [key, construct] of Object.entries(site.constructs)) {
+			entries.push(entryOf(key, kind, construct));
+		}
+	}
+
+	for (const [key, construct] of Object.entries(DOCUMENT_CONVENTIONS)) {
+		entries.push(entryOf(key, undefined, construct));
+	}
+
+	return entries;
+}
+
+function entryOf(
+	key: string,
+	site: ConstructSiteKind | undefined,
+	construct: Construct,
+): ConstructRegistryEntry {
+	if (construct.handled) {
+		return { key, reason: undefined, site, state: construct.loadBearing ? "acted-on" : "shown" };
+	}
+
+	return {
+		key,
+		reason: construct.reason,
+		site,
+		state: construct.loadBearing ? "unimplemented" : "never-read",
+	};
+}
+
+function stateOf(site: ConstructSite, key: string): ConstructState {
+	const construct = constructAt(site, key);
+
+	if (!construct) {
+		return "unrecognised";
+	}
+
+	if (construct.handled) {
+		return construct.loadBearing ? "acted-on" : "shown";
+	}
+
+	return construct.loadBearing ? "unimplemented" : "never-read";
 }
 
 /**
@@ -321,7 +453,16 @@ const SITES = {
 	},
 } satisfies Record<string, ConstructSite>;
 
-type SiteKind = keyof typeof SITES;
+/**
+ * Every kind of position this format has, as the construct table itself keys them.
+ *
+ * Published because a caller reporting on a document needs to say which kind a construct was
+ * found at without reading the sentence written for a person, and because the set is the
+ * table's own rather than a second list that could fall behind it.
+ */
+export type ConstructSiteKind = keyof typeof SITES;
+
+type SiteKind = ConstructSiteKind;
 
 /** What a position says about one key, or what every position says about it. */
 function constructAt(site: ConstructSite, key: string): Construct | undefined {
