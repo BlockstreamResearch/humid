@@ -34,3 +34,21 @@ export type { ReadFeeRate, ReadTxOut } from "./chain/chainRead";
 // rather than named again beside it. A wallet supplying a compiler already holds its shape,
 // and a second public name for one is a second thing to keep in step.
 export { type ManifestReview, isRefusal, reviewManifestAction } from "./review";
+// Every refusal carries one of these beside its sentence, so a caller can tell "this wallet
+// will never build that" from "your state file is out of date" — the same wire code and
+// opposite advice. The vocabulary is published; the table that produces it is not.
+export type { RejectToken } from "./document/refuse";
+
+// 4. What came back, checked against what was agreed to — before it is called a transaction.
+// Both read the finished transaction's own bytes rather than asking the module that built it,
+// because a module's account of itself cannot answer whether it did something it was not
+// asked to. They are here rather than inside the review because only whoever holds the signing
+// module has bytes to check.
+export {
+	type ExpectedInputs,
+	type ExpectedOutput,
+	type ExpectedOutputs,
+	type GuardResult,
+	guardBuiltOutputs,
+	guardSpentInputs,
+} from "./chain/guards";

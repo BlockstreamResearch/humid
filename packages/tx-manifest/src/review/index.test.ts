@@ -160,22 +160,24 @@ describe("reviewManifestAction", () => {
 	// Receive spends the covenant. This is where the wallet's derivation is checked against
 	// something it did not get from the requester.
 	describe("spending a covenant", () => {
-		// Receive verifies but cannot yet be built: its output amount references another
-		// input, which this runtime does not evaluate, and its spend needs a signing witness.
-		// Asserting the refusal is about the amount rather than the covenant is what shows
-		// verification got past — a weaker claim than "it builds", and the true one. Building a
-		// Receive on a guess would be building a partial transaction and calling it whole.
+		// Receive's output pays what the covenant input turned out to hold — `p2pk_in.amount_sat`,
+		// a figure the wallet read from the chain rather than one the document states. So the
+		// review resolving at all is the whole of what this asserts: the covenant was rebuilt,
+		// compared against what is at the outpoint, and the amount that reads it came out as
+		// what the chain reported.
 		test("gets past verification when the rebuilt contract locks the funds that are there", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
 				...deps,
 				readTxOut: chainHolding(DERIVED_SCRIPT),
 			});
 
-			expect(isRefusal(result)).toBe(true);
+			expect(isRefusal(result)).toBe(false);
 
-			if (isRefusal(result)) {
-				expect(result.reason).toContain("amount");
-				expect(result.reason).not.toContain("rebuilds to");
+			if (!isRefusal(result)) {
+				expect(result.covenants.map((found) => found.verified)).toEqual(["matches-chain"]);
+				expect(result.outputs.find((output) => output.id === "received_out")?.sats).toBe(
+					BigInt(COVENANT_HOLDS),
+				);
 			}
 		});
 

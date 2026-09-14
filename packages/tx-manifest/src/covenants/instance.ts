@@ -1,6 +1,7 @@
 import { asArray, asRecord } from "../document/json";
 import type { NormalisationNote, NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
+import { computedValue, computesValue } from "../evaluation/computedValue";
 import { resolveCompileParams } from "./compileParams";
 import { COVENANT_HASH_SEED, type HashCovenant, ITERATION_BOUND } from "./covenantHash";
 
@@ -305,6 +306,17 @@ function resolveFieldReference(
 	const found = resolveReference(text, "compileParam", scope, notes);
 
 	if (!found.ok) {
+		// A field the document works out rather than states. Asked only after a reference has
+		// failed, and recognised by the operators it is written with rather than by whether it
+		// evaluates: a field holding thirty-two zero bytes is a hash and is also legal
+		// arithmetic, and evaluating it would record `0` — a different value at every position
+		// that compiles it, and one nothing downstream could tell from the real one.
+		if (computesValue(text)) {
+			const computed = computedValue(text, "compileParam", scope, notes);
+
+			return computed.ok ? computed : { ok: false, reason: `Field ${name}: ${computed.reason}` };
+		}
+
 		return text.startsWith("$") || text.includes(".")
 			? { ok: false, reason: `Field ${name}: ${found.reason}` }
 			: { ok: true, value: text };

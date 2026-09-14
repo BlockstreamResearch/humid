@@ -1,3 +1,4 @@
+import { baseUnits } from "../chain/baseUnits";
 import type { ReadFeeRate, ReadTxOut } from "../chain/chainRead";
 import { byOutpoint, outpointKey } from "../chain/outpoint";
 import {
@@ -23,16 +24,30 @@ import {
 	normaliseManifest,
 } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
+import { type RejectToken, refuseUnsupported } from "../document/refuse";
 import { covenantSites } from "../document/sites";
 import { assetLedger, type HeldValue, resolveAsset } from "../evaluation/assetLedger";
 import type { BlindingWord } from "../evaluation/blinding";
+import {
+	actionHook,
+	inputHook,
+	inputHookScope,
+	runHook,
+	withHookValues,
+} from "../evaluation/hooks";
+import { type PlaceableInput, placeInputs } from "../evaluation/inputOrder";
+import { resolveInputRules, transactionSequence } from "../evaluation/inputRules";
 import {
 	declaredIssuance,
 	issuanceAttributes,
 	type PlannedIssuance,
 	resolveIssuance,
 } from "../evaluation/issuance";
+import { fillParameters } from "../evaluation/parameters";
 import { planAction } from "../evaluation/plan";
+import { checkPositions, type StatedPosition } from "../evaluation/positions";
+import { checkValidations } from "../evaluation/validate";
+import { resolveStaticWitnesses } from "../evaluation/witness";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { resolveActionRequirements } from "../request/requirements";
 import { type AssetHoldings, fundAssets } from "./assetFunding";
@@ -166,12 +181,27 @@ export type ManifestReview = {
 	/** Legacy spellings the document used, so the generation it came from can be reported. */
 	normalisation: NormalisationNote[];
 	outputs: ReviewedOutput[];
+	/**
+	 * The asset the network charges its fees in, as the wallet was configured with it.
+	 *
+	 * Carried because the plan is not complete without it and because anything checking a
+	 * finished transaction against this plan needs it: a fee output is the network's own, and
+	 * "the fee is paid in whatever the fee output says" is not a check. Written in the
+	 * canonical form the rest of this package compares asset ids in.
+	 */
+	policyAsset: string;
 	protocol: string;
 	/** The wallet's own outputs that fund this, chosen by the wallet. */
 	selected: SelectableUtxo[];
 };
 
-export type ReviewRefusal = { reason: string; refused: true };
+/**
+ * Why the wallet will not build this action: a sentence for a person, a name for a program.
+ *
+ * Both, always. A site handed only the sentence cannot tell a document it must rewrite from a
+ * state file it must refresh, and a person handed only the name has been told nothing.
+ */
+export type ReviewRefusal = { reason: string; refused: true; reject: RejectToken };
 
 export type ReviewManifestActionResult = ManifestReview | ReviewRefusal;
 
@@ -210,6 +240,15 @@ export async function reviewManifestAction(
 	request: ParsedLiquidProcessCtParams,
 	input: {
 		compile: CompileCovenant;
+		/**
+		 * The version of SimplicityHL standing behind `compile`, when the caller knows it.
+		 *
+		 * Optional because this package compiles nothing itself and cannot ask. A caller that
+		 * supplies one has the document's own declared version checked against it; a caller that
+		 * does not gets the check skipped rather than answered against a stand-in, because
+		 * passing a placeholder would turn "not checked" into "checked and fine".
+		 */
+		compilerVersion?: string;
 		/**
 		 * What a contract declares about its own compile parameters.
 		 *
@@ -251,10 +290,28 @@ export async function reviewManifestAction(
 	const deployment = normaliseInstance(request.instance);
 	const notes: NormalisationNote[] = [...normalised.notes, ...deployment.notes];
 
+	// Everything the wallet will not build, before it builds anything. A construct in a
+	// load-bearing position that this runtime does not act on is refused here rather than
+	// stepped over: the format's own conformance rule is that a tool which does not implement
+	// an extension rejects a manifest using its fields, and a document read only in part is a
+	// document nobody can say what signing would do.
+	const unsupported = refuseUnsupported(manifest, {
+		...(input.compilerVersion === undefined ? {} : { compilerVersion: input.compilerVersion }),
+		contractSources: request.contractSources,
+	});
+
+	if (unsupported) {
+		return { reason: unsupported.reason, refused: true, reject: unsupported.reject };
+	}
+
 	const action = findAction(manifest, request.action);
 
 	if (!action) {
-		return { reason: `The manifest declares no action named "${request.action}".`, refused: true };
+		return {
+			reason: `The manifest declares no action named "${request.action}".`,
+			refused: true,
+			reject: "no-such-action",
+		};
 	}
 
 	// The mode this protocol says its contracts were built in, before anything is compiled. It
@@ -264,17 +321,47 @@ export async function reviewManifestAction(
 	const buildMode = manifest.buildMode;
 
 	if (!buildMode.ok) {
-		return { reason: buildMode.reason, refused: true };
+		return { reason: buildMode.reason, refused: true, reject: "unreadable-build-mode" };
 	}
 
-	const requirements = resolveActionRequirements(request, manifest, action);
+	// What the protocol already knows the answer to is filled before anything asks whether the
+	// request is complete. The other order reports a parameter as missing that the document
+	// itself supplies, which sends a site looking for a value it was never meant to send.
+	const filled = fillParameters(
+		action,
+		request.params,
+		{ instance: deployment.instance.fields, params: request.params },
+		notes,
+	);
+
+	if (!filled.ok) {
+		return { reason: filled.reason, refused: true, reject: filled.reject };
+	}
+
+	// A container the document declares and writes in a shape nothing here can read. Every one
+	// of these keys is one the runtime acts on, so the reading that used to apply — a value that
+	// is not the expected shape is the same as no value — turned a malformed declaration into an
+	// absent one: an action whose `validations` are an object rather than a list had no rules
+	// checked, and nothing said so.
+	const malformed = malformedDeclaration(action);
+
+	if (malformed) {
+		return { reason: malformed, refused: true, reject: "document-fault" };
+	}
+
+	const params = filled.params;
+	const requirements = resolveActionRequirements({ ...request, params }, manifest, action);
 
 	if (requirements.missing.length > 0) {
 		const named = requirements.missing
 			.map((entry) => (entry.keys ? `${entry.reason} (${entry.keys.join(", ")})` : entry.reason))
 			.join(" ");
 
-		return { reason: `This request cannot be built. ${named}`, refused: true };
+		return {
+			reason: `This request cannot be built. ${named}`,
+			refused: true,
+			reject: "incomplete-request",
+		};
 	}
 
 	/**
@@ -333,7 +420,7 @@ export async function reviewManifestAction(
 	let scope: ReferenceScope = {
 		inputs,
 		instance: deployment.instance.fields,
-		params: request.params,
+		params,
 	};
 
 	// The covenants this action spends, which are the ones there is something on chain to compare
@@ -363,13 +450,17 @@ export async function reviewManifestAction(
 		});
 
 		if (!derived.ok) {
-			return { reason: derived.reason, refused: true };
+			return { reason: derived.reason, refused: true, reject: "document-fault" };
 		}
 
 		const outpoint = stateOutpoint(request, site.utxoType);
 
 		if (!outpoint) {
-			return { reason: `The state file lists no ${site.utxoType} to spend.`, refused: true };
+			return {
+				reason: `The state file lists no ${site.utxoType} to spend.`,
+				refused: true,
+				reject: "no-utxo-to-spend",
+			};
 		}
 
 		let onChain;
@@ -383,13 +474,14 @@ export async function reviewManifestAction(
 			return {
 				reason: `Could not read what is at ${outpoint.txid}:${outpoint.vout}: ${String(error)}`,
 				refused: true,
+				reject: "chain-read-failed",
 			};
 		}
 
 		const matched = covenantMatchesChain(derived.derivation, onChain.scriptPubKeyHex);
 
 		if (!matched.matched) {
-			return { reason: matched.reason, refused: true };
+			return { reason: matched.reason, refused: true, reject: "covenant-mismatch" };
 		}
 
 		/**
@@ -419,6 +511,7 @@ export async function reviewManifestAction(
 					"explicit amount and asset, so this wallet cannot say what it holds. It will not " +
 					"assume a balance for an output it is about to spend.",
 				refused: true,
+				reject: "unbuildable-utxo-type",
 			};
 		}
 
@@ -433,17 +526,32 @@ export async function reviewManifestAction(
 					`${onChain.rawAssetId}, and the manifest gives that input no id, so this wallet ` +
 					"cannot account for what it brings.",
 				refused: true,
+				reject: "document-fault",
 			};
 		}
 
 		// Recorded beside the amount because an input's own name reads the asset as
 		// `<input>.asset`, and a name that could not see it would resolve to nothing.
-		inputs[site.id] = { amount_sat: BigInt(onChain.amountSats), asset: onChain.rawAssetId };
-		chainHeld.push({
-			asset: onChain.rawAssetId,
-			id: site.id,
-			sats: BigInt(onChain.amountSats),
-		});
+		// Parsed once, and parsed rather than trusted. The reader is the wallet's own and what
+		// it returns is text: an empty string converts to zero, a hexadecimal one to a number in
+		// a base nobody meant, and a fraction throws — out of a function whose whole contract is
+		// to answer with a refusal. All three are the same failure, and all three are a covenant
+		// whose holding this wallet has not established.
+		const held = baseUnits(onChain.amountSats);
+
+		if (held === undefined) {
+			return {
+				reason:
+					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} came back holding ` +
+					`${JSON.stringify(onChain.amountSats)}, which is not an amount this wallet can read. ` +
+					"It will not spend an output it cannot say the value of.",
+				refused: true,
+				reject: "unbuildable-utxo-type",
+			};
+		}
+
+		inputs[site.id] = { amount_sat: held, asset: onChain.rawAssetId };
+		chainHeld.push({ asset: onChain.rawAssetId, id: site.id, sats: held });
 
 		covenants.push({ ...derived.derivation, role: "spent", verified: "matches-chain" });
 	}
@@ -461,8 +569,20 @@ export async function reviewManifestAction(
 	});
 
 	if (!issued.ok) {
-		return { reason: issued.reason, refused: true };
+		return { reason: issued.reason, refused: true, reject: issued.reject };
 	}
+
+	// Hooks run after every input is resolved and before anything is built, which is what makes
+	// them able to say what an input turned out to hold. An input's own hook goes first and in
+	// declaration order, then the action's, because a document's later line may read what an
+	// earlier one set — and every output amount and validation below reads the result.
+	const hooked = runActionHooks(action, scope, notes);
+
+	if (!hooked.ok) {
+		return { reason: hooked.reason, refused: true, reject: "document-fault" };
+	}
+
+	scope = hooked.scope;
 
 	// The deployment this action creates, worked out before anything is derived from it. Its
 	// covenant-hash fields are compiled here rather than asked for, because nothing but a wallet
@@ -478,7 +598,7 @@ export async function reviewManifestAction(
 		: undefined;
 
 	if (created && !created.ok) {
-		return { reason: created.reason, refused: true };
+		return { reason: created.reason, refused: true, reject: "document-fault" };
 	}
 
 	if (created) {
@@ -508,16 +628,55 @@ export async function reviewManifestAction(
 		});
 
 		if (!derived.ok) {
-			return { reason: derived.reason, refused: true };
+			return { reason: derived.reason, refused: true, reject: "document-fault" };
 		}
 
 		covenants.push({ ...derived.derivation, role: "created", verified: "not-yet-on-chain" });
 	}
 
+	// A value the document states for a witness outright, resolved after the hooks: a protocol
+	// may select a contract's branch by a field of its own deployment, and a hook is what may
+	// have written that field. Nothing here signs anything — the literal and its type travel to
+	// the compiler as text — but a value that will not resolve is a branch nobody chose.
+	const stated = resolveStaticWitnesses(action, scope, notes);
+
+	if (!stated.ok) {
+		return { reason: stated.reason, refused: true, reject: "document-fault" };
+	}
+
 	const plan = planAction(action, scope, notes, manifest.raw.confidential_outputs);
 
 	if (!plan.ok) {
-		return { reason: plan.reason, refused: true };
+		return { reason: plan.reason, refused: true, reject: "document-fault" };
+	}
+
+	// The protocol's own rules about this action, checked once its amounts are known: a rule
+	// comparing an amount cannot be checked before there is one. A rule that fails refuses, and
+	// so does one this runtime cannot read — reading half a rule permits exactly what it was
+	// written to prevent.
+	const failed = checkValidations(action, scope, notes);
+
+	if (failed) {
+		return { reason: failed.reason, refused: true, reject: "document-fault" };
+	}
+
+	// What the action requires of each input beyond where the money comes from: a relative
+	// timelock a covenant may depend on, and an address it may pin funding to.
+	const inputRules = resolveInputRules(action, scope, notes);
+
+	if (!inputRules.ok) {
+		return { reason: inputRules.reason, refused: true, reject: "document-fault" };
+	}
+
+	// The signing module takes one sequence for the transaction and writes it onto every input
+	// that declares none, so what the action declares per input has to collapse to a single
+	// value or be refused here. What survives is a sequence with the timelock disable bit set,
+	// which constrains no input at all — so honouring it is nothing the builder has to be told,
+	// and a declaration this wallet cannot carry is refused before the person is asked.
+	const sequence = transactionSequence(inputRules.rules);
+
+	if (!sequence.ok) {
+		return { reason: sequence.reason, refused: true, reject: "unimplemented-construct" };
 	}
 
 	let feeRateSatsPerKvb: number;
@@ -528,6 +687,29 @@ export async function reviewManifestAction(
 		return {
 			reason: `The wallet could not establish a fee rate, so it will not build this: ${String(error)}`,
 			refused: true,
+			reject: "no-fee-rate",
+		};
+	}
+
+	// A reader that returns rather than throws has still not necessarily answered. `NaN` is
+	// what a failed parse of an endpoint's reply comes back as, an infinity is what dividing by
+	// a zero estimate produces, and a negative rate is a number no network charges. Each of
+	// them reaches the same place — the headroom this over-selects by, which converts the rate
+	// to a whole number of base units — and converting any of them throws out of this function
+	// entirely, so a caller promised a refusal gets an exception instead.
+	//
+	// Zero is allowed and is not in that set. A regtest node with no traffic really does answer
+	// zero, the arithmetic below is sound at zero, and what it produces is a transaction that
+	// over-selects by nothing — which the signing module then charges its own fee against out
+	// of what was selected for the outputs. That is a shortfall if it does not fit, named as
+	// one, rather than a refusal for a rate the network genuinely quoted.
+	if (!Number.isFinite(feeRateSatsPerKvb) || feeRateSatsPerKvb < 0) {
+		return {
+			reason:
+				`The wallet was given ${feeRateSatsPerKvb} as a fee rate, which is not a rate anything ` +
+				"can be charged at. It will not build a transaction it cannot price.",
+			refused: true,
+			reject: "no-fee-rate",
 		};
 	}
 
@@ -554,7 +736,7 @@ export async function reviewManifestAction(
 	});
 
 	if (!reckoned.ok) {
-		return { reason: reckoned.reason, refused: true };
+		return { reason: reckoned.reason, refused: true, reject: reckoned.reject };
 	}
 
 	const ledger = reckoned.ledger;
@@ -602,12 +784,138 @@ export async function reviewManifestAction(
 				`The output ${foreign.id || "(unnamed)"} must hide what it carries and pays somewhere ` +
 				"this wallet holds no blinding key for.",
 			refused: true,
+			reject: "unimplemented-construct",
 		};
 	}
 
 	// Each asset funded out of what the wallet holds in that asset, and short in one of them is
 	// a refusal that says which one. The fee is added to the network's own asset and to no
 	// other: a second asset never becomes a second fee.
+	/**
+	 * Which script each declared input must be funded from, where the action pins one.
+	 *
+	 * A script rather than an address, on both sides. The document's `from_address` resolves
+	 * through the request or the deployment to whatever those carry, and what the wallet's own
+	 * outputs carry is `scriptPubKeyHex` — so this compares hex against hex and decodes nothing.
+	 * Nothing in this package holds a bech32 reader, so a deployment recording a bech32 address
+	 * where the wallet records a script is two strings that do not match, and the action is
+	 * refused rather than funded from somewhere the protocol did not name.
+	 */
+	const pinFor = new Map<string, string>();
+
+	for (const rule of inputRules.rules) {
+		if (rule.fromAddress !== undefined) {
+			pinFor.set(rule.id, rule.fromAddress);
+		}
+	}
+
+	/** Every declared input the wallet funds out of its own outputs, and in which asset. */
+	const fundedInput = new Map(ledger.walletInputs.map((wallet) => [wallet.id, wallet.asset]));
+
+	// A pin on an input the wallet funds nothing for — a covenant input, whose output the state
+	// file names and the chain confirmed — is a requirement about a choice this wallet does not
+	// make. It is refused rather than passed over, because passing over a pin is exactly how an
+	// action gets funded from somewhere its protocol ruled out.
+	for (const [id, script] of pinFor) {
+		if (!fundedInput.has(id)) {
+			return {
+				reason:
+					`This action requires input ${id} to be funded from ${script}, and that input is ` +
+					"not one this wallet funds out of its own outputs.",
+				refused: true,
+				reject: "document-fault",
+			};
+		}
+	}
+
+	/**
+	 * The pin that applies to each asset, which is the unit funding is actually chosen in.
+	 *
+	 * One selection is made per asset and credited to the declared inputs in it, so a pin on any
+	 * one of them constrains the whole of that asset's run — there is no smaller thing to
+	 * constrain. That is why two inputs in one asset pinned to different scripts is refused
+	 * rather than reconciled: both cannot be honoured, and honouring either silently is the
+	 * wallet choosing which half of the document to believe.
+	 *
+	 * An asset nothing pins is left alone. Filtering every asset by the first pin found is what
+	 * this replaces, and it constrained inputs the document said nothing about — an action
+	 * pinning its collateral would refuse for holding no fee money at the collateral's address.
+	 */
+	const pinnedAsset = new Map<string, { id: string; script: string }>();
+
+	for (const wallet of ledger.walletInputs) {
+		const script = pinFor.get(wallet.id);
+
+		if (script === undefined) {
+			continue;
+		}
+
+		const already = pinnedAsset.get(wallet.asset);
+
+		if (already && !sameScript(already.script, script)) {
+			return {
+				reason:
+					`This action requires input ${already.id} to be funded from ${already.script} and ` +
+					`input ${wallet.id} from ${script}, and both are funded in ${wallet.asset} out of ` +
+					"one selection. This wallet cannot fund one run of outputs from two places.",
+				refused: true,
+				reject: "no-funds-at-signing-address",
+			};
+		}
+
+		pinnedAsset.set(wallet.asset, { id: wallet.id, script });
+	}
+
+	const pinnedHoldings: AssetHoldings = (asset) => {
+		const pin = pinnedAsset.get(asset);
+
+		return pin === undefined
+			? holdings(asset)
+			: holdings(asset).filter((utxo) => sameScript(utxo.scriptPubKeyHex ?? "", pin.script));
+	};
+
+	// Said here rather than left to the shortfall, because they are different sentences: "you
+	// hold nothing in this asset" and "you hold nothing in this asset *there*" send a person to
+	// two different places. Only the assets that are actually pinned are checked, and each names
+	// its own.
+	for (const [asset, pin] of pinnedAsset) {
+		const committed = issued.reserved.some((held) => held.asset === asset);
+
+		if (pinnedHoldings(asset).length === 0 && !committed) {
+			return {
+				reason:
+					`This action must fund input ${pin.id} from ${pin.script}, and this wallet holds ` +
+					`nothing in ${asset} there.`,
+				refused: true,
+				reject: "no-funds-at-signing-address",
+			};
+		}
+	}
+
+	// An output committed to for an issuance was chosen before the action's pins could be
+	// resolved, because the asset id depends on that output and the hooks that read the id run
+	// first. Where the two disagree the action is refused rather than built from another output:
+	// moving the issuance would mint a different asset than the one already computed.
+	//
+	// Only against the pin on the input that issued it. An issuance on an input the document
+	// pins nothing for is not misplaced by a pin somewhere else in the same action.
+	const misplaced = issued.reserved.find((held) => {
+		const script = pinFor.get(held.inputId);
+
+		return script !== undefined && !sameScript(held.utxo.scriptPubKeyHex ?? "", script);
+	});
+
+	if (misplaced) {
+		return {
+			reason:
+				`This action must fund input ${misplaced.inputId} from ` +
+				`${pinFor.get(misplaced.inputId) ?? ""}, and the output it issues an asset from is not ` +
+				"there.",
+			refused: true,
+			reject: "no-funds-at-signing-address",
+		};
+	}
+
 	const funding = fundAssets(ledger.entries, {
 		// The fee has no figure until the transaction has been weighed, which is after this. So
 		// the network's asset is over-selected by a kilo-vbyte at the chosen rate — enough for a
@@ -615,13 +923,13 @@ export async function reviewManifestAction(
 		// change. No other asset carries any of it.
 		feeSats: feeHeadroomSats(feeRateSatsPerKvb),
 		headroomSats: 0n,
-		holdings,
+		holdings: pinnedHoldings,
 		policyAsset: input.policyAsset,
 		reserved: issued.reserved,
 	});
 
 	if (!funding.ok) {
-		return { reason: funding.reason, refused: true };
+		return { reason: funding.reason, refused: true, reject: funding.reject };
 	}
 
 	const fundedFor = new Map(funding.funded.map((entry) => [entry.asset, entry]));
@@ -634,6 +942,8 @@ export async function reviewManifestAction(
 		covenants.map((found) => [found.utxoType, found.scriptPubKeyHex]),
 	);
 	const outputs: ReviewedOutput[] = [];
+	/** Where each declared output lands, which is not its declared position once one is dropped. */
+	const outputAt = new Map<string, number>();
 
 	for (const [at, planned] of plan.plan.outputs.entries()) {
 		const asset = ledger.outputs[at] ?? policyAsset;
@@ -649,6 +959,7 @@ export async function reviewManifestAction(
 				continue;
 			}
 
+			outputAt.set(planned.id, outputs.length);
 			outputs.push({
 				asset,
 				blinded: planned.blinding.blinding === "hidden",
@@ -681,9 +992,11 @@ export async function reviewManifestAction(
 			return {
 				reason: `Output ${planned.id} pays a covenant the wallet did not verify.`,
 				refused: true,
+				reject: "covenant-mismatch",
 			};
 		}
 
+		outputAt.set(planned.id, outputs.length);
 		outputs.push({
 			asset,
 			blinded: planned.blinding.blinding === "hidden",
@@ -703,7 +1016,168 @@ export async function reviewManifestAction(
 			...funding.funded.map((entry) => entry.asset),
 		]),
 	];
-	const selected = fundedOrder.flatMap((asset) => fundedFor.get(asset)?.selected ?? []);
+	/** Which declared input was credited with each asset's whole selection. */
+	const creditedWith = new Map<string, string>();
+	/** A declared input built out of the selection an earlier declaration was credited with. */
+	const fundedWith = new Map<string, string>();
+	/** Which of the chosen outputs build each declared input, in the order they were chosen. */
+	const walletRuns = new Map<string, SelectableUtxo[]>();
+
+	for (const wallet of ledger.walletInputs) {
+		const credited = creditedWith.get(wallet.asset);
+
+		// Two declared inputs in one asset are funded out of one selection, and nothing in the
+		// document says which of the chosen outputs belongs to which of them. The first is
+		// credited with the whole selection; the second is told it lands where that run ends,
+		// which is the honest answer to a question the document did not answer.
+		if (credited !== undefined) {
+			fundedWith.set(wallet.id, credited);
+
+			continue;
+		}
+
+		creditedWith.set(wallet.asset, wallet.id);
+		walletRuns.set(wallet.id, fundedFor.get(wallet.asset)?.selected ?? []);
+	}
+
+	/**
+	 * Every run of chosen outputs, in the order the action's declarations reach them.
+	 *
+	 * Walked by asset rather than by declaration so that an action stating no position at all
+	 * lays its inputs out exactly as it did before positions were read: the assets an input
+	 * declares first, then the ones only the fee needed. An asset no input declares — which is
+	 * where an undeclared fee is paid — is a run with no name and no stated place.
+	 */
+	const declaredInputs = asArray(action.node.inputs).map((entry) => asRecord(entry));
+	const statedIndexOf = (id: string): number | undefined => {
+		const declared = declaredInputs.find((entry) => entry?.id === id);
+
+		return statedIndex(declared?.required_index) ?? undefined;
+	};
+	const placeable: PlaceableInput<SelectableUtxo>[] = [];
+
+	for (const asset of fundedOrder) {
+		const id = creditedWith.get(asset);
+		const wanted = id === undefined ? undefined : statedIndexOf(id);
+		const entry: PlaceableInput<SelectableUtxo> = {
+			slots: (id === undefined ? fundedFor.get(asset)?.selected : walletRuns.get(id)) ?? [],
+		};
+
+		if (id !== undefined) {
+			entry.id = id;
+		}
+
+		if (wanted !== undefined) {
+			entry.stated = wanted;
+		}
+
+		placeable.push(entry);
+	}
+	const placement = placeInputs(placeable);
+	/**
+	 * Where a declared input landed, which is not always anywhere.
+	 *
+	 * One funded out of an earlier declaration's selection lands where that run ends, and one
+	 * the wallet builds nothing for — a covenant input, which this slice does not build — lands
+	 * nowhere at all rather than at a number that reads like a place.
+	 */
+	const landedAt = (id: string): number | undefined => {
+		const own = placement.at.get(id);
+
+		if (own !== undefined) {
+			return own;
+		}
+
+		const credited = fundedWith.get(id);
+		const start = credited === undefined ? undefined : placement.at.get(credited);
+
+		return start === undefined ? undefined : start + (walletRuns.get(credited ?? "")?.length ?? 0);
+	};
+
+	// Where each piece actually lands, against where the document says it must. The inputs were
+	// laid out above in the order the document states, and the declared outputs are built in
+	// order with the network's change last — so the layout is known here, and a piece that could
+	// not land where it was asked to is refused by name rather than built somewhere else.
+	const positions: StatedPosition[] = [];
+
+	for (const declared of declaredInputs) {
+		if (!declared || declared.required_index === undefined) {
+			continue;
+		}
+
+		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
+		const wanted = statedIndex(declared.required_index);
+
+		// A position written as anything but a whole number is a requirement this wallet cannot
+		// read, and the old reading — anything that is not a number means no requirement — is
+		// the silent one: the covenant that reads that index still reads it, and the network
+		// rejects the transaction after a person has approved it.
+		if (wanted === undefined) {
+			return {
+				reason: `Input ${id} states a position of ${JSON.stringify(declared.required_index)}, which is not a place in a transaction.`,
+				refused: true,
+				reject: "unbuildable-position",
+			};
+		}
+
+		positions.push({
+			// An input the wallet builds nothing for is counted one past the end, which no stated
+			// position can equal: it has no place, and being refused by name is what says so.
+			at: landedAt(id) ?? placement.order.length,
+			id,
+			kind: "input",
+			stated: wanted,
+		});
+	}
+
+	for (const entry of asArray(action.node.outputs)) {
+		const declared = asRecord(entry);
+
+		if (!declared || declared.required_index === undefined) {
+			continue;
+		}
+
+		const id = typeof declared.id === "string" ? declared.id : undefined;
+		const wanted = statedIndex(declared.required_index);
+
+		if (wanted === undefined) {
+			return {
+				reason: `Output ${id ?? "(unnamed)"} states a position of ${JSON.stringify(declared.required_index)}, which is not a place in a transaction.`,
+				refused: true,
+				reject: "unbuildable-position",
+			};
+		}
+
+		// An output the document gives no id cannot be found among the ones the wallet built —
+		// they are matched by the id the plan carries — so there is nothing to check the
+		// position against, and passing over it would be honouring the requirement by not
+		// looking at it.
+		if (id === undefined) {
+			return {
+				reason:
+					`This action states a position for an output the manifest gives no id, so this ` +
+					"wallet cannot say which output it is or where it landed.",
+				refused: true,
+				reject: "unbuildable-position",
+			};
+		}
+
+		// The network's change is appended by the module after everything else, so a document
+		// stating a position for it is stating one the wallet could only meet by accident. An
+		// output the wallet dropped for paying nothing is counted where it would have been.
+		positions.push({ at: outputAt.get(id) ?? outputs.length, id, kind: "output", stated: wanted });
+	}
+
+	const positioned = checkPositions(positions, {
+		inputs: placement.order.length,
+		outputs: outputs.length + Math.min(networkChange.length, 1),
+	});
+
+	if (!positioned.ok) {
+		return { reason: positioned.reason, refused: true, reject: "unbuildable-position" };
+	}
+
+	const selected = placement.order;
 
 	return {
 		action: request.action,
@@ -716,14 +1190,26 @@ export async function reviewManifestAction(
 		issuances: issued.issuances,
 		normalisation: notes,
 		outputs,
+		policyAsset,
 		protocol: manifest.protocol ?? "",
 		selected,
 	};
 }
 
 type ResolvedIssuances =
-	| { issuances: PlannedIssuance[]; ok: true; reserved: { asset: string; utxo: SelectableUtxo }[] }
-	| { ok: false; reason: string };
+	| {
+			issuances: PlannedIssuance[];
+			ok: true;
+			/**
+			 * The outputs committed to for an issuance, each with the input it was reserved for.
+			 *
+			 * The input's own id travels with it because a pin belongs to one declared input
+			 * rather than to the asset it happens to be in: checking every reserved output against
+			 * every pin would refuse an issuance the document said nothing about.
+			 */
+			reserved: { asset: string; inputId: string; utxo: SelectableUtxo }[];
+	  }
+	| { ok: false; reason: string; reject: RejectToken };
 
 /**
  * Works out every asset this action creates, and which output each one is derived from.
@@ -750,7 +1236,7 @@ function resolveIssuances(
 	},
 ): ResolvedIssuances {
 	const issuances: PlannedIssuance[] = [];
-	const reserved: { asset: string; utxo: SelectableUtxo }[] = [];
+	const reserved: { asset: string; inputId: string; utxo: SelectableUtxo }[] = [];
 	const policyAsset = context.policyAsset.trim().toLowerCase();
 	const pools = new Map<string, SelectableUtxo[]>();
 	/**
@@ -822,6 +1308,7 @@ function resolveIssuances(
 				reason:
 					`Input ${id} issues an asset from a covenant this wallet spends, and this wallet ` +
 					"cannot yet satisfy a covenant input.",
+				reject: "unimplemented-construct",
 			};
 		}
 
@@ -832,7 +1319,7 @@ function resolveIssuances(
 		});
 
 		if (!asset.ok) {
-			return { ok: false, reason: asset.reason };
+			return { ok: false, reason: asset.reason, reject: "foreign-asset" };
 		}
 
 		const funding = spareIn(asset.id);
@@ -852,6 +1339,7 @@ function resolveIssuances(
 					`Input ${id} issues an asset, which needs one of this wallet's own outputs in ` +
 					`${asset.id} to derive it from, and there is none left to use.` +
 					withheldSentence(withheld),
+				reject: "shortfall",
 			};
 		}
 
@@ -862,11 +1350,11 @@ function resolveIssuances(
 		);
 
 		if (!resolved.ok) {
-			return { ok: false, reason: resolved.reason };
+			return { ok: false, reason: resolved.reason, reject: resolved.reject };
 		}
 
 		taken.add(outpointKey(funding));
-		reserved.push({ asset: asset.id, utxo: funding });
+		reserved.push({ asset: asset.id, inputId: id, utxo: funding });
 		issuances.push(resolved.issuance);
 		// The issued asset and its reissuance token, under the input's own name. An input's
 		// `asset` is what it creates rather than what the output it spends held, which is the
@@ -931,4 +1419,142 @@ function bySize(left: bigint, right: bigint, smallestFirst: boolean): number {
 	}
 
 	return left > right === smallestFirst ? 1 : -1;
+}
+
+type HookedScope = { ok: false; reason: string } | { ok: true; scope: ReferenceScope };
+
+/**
+ * Runs every hook this action declares, in the order the format states they run in.
+ *
+ * Each input's own hook first and in declaration order, then the action's — and each against a
+ * scope already carrying everything set before it, because the format says a later assignment
+ * may read an earlier one's result. Folding them together against one frozen scope would
+ * silently produce a different transaction for a document that reads its own earlier line.
+ */
+function runActionHooks(
+	action: NormalisedAction,
+	scope: ReferenceScope,
+	notes: NormalisationNote[],
+): HookedScope {
+	let running = scope;
+
+	for (const entry of asArray(action.node.inputs)) {
+		const declared = asRecord(entry);
+
+		if (!declared) {
+			continue;
+		}
+
+		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
+		const hook = inputHook(declared);
+
+		// A hook the document declares and this runtime cannot read is refused rather than
+		// skipped. Skipping it is the silent failure: every amount and every rule below reads
+		// the scope this was supposed to write into, and they resolve against the wrong values
+		// without anything having gone visibly wrong.
+		if (hook.kind === "malformed") {
+			return { ok: false, reason: `Input ${id}: ${hook.reason}` };
+		}
+
+		if (hook.kind === "absent") {
+			continue;
+		}
+
+		// Inside `on_resolved`, `asset` and `reissuance_token` name this input rather than
+		// something else in scope: the input writing them is the input being resolved.
+		const ran = runHook(hook.set, inputHookScope(running, running.inputs?.[id] ?? {}), notes);
+
+		if (!ran.ok) {
+			return ran;
+		}
+
+		running = withHookValues(running, ran.values);
+	}
+
+	const hook = actionHook(action);
+
+	if (hook.kind === "malformed") {
+		return { ok: false, reason: `${action.name}: ${hook.reason}` };
+	}
+
+	if (hook.kind === "absent") {
+		return { ok: true, scope: running };
+	}
+
+	const ran = runHook(hook.set, running, notes);
+
+	return ran.ok ? { ok: true, scope: withHookValues(running, ran.values) } : ran;
+}
+
+/**
+ * Two spellings of one locking script are one locking script.
+ *
+ * Hex on both sides and compared as bytes: a script is a run of bytes and the case it is
+ * written in is not part of which script it is. Nothing is decoded here — see the pin map above
+ * for why an address and a script are simply two strings that do not match.
+ */
+function sameScript(one: string, other: string): boolean {
+	return one.trim().toLowerCase() === other.trim().toLowerCase();
+}
+
+/**
+ * A stated position, or nothing where what was written is not one.
+ *
+ * Whole and finite, and negative only in the sense the format means by it — counting from the
+ * end. `1.5` is not a place a transaction has, `NaN` is not a place at all, and a number beyond
+ * what can be counted exactly is a position nothing could land at. Each of them used to read as
+ * "this output states no position", which is the one answer none of them gives.
+ */
+function statedIndex(declared: unknown): number | undefined {
+	return typeof declared === "number" && Number.isSafeInteger(declared) ? declared : undefined;
+}
+
+/**
+ * The first container this action declares in a shape this runtime cannot read.
+ *
+ * Every key checked here is one the construct table marks as acted on, and each is read
+ * through a helper that answers "not the shape I wanted" and "not there" with the same value.
+ * That is the right answer for a document that says nothing and the wrong one for a document
+ * that says something unreadable: the second has declarations — rules to check, inputs to
+ * build, a witness to fill — and passing over them is honouring them by not looking.
+ *
+ * Shapes only. What each container says is read where it is read, and refuses there.
+ */
+function malformedDeclaration(action: NormalisedAction): string | undefined {
+	const node = action.node;
+
+	for (const key of ["inputs", "outputs", "validations"] as const) {
+		if (node[key] !== undefined && !Array.isArray(node[key])) {
+			return `${action.name} declares ${key} as something other than a list, so this wallet cannot read what it declares.`;
+		}
+
+		for (const [at, entry] of asArray(node[key]).entries()) {
+			if (!asRecord(entry)) {
+				return `${action.name} declares ${key} ${at} as something this wallet cannot read.`;
+			}
+		}
+	}
+
+	if (node.params !== undefined && !asRecord(node.params)) {
+		return `${action.name} declares params as something other than a set of parameters, so this wallet cannot fill any of them.`;
+	}
+
+	for (const entry of asArray(node.inputs)) {
+		const input = asRecord(entry) ?? {};
+		const id = typeof input.id === "string" ? input.id : "(unnamed)";
+
+		// A witness block nothing can read is a spend nobody can satisfy, and the refusal
+		// surface that checks which witnesses this wallet can produce would see none of them.
+		if (input.witnesses !== undefined && !asRecord(input.witnesses)) {
+			return `Input ${id} declares witnesses this wallet cannot read.`;
+		}
+
+		// An issuance block nothing can read is an input that stops being an issuing input:
+		// the asset it was to create is never derived, and its own name resolves to nothing.
+		if (input.issuance !== undefined && !asRecord(input.issuance)) {
+			return `Input ${id} declares an issuance this wallet cannot read.`;
+		}
+	}
+
+	return undefined;
 }

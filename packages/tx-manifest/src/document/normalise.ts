@@ -43,6 +43,14 @@ export type NormalisedManifest = {
 	 */
 	buildMode: BuildMode;
 	chain?: string;
+	/**
+	 * The document's top level with its legacy spellings rewritten.
+	 *
+	 * Anything reading the manifest generically — the construct table above all — reads this
+	 * rather than `raw`, or it meets a spelling the runtime already answered and reports it as
+	 * a field nobody has ever seen.
+	 */
+	node: Record<string, unknown>;
 	protocol?: string;
 	/** The document exactly as it arrived, so nothing this layer does not model is lost. */
 	raw: Record<string, unknown>;
@@ -108,12 +116,38 @@ export function normaliseManifest(raw: Record<string, unknown>): NormaliseManife
 			actions: normaliseActions(raw, notes),
 			buildMode: readBuildMode(raw, notes),
 			chain: asString(raw.chain),
+			node: normaliseTopLevel(raw, notes),
 			protocol: asString(raw.protocol),
 			raw,
 			utxoTypes: asRecord(raw.utxo_types) ?? {},
 		},
 		notes,
 	};
+}
+
+/**
+ * The document's own top level, with the spellings this runtime already answers rewritten.
+ *
+ * Only the top level, and only the keys whose legacy name is a rename rather than a different
+ * construct. `compose_version` is the oldest spelling of `manifest_version` and one document
+ * in the corpus still carries it; left alone it reads to anything walking the document
+ * generically as a field no specification describes, which is a refusal earned by a spelling
+ * rather than by anything the document says.
+ */
+function normaliseTopLevel(
+	raw: Record<string, unknown>,
+	notes: NormalisationNote[],
+): Record<string, unknown> {
+	const node = { ...raw };
+	const version = pick(node, "manifest_version", "compose_version", "manifest", notes);
+
+	delete node.compose_version;
+
+	if (version !== undefined) {
+		node.manifest_version = version;
+	}
+
+	return node;
 }
 
 /**

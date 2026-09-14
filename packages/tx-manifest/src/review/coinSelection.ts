@@ -14,6 +14,15 @@ export type SelectableUtxo = {
 	 * assembling a list by hand has nothing to hide.
 	 */
 	confidential?: boolean;
+	/**
+	 * Where this output pays, when the wallet knows it.
+	 *
+	 * Needed only by an action that pins an input to one address. Optional because the wallet's
+	 * own snapshot carries it and a caller assembling a list by hand should not have to — and a
+	 * caller that omits it is refused where a pin cannot be honoured rather than funded from
+	 * whatever happened to be in the list.
+	 */
+	scriptPubKeyHex?: string;
 	spendable: boolean;
 	txOut: string;
 	txid: string;

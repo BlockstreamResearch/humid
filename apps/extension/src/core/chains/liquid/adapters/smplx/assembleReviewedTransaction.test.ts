@@ -29,7 +29,82 @@ const COVENANT_BUILD = {
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 const CHANGE_SCRIPT = `0014${"44".repeat(20)}`;
 const ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-const SIGNED: AssembledTransaction = { feeSats: 300n, hex: "02000000", txid: "f".repeat(64) };
+/**
+ * A finished transaction, written as the bytes one actually is.
+ *
+ * The module hands back a hex string and this module now reads it: what a builder was asked to
+ * do and what came back are different facts, and the second is only in the bytes. So a
+ * substitute returning a placeholder would let every guard below pass without seeing anything —
+ * these fixtures are assembled field by field for the same reason the guards read them.
+ */
+const CONFIDENTIAL_VALUE = `08${"44".repeat(32)}`;
+const CONFIDENTIAL_ASSET = `0a${"33".repeat(32)}`;
+const NONCE = `02${"55".repeat(32)}`;
+
+function txIn({
+	issuance,
+	txid,
+	vout,
+}: {
+	issuance?: boolean;
+	txid: string;
+	vout: number;
+}): string {
+	const reversed = (txid.match(/../g) ?? []).toReversed().join("");
+	const marked = (issuance ? vout | 0x80_00_00_00 : vout) >>> 0;
+	const index = (marked.toString(16).padStart(8, "0").match(/../g) ?? []).toReversed().join("");
+	// An issuing input carries a blinding nonce, an entropy and two confidential values after
+	// its sequence — here both stated rather than hidden.
+	const declared = issuance ? `${"00".repeat(32)}${"aa".repeat(32)}${"01".padEnd(18, "0")}00` : "";
+
+	return `${reversed}${index}00ffffffff${declared}`;
+}
+
+/**
+ * One output as the chain writes one.
+ *
+ * The asset is written in reverse of how it is displayed, which is the encoding's own rule and
+ * not a detail this fixture may skip: written forwards it would be a different asset, and the
+ * guard comparing it against the review would be comparing the wrong thing and agreeing.
+ */
+function outputBytes(
+	scriptHex: string,
+	{ asset = ASSET, blinded = false, sats = 1000n } = {},
+): string {
+	const length = (scriptHex.length / 2).toString(16).padStart(2, "0");
+
+	if (blinded) {
+		return `${CONFIDENTIAL_ASSET}${CONFIDENTIAL_VALUE}${NONCE}${length}${scriptHex}`;
+	}
+
+	const reversed = (asset.match(/../g) ?? []).toReversed().join("");
+
+	return `01${reversed}01${sats.toString(16).padStart(16, "0")}00${length}${scriptHex}`;
+}
+
+/** The fee, which has no script at all: the network reads its amount in order to charge it. */
+const FEE_OUT = outputBytes("", { sats: 300n });
+/** The covenant output the default review plans, for exactly what the review says it pays. */
+const COVENANT_OUT = outputBytes(COVENANT_SCRIPT, { sats: 50_000n });
+/** What is left over, returned to the script the caller named. */
+const CHANGE_OUT = outputBytes(CHANGE_SCRIPT, { sats: 900n });
+
+function signedHex(spends: Parameters<typeof txIn>[0][], outs: string[]): string {
+	const inputCount = spends.length.toString(16).padStart(2, "0");
+	const outputCount = outs.length.toString(16).padStart(2, "0");
+
+	return `0200000000${inputCount}${spends.map((spend) => txIn(spend)).join("")}${outputCount}${outs.join("")}00000000`;
+}
+
+/** What the module gives back for the default review: the one input it chose, and three outputs. */
+function signed(
+	spends: Parameters<typeof txIn>[0][] = [{ txid: "c".repeat(64), vout: 0 }],
+	outs: string[] = [COVENANT_OUT, CHANGE_OUT, FEE_OUT],
+): AssembledTransaction {
+	return { feeSats: 300n, hex: signedHex(spends, outs), txid: "f".repeat(64) };
+}
+
+const SIGNED: AssembledTransaction = signed();
 // A P2WPKH output consensus-encoded, which is what the real builder decodes and what the
 // wallet's own snapshot already holds for an output it can spend.
 const TXOUT_HEX = `01${"49".repeat(32)}0100000000000186a000160014${"00".repeat(20)}`;
@@ -165,12 +240,27 @@ function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
 				scriptPubKeyHex: COVENANT_SCRIPT,
 			},
 		],
+		policyAsset: ASSET,
 		protocol: "p2pk-simplicity",
 		selected: [
 			{ amount: "1000000", spendable: true, txOut: TXOUT_HEX, txid: "c".repeat(64), vout: 0 },
 		],
 		...overrides,
 	};
+}
+
+/** The default review with its one output planned hidden, for the mixed-shape case. */
+function blindedOutputs(): ManifestReview["outputs"] {
+	return [
+		{
+			asset: ASSET,
+			blinded: true,
+			decidedBy: "output",
+			id: "p2pk_out",
+			sats: 50_000n,
+			scriptPubKeyHex: COVENANT_SCRIPT,
+		},
+	];
 }
 
 function subject(
@@ -368,6 +458,336 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.freed).toBe(1);
 			// Nothing is signed once the transaction could not be finished being assembled.
 			expect(finalized).toBe(0);
+		});
+	});
+
+	// AC: the finished transaction is checked against the reviewed plan out of its own consensus
+	// bytes, after the finalizer has run. Everything before this point is a request made of the
+	// module; whether the module honoured it is visible nowhere else.
+	describe("what came back, against what was agreed to", () => {
+		test("returns the transaction when the bytes are the plan", async () => {
+			const { assemble } = subject();
+
+			expect(await assemble()).toMatchObject({ ok: true });
+		});
+
+		test("refuses when the transaction spends an outpoint nothing asked for", async () => {
+			const extra = { txid: "e".repeat(64), vout: 2 };
+			const { assemble } = subject({}, () => signed([{ txid: "c".repeat(64), vout: 0 }, extra]));
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+
+			if (!result.ok) {
+				expect(result.reject).toBe("built-something-else");
+				expect(result.reason).toContain(`${extra.txid}:2`);
+			}
+		});
+
+		// A transaction that spends less than the review committed to is not a safer version of
+		// it: the wallet chose those outputs, and one left out is a different transaction.
+		test("and when it leaves out one the review selected", async () => {
+			const { assemble } = subject(
+				{
+					selected: [
+						{ amount: "1000000", spendable: true, txOut: TXOUT_HEX, txid: "c".repeat(64), vout: 0 },
+						{ amount: "500000", spendable: true, txOut: TXOUT_HEX, txid: "d".repeat(64), vout: 1 },
+					],
+				},
+				() => signed([{ txid: "c".repeat(64), vout: 0 }]),
+			);
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+
+			if (!result.ok) {
+				expect(result.reason).toContain(`${"d".repeat(64)}:1`);
+			}
+		});
+
+		// The issuing input is the same outpoint the asset was derived from, and Elements writes
+		// the issuance marker into the top bits of the index. A guard that did not unmask it
+		// would refuse every transaction that creates an asset.
+		test("accepts an input that also creates an asset, as the outpoint it spends", async () => {
+			const { assemble } = subject(
+				{
+					issuances: [plannedIssuance()],
+					selected: [
+						{
+							amount: "1000000",
+							spendable: true,
+							txOut: TXOUT_HEX,
+							txid: ISSUANCE_TXID,
+							vout: 0,
+						},
+					],
+				},
+				() => signed([{ issuance: true, txid: ISSUANCE_TXID, vout: 0 }]),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+		});
+
+		test("refuses when an output came back hiding an amount this action publishes", async () => {
+			const { assemble } = subject({}, () =>
+				signed(undefined, [
+					outputBytes(COVENANT_SCRIPT, { blinded: true, sats: 50_000n }),
+					CHANGE_OUT,
+					FEE_OUT,
+				]),
+			);
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+
+			if (!result.ok) {
+				expect(result.reject).toBe("built-something-else");
+				expect(result.reason).toContain("p2pk_out");
+			}
+		});
+
+		test("and when the change came back the opposite way round", async () => {
+			const { assemble } = subject({}, () =>
+				signed(undefined, [COVENANT_OUT, outputBytes(CHANGE_SCRIPT, { blinded: true }), FEE_OUT]),
+			);
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+
+			if (!result.ok) {
+				expect(result.reason).toContain("the change");
+			}
+		});
+
+		test("and when it carries fewer outputs than the action built", async () => {
+			const { assemble } = subject({}, () => signed(undefined, []));
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+
+			if (!result.ok) {
+				expect(result.reason).toContain("0 outputs");
+			}
+		});
+
+		// The module's word is not what is read: a transaction whose bytes cannot be parsed is a
+		// transaction nothing can check, and an unchecked one is not returned.
+		test("and when what came back is not a transaction at all", async () => {
+			const { assemble } = subject({}, () => ({
+				feeSats: 300n,
+				hex: "02000000",
+				txid: "f".repeat(64),
+			}));
+
+			expect(await assemble()).toMatchObject({ ok: false, reject: "built-something-else" });
+		});
+
+		test("refuses when an output came back paid to another script", async () => {
+			const { assemble } = subject({}, () =>
+				signed(undefined, [
+					outputBytes(`0014${"99".repeat(20)}`, { sats: 50_000n }),
+					CHANGE_OUT,
+					FEE_OUT,
+				]),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: false, reject: "built-something-else" });
+		});
+
+		test("and when it came back paid a different amount", async () => {
+			const { assemble } = subject({}, () =>
+				signed(undefined, [outputBytes(COVENANT_SCRIPT, { sats: 49_999n }), CHANGE_OUT, FEE_OUT]),
+			);
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+			expect(result.ok || result.reason).toContain("49999");
+		});
+
+		// The right amount of the wrong thing is not the right output. On a chain carrying more
+		// than one asset that is a transaction nobody agreed to rather than a rounding error.
+		test("and when it came back paid in another asset", async () => {
+			const { assemble } = subject({}, () =>
+				signed(undefined, [
+					outputBytes(COVENANT_SCRIPT, { asset: "bb".repeat(32), sats: 50_000n }),
+					CHANGE_OUT,
+					FEE_OUT,
+				]),
+			);
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+			expect(result.ok || result.reason).toContain("asset");
+		});
+
+		// The attack the tail check exists for: a finalizer that may append anything scripted can
+		// append an output of its own, give it the blinding the guard expects of change, and pass.
+		test("and when the module appended an output of its own beside the change", async () => {
+			const { assemble } = subject({}, () =>
+				signed(undefined, [
+					COVENANT_OUT,
+					CHANGE_OUT,
+					outputBytes(`0014${"99".repeat(20)}`, { sats: 50n }),
+					FEE_OUT,
+				]),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: false, reject: "built-something-else" });
+		});
+
+		test("and when change went somewhere other than the script this module named", async () => {
+			const { assemble } = subject({}, () =>
+				signed(undefined, [
+					COVENANT_OUT,
+					outputBytes(`0014${"99".repeat(20)}`, { sats: 900n }),
+					FEE_OUT,
+				]),
+			);
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+			expect(result.ok || result.reason).toContain("change");
+		});
+
+		test("and when it pays two fees", async () => {
+			const { assemble } = subject({}, () => signed(undefined, [COVENANT_OUT, FEE_OUT, FEE_OUT]));
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+			expect(result.ok || result.reason).toContain("two fees");
+		});
+
+		test("and when it pays none", async () => {
+			const { assemble } = subject({}, () => signed(undefined, [COVENANT_OUT]));
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+			expect(result.ok || result.reason).toContain("fee");
+		});
+
+		// The fee is the one figure taken from the module, and it is taken in order to be
+		// checked: what it says it charged against what it actually wrote.
+		test("and when the fee it wrote is not the fee it reported", async () => {
+			const { assemble } = subject({}, () => ({
+				feeSats: 300n,
+				hex: signed(undefined, [COVENANT_OUT, CHANGE_OUT, outputBytes("", { sats: 9000n })]).hex,
+				txid: "f".repeat(64),
+			}));
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+			expect(result.ok || result.reason).toContain("9000");
+		});
+
+		// Comparing sets cannot answer "how many times", so a transaction spending one output
+		// twice would read as identical to one spending it once.
+		test("and when it spends one of the chosen outputs twice", async () => {
+			const { assemble } = subject({}, () =>
+				signed([
+					{ txid: "c".repeat(64), vout: 0 },
+					{ txid: "c".repeat(64), vout: 0 },
+				]),
+			);
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+			expect(result.ok || result.reason).toContain("twice");
+		});
+
+		// The fee is the one figure taken from the module, and the guard is told what the module
+		// reported rather than a number this module chose — so a report that does not match the
+		// bytes is caught whatever the figure happens to be.
+		test("checks the fee against whatever the module reported, not a fixed figure", async () => {
+			const { assemble } = subject({}, () => ({
+				feeSats: 450n,
+				hex: signed(undefined, [COVENANT_OUT, CHANGE_OUT, outputBytes("", { sats: 450n })]).hex,
+				txid: "f".repeat(64),
+			}));
+
+			expect(await assemble()).toMatchObject({ ok: true });
+		});
+
+		// A fee pays the network in the money the network takes, and which asset that is comes
+		// from the review rather than from the fee output itself — read off the output, the
+		// check would be true by definition.
+		test("refuses a fee paid in something other than the network's own asset", async () => {
+			const { assemble } = subject({}, () =>
+				signed(undefined, [
+					COVENANT_OUT,
+					CHANGE_OUT,
+					outputBytes("", { asset: "bb".repeat(32), sats: 300n }),
+				]),
+			);
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+			expect(result.ok || result.reason).toContain("fee");
+		});
+
+		// An output is blinded or open as a whole. A committed value beside a published asset
+		// claims to hide what it is publishing, and reduced to "did an amount come back as a
+		// number" it is indistinguishable from an output that really is hidden.
+		test("refuses an output written as neither shape", async () => {
+			const mixed = `01${(ASSET.match(/../g) ?? []).toReversed().join("")}${CONFIDENTIAL_VALUE}${NONCE}${(COVENANT_SCRIPT.length / 2).toString(16).padStart(2, "0")}${COVENANT_SCRIPT}`;
+			const { assemble } = subject(
+				{ outputs: blindedOutputs() },
+				() => signed(undefined, [mixed, CHANGE_OUT, FEE_OUT]),
+				// A hidden output needs a key to hide it with, which the caller supplies; without
+				// one the action is refused long before any bytes come back.
+				{ blindingPublicKeyHex: `02${"66".repeat(32)}` },
+			);
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+			expect(result.ok || result.reason).toContain("neither");
+		});
+
+		// The whole transaction is parsed before any of it is reported: bytes whose prefix
+		// happens to parse can carry anything at all after the part a guard reads.
+		test("refuses bytes that carry a transaction and then more", async () => {
+			const { assemble } = subject({}, () => ({
+				feeSats: 300n,
+				hex: `${signed().hex}deadbeef`,
+				txid: "f".repeat(64),
+			}));
+
+			expect(await assemble()).toMatchObject({ ok: false, reject: "built-something-else" });
+		});
+
+		// A refusal that leaks the builder leaks wasm memory a collector cannot see, and the
+		// guard paths are the newest place that can do it.
+		test("releases the builder on the path where the bytes disagree", async () => {
+			const { assemble, recorded } = subject({}, () => signed([{ txid: "e".repeat(64), vout: 0 }]));
+
+			const result = await assemble();
+
+			expect(result.ok).toBe(false);
+			expect(recorded.freed).toBe(1);
+		});
+
+		// The transaction is not handed back with a warning attached: by this point the person
+		// may already have approved, so there is nothing left to ask them.
+		test("and returns no transaction with the refusal", async () => {
+			const result = await subject({}, () =>
+				signed([{ txid: "e".repeat(64), vout: 0 }]),
+			).assemble();
+
+			expect(result.ok).toBe(false);
+			expect("transaction" in result).toBe(false);
 		});
 	});
 
