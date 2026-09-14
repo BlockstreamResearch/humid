@@ -27,6 +27,15 @@ jobs:
           mkdir -p lwk/lwk_wasm/pkg
           printf '{"name":"lwk_wasm","version":"0.0.0","type":"module"}\n' > lwk/lwk_wasm/pkg/package.json
 
+      # Same again for `smplx-wasm`, added for the manifest runtime the extension ships and
+      # likewise not imported by the web app. This checkout has no submodules, so without a
+      # package at that path `bun install` cannot resolve the workspace and the deploy fails
+      # on a dependency nothing here builds with.
+      - name: Prepare unused smplx-wasm dependency
+        run: |
+          mkdir -p smplx/crates/wasm/pkg
+          printf '{"name":"smplx-wasm","version":"0.0.0","type":"module"}\n' > smplx/crates/wasm/pkg/package.json
+
       - name: Install dependencies
         uses: ./.github/actions/install
 

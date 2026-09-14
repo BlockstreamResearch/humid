@@ -27,6 +27,24 @@ const COMPILED = { address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT };
 
 const compile = () => COMPILED;
 
+/** The wallet's own side of the transaction: where it pays, what it holds, what a fee costs. */
+const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
+const fundingUtxos = [
+	{ amount: "1000000", spendable: true, txOut: "00", txid: "c".repeat(64), vout: 0 },
+];
+const readFeeRate = async () => 1000;
+
+/** What every case shares; individual tests override only what they exercise. */
+const deps = {
+	compile,
+	fundingUtxos,
+	network: "liquid",
+	policyAsset: POLICY_ASSET,
+	readFeeRate,
+	walletScriptPubKeyHex: WALLET_SCRIPT,
+};
+
 const chainHolding = (scriptPubKeyHex: string) => async (): Promise<TxOutAtOutPoint> => ({
 	scriptPubKeyHex,
 });
@@ -60,8 +78,7 @@ describe("reviewManifestAction", () => {
 	describe("creating a covenant", () => {
 		test("reports the derived covenant as not yet on chain", async () => {
 			const result = await reviewManifestAction(request(), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: chainHolding(DERIVED_SCRIPT),
 			});
 
@@ -86,8 +103,7 @@ describe("reviewManifestAction", () => {
 			let asked = 0;
 
 			await reviewManifestAction(request(), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: async () => {
 					asked += 1;
 
@@ -102,12 +118,12 @@ describe("reviewManifestAction", () => {
 			const seen: string[] = [];
 
 			await reviewManifestAction(request(), {
+				...deps,
 				compile: (input) => {
 					seen.push(input.argumentsJson);
 
 					return COMPILED;
 				},
-				network: "liquid",
 				readTxOut: chainHolding(DERIVED_SCRIPT),
 			});
 
@@ -119,25 +135,22 @@ describe("reviewManifestAction", () => {
 	// Receive spends the covenant. This is where the wallet's derivation is checked against
 	// something it did not get from the requester.
 	describe("spending a covenant", () => {
-		test("passes when the rebuilt contract locks the funds that are there", async () => {
+		// Receive verifies but cannot yet be built: its output amount references another
+		// input, which this runtime does not evaluate, and its spend needs a signing witness.
+		// Asserting the refusal is about the amount rather than the covenant is what shows
+		// verification got past — a weaker claim than "it builds", and the true one. Building a
+		// Receive on a guess would be building a partial transaction and calling it whole.
+		test("gets past verification when the rebuilt contract locks the funds that are there", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: chainHolding(DERIVED_SCRIPT),
 			});
 
-			expect(isRefusal(result)).toBe(false);
+			expect(isRefusal(result)).toBe(true);
 
-			if (!isRefusal(result)) {
-				expect(result.covenants).toEqual([
-					{
-						address: DERIVED,
-						role: "spent",
-						scriptPubKeyHex: DERIVED_SCRIPT,
-						utxoType: "p2pk_output",
-						verified: "matches-chain",
-					},
-				]);
+			if (isRefusal(result)) {
+				expect(result.reason).toContain("amount");
+				expect(result.reason).not.toContain("rebuilds to");
 			}
 		});
 
@@ -145,8 +158,7 @@ describe("reviewManifestAction", () => {
 			const asked: { txid: string; vout: number }[] = [];
 
 			await reviewManifestAction(spendRequest(oneCovenantUtxo), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: async (outpoint) => {
 					asked.push(outpoint);
 
@@ -159,8 +171,7 @@ describe("reviewManifestAction", () => {
 
 		test("refuses when the funds are locked by something else", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: chainHolding(ELSEWHERE_SCRIPT),
 			});
 
@@ -173,8 +184,7 @@ describe("reviewManifestAction", () => {
 
 		test("refuses when the state file lists no such covenant", async () => {
 			const result = await reviewManifestAction(spendRequest({ utxos: [] }), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: chainHolding(DERIVED_SCRIPT),
 			});
 
@@ -183,8 +193,7 @@ describe("reviewManifestAction", () => {
 
 		test("refuses before reading anything when the state file is absent", async () => {
 			const result = await reviewManifestAction(spendRequest(), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: chainHolding(DERIVED_SCRIPT),
 			});
 
@@ -193,8 +202,7 @@ describe("reviewManifestAction", () => {
 
 		test("refuses when the chain cannot be read, rather than proceeding unchecked", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
-				compile,
-				network: "liquid",
+				...deps,
 				readTxOut: async () => {
 					throw new Error("offline");
 				},
@@ -210,8 +218,7 @@ describe("reviewManifestAction", () => {
 
 	test("refuses a request missing a part the action needs, naming it", async () => {
 		const result = await reviewManifestAction(request({ contractSources: {} }), {
-			compile,
-			network: "liquid",
+			...deps,
 			readTxOut: chainHolding(DERIVED_SCRIPT),
 		});
 
@@ -224,8 +231,7 @@ describe("reviewManifestAction", () => {
 
 	test("refuses an action the manifest does not declare, naming it", async () => {
 		const result = await reviewManifestAction(request({ action: "Withdraw" }), {
-			compile,
-			network: "liquid",
+			...deps,
 			readTxOut: chainHolding(DERIVED_SCRIPT),
 		});
 
@@ -236,12 +242,124 @@ describe("reviewManifestAction", () => {
 		}
 	});
 
+	// Everything below is the transaction the review settles, so that what a person approves
+	// is what gets signed rather than a description of it reassembled afterwards.
+	describe("the transaction it settles", () => {
+		test("pays the covenant output the script it derived, not the address it is shown as", async () => {
+			const result = await reviewManifestAction(request(), {
+				...deps,
+				readTxOut: chainHolding(DERIVED_SCRIPT),
+			});
+
+			expect(isRefusal(result)).toBe(false);
+
+			if (!isRefusal(result)) {
+				expect(result.outputs).toEqual([
+					{
+						asset: POLICY_ASSET,
+						id: "p2pk_out",
+						sats: 1000n,
+						scriptPubKeyHex: DERIVED_SCRIPT,
+					},
+				]);
+			}
+		});
+
+		// The builder hex-decodes every script it is handed, so a bech32 address fails inside
+		// the module with an error naming neither the output nor what was wrong with it.
+		test("gives every output a script the builder can decode", async () => {
+			const result = await reviewManifestAction(request(), {
+				...deps,
+				readTxOut: chainHolding(DERIVED_SCRIPT),
+			});
+
+			expect(isRefusal(result)).toBe(false);
+
+			if (!isRefusal(result)) {
+				expect(result.outputs.length).toBeGreaterThan(0);
+
+				for (const output of result.outputs) {
+					expect(output.scriptPubKeyHex).toMatch(/^(?:[0-9a-fA-F]{2})+$/);
+				}
+			}
+		});
+
+		// Change carries no amount, because change is whatever is left after the fee — and the
+		// fee is not known until the transaction has a shape.
+		test("plans no output for the change the action declares", async () => {
+			const result = await reviewManifestAction(request(), {
+				...deps,
+				readTxOut: chainHolding(DERIVED_SCRIPT),
+			});
+
+			expect(isRefusal(result)).toBe(false);
+
+			if (!isRefusal(result)) {
+				expect(result.outputs.map((output) => output.id)).not.toContain("change_out");
+			}
+		});
+
+		test("selects the wallet's own outputs to fund it, and reports the rate it will pay", async () => {
+			const result = await reviewManifestAction(request(), {
+				...deps,
+				readTxOut: chainHolding(DERIVED_SCRIPT),
+			});
+
+			expect(isRefusal(result)).toBe(false);
+
+			if (!isRefusal(result)) {
+				expect(result.feeRateSatsPerKvb).toBe(1000);
+				expect(result.selected).toEqual(fundingUtxos);
+			}
+		});
+
+		// The fee is the wallet's business: the request carries none, and an action is refused
+		// rather than built when no rate can be established. A default here would quietly turn
+		// "we do not know" into "we are sure".
+		test("refuses when no fee rate can be established, rather than assuming one", async () => {
+			const result = await reviewManifestAction(request(), {
+				...deps,
+				readFeeRate: async () => {
+					throw new Error("no estimate");
+				},
+				readTxOut: chainHolding(DERIVED_SCRIPT),
+			});
+
+			expect(isRefusal(result)).toBe(true);
+
+			if (isRefusal(result)) {
+				expect(result.reason).toContain("fee rate");
+			}
+		});
+
+		test("refuses when the account cannot cover the action and its fee", async () => {
+			const result = await reviewManifestAction(request(), {
+				...deps,
+				fundingUtxos: [
+					{ amount: "10", spendable: true, txOut: "00", txid: "d".repeat(64), vout: 0 },
+				],
+				readTxOut: chainHolding(DERIVED_SCRIPT),
+			});
+
+			expect(isRefusal(result)).toBe(true);
+		});
+
+		test("refuses an amount this runtime does not evaluate, rather than guessing one", async () => {
+			const result = await reviewManifestAction(
+				request({ params: { amount_sat: "params.amount_sat - fee", pubkey: PUBKEY } }),
+				{ ...deps, readTxOut: chainHolding(DERIVED_SCRIPT) },
+			);
+
+			expect(isRefusal(result)).toBe(true);
+		});
+	});
+
 	test("refuses when the contract does not compile", async () => {
 		const result = await reviewManifestAction(request(), {
+			...deps,
 			compile: () => {
 				throw new Error("parse error");
 			},
-			network: "liquid",
 			readTxOut: chainHolding(DERIVED_SCRIPT),
 		});
 

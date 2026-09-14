@@ -1,0 +1,85 @@
+name: tx-manifest / smplx check
+
+# The gate for the tx-manifest package and the smplx adapter, and only for those.
+#
+# Deliberately not `bun run check`. On a clean frozen install against the pinned
+# submodules, the repository-wide typecheck fails in existing UI code on duplicate React
+# and Zod type families reached through separate dependency trees — a problem that predates
+# this work and that is repaired later on this branch. Running the full gate here would
+# report those failures against every change to the manifest runtime and say nothing about
+# it. So this checks what this slice owns, in full, and the root gate is restored in the
+# activation slice once the cumulative branch carries the dependency repairs.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Recursive, and both wasm packages are built before anything else runs. Neither is
+      # optional: `lwk_wasm` and `smplx-wasm` are local `file:` dependencies, so on a
+      # checkout without them the frozen install cannot resolve the workspace, the
+      # typechecks have no declarations to read, and the two test files that drive the real
+      # smplx module rather than a substitute fail on
+      # `Cannot find module 'smplx-wasm/smplx_wasm_bg.js'` — driving the real one is the
+      # point of them.
+      - name: Checkout (with the lwk and smplx submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      # dev rather than release: this job checks code, and an unoptimised wasm builds
+      # faster. The release profile belongs to the build workflow, which ships the result.
+      - name: Build lwk_wasm
+        uses: ./.github/actions/build-lwk-wasm
+        with:
+          profile: dev
+
+      - name: Build smplx_wasm
+        uses: ./.github/actions/build-smplx-wasm
+
+      - name: Install dependencies
+        uses: ./.github/actions/install
+
+      - name: Typecheck packages
+        run: bun run typecheck:packages
+
+      # The extension half of this slice, typechecked by naming its files rather than by
+      # running the root project over `apps/extension/src`. `--ignoreConfig` is what makes
+      # that possible: the root `tsconfig.json` would pull in the whole app and with it the
+      # baseline failures above, so the flags this surface actually needs are stated here
+      # instead. The two ambient declaration files are named because nothing imports them —
+      # they are what make `smplx-wasm/smplx_wasm_bg.js` and `bun:test` resolvable.
+      - name: Typecheck the smplx adapter
+        run: |
+          bunx tsc --ignoreConfig --noEmit --strict \
+            --module ESNext --moduleResolution bundler --target ESNext \
+            --lib ESNext,DOM --types bun-types --skipLibCheck \
+            apps/extension/src/vite-env.d.ts \
+            apps/extension/src/bun-test-env.d.ts \
+            apps/extension/src/core/chains/liquid/adapters/smplx/loadSmplxWasm.ts \
+            apps/extension/src/core/chains/liquid/adapters/smplx/compileCovenantWithSmplx.ts \
+            apps/extension/src/core/chains/liquid/adapters/smplx/assembleReviewedTransaction.ts \
+            apps/extension/src/core/chains/liquid/adapters/smplx/smplxWasmForTests.ts \
+            apps/extension/src/core/chains/liquid/adapters/smplx/loadSmplxWasm.test.ts \
+            apps/extension/src/core/chains/liquid/adapters/smplx/compileCovenantWithSmplx.test.ts \
+            apps/extension/src/core/chains/liquid/adapters/smplx/assembleReviewedTransaction.test.ts
+
+      # Both are repository-wide and both pass on this branch, so they are run as they are
+      # rather than narrowed to these paths.
+      - name: Lint
+        run: bun run lint
+
+      - name: Check formatting
+        run: bun run format:check
+
+      - name: Test
+        run: bun test packages/tx-manifest apps/extension/src/core/chains/liquid/adapters/smplx

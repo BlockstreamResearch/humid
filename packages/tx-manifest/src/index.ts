@@ -22,9 +22,15 @@ export { parseLiquidProcessCtParams } from "./request/validation";
 
 // 2. What the chain says, which only a wallet can ask for. A port rather than an
 // implementation: this package states the question and holds no endpoint of its own.
-export type { ReadTxOut } from "./chain/chainRead";
+export type { ReadFeeRate, ReadTxOut } from "./chain/chainRead";
 
-// 3. The action, resolved into what the wallet established about it — or a refusal. This runs
-// before the permission gate, where a standing permission cannot skip it, which is why
-// everything it cannot establish refuses rather than warns.
+// 3. The action, resolved into an exact plan of what the wallet would do — or a refusal.
+// This runs before the permission gate, where a standing permission cannot skip it, which is
+// why everything it cannot establish refuses rather than warns. What comes back is the plan a
+// builder is driven from rather than a description written up afterwards, so what a person is
+// shown and what gets signed are worked out once.
+//
+// The compiler and the shapes this plan is written in are reachable through this function
+// rather than named again beside it. A wallet supplying a compiler already holds its shape,
+// and a second public name for one is a second thing to keep in step.
 export { type ManifestReview, isRefusal, reviewManifestAction } from "./review";

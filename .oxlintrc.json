@@ -37,6 +37,7 @@
 	},
 	"ignorePatterns": [
 		"lwk/**",
+		"smplx/**",
 		"dist/**",
 		"build/**",
 		"node_modules/**",
