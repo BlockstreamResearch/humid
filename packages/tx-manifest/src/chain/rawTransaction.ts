@@ -26,6 +26,7 @@
 
 import {
 	decodeHex,
+	encodeHex,
 	type Reader,
 	readHex,
 	readReversedHex,
@@ -68,6 +69,14 @@ export type ParsedTxOut = {
 	rawAssetId?: string;
 	/** The script that locks the output, in hex. Empty for the fee, which locks to nothing. */
 	scriptPubKeyHex: string;
+	/**
+	 * The output exactly as the transaction holds it, to hand to something that spends it.
+	 *
+	 * The bytes rather than a re-encoding of the fields above: what a signing module is given
+	 * for an input it must spend has to be what the chain wrote, and a value read out and put
+	 * back can differ from it by a byte in a way nothing here would notice.
+	 */
+	txOutHex: string;
 	/** Whether the amount is stated, committed to, or absent. */
 	valueForm: FieldForm;
 };
@@ -94,6 +103,37 @@ export function spentInputs(transactionHex: string): SpentInputs {
 }
 
 export type TxOutsOf = { ok: true; txOuts: ParsedTxOut[] } | { ok: false; reason: string };
+
+export type TxOutAt = { ok: false; reason: string } | { ok: true; txOut: ParsedTxOut };
+
+/**
+ * One numbered output of a transaction, read out of the transaction's own bytes.
+ *
+ * The whole transaction is parsed to answer it rather than the front of one, for the same
+ * reason `spentInputs` does: an output at index three read out of a prefix that happens to
+ * parse is an output of something nobody has shown to be a transaction. What comes back
+ * carries the output's own bytes, which is what a module spending it has to be handed.
+ */
+export function txOutAt(transactionHex: string, vout: number): TxOutAt {
+	if (!Number.isInteger(vout) || vout < 0) {
+		return { ok: false, reason: `${vout} is not an output index.` };
+	}
+
+	const parsed = parseTransaction(transactionHex);
+
+	if (!parsed.ok) {
+		return parsed;
+	}
+
+	const txOut = parsed.transaction.txOuts[vout];
+
+	return txOut === undefined
+		? {
+				ok: false,
+				reason: `The transaction carries ${parsed.transaction.txOuts.length} outputs, so there is none at ${vout}.`,
+			}
+		: { ok: true, txOut };
+}
 
 /**
  * Every output of a finished transaction, in the order it carries them.
@@ -347,6 +387,10 @@ function skipVector(reader: Reader): boolean {
 
 /** One output, read from wherever the reader currently sits. */
 function readOutput(reader: Reader): ParsedTxOut | undefined {
+	// Where this output starts, so its own bytes can be carried out whole. Taken before
+	// anything is read and read again after, because the width of an output is not a constant:
+	// every one of its three fields is explicit or a commitment, and the script is counted.
+	const from = reader.at;
 	const asset = readField(reader, OUTPUT_ASSET);
 	const value = readField(reader, OUTPUT_VALUE);
 	const nonce = readField(reader, OUTPUT_NONCE);
@@ -375,6 +419,7 @@ function readOutput(reader: Reader): ParsedTxOut | undefined {
 		assetForm: asset.form,
 		nonceForm: nonce.form,
 		scriptPubKeyHex,
+		txOutHex: encodeHex(reader.bytes.subarray(from, reader.at)),
 		valueForm: value.form,
 	};
 }

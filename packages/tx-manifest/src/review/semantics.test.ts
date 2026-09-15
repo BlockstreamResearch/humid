@@ -37,6 +37,8 @@ const deps = {
 		amountSats: "50000",
 		rawAssetId: POLICY_ASSET,
 		scriptPubKeyHex: DERIVED_SCRIPT,
+		// The bytes a spend would carry to the builder, stated for the same reason the amount is.
+		txOutHex: `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`,
 	}),
 	scriptPubKeyOf: () => DERIVED_SCRIPT,
 	walletScriptPubKeyHex: WALLET_SCRIPT,

@@ -6,14 +6,14 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "tsc -b && vite build",
-		"typecheck": "tsc --noEmit",
-		"typecheck:tooling": "tsc -p tsconfig.tooling.json --noEmit --pretty false",
+		"typecheck": "tsc -b --force",
 		"preview": "vite preview",
 		"cleanup": "rm -rf node_modules out dist"
 	},
 	"dependencies": {
 		"@fontsource-variable/jetbrains-mono": "^5.2.8",
 		"@humid/appkit-injected-adapter": "workspace:*",
+		"@humid/smplx-compiler": "workspace:*",
 		"@humid/tx-manifest": "workspace:*",
 		"@reown/appkit": "^1.8.19",
 		"@reown/appkit-common": "^1.8.19",
@@ -36,7 +36,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "^24.10.1",
-		"@types/react": "^19.2.5",
+		"@types/react": "^19.2.16",
 		"@types/react-dom": "^19.2.3",
 		"@vitejs/plugin-react": "^5.1.1",
 		"typescript": "~5.9.3",

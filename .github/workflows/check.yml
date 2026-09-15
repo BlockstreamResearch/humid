@@ -1,0 +1,49 @@
+name: Check
+
+# Runs the same gate a commit runs locally, on every push and pull request. Until this
+# existed nothing in CI ran the tests at all: the only workflows were a manual extension
+# build and two deploys, so 456 tests protected nothing that could block a merge.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Recursive, and both wasm packages are built before anything else runs. A leaner
+      # job was tried and does not work: on a checkout without them `bun install` reports
+      # "Failed to install 2 packages", typechecking fails with eleven errors about
+      # `lwk_wasm` and `smplx-wasm` having no declarations, and three test files fail
+      # outright on `Cannot find module 'smplx-wasm/smplx_wasm_bg.js'` — they drive the
+      # real module rather than a substitute, which is the point of them.
+      - name: Checkout (with the lwk and smplx submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      # dev rather than release: this job checks code, and an unoptimised wasm builds
+      # faster. The release profile belongs to the build workflow, which ships the result.
+      - name: Build lwk_wasm
+        uses: ./.github/actions/build-lwk-wasm
+        with:
+          profile: dev
+
+      - name: Build smplx_wasm
+        uses: ./.github/actions/build-smplx-wasm
+
+      - name: Install dependencies
+        uses: ./.github/actions/install
+
+      # typecheck across apps/extension, packages/ and apps/web, then lint, format and
+      # the test suite. The three projects are separate deliberately — see the comment in
+      # lefthook.yml for why one `tsc --noEmit` never covered them.
+      - name: Check
+        run: bun run check

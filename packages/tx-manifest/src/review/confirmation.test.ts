@@ -46,6 +46,8 @@ const chainHolding = (scriptPubKeyHex: string) => async (): Promise<TxOutAtOutPo
 	amountSats: COVENANT_HOLDS,
 	rawAssetId: POLICY_ASSET,
 	scriptPubKeyHex,
+	// The bytes a spend would carry to the builder, stated for the same reason the amount is.
+	txOutHex: `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`,
 });
 
 const oneCovenantUtxo = { utxos: [{ txid: TXID, utxo_type: "p2pk_output", vout: 0 }] };

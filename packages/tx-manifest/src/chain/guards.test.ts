@@ -391,6 +391,9 @@ describe("an output field whose prefix means nothing at that position", () => {
 			assetForm: "commitment",
 			nonceForm: "commitment",
 			scriptPubKeyHex: "",
+			// The output's own bytes, which are the ones just written: an output carried out to
+			// be spent has to be what the transaction holds rather than a re-encoding of it.
+			txOutHex: built,
 			valueForm: "commitment",
 		});
 	});

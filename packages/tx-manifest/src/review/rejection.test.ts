@@ -48,6 +48,8 @@ const chainHolding = (scriptPubKeyHex: string) => async (): Promise<TxOutAtOutPo
 	amountSats: "50000",
 	rawAssetId: POLICY_ASSET,
 	scriptPubKeyHex,
+	// The bytes a spend would carry to the builder, stated for the same reason the amount is.
+	txOutHex: `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`,
 });
 
 function request(
@@ -475,6 +477,7 @@ describe("what the chain reader says an output holds", () => {
 					amountSats,
 					rawAssetId: POLICY_ASSET,
 					scriptPubKeyHex: DERIVED_SCRIPT,
+					txOutHex: `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`,
 				}),
 			});
 

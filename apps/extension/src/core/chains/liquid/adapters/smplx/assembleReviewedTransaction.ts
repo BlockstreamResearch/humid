@@ -3,6 +3,7 @@ import {
 	guardSpentInputs,
 	type ManifestReview,
 	type RejectToken,
+	type StaticWitness,
 } from "@humid/tx-manifest";
 
 import type { SmplxWasmModule } from "./loadSmplxWasm";
@@ -45,6 +46,62 @@ export type AssemblingBuilder = Pick<
 	InstanceType<SmplxWasmModule["TransactionBuilder"]>,
 	"addChange" | "addOutput" | "addWalletInput" | "free"
 > & {
+	/**
+	 * Adds a covenant input: an output locked by a Simplicity program, spent by satisfying it.
+	 *
+	 * Everything the covenant was compiled from is passed again, because the module compiles the
+	 * contract a second time to satisfy it and a compile differing in any of them produces a
+	 * different script. The witness values are the compiler's own `.wit` shape as text; the
+	 * signature witness is a name rather than a value, because only the signer can make one and
+	 * the transaction it signs over does not exist yet.
+	 */
+	addCovenantInput: (
+		txid: string,
+		vout: number,
+		txOutHex: string,
+		source: string,
+		argumentsJson?: string,
+		witnessJson?: string,
+		signatureWitness?: string,
+		extraLeavesJson?: string,
+		includeDebugSymbols?: boolean,
+	) => void;
+	/**
+	 * Adds a covenant input that also creates a new asset.
+	 *
+	 * The covenant half is `addCovenantInput` and the issuance half `addWalletIssuanceInput`;
+	 * this exists because an input can only be added once and a document may declare both on it.
+	 */
+	addCovenantIssuanceInput: (
+		txid: string,
+		vout: number,
+		txOutHex: string,
+		source: string,
+		argumentsJson: string | undefined,
+		witnessJson: string | undefined,
+		signatureWitness: string | undefined,
+		assetAmountSats: bigint,
+		inflationAmountSats: bigint,
+		issuerContractHex: string | undefined,
+		extraLeavesJson?: string,
+		includeDebugSymbols?: boolean,
+	) => AssembledIssuanceReport;
+	/**
+	 * The block height this transaction may not be mined before.
+	 *
+	 * Set rather than defaulted, and only where the review read one: a covenant branch guarded
+	 * by a lock height reads this field, and a transaction declaring none satisfies no such
+	 * branch.
+	 */
+	setLocktimeHeight: (height: number) => void;
+	/**
+	 * The sequence written onto every input that declares none.
+	 *
+	 * One value for the transaction, because that is what the module takes. The review has
+	 * already collapsed what the action declares into the single value this can be, or refused
+	 * the action.
+	 */
+	setSequence: (sequence: number) => void;
 	/**
 	 * Adds a wallet input that also creates a new asset.
 	 *
@@ -138,27 +195,14 @@ export async function assembleReviewedTransaction(
 		smplx: { TransactionBuilder: new () => AssemblingBuilder };
 	},
 ): Promise<AssembleResult> {
-	// A covenant being spent needs the source, the arguments and the witness the review
-	// verified it under, and a signature over this transaction for the branch that asserts
-	// one. None of that is established yet, and a transaction assembled without it is not a
-	// smaller version of the right one — it is one the covenant refuses at execution, after
-	// a person has approved it. So it refuses here, where the reason can be read.
-	const spent = review.covenants.find((covenant) => covenant.role === "spent");
-
-	if (spent) {
+	// Nothing to spend at all, which is not a transaction. Asked of the order rather than of
+	// the wallet's own selection: an action whose covenant already holds everything its outputs
+	// cost is funded entirely by the covenant it spends, and refusing that for holding none of
+	// the wallet's own outputs would refuse the ordinary case of a protocol paying itself out.
+	if (review.inputOrder.length === 0) {
 		return {
 			ok: false,
-			reason:
-				`"${review.action}" spends the ${spent.utxoType} covenant, and this wallet cannot ` +
-				"yet satisfy a covenant input. It will not build part of the transaction and call it whole.",
-			reject: "unimplemented-construct",
-		};
-	}
-
-	if (review.selected.length === 0) {
-		return {
-			ok: false,
-			reason: `"${review.action}" has no wallet output funding it.`,
+			reason: `"${review.action}" has nothing funding it.`,
 			reject: "shortfall",
 		};
 	}
@@ -233,9 +277,18 @@ export async function assembleReviewedTransaction(
 		issuing.set(key, issuance);
 	}
 
-	// An asset derived from an output no input spends is an id for something that would never
-	// come to exist, and the person would already have been shown it.
-	const spending = new Set(review.selected.map((utxo) => outpointKey(utxo)));
+	/**
+	 * Every output this transaction will spend, covenant and wallet alike.
+	 *
+	 * Read off the order rather than off the selection, because the order is what actually gets
+	 * added and a covenant input is in one and not the other. An asset derived from an output
+	 * that is in neither is an id for something that would never come to exist.
+	 */
+	const spending = new Set(
+		review.inputOrder.map((planned) =>
+			outpointKey(planned.source === "covenant" ? planned.covenant : planned.utxo),
+		),
+	);
 	const stranded = review.issuances.find(
 		(issuance) => !spending.has(outpointKey(issuance.outpoint)),
 	);
@@ -253,10 +306,10 @@ export async function assembleReviewedTransaction(
 	// One output described twice is still one output, and adding both is a transaction that
 	// spends it twice. Selection removes these, so reaching here means the review was assembled
 	// by something other than a review — which is exactly when a builder should not be started.
-	if (spending.size !== review.selected.length) {
+	if (spending.size !== review.inputOrder.length) {
 		return {
 			ok: false,
-			reason: `"${review.action}" spends one of this wallet's outputs more than once.`,
+			reason: `"${review.action}" spends one of its outputs more than once.`,
 			reject: "document-fault",
 		};
 	}
@@ -264,8 +317,129 @@ export async function assembleReviewedTransaction(
 	const builder = new input.smplx.TransactionBuilder();
 
 	try {
-		for (const utxo of review.selected) {
-			const issuance = issuing.get(outpointKey(utxo));
+		// A covenant branch guarded by a lock height reads the transaction's own locktime, and
+		// one that declares none satisfies no such branch. The review answers with where the
+		// chain is — the same thing every wallet writes there, and nothing about any protocol.
+		// Skipped where it read nothing, because an action whose covenants are not time-locked
+		// does not need one.
+		if (review.locktimeHeight !== undefined) {
+			builder.setLocktimeHeight(review.locktimeHeight);
+		}
+
+		// One sequence for the transaction, because that is what the module takes: it writes
+		// this onto every input that declares none. The review has already collapsed what the
+		// action declares into the single value this can be, or refused the action.
+		if (review.sequence !== undefined) {
+			builder.setSequence(review.sequence);
+		}
+
+		/** Which of the outputs an issuance was derived from have actually been added. */
+		const placed = new Set<string>();
+
+		/**
+		 * The module derived the asset for itself, from the same output, and says what it made
+		 * of it.
+		 *
+		 * This is the first fact the wallet and the module each establish independently, so it
+		 * gets the treatment every other such fact gets: they are compared, and a difference
+		 * refuses rather than one of the two being trusted. A silent disagreement means one of
+		 * them is creating a different asset than the other, and nothing downstream could tell
+		 * which — after a person has already approved the one the wallet showed them.
+		 */
+		const disagreement = (
+			issuance: ManifestReview["issuances"][number],
+			reported: AssembledIssuanceReport,
+		): AssembleResult | undefined => {
+			try {
+				const difference = firstDisagreement(issuance, reported);
+
+				return difference === undefined
+					? undefined
+					: {
+							ok: false,
+							reason:
+								`Input ${issuance.inputId} creates an asset the signing module does not ` +
+								`agree about: the ${difference.what} the wallet derived is ${difference.mine} ` +
+								`and the module reports ${difference.theirs}.`,
+							reject: "built-something-else",
+						};
+			} finally {
+				reported.free();
+			}
+		};
+
+		// In the order the review worked out, which is the document's wherever it states one.
+		// Adding every covenant first and the wallet's own after is one order among many: a
+		// covenant introspects positions, and a document stating one for an input the wallet
+		// supplies is saying that that order builds a transaction its contract will not run
+		// against.
+		for (const planned of review.inputOrder) {
+			const key =
+				planned.source === "covenant" ? outpointKey(planned.covenant) : outpointKey(planned.utxo);
+			const issuance = issuing.get(key);
+
+			if (issuance) {
+				placed.add(key);
+			}
+
+			if (planned.source === "covenant") {
+				const { covenant } = planned;
+				// The values the document states outright, which is how a covenant with more than
+				// one branch is told which to run. A signature is not among them: only the signer
+				// can make one, and naming it is what asks for one. Passed as the compiler's own
+				// witness shape — a type and a literal, both text — because the compiler is what
+				// parses SimplicityHL.
+				const witness = witnessValuesJson(covenant.witnessValues);
+
+				if (!issuance) {
+					// The leaves and the mode go with the source and the parameters, because all four
+					// decide the script the covenant locks to. Sending the first two alone builds a
+					// different contract than the one the review checked against the chain, and the
+					// covenant refuses its own spend at execution.
+					builder.addCovenantInput(
+						covenant.txid,
+						covenant.vout,
+						covenant.txOutHex,
+						covenant.source,
+						covenant.argumentsJson,
+						witness,
+						covenant.signatureWitness,
+						covenant.extraLeavesJson,
+						covenant.includeDebugSymbols,
+					);
+
+					continue;
+				}
+
+				// A covenant that also issues is added once, by the call that does both. The
+				// issuer contract is left unstated because a manifest declares none at any
+				// position, so both sides commit to nothing and each says so.
+				const refusal = disagreement(
+					issuance,
+					builder.addCovenantIssuanceInput(
+						covenant.txid,
+						covenant.vout,
+						covenant.txOutHex,
+						covenant.source,
+						covenant.argumentsJson,
+						witness,
+						covenant.signatureWitness,
+						issuance.assetAmountSats,
+						issuance.inflationAmountSats,
+						undefined,
+						covenant.extraLeavesJson,
+						covenant.includeDebugSymbols,
+					),
+				);
+
+				if (refusal) {
+					return refusal;
+				}
+
+				continue;
+			}
+
+			const { utxo } = planned;
 
 			if (!issuance) {
 				builder.addWalletInput(utxo.txid, utxo.vout, utxo.txOut);
@@ -276,40 +450,36 @@ export async function assembleReviewedTransaction(
 			// An issuing input is added once, as an issuance. Adding it here and again as an
 			// ordinary wallet input would spend the same output twice, which is not a
 			// transaction at all.
-			//
-			// The issuer contract is left unstated because a manifest declares none at any
-			// position, so both sides commit to nothing and each says so.
-			const reported = builder.addWalletIssuanceInput(
-				utxo.txid,
-				utxo.vout,
-				utxo.txOut,
-				issuance.assetAmountSats,
-				issuance.inflationAmountSats,
-				undefined,
+			const refusal = disagreement(
+				issuance,
+				builder.addWalletIssuanceInput(
+					utxo.txid,
+					utxo.vout,
+					utxo.txOut,
+					issuance.assetAmountSats,
+					issuance.inflationAmountSats,
+					undefined,
+				),
 			);
 
-			// The module derived the asset for itself, from the same output. This is the first
-			// fact the wallet and the module each establish independently, so it gets the
-			// treatment every other such fact gets: they are compared, and a difference refuses
-			// rather than one of the two being trusted. A silent disagreement means one of them
-			// is creating a different asset than the other, and nothing downstream could tell
-			// which — after a person has already approved the one the wallet showed them.
-			try {
-				const difference = firstDisagreement(issuance, reported);
-
-				if (difference) {
-					return {
-						ok: false,
-						reason:
-							`Input ${issuance.inputId} creates an asset the signing module does not ` +
-							`agree about: the ${difference.what} the wallet derived is ${difference.mine} ` +
-							`and the module reports ${difference.theirs}.`,
-						reject: "built-something-else",
-					};
-				}
-			} finally {
-				reported.free();
+			if (refusal) {
+				return refusal;
 			}
+		}
+
+		// Every issuance was actually added, rather than merely matched against an order that
+		// contains its output. The pre-check above says the outpoint is in the order; this says
+		// the loop reached it — and the two differ if the order is ever walked partially.
+		const missed = review.issuances.find((issuance) => !placed.has(outpointKey(issuance.outpoint)));
+
+		if (missed) {
+			return {
+				ok: false,
+				reason:
+					`Input ${missed.inputId} issues an asset from an output this transaction does not ` +
+					"spend, so the asset would never exist.",
+				reject: "document-fault",
+			};
 		}
 
 		// Paid in the asset the review worked out for it, and to the script it derived. An
@@ -363,6 +533,26 @@ export async function assembleReviewedTransaction(
 	} finally {
 		builder.free();
 	}
+}
+
+/**
+ * The witness values one covenant input needs, in the shape the signing module takes.
+ *
+ * A type and a literal, both text, keyed by the name the contract declares. Nothing here parses
+ * either: the compiler that will type-check the literal is the authority on what it means, and
+ * a wallet reading `Right(Left(()))` for itself would be a second opinion about which branch of
+ * a contract runs — given by the one component with no way to check it.
+ */
+function witnessValuesJson(values: StaticWitness[] | undefined): string | undefined {
+	if (!values || values.length === 0) {
+		return undefined;
+	}
+
+	return JSON.stringify(
+		Object.fromEntries(
+			values.map(({ name, simplicityType, value }) => [name, { type: simplicityType, value }]),
+		),
+	);
 }
 
 /**
@@ -427,10 +617,11 @@ function disagreementWith(
 	changeScriptPubKeyHex: string,
 ): string | undefined {
 	const spent = guardSpentInputs(transaction.hex, {
-		// Empty rather than derived, and the emptiness is the claim: an action spending a
-		// covenant is refused above, before a builder exists, so a covenant input in these bytes
-		// is one nothing here asked for and the guard says so.
-		covenantInputs: [],
+		// The covenant outputs the action requires, as the review established them from the
+		// chain. Read off the review rather than off what was added: what was added is this
+		// module's own account of itself, which is the one source that cannot say whether the
+		// module spent something nobody asked it to.
+		covenantInputs: review.covenantInputs.map(({ txid, vout }) => ({ txid, vout })),
 		walletInputs: review.selected.map(({ txid, vout }) => ({ txid, vout })),
 	});
 

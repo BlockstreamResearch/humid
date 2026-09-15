@@ -41,7 +41,18 @@ const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
  * introspect a commitment — so a reader that left these out would stand in for something no
  * legitimate deployment produces, and the review refuses it rather than assuming a balance.
  */
-const COVENANT_HOLDING = { amountSats: "50000", rawAssetId: POLICY_ASSET };
+const COVENANT_TXOUT = `01${"aa".repeat(32)}010000000000000064000022${"00".repeat(34)}`;
+/**
+ * The covenant output exactly as a chain read hands it back.
+ *
+ * Stated rather than left out because a covenant spend carries these bytes to the builder, and
+ * a reader that omitted them would be standing in for one no wallet ships.
+ */
+const COVENANT_HOLDING = {
+	amountSats: "50000",
+	rawAssetId: POLICY_ASSET,
+	txOutHex: COVENANT_TXOUT,
+};
 
 const SOURCES = Object.fromEntries(
 	["vault", "reserve", "guard", "left", "right"].map((name) => [

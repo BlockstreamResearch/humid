@@ -52,12 +52,16 @@ const MODEL: ShownConfirmation = {
 	summary: fromSite("Spend a p2pk output back into your wallet."),
 };
 
-const payload = (shown: unknown = MODEL) => ({ kind: PROCESS_CT_CONFIRMATION_KIND, shown });
+const payload = (shown: unknown = MODEL, broadcast = false) => ({
+	broadcast,
+	kind: PROCESS_CT_CONFIRMATION_KIND,
+	shown,
+});
 
-const markup = (shown: ShownConfirmation = MODEL) =>
+const markup = (shown: ShownConfirmation = MODEL, broadcast = false) =>
 	renderToStaticMarkup(
 		<ProcessCtConfirmation
-			data={{ kind: PROCESS_CT_CONFIRMATION_KIND, shown }}
+			data={{ broadcast, kind: PROCESS_CT_CONFIRMATION_KIND, shown }}
 			onConfirm={() => {}}
 			onDecline={() => {}}
 		/>,
@@ -428,5 +432,45 @@ describe("what the screen says", () => {
 		const { summary: _summary, ...withoutSummary } = MODEL;
 
 		expect(markup(withoutSummary)).not.toContain("What the site says this does");
+	});
+});
+
+/**
+ * Which of the two authorisations this screen is asking for.
+ *
+ * A signature handed back to the site and a signature broadcast are different things to agree
+ * to, and the request says which. A screen that showed one word for both would be asking a
+ * person to approve something the wallet knew and did not tell them.
+ */
+describe("what the button says it will do", () => {
+	test("offers to sign, for a request that will not send", () => {
+		const rendered = markup(MODEL, false);
+
+		expect(rendered).toContain(">Sign<");
+		expect(rendered).not.toContain("Sign and send");
+		expect(rendered).toContain("handed back to the site rather than sent");
+	});
+
+	test("offers to sign and send, for a request that will", () => {
+		const rendered = markup(MODEL, true);
+
+		expect(rendered).toContain("Sign and send");
+		expect(rendered).toContain("signed and sent");
+	});
+
+	// Not defaulted. A payload that omits it cannot say which of the two questions is being
+	// asked, and reading the absence as the quieter answer would put "Sign" on a screen that is
+	// about to broadcast.
+	test("refuses a payload that does not say", () => {
+		expect(isProcessCtConfirmationData({ kind: PROCESS_CT_CONFIRMATION_KIND, shown: MODEL })).toBe(
+			false,
+		);
+		expect(
+			isProcessCtConfirmationData({
+				broadcast: "yes",
+				kind: PROCESS_CT_CONFIRMATION_KIND,
+				shown: MODEL,
+			}),
+		).toBe(false);
 	});
 });

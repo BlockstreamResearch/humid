@@ -1,3 +1,4 @@
+import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
 import { inspectManifestDocument, type InspectManifestResult } from "@humid/tx-manifest";
 
 /** Nothing has been pasted yet, which is not a fault to report. */
@@ -12,14 +13,6 @@ export type ReadDocument =
 	| ({ kind: "read" } & InspectManifestResult);
 
 export type ReadOptions = {
-	/**
-	 * The single SimplicityHL version the reading wallet ships, when a person has named one.
-	 *
-	 * This page holds no compiler and no wallet, so there is nothing here to read it from. Left
-	 * blank the check is reported as not run — supplying a stand-in would turn "not checked"
-	 * into "checked and fine", which is the one thing this page must not do.
-	 */
-	compilerVersion?: string;
 	/**
 	 * The sources of the contracts this document references, under those paths.
 	 *
@@ -56,15 +49,21 @@ export function readDocument(text: string, options: ReadOptions = {}): ReadDocum
 		};
 	}
 
-	// Each value only where a person actually supplied it, and never a stand-in for one they
-	// did not: the package says what it could not reach, and the page prints that — including
-	// the half-answer, where a version arrived and the sources it is also declared in did not.
+	// The compiler version always, because this page and the wallet now read it from the same
+	// place: one constant, guarded against the submodule it describes. It used to be typed in,
+	// which made the shipped inspector answerable to whatever a person happened to write —
+	// including nothing, which reported the check as not run against a wallet that could have
+	// answered it. The package still takes the version as an argument, because the package
+	// ships no wallet and must not know one; what changed is that this caller has one.
+	//
+	// The contract sources only when a person has handed them over, and never a stand-in: that
+	// would turn "not checked" into "checked and fine", and the package says what it could not
+	// reach so the page can print it — including the half-answer, where the version is known
+	// and the sources it is also declared in are not.
 	return {
 		kind: "read",
 		...inspectManifestDocument(parsed, {
-			...(options.compilerVersion === undefined || options.compilerVersion.trim() === ""
-				? {}
-				: { compilerVersion: options.compilerVersion.trim() }),
+			compilerVersion: SMPLX_COMPILER_VERSION,
 			...(options.contractSources === undefined
 				? {}
 				: { contractSources: options.contractSources }),

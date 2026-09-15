@@ -1,5 +1,5 @@
 import { baseUnits } from "../chain/baseUnits";
-import type { ReadFeeRate, ReadTxOut } from "../chain/chainRead";
+import type { ReadChainTip, ReadFeeRate, ReadTxOut } from "../chain/chainRead";
 import { byOutpoint, outpointKey } from "../chain/outpoint";
 import { type ConfirmationModel, confirmationModel, type ReviewedPlan } from "../confirmation";
 import {
@@ -48,7 +48,7 @@ import { fillParameters } from "../evaluation/parameters";
 import { planAction } from "../evaluation/plan";
 import { checkPositions, type StatedPosition } from "../evaluation/positions";
 import { checkValidations } from "../evaluation/validate";
-import { resolveStaticWitnesses } from "../evaluation/witness";
+import { resolveStaticWitnesses, type StaticWitness } from "../evaluation/witness";
 import { estimateFeeSats } from "../fee";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { resolveActionRequirements } from "../request/requirements";
@@ -74,6 +74,61 @@ export type CovenantFinding = CovenantDerivation & {
 	role: "created" | "spent";
 	verified: "matches-chain" | "not-yet-on-chain";
 };
+
+/**
+ * One covenant this transaction spends, with everything needed to spend it.
+ *
+ * The source, the arguments, the leaves and the build mode are the ones the wallet verified
+ * against the chain rather than a second reading of the request. Whatever spends this covenant
+ * compiles the contract again, and a compile differing in any one of those produces a different
+ * script — which the covenant's own execution then rejects, after a person has approved a
+ * transaction the wallet had already checked.
+ */
+export type ReviewedCovenantInput = {
+	argumentsJson: string;
+	/** The taproot leaves it was verified under, encoded as the compiler takes them. */
+	extraLeavesJson: string;
+	/** The manifest's id for the input, so what the action requires of it can be found. */
+	id: string;
+	/** The mode it was verified under, which decides its script as much as its parameters do. */
+	includeDebugSymbols: boolean;
+	/**
+	 * The witness the signer must fill with a signature over this transaction.
+	 *
+	 * Carried through from the manifest's own declaration because the alternative is not
+	 * signing it: a covenant whose program asserts a signature cannot be satisfied by anything
+	 * the request supplies — the signature is over a transaction that does not exist yet — so
+	 * leaving this unset makes the spend fail at signing rather than anywhere a person could
+	 * act on it.
+	 */
+	signatureWitness?: string;
+	source: string;
+	/** The output exactly as the chain holds it, which is what a builder is handed. */
+	txOutHex: string;
+	txid: string;
+	/** The manifest's name for the kind of UTXO this is, for a refusal that has to name it. */
+	utxoType: string;
+	vout: number;
+	/**
+	 * The values this input's contract needs supplied rather than signed.
+	 *
+	 * A covenant with more than one branch is told which one to run by a witness the document
+	 * states outright. Carried through unparsed, because the compiler that type-checks a
+	 * SimplicityHL literal is the authority on what it means and this package is not.
+	 */
+	witnessValues?: StaticWitness[];
+};
+
+/**
+ * One input of the transaction, in the place the wallet is to build it.
+ *
+ * Carries the piece itself rather than a number pointing into one of the two lists the review
+ * also reports, because a caller holding a number has to be told which list it counts along and
+ * can be told wrongly. What is here is what to add; there is nothing to look up.
+ */
+export type PlannedInput =
+	| { covenant: ReviewedCovenantInput; source: "covenant" }
+	| { source: "wallet"; utxo: SelectableUtxo };
 
 /** One output of the transaction the wallet worked out, ready to be shown and then built. */
 export type ReviewedOutput = {
@@ -182,6 +237,8 @@ export type ManifestReview = {
 	 */
 	confirmation: ConfirmationModel;
 	covenants: CovenantFinding[];
+	/** The covenant outputs this action spends, ready to be added as inputs. */
+	covenantInputs: ReviewedCovenantInput[];
 	/**
 	 * The deployment this action brings into existence, when it creates one.
 	 *
@@ -211,6 +268,43 @@ export type ManifestReview = {
 	 * the transaction actually spends or to one considered and dropped.
 	 */
 	issuances: PlannedIssuance[];
+	/**
+	 * The transaction's inputs, in the order they must be added.
+	 *
+	 * A covenant introspects positions, so the order is part of what the document says rather
+	 * than the wallet's to choose. Adding every covenant first and the wallet's own after is one
+	 * order among many, and where a document states a position for an input the wallet supplies
+	 * it is saying that that one is wrong — a contract asserting its own index will not run
+	 * against a transaction built the other way, and nothing after signing could say why.
+	 */
+	inputOrder: PlannedInput[];
+	/**
+	 * The block height this transaction declares it may not be mined before.
+	 *
+	 * Present whenever the action spends a covenant and the wallet could read the chain's
+	 * height. A contract branch guarded by a lock height reads the transaction's own locktime,
+	 * so a transaction declaring none satisfies no such branch — and no document in the corpus
+	 * states a locktime, because the height a spend is valid at is a fact about the chain rather
+	 * than about the protocol. The wallet answers with where the chain is, which is what every
+	 * wallet writes there and says nothing about any protocol.
+	 *
+	 * Absent when the action spends no covenant, or when no chain-tip reader was supplied. A
+	 * time-locked branch is then unsatisfiable, and it fails at execution rather than here,
+	 * because whether a branch checks a height is inside the contract rather than the document.
+	 */
+	locktimeHeight?: number;
+	/**
+	 * The sequence every input of this transaction carries, when the action declares one.
+	 *
+	 * One value rather than one per input, because that is what the signing module takes: it
+	 * writes this onto every input that declares none, the wallet's own funding inputs
+	 * included. An action whose declarations cannot collapse to one value is refused rather
+	 * than built, so this being present means every declaration in it agreed.
+	 *
+	 * Absent where the action declares nothing, which leaves every input at the module's own
+	 * default and the transaction's locktime unenforced.
+	 */
+	sequence?: number;
 	/**
 	 * What this action does to the wallet's balance, one asset at a time.
 	 *
@@ -320,6 +414,15 @@ export async function reviewManifestAction(
 		network: string;
 		/** The asset the network charges its fees in, which is the only asset that pays them. */
 		policyAsset: string;
+		/**
+		 * How high the chain is, for an action whose covenant branch is time-locked.
+		 *
+		 * Optional, and asked only when the action spends a covenant. A failure to read it is
+		 * not a reason to refuse an action whose covenants are not time-locked: the branch that
+		 * needs a height fails at execution naming itself, which is a better answer than
+		 * refusing everything because one read did not come back.
+		 */
+		readChainTip?: ReadChainTip;
 		readFeeRate: ReadFeeRate;
 		readTxOut: ReadTxOut;
 		/**
@@ -443,6 +546,16 @@ export async function reviewManifestAction(
 	const declaredTypes = declaredParamTypes(manifest, action);
 	const hashCovenant = covenantHashFrom(input.scriptPubKeyOf, buildMode.includeDebugSymbols);
 	const covenants: CovenantFinding[] = [];
+	/**
+	 * Everything a builder needs to spend each covenant, written as each one is verified.
+	 *
+	 * Written here rather than gathered afterwards, because what is here is what was actually
+	 * checked against the chain: the source the request supplied, the arguments the wallet
+	 * resolved, the leaves and the mode it compiled under, and the bytes the chain answered
+	 * with. Reading the request a second time to build the spend would be a second answer to
+	 * the same question, and nothing downstream could tell the two apart.
+	 */
+	const covenantInputs: ReviewedCovenantInput[] = [];
 
 	/**
 	 * What a name means while this action is being read.
@@ -602,6 +715,18 @@ export async function reviewManifestAction(
 		inputs[site.id] = { amount_sat: held, asset: onChain.rawAssetId };
 		chainHeld.push({ asset: onChain.rawAssetId, id: site.id, sats: held });
 
+		covenantInputs.push({
+			argumentsJson: derived.derivation.argumentsJson,
+			extraLeavesJson: derived.derivation.extraLeavesJson,
+			id: site.id,
+			includeDebugSymbols: derived.derivation.includeDebugSymbols,
+			...(site.signatureWitness === undefined ? {} : { signatureWitness: site.signatureWitness }),
+			source: derived.derivation.source,
+			txOutHex: onChain.txOutHex,
+			txid: outpoint.txid,
+			utxoType: site.utxoType,
+			vout: outpoint.vout,
+		});
 		covenants.push({ ...derived.derivation, role: "spent", verified: "matches-chain" });
 	}
 
@@ -610,6 +735,11 @@ export async function reviewManifestAction(
 	// asset as soon as the input resolves, and an id derived from an output the wallet had not
 	// yet committed to spending would be an id for an asset that never comes to exist.
 	const issued = resolveIssuances(action, {
+		// The covenant inputs the loop above verified, by the id the document names them. An
+		// issuance declared on one is derived from the covenant's own outpoint rather than from
+		// an output of the wallet's — the covenant is what the transaction spends there, and
+		// there is nothing to choose.
+		covenantInputs,
 		holdings,
 		inputs,
 		notes,
@@ -693,6 +823,18 @@ export async function reviewManifestAction(
 		return { reason: stated.reason, refused: true, reject: "document-fault" };
 	}
 
+	// The values a covenant input's contract is told outright, joined to the input that carries
+	// them. Attached here rather than in the loop above because a stated value may name a field
+	// of the deployment, and a hook is what may have written that field — so the literal is not
+	// resolvable until the hooks have run.
+	for (const covenant of covenantInputs) {
+		const values = stated.witnesses.get(covenant.id);
+
+		if (values && values.length > 0) {
+			covenant.witnessValues = values;
+		}
+	}
+
 	const plan = planAction(action, scope, notes, manifest.raw.confidential_outputs);
 
 	if (!plan.ok) {
@@ -720,8 +862,10 @@ export async function reviewManifestAction(
 	// The signing module takes one sequence for the transaction and writes it onto every input
 	// that declares none, so what the action declares per input has to collapse to a single
 	// value or be refused here. What survives is a sequence with the timelock disable bit set,
-	// which constrains no input at all — so honouring it is nothing the builder has to be told,
-	// and a declaration this wallet cannot carry is refused before the person is asked.
+	// which constrains no input at all — but it is not therefore nothing to say: it is what
+	// enables the transaction's own locktime, and a covenant branch guarded by a lock height
+	// reads that. So the value is carried out on the plan and the builder is told it, and a
+	// declaration this wallet cannot carry is refused before the person is asked.
 	const sequence = transactionSequence(inputRules.rules);
 
 	if (!sequence.ok) {
@@ -1082,7 +1226,7 @@ export async function reviewManifestAction(
 	/** A declared input built out of the selection an earlier declaration was credited with. */
 	const fundedWith = new Map<string, string>();
 	/** Which of the chosen outputs build each declared input, in the order they were chosen. */
-	const walletRuns = new Map<string, SelectableUtxo[]>();
+	const walletRuns = new Map<string, PlannedInput[]>();
 
 	for (const wallet of ledger.walletInputs) {
 		const credited = creditedWith.get(wallet.asset);
@@ -1098,35 +1242,39 @@ export async function reviewManifestAction(
 		}
 
 		creditedWith.set(wallet.asset, wallet.id);
-		walletRuns.set(wallet.id, fundedFor.get(wallet.asset)?.selected ?? []);
+		walletRuns.set(
+			wallet.id,
+			(fundedFor.get(wallet.asset)?.selected ?? []).map((utxo) => ({
+				source: "wallet" as const,
+				utxo,
+			})),
+		);
 	}
 
 	/**
-	 * Every run of chosen outputs, in the order the action's declarations reach them.
+	 * Every declared input, with what the wallet would build it from and where it must go.
 	 *
-	 * Walked by asset rather than by declaration so that an action stating no position at all
-	 * lays its inputs out exactly as it did before positions were read: the assets an input
-	 * declares first, then the ones only the fee needed. An asset no input declares — which is
-	 * where an undeclared fee is paid — is a run with no name and no stated place.
+	 * Walked by declaration rather than by asset, because a covenant input is declared and is
+	 * not funded out of anything — an order worked out from the assets alone has nowhere to put
+	 * it, and adding every covenant first is the wallet's habit rather than the document's word.
+	 * A contract asserting its own index will not run against a transaction built the other way,
+	 * and nothing after signing could say why.
 	 */
 	const declaredInputs = asArray(action.node.inputs).map((entry) => asRecord(entry));
-	const statedIndexOf = (id: string): number | undefined => {
-		const declared = declaredInputs.find((entry) => entry?.id === id);
+	const placeable: PlaceableInput<PlannedInput>[] = [];
 
-		return statedIndex(declared?.required_index) ?? undefined;
-	};
-	const placeable: PlaceableInput<SelectableUtxo>[] = [];
-
-	for (const asset of fundedOrder) {
-		const id = creditedWith.get(asset);
-		const wanted = id === undefined ? undefined : statedIndexOf(id);
-		const entry: PlaceableInput<SelectableUtxo> = {
-			slots: (id === undefined ? fundedFor.get(asset)?.selected : walletRuns.get(id)) ?? [],
-		};
-
-		if (id !== undefined) {
-			entry.id = id;
+	for (const declared of declaredInputs) {
+		if (!declared) {
+			continue;
 		}
+
+		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
+		const covenant = covenantInputs.find((candidate) => candidate.id === id);
+		const slots: PlannedInput[] = covenant
+			? [{ covenant, source: "covenant" }]
+			: (walletRuns.get(id) ?? []);
+		const wanted = statedIndex(declared.required_index);
+		const entry: PlaceableInput<PlannedInput> = { id, slots };
 
 		if (wanted !== undefined) {
 			entry.stated = wanted;
@@ -1134,13 +1282,30 @@ export async function reviewManifestAction(
 
 		placeable.push(entry);
 	}
+
+	/**
+	 * What was chosen for an asset no input declares, which is where an undeclared fee is paid.
+	 *
+	 * A run with no name and no stated place: nothing in the document refers to it, so nothing
+	 * can require it to be anywhere, and it falls into whatever is left.
+	 */
+	const undeclared = fundedOrder
+		.filter((asset) => !creditedWith.has(asset))
+		.flatMap((asset) => fundedFor.get(asset)?.selected ?? []);
+
+	if (undeclared.length > 0) {
+		placeable.push({ slots: undeclared.map((utxo) => ({ source: "wallet" as const, utxo })) });
+	}
+
 	const placement = placeInputs(placeable);
 	/**
 	 * Where a declared input landed, which is not always anywhere.
 	 *
-	 * One funded out of an earlier declaration's selection lands where that run ends, and one
-	 * the wallet builds nothing for — a covenant input, which this slice does not build — lands
-	 * nowhere at all rather than at a number that reads like a place.
+	 * A covenant input lands where the placement put it, like any other: it is a piece of the
+	 * transaction now rather than something this slice declines to build. One funded out of an
+	 * earlier declaration's selection lands where that run ends. A declaration the wallet builds
+	 * nothing at all for lands nowhere rather than at a number that reads like a place, and the
+	 * position check counts it one past the end so it is refused by name.
 	 */
 	const landedAt = (id: string): number | undefined => {
 		const own = placement.at.get(id);
@@ -1238,7 +1403,15 @@ export async function reviewManifestAction(
 		return { reason: positioned.reason, refused: true, reject: "unbuildable-position" };
 	}
 
-	const selected = placement.order;
+	/**
+	 * The wallet's own outputs this transaction spends, which is not the order it spends in.
+	 *
+	 * Each asset's own run together, in the order the action declares the inputs that need
+	 * them, with the output an issuance is derived from first within its asset. Which of them
+	 * the transaction spends, not in which order: `inputOrder` is the order, and once a covenant
+	 * input is in it the two are not the same list.
+	 */
+	const selected = fundedOrder.flatMap((asset) => fundedFor.get(asset)?.selected ?? []);
 
 	/**
 	 * What a transaction of this shape costs at the rate the chain quoted.
@@ -1278,22 +1451,39 @@ export async function reviewManifestAction(
 			(entry.asset === policyAsset ? estimatedFeeSats : 0n),
 	}));
 
+	/**
+	 * Where the chain is, when this action spends a covenant.
+	 *
+	 * Asked here rather than at the top because most actions never need it, and a failure to
+	 * read it is not a reason to refuse an action whose covenants are not time-locked: the
+	 * branch that needs a height fails at execution, naming itself, which is a better answer
+	 * than refusing everything because one network call did not come back.
+	 */
+	const locktimeHeight =
+		covenantInputs.length > 0 && input.readChainTip
+			? await input.readChainTip().catch(() => undefined)
+			: undefined;
+
 	const reviewed: ReviewedPlan = {
 		action: request.action,
 		...(action.boundTo === undefined ? {} : { boundTo: action.boundTo }),
 		changeBlinded,
 		...(changeOverrode === undefined ? {} : { changeOverrode }),
+		covenantInputs,
 		covenants,
 		...(created === undefined ? {} : { createdInstance: created.instance }),
 		estimatedFeeSats,
 		feeRateSatsPerKvb,
+		inputOrder: placement.order,
 		issuances: issued.issuances,
+		...(locktimeHeight === undefined ? {} : { locktimeHeight }),
 		movements,
 		normalisation: notes,
 		outputs,
 		policyAsset,
 		protocol: manifest.protocol ?? "",
 		selected,
+		...(sequence.value === undefined ? {} : { sequence: sequence.value }),
 	};
 
 	// The model is a reading of everything above, so it is derived from the finished plan rather
@@ -1326,18 +1516,36 @@ type ResolvedIssuances =
 /**
  * Works out every asset this action creates, and which output each one is derived from.
  *
- * An input the wallet funds has no outpoint until the wallet picks one, and this is where it
- * gets one — the asset id is a function of that output, so choosing it later would mean
- * deriving an id for an output the transaction might not spend.
+ * Which output that is depends on what the input spends, and the two cases are not the same
+ * question. An input the wallet funds has no outpoint until the wallet picks one, and this is
+ * where it gets one — the asset id is a function of that output, so choosing it later would mean
+ * deriving an id for an output the transaction might not spend. An input that spends a covenant
+ * already has one: the state file named it and the chain confirmed what is there, so there is
+ * nothing to choose and nothing of the wallet's to reserve.
  *
- * The chosen output is returned as reserved rather than merely noted. Everything after this
+ * Deriving a covenant issuance from a wallet output anyway is the failure this replaces. It
+ * produced a well-formed asset keyed to an output the covenant input has no relation to, quietly
+ * committed the transaction to spending that output, and left the module's covenant-issuance call
+ * unreachable — so the asset a person was shown was not the asset the transaction would create.
+ *
+ * A chosen wallet output is returned as reserved rather than merely noted. Everything after this
  * treats the funding pool as what is left, because an output spent twice is not a transaction,
  * and an issuance derived from one the wallet then declined to spend is worse: it is a
- * well-formed id for an asset that would never exist.
+ * well-formed id for an asset that would never exist. A covenant's outpoint is not reserved,
+ * because it was never in that pool.
  */
 function resolveIssuances(
 	action: NormalisedAction,
 	context: {
+		/**
+		 * The covenants this action spends, in the order they were verified.
+		 *
+		 * Looked up by the id the document gives the input, which is the only join the two sides
+		 * promise: the manifest names the input and the wallet established what is at its
+		 * outpoint. Passed in rather than re-read from the request, because what is here is what
+		 * was actually checked against the chain.
+		 */
+		covenantInputs: ReviewedCovenantInput[];
 		/** The wallet's spendable outputs in one asset, which is where an issuing input comes from. */
 		holdings: AssetHoldings;
 		/** What the wallet established about each input, which the issued asset joins. */
@@ -1410,20 +1618,6 @@ function resolveIssuances(
 
 		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
 
-		// A covenant can issue an asset too, on the input that spends it, and the module has a
-		// separate call for it. Satisfying a covenant input is not something this wallet can do
-		// yet at all, so an issuance sitting on one is refused by name rather than derived from
-		// an outpoint that would then be added as an ordinary input.
-		if (typeof asRecord(declared.utxo_source)?.utxo_type === "string") {
-			return {
-				ok: false,
-				reason:
-					`Input ${id} issues an asset from a covenant this wallet spends, and this wallet ` +
-					"cannot yet satisfy a covenant input.",
-				reject: "unimplemented-construct",
-			};
-		}
-
 		const asset = resolveAsset(declared.asset, `input ${id}`, {
 			notes: context.notes,
 			policyAsset: context.policyAsset,
@@ -1432,6 +1626,50 @@ function resolveIssuances(
 
 		if (!asset.ok) {
 			return { ok: false, reason: asset.reason, reject: "foreign-asset" };
+		}
+
+		const covenant = context.covenantInputs.find((candidate) => candidate.id === id);
+
+		// A covenant that issues. The outpoint is the covenant's own — the state file named it
+		// and the chain confirmed it — so nothing is chosen and nothing of the wallet's is
+		// reserved. Taking a wallet output here would derive the asset from an output this input
+		// does not spend, and commit the transaction to spending it as well.
+		if (covenant) {
+			const outpoint = { txid: covenant.txid, vout: covenant.vout };
+			const key = outpointKey(outpoint);
+
+			// Two issuances derived from one output would each be a well-formed id for a different
+			// asset, and the transaction would have to spend that output twice to create both.
+			// The same rule the wallet pool is held to, applied to the one output that is not in it.
+			if (taken.has(key)) {
+				return {
+					ok: false,
+					reason:
+						`Input ${id} issues an asset from ${outpoint.txid}:${outpoint.vout}, which ` +
+						"another input of this transaction already issues from. One output cannot " +
+						"create two assets.",
+					reject: "document-fault",
+				};
+			}
+
+			const issuedHere = resolveIssuance(
+				{ declared: issuance, id, outpoint },
+				context.scope,
+				context.notes,
+			);
+
+			if (!issuedHere.ok) {
+				return { ok: false, reason: issuedHere.reason, reject: issuedHere.reject };
+			}
+
+			taken.add(key);
+			issuances.push(issuedHere.issuance);
+			context.inputs[id] = {
+				...context.inputs[id],
+				...issuanceAttributes(issuedHere.issuance),
+			};
+
+			continue;
 		}
 
 		const funding = spareIn(asset.id);

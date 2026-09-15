@@ -19,6 +19,18 @@ export type CovenantSite = {
 	 */
 	id: string;
 	role: "created" | "spent";
+	/**
+	 * The witness this covenant's program needs a signature for, when it has one.
+	 *
+	 * A covenant that authenticates whoever spends it declares a `Signature` witness sourced
+	 * from a wallet key, and the signer is the only thing that can fill it — nothing the
+	 * request supplies could, because the signature is over a transaction that does not exist
+	 * until the wallet has assembled it. Carried through by name rather than worked out again
+	 * where the spend is built, because the document is read once.
+	 *
+	 * Absent for a covenant that needs no signature, and for one being created.
+	 */
+	signatureWitness?: string;
 	utxoType: string;
 	/** The compile parameters wired in at this site, unresolved. */
 	wiring: Record<string, unknown>;
@@ -31,7 +43,14 @@ export function covenantSites(action: Record<string, unknown>): CovenantSite[] {
 		const site = covenantReference(asRecord(entry)?.utxo_source);
 
 		if (site) {
-			sites.push({ ...site, id: identifierOf(entry), role: "spent" });
+			const signatureWitness = walletSignatureWitness(asRecord(entry)?.witnesses);
+
+			sites.push({
+				...site,
+				id: identifierOf(entry),
+				role: "spent",
+				...(signatureWitness === undefined ? {} : { signatureWitness }),
+			});
 		}
 	}
 
@@ -89,6 +108,26 @@ function covenantReference(
 	}
 
 	return { utxoType, wiring: asRecord(record?.compile_params) ?? {} };
+}
+
+/**
+ * The witness a wallet key must sign, from an input's witness declarations.
+ *
+ * Only a `Signature` witness sourced from the wallet qualifies. One with a literal value is
+ * already supplied and one worked out from a formula is computed rather than signed, so asking
+ * the signer for either would produce a signature nothing checks — and, worse, would leave the
+ * witness the contract does read unfilled.
+ */
+function walletSignatureWitness(declared: unknown): string | undefined {
+	for (const [name, entry] of Object.entries(asRecord(declared) ?? {})) {
+		const witness = asRecord(entry);
+
+		if (witness?.type === "Signature" && asRecord(witness.source)?.type === "wallet") {
+			return name;
+		}
+	}
+
+	return undefined;
 }
 
 function identifierOf(entry: unknown): string {
