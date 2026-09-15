@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import multiassetManifest from "../__fixtures__/multiasset.manifest.json";
 import { deriveNewIssuance } from "../chain/issuance";
+import { estimateFeeSats } from "../fee";
 import { isRefusal, reviewManifestAction } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import type { SelectableUtxo } from "./coinSelection";
@@ -28,6 +29,7 @@ function utxo(amount: string, txid: string, overrides: Partial<SelectableUtxo> =
 }
 
 const deps = {
+	accountLabel: "liquid:testnet account 0",
 	compile: () => ({ address: "tex1p_derived", scriptPubKeyHex: DERIVED_SCRIPT }),
 	network: "liquid",
 	policyAsset: POLICY_ASSET,
@@ -143,6 +145,32 @@ describe("an action that moves two assets", () => {
 		expect(isRefusal(result) ? [] : result.outputs.map((output) => output.id)).not.toContain(
 			"change_out",
 		);
+	});
+
+	// The same rule at the surface. What a person is shown for an action moving two assets is
+	// two lines, because a single figure could only be written by adding the two together —
+	// and a token and an amount of money do not add. The token line here is zero: the wallet
+	// pays its own token to itself and takes the surplus back, so what this action costs the
+	// person is money, and saying so takes two sentences rather than one.
+	test("shows one line per asset on the confirmation, and never one line for both", async () => {
+		const result = await pay();
+
+		expect(isRefusal(result)).toBe(false);
+
+		if (!isRefusal(result)) {
+			const rows = result.confirmation.netEffect.map((row) => [row.asset.value, row.sats.value]);
+
+			// The network's own asset first, because the ledger seeds it before it reads a
+			// single output: every transaction pays a fee and the fee is charged in that asset.
+			// The token follows as the first asset the document itself names.
+			expect(rows).toEqual([
+				[POLICY_ASSET, -700n - result.estimatedFeeSats],
+				[TOKEN, 0n],
+			]);
+			// Two assets, two rows, and each row keyed by the asset it is about. A surface handed
+			// one figure could not have written either of these sentences.
+			expect(new Set(rows.map(([asset]) => asset)).size).toBe(2);
+		}
 	});
 
 	// An asset with more coming in than going out and nowhere declared to put the difference
@@ -294,6 +322,48 @@ describe("an action that creates an asset", () => {
 			expect(issuance?.assetAmountSats).toBe(21n);
 			expect(issuance?.inflationAmountSats).toBe(0n);
 			expect(issuance?.inputId).toBe("mint_in");
+		}
+	});
+
+	// An issuance is a surcharge on an input that is already counted, and the estimate has to
+	// carry it: an issuance adds the amount, the inflation keys, the entropy and the blinding
+	// nonce to the input it sits on, and a shape that forgot to say so would price this
+	// transaction as though none of that were there.
+	test("prices the input that creates the asset as an issuing one", async () => {
+		const result = await mint();
+
+		expect(isRefusal(result)).toBe(false);
+
+		if (!isRefusal(result)) {
+			const shape = {
+				covenantInputs: 0,
+				outputs: result.outputs.length,
+				walletInputs: result.selected.length,
+			};
+
+			expect(result.estimatedFeeSats).toBe(
+				estimateFeeSats({ ...shape, issuingInputs: 1 }, result.feeRateSatsPerKvb),
+			);
+			// And the figure it would have been without the surcharge, which is what a silently
+			// omitted `issuingInputs` produces: lower, so the transaction would come up short.
+			expect(result.estimatedFeeSats).toBeGreaterThan(
+				estimateFeeSats({ ...shape, issuingInputs: 0 }, result.feeRateSatsPerKvb),
+			);
+		}
+	});
+
+	// The two assets a mint moves, on the screen as two lines: the asset it creates, which the
+	// wallet gains all of, and the money the fee comes out of.
+	test("shows the created asset and the money it cost as separate lines", async () => {
+		const result = await mint();
+
+		expect(isRefusal(result)).toBe(false);
+
+		if (!isRefusal(result)) {
+			const rows = result.confirmation.netEffect.map((row) => [row.asset.value, row.sats.value]);
+
+			expect(rows).toContainEqual([POLICY_ASSET, -result.estimatedFeeSats]);
+			expect(rows).toContainEqual([result.issuances[0]?.asset ?? "", 21n]);
 		}
 	});
 

@@ -74,6 +74,16 @@ jobs:
             apps/extension/src/core/chains/liquid/adapters/smplx/compileCovenantWithSmplx.test.ts \
             apps/extension/src/core/chains/liquid/adapters/smplx/assembleReviewedTransaction.test.ts
 
+      # The confirmation surface, which is React where the rest of this slice is not: it needs
+      # the JSX transform, the React declarations and the app's own `@/` mapping, and a path
+      # mapping cannot be given on a tsc command line. So it is named in a config of its own —
+      # one that extends the root project rather than restating a subset of it, because a
+      # surface checked under settings the app does not use has been checked against something
+      # nobody ships. It overrides only what is read: these two files and what they import,
+      # not the whole app whose baseline failures this job deliberately skips.
+      - name: Typecheck the confirmation surface
+        run: bunx tsc -p apps/extension/tsconfig.confirmation.json
+
       # The web half of this slice: the manifest inspector and the format support page, which
       # read the manifest runtime's TypeScript rather than only a JSON fixture from it.
       #
@@ -105,7 +115,12 @@ jobs:
       # page. They render each view to a string with no wallet, no provider and no document,
       # which is the strongest available check that those pages stand alone — so they have to
       # run here rather than only in a full-repository gate this job deliberately skips.
+      #
+      # The confirmation surface is rendered the same way and for the same reason: what a
+      # person is shown before they authorise a contract action, and what this wallet refuses
+      # to show them, are assertions about markup rather than about a model.
       - name: Test
         run: |
           bun test packages/tx-manifest apps/web \
-            apps/extension/src/core/chains/liquid/adapters/smplx
+            apps/extension/src/core/chains/liquid/adapters/smplx \
+            apps/extension/src/core/chains/liquid/application/methods/processConfidentialTransaction

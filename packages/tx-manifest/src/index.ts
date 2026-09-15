@@ -39,6 +39,18 @@ export { type ManifestReview, isRefusal, reviewManifestAction } from "./review";
 // opposite advice. The vocabulary is published; the table that produces it is not.
 export type { RejectToken } from "./document/refuse";
 
+// 3a. What a person is shown before they decide, and where each value on that screen came
+// from. It is a reading of the plan above rather than a second establishment of anything, and
+// it is reachable through the review as well — named here because the surface that renders it
+// holds nothing else of this package, and because a value's origin is a type rather than a
+// convention: what cannot be assigned to a `Provenanced` cannot reach that surface at all.
+export { type ShownConfirmation, describeOrigin, toShownConfirmation } from "./confirmation";
+// Three constructors rather than four: `fromChain` has no caller outside this package, and a
+// public name for it would be a fourth thing to keep in step for nobody. `Origin` is not named
+// either — what crosses is a `Provenanced` value, and a caller taking origins apart by name
+// rather than reading `describeOrigin` is building a second vocabulary beside this one.
+export { type Provenanced, computed, fromSite, verified } from "./confirmation/provenance";
+
 // 4. What came back, checked against what was agreed to — before it is called a transaction.
 // Both read the finished transaction's own bytes rather than asking the module that built it,
 // because a module's account of itself cannot answer whether it did something it was not

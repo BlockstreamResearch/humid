@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ManifestReview } from "@humid/tx-manifest";
+import { type ManifestReview, computed, fromSite } from "@humid/tx-manifest";
 
 import {
 	type AssembledTransaction,
@@ -215,6 +215,20 @@ type SmplxModule = { TransactionBuilder: new () => AssemblingBuilder };
 function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
 	return {
 		action: "Pay",
+		// What a person would be shown, which this module never reads: it builds from the plan.
+		// Present because the review carries it, and stated rather than cast so that a field
+		// added to the model is a compile error here rather than a hole nobody notices.
+		confirmation: {
+			account: computed("liquid:testnet account 0"),
+			action: fromSite("Pay"),
+			covenants: [],
+			feeAsset: computed(ASSET),
+			feeSats: computed(344n),
+			hiddenAmounts: [],
+			netEffect: [{ asset: computed(ASSET), sats: computed(-50_344n) }],
+			protocol: fromSite("p2pk-simplicity"),
+			publishedAmounts: [],
+		},
 		covenants: [
 			{
 				address: "tex1p_derived",
@@ -227,8 +241,10 @@ function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
 		],
 		changeBlinded: false,
 		changeOverrode: "chain",
+		estimatedFeeSats: 344n,
 		feeRateSatsPerKvb: 1000,
 		issuances: [],
+		movements: [{ asset: ASSET, sats: -50_344n }],
 		normalisation: [],
 		outputs: [
 			{
