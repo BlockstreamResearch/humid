@@ -18,6 +18,10 @@ export const WALLET_RPC_ERROR_REASONS = {
 	INVALID_IDENTITY_PUBLIC_KEY: "invalid_identity_public_key",
 	INVALID_IDENTITY_REQUEST: "invalid_identity_request",
 	INVALID_LOCAL_ROOT_MATERIAL: "invalid_local_root_material",
+	// One code for every way a contract action is refused. Which way it was is the `reject`
+	// token beside it, because a caller telling "this wallet will never build that" from "your
+	// state file is out of date" cannot do it by parsing an English sentence.
+	INVALID_MANIFEST_REQUEST: "invalid_manifest_request",
 	INVALID_MESSAGE_SIGNING_REQUEST: "invalid_message_signing_request",
 	INVALID_PARAMS: "invalid_params",
 	INVALID_PSET_REQUEST: "invalid_pset_request",

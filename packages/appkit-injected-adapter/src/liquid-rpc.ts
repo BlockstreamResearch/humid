@@ -251,5 +251,47 @@ export type LiquidSignIdentityResult = {
 
 /* ---------- processConfidentialTransaction ---------- */
 
-/** Wallet ABI request. No dapp-facing shape exists yet; the wallet answers with a not-implemented error. */
+/**
+ * Wallet ABI request: one action of a txManifest protocol.
+ *
+ * Deliberately still permissive. What a site sends is a whole manifest document, the sources of
+ * the contracts it references, an action name and that action's own parameters — and the shape of
+ * the last two is decided by the document rather than by this package. A type written here would
+ * be a second, weaker copy of a format the wallet already reads in full and refuses in detail, and
+ * a request that satisfied it would still be refused by name. So the request stays open and the
+ * wallet's own reader is the authority on it.
+ *
+ * The keys the wallet accepts are `manifest`, `contractSources`, `action`, `params`, `instance`,
+ * `state` and `broadcast`; anything else is a malformed request rather than a value quietly
+ * dropped. `instance` is the deployment a class method reads its field values out of, and is
+ * absent for an action declared at the top level — so it is optional in the same way `state` is,
+ * and for the same reason: which of them an action needs is decided by the document.
+ */
 export type LiquidProcessConfidentialTransactionParams = Record<string, unknown>;
+
+/**
+ * What comes back once the action has been signed.
+ *
+ * This is stated where the request is not, because the answer is the wallet's own and is the
+ * same shape for every protocol: the site did not decide it and cannot vary it.
+ */
+export type LiquidProcessConfidentialTransactionResult = {
+	/** Whether the wallet sent this, which is what the request asked it to do. */
+	broadcast: boolean;
+	/**
+	 * The deployment this action brought into existence, when it created one.
+	 *
+	 * Absent for every action that only spends what already exists. Returned rather than left to
+	 * be worked out again, because half of these fields are functions of outputs the wallet chose
+	 * — an asset id is derived from the output its issuing input spends — so a caller
+	 * reconstructing them afterwards would be guessing which output that was. The deployment
+	 * outlives the transaction; this is where it can still be read.
+	 */
+	deployment?: Record<string, string>;
+	/** What the network charged, in base units, as text: JSON cannot carry the integer. */
+	feeSats: string;
+	/** The finished transaction, consensus-encoded. Present whether or not it was sent. */
+	transactionHex: string;
+	/** The transaction id: the network's own once broadcast, the signed one's otherwise. */
+	txid: string;
+};

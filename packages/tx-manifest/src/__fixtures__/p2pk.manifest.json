@@ -1,0 +1,133 @@
+{
+    "manifest_version": "0.1.0",
+    "attestation_version": "1",
+    "protocol": "p2pk-simplicity",
+    "description": "Hello World — Pay-to-public-key using a Simplicity checksig program on Liquid.",
+    "chain": "liquid",
+    "utxo_types": {
+        "p2pk_output": {
+            "description": "A Liquid UTXO locked to PUBKEY via the compiled p2pk.simf program.",
+            "script": {
+                "type": "simplicity",
+                "source": "./p2pk.simf"
+            },
+            "asset": "lbtc",
+            "confidential": false
+        }
+    },
+    "actions": {
+        "Pay": {
+            "description": "Lock funds into a p2pk output that only PUBKEY's owner can spend.",
+            "params": {
+                "pubkey": {
+                    "type": "pubkey",
+                    "description": "The x-only public key that will be able to spend this output (the recipient)."
+                },
+                "amount_sat": {
+                    "type": "u64",
+                    "description": "Amount in satoshis to lock in the output."
+                }
+            },
+            "inputs": [
+                {
+                    "id": "funding_input",
+                    "description": "Wallet UTXO providing the funds.",
+                    "utxo_source": "wallet",
+                    "asset": "lbtc",
+                    "amount_sat": {
+                        "min_amount": "params.amount_sat"
+                    }
+                }
+            ],
+            "outputs": [
+                {
+                    "id": "p2pk_out",
+                    "description": "The funded p2pk output, locked to PUBKEY.",
+                    "destination": {
+                        "utxo_type": "p2pk_output",
+                        "compile_params": {
+                            "PUB_KEY": "params.pubkey"
+                        }
+                    },
+                    "amount_sat": "params.amount_sat",
+                    "asset": "lbtc"
+                },
+                {
+                    "id": "change_out",
+                    "description": "Change returned to the funding wallet.",
+                    "destination": "change",
+                    "asset": "lbtc",
+                    "optional": true
+                }
+            ],
+            "validations": [
+                {
+                    "id": "amount_nonzero",
+                    "rule": {
+                        "type": "arithmetic",
+                        "expr": "params.amount_sat > 0"
+                    },
+                    "error": {
+                        "code": "INVALID_AMOUNT",
+                        "message": "Amount must be greater than zero"
+                    }
+                }
+            ]
+        },
+        "Receive": {
+            "description": "Spend a p2pk output back into your wallet. Requires a BIP340 signature from the pubkey the output was locked to.",
+            "params": {
+                "pubkey": {
+                    "type": "pubkey",
+                    "description": "The x-only public key the output was locked to in Pay. Must be one of your own wallet's keys so the wallet can sign the spend."
+                }
+            },
+            "inputs": [
+                {
+                    "id": "p2pk_in",
+                    "description": "The p2pk covenant UTXO to spend, located via the state file by its utxo_type.",
+                    "utxo_source": {
+                        "utxo_type": "p2pk_output",
+                        "compile_params": {
+                            "PUB_KEY": "params.pubkey"
+                        }
+                    },
+                    "witnesses": {
+                        "SIGNATURE": {
+                            "type": "Signature",
+                            "sig_type": "sig_hash_all",
+                            "source": {
+                                "type": "wallet",
+                                "key": "params.pubkey"
+                            },
+                            "description": "BIP340 Schnorr signature over the whole transaction, from the recipient key."
+                        }
+                    }
+                },
+                {
+                    "id": "fee_input",
+                    "description": "Wallet L-BTC UTXO to pay the network fee.",
+                    "utxo_source": "wallet",
+                    "asset": "lbtc",
+                    "optional": true
+                }
+            ],
+            "outputs": [
+                {
+                    "id": "received_out",
+                    "description": "The reclaimed funds, sent to your wallet.",
+                    "destination": "wallet",
+                    "asset": "lbtc",
+                    "amount_sat": "p2pk_in.amount_sat"
+                },
+                {
+                    "id": "fee_change",
+                    "description": "L-BTC change from the fee input.",
+                    "destination": "change",
+                    "asset": "lbtc",
+                    "optional": true
+                }
+            ]
+        }
+    }
+}

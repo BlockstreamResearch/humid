@@ -87,7 +87,25 @@ export async function sendTransfer(
 			// Native "Max": drain every L-BTC input to the recipient, ignoring `amount`. LWK selects all
 			// inputs and subtracts the fee, so the broadcast pays whatever the fee is off the freshly
 			// re-synced UTXO set — no dependence on the amount estimated earlier (no feeRate() = default).
+			// The drain path takes the address as it is, so an unconfidential one produces an explicit
+			// output without needing the branch below.
 			builder = builder.drainLbtcWallet().drainLbtcTo(recipientAddress);
+		} else if (!recipientAddress.isBlinded()) {
+			// An unconfidential recipient needs the explicit path: the ordinary one refuses an address
+			// with no blinding key outright ("Address must be confidential"). Without this the wallet
+			// cannot pay an explicit output at all — which means it cannot fund a contract action, since
+			// a covenant can only spend an explicit one, and the Receive screen's unconfidential tab
+			// exists to show people the address to fund. The confidentiality that is lost is the point
+			// of the address, and the review screen says so before anyone confirms.
+			//
+			// Before the asset branches rather than inside them, because this one call takes either:
+			// the asset is named explicitly, so the network's own and an issued one need no separate
+			// path here.
+			builder = builder.addExplicitRecipient(
+				recipientAddress,
+				amount,
+				lwk.AssetId.fromString(rawAssetId),
+			);
 		} else if (rawAssetId === account.rawPolicyAssetId) {
 			builder = builder.addLbtcRecipient(recipientAddress, amount);
 		} else {

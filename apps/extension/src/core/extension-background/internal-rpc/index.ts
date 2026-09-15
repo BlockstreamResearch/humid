@@ -10,12 +10,14 @@ import type {
 	TransferReview,
 } from "@/core/accounts/application/accounts-rpc/model/types";
 import type { ChainGroup } from "@/core/chains/application/ChainGroup";
+import type { LiquidContractIdentity } from "@/core/chains/liquid/application/contractIdentity";
 import type { ConfirmationRequest } from "@/helpers/background";
 
 import type { ConfirmationResponder } from "../confirmations";
 import type { RequestHandlerMap } from "../transport";
 import { createAccountsInternalHandlers } from "./accounts";
 import { createChainsInternalHandlers } from "./chains";
+import { createLiquidContractInternalHandlers } from "./liquid-contract";
 import { walletVaultInternalHandlers } from "./wallet-vault";
 import { walletConnectInternalHandlers } from "./walletconnect";
 
@@ -30,6 +32,7 @@ export type CreateInternalRpcHandlersInput = {
 	getReceiveAddress: () => Promise<ReceiveAddress>;
 	inspectTransfer: (input: SendTransferInput) => Promise<TransferReview>;
 	purgeAccountPortfolio: (accountGroupId: string) => Promise<void>;
+	readContractIdentity: (accountGroupId?: string) => Promise<LiquidContractIdentity>;
 	purgeAccountWalletConnectSessions: (accountGroupIds: readonly string[]) => Promise<void>;
 	refreshPortfolio: () => Promise<PortfolioSnapshot>;
 	sendTransfer: (input: SendTransferInput) => Promise<SendTransferResult>;
@@ -49,6 +52,7 @@ export function createInternalRpcHandlers({
 	inspectTransfer,
 	purgeAccountPortfolio,
 	purgeAccountWalletConnectSessions,
+	readContractIdentity,
 	refreshPortfolio,
 	sendTransfer,
 }: CreateInternalRpcHandlersInput): RequestHandlerMap {
@@ -73,6 +77,7 @@ export function createInternalRpcHandlers({
 		...walletVaultInternalHandlers,
 		...walletConnectInternalHandlers,
 		...createChainsInternalHandlers(chainGroups),
+		...createLiquidContractInternalHandlers(readContractIdentity),
 		...createAccountsInternalHandlers({
 			estimateMaxSend,
 			getActivity,

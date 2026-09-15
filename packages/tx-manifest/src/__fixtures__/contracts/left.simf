@@ -1,0 +1,8 @@
+// One half of a pair of covenants each built from the other's script hash. Compiling either
+// requires the other to have been compiled first, and there is no order in which that is
+// possible — which is the point: a document declaring this pair has no answer to settle on.
+fn main() {
+    let other: u256 = param::OTHER_COV_HASH;
+
+    jet::verify(jet::eq_256(jet::output_script_hash(0), other));
+}

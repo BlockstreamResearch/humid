@@ -2,3 +2,7 @@
 	path = lwk
 	url = https://github.com/lukachi/lwk.git
 	branch = humid/esplora-backend-config
+[submodule "smplx"]
+	path = smplx
+	url = https://github.com/lukachi/smplx.git
+	branch = dev

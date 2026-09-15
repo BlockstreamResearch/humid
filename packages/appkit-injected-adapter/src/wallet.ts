@@ -10,6 +10,7 @@ import type {
 	LiquidGetWalletDescriptorParams,
 	LiquidGetWalletDescriptorResult,
 	LiquidProcessConfidentialTransactionParams,
+	LiquidProcessConfidentialTransactionResult,
 	LiquidSendTransferParams,
 	LiquidSendTransferResult,
 	LiquidSignIdentityParams,
@@ -45,7 +46,7 @@ export type WalletClient = {
 	signIdentity(params: LiquidSignIdentityParams): Promise<LiquidSignIdentityResult>;
 	processConfidentialTransaction(
 		params: LiquidProcessConfidentialTransactionParams,
-	): Promise<unknown>;
+	): Promise<LiquidProcessConfidentialTransactionResult>;
 };
 
 /**
@@ -82,6 +83,11 @@ export function createWalletClient(provider: CaipRpcProvider, scope: string): Wa
 		signIdentity: (params) =>
 			invokeMethod<LiquidSignIdentityResult>(provider, scope, "signIdentity", params),
 		processConfidentialTransaction: (params) =>
-			invokeMethod<unknown>(provider, scope, "processConfidentialTransaction", params),
+			invokeMethod<LiquidProcessConfidentialTransactionResult>(
+				provider,
+				scope,
+				"processConfidentialTransaction",
+				params,
+			),
 	};
 }
