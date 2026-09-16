@@ -36,16 +36,6 @@ export type ParseResult =
 	| { ok: false; reason: string }
 	| { ok: true; transaction: ParsedTransaction };
 
-export type SpentInputs = { ok: true; spent: Outpoint[] } | { ok: false; reason: string };
-
-export function spentInputs(transactionHex: string): SpentInputs {
-	const parsed = parseTransaction(transactionHex);
-
-	return parsed.ok ? { ok: true, spent: parsed.transaction.spent } : parsed;
-}
-
-export type TxOutsOf = { ok: true; txOuts: ParsedTxOut[] } | { ok: false; reason: string };
-
 export type TxOutAt = { ok: false; reason: string } | { ok: true; txOut: ParsedTxOut };
 
 export function txOutAt(transactionHex: string, vout: number): TxOutAt {
@@ -69,13 +59,7 @@ export function txOutAt(transactionHex: string, vout: number): TxOutAt {
 		: { ok: true, txOut };
 }
 
-export function txOutsOf(transactionHex: string): TxOutsOf {
-	const parsed = parseTransaction(transactionHex);
-
-	return parsed.ok ? { ok: true, txOuts: parsed.transaction.txOuts } : parsed;
-}
-
-export function parseTransaction(transactionHex: string): ParseResult {
+function parseTransaction(transactionHex: string): ParseResult {
 	const bytes = decodeHex(transactionHex);
 
 	if (!bytes) {

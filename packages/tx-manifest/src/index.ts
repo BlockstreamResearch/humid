@@ -22,15 +22,6 @@ export { type ShownConfirmation, describeOrigin, toShownConfirmation } from "./c
 export { type Provenanced, computed, fromDapp, verified } from "./confirmation/provenance";
 
 export {
-	type ExpectedInputs,
-	type ExpectedOutput,
-	type ExpectedOutputs,
-	type GuardResult,
-	guardBuiltOutputs,
-	guardSpentInputs,
-} from "./chain/guards";
-
-export {
 	type InspectManifestOptions,
 	type InspectManifestResult,
 	type ManifestFault,

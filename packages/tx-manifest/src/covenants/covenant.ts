@@ -92,13 +92,7 @@ export async function deriveCovenantAddress(
 		}
 	}
 
-	const params = resolveCompileParams(
-		wiring,
-		input.declaredTypes,
-		input.scope,
-		input.notes,
-		declaring,
-	);
+	const params = resolveCompileParams(wiring, input.declaredTypes, input.scope, declaring);
 
 	if (!params.ok) {
 		return params;

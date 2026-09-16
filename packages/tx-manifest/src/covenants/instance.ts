@@ -133,7 +133,6 @@ export function resolveCreatedInstance(
 				wiring.wiring,
 				declaredTypes,
 				scope,
-				input.notes,
 				undefined,
 				wiring.declaredAtUse,
 			);
@@ -224,7 +223,7 @@ function resolveFieldReference(
 	scope: ReferenceScope,
 	notes?: NormalisationNote[],
 ): { ok: false; reason: string } | { ok: true; value: string } {
-	const found = resolveReference(text, "compileParam", scope, notes);
+	const found = resolveReference(text, "compileParam", scope);
 
 	if (!found.ok) {
 		if (computesValue(text)) {

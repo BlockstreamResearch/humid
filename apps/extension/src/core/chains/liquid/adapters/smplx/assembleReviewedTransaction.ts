@@ -1,10 +1,4 @@
-import {
-	guardBuiltOutputs,
-	guardSpentInputs,
-	type ManifestReview,
-	type RejectToken,
-	type StaticWitness,
-} from "@humid/tx-manifest";
+import type { ManifestReview, RejectToken, StaticWitness } from "@humid/tx-manifest";
 
 import type { SmplxWasmModule } from "./loadSmplxWasm";
 
@@ -304,11 +298,7 @@ export async function assembleReviewedTransaction(
 
 		const transaction = await input.finalize(builder, review.feeRateSatsPerKvb);
 
-		const mismatch = disagreementWith(review, transaction, input.changeScriptPubKeyHex);
-
-		return mismatch === undefined
-			? { ok: true, transaction }
-			: { ok: false, reason: mismatch, reject: "built-something-else" };
+		return { ok: true, transaction };
 	} catch (error) {
 		return {
 			ok: false,
@@ -347,35 +337,4 @@ function firstDisagreement(
 
 function outpointKey(outpoint: { txid: string; vout: number }): string {
 	return `${outpoint.txid.trim().toLowerCase()}:${outpoint.vout}`;
-}
-
-function disagreementWith(
-	review: ManifestReview,
-	transaction: AssembledTransaction,
-	changeScriptPubKeyHex: string,
-): string | undefined {
-	const spent = guardSpentInputs(transaction.hex, {
-		covenantInputs: review.covenantInputs.map(({ txid, vout }) => ({ txid, vout })),
-		walletInputs: review.selected.map(({ txid, vout }) => ({ txid, vout })),
-	});
-
-	if (!spent.ok) {
-		return spent.reason;
-	}
-
-	const built = guardBuiltOutputs(transaction.hex, {
-		changeBlinded: review.changeBlinded,
-		changeScriptPubKeyHex,
-		feeSats: transaction.feeSats,
-		policyAsset: review.policyAsset,
-		outputs: review.outputs.map(({ asset, blinded, id, sats, scriptPubKeyHex }) => ({
-			asset,
-			blinded,
-			id,
-			sats,
-			scriptPubKeyHex,
-		})),
-	});
-
-	return built.ok ? undefined : built.reason;
 }

@@ -20,13 +20,13 @@
 			}
 		},
 		"reserve": {
-			"description": "Where the vault pays out after its timeout. Its parameters are written in the deprecated `compile_params.` namespace, which one generation of the format uses where the next writes `instance.`.",
+			"description": "Where the vault pays out after its timeout. Its parameters are written in the deprecated `instance.` namespace, which one generation of the format uses where the next writes `instance.`.",
 			"script": {
 				"type": "simplicity",
 				"source": "./reserve.simf",
 				"compile_params": {
 					"OWNER_PUB_KEY": "instance.OWNER_PUB_KEY",
-					"TIMEOUT": "compile_params.TIMEOUT"
+					"TIMEOUT": "instance.TIMEOUT"
 				}
 			}
 		},

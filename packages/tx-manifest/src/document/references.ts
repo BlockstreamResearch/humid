@@ -1,17 +1,11 @@
 import { asArray, asRecord } from "./json";
-import {
-	declaredFields,
-	type NormalisationNote,
-	type NormalisedAction,
-	type NormalisedManifest,
-} from "./normalise";
+import { declaredFields, type NormalisedAction, type NormalisedManifest } from "./normalise";
 import { namedUtxoTypes } from "./sites";
 
 export type ReferenceForm = "args" | "bare" | "input-attribute" | "instance" | "params";
 
 export type ParsedReference = {
 	attribute?: string;
-	deprecated?: boolean;
 	form: ReferenceForm;
 	name: string;
 };
@@ -69,11 +63,10 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 	},
 };
 
-const NAMESPACES: Record<string, { deprecated: boolean; form: ReferenceForm }> = {
-	args: { deprecated: false, form: "args" },
-	compile_params: { deprecated: true, form: "instance" },
-	instance: { deprecated: false, form: "instance" },
-	params: { deprecated: false, form: "params" },
+const NAMESPACES: Record<string, ReferenceForm> = {
+	args: "args",
+	instance: "instance",
+	params: "params",
 };
 
 const NAME = "[A-Za-z_][A-Za-z0-9_]*";
@@ -93,14 +86,10 @@ export function parseReference(text: string): ParsedReference | undefined {
 		return { form: "bare", name: head };
 	}
 
-	const namespace = NAMESPACES[head];
+	const form = NAMESPACES[head];
 
-	if (namespace) {
-		return {
-			...(namespace.deprecated ? { deprecated: true } : {}),
-			form: namespace.form,
-			name: tail,
-		};
+	if (form) {
+		return { form, name: tail };
 	}
 
 	return { attribute: tail, form: "input-attribute", name: head };
@@ -110,7 +99,6 @@ export function resolveReference(
 	text: string,
 	site: ReferenceSiteKind,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): ReferenceResolution {
 	const reference = parseReference(text);
 	const accepted = SITES[site];
@@ -121,10 +109,6 @@ export function resolveReference(
 
 	if (!accepted.accepts.includes(reference.form)) {
 		return { ok: false, reason: `"${text}" cannot be used as ${accepted.describes}.` };
-	}
-
-	if (reference.deprecated) {
-		notes?.push({ at: accepted.describes, canonical: "instance.", found: "compile_params." });
 	}
 
 	const found = lookUp(reference, scope);

@@ -30,11 +30,11 @@ describe("what a reader is told about older spellings", () => {
 
 	test("shows every rewrite, not only the first", () => {
 		const html = render([
-			{ at: "manifest", canonical: "manifest_version", found: "compose_version" },
-			{ at: "manifest", canonical: "params", found: "compile_params" },
+			{ at: "action Pay", canonical: "is_constructor", found: "deploy" },
+			{ at: "instance", canonical: "instance.fields", found: "instance_params" },
 		]);
 
-		expect(html).toContain("compose_version");
-		expect(html).toContain("compile_params");
+		expect(html).toContain("deploy");
+		expect(html).toContain("instance_params");
 	});
 });

@@ -1,5 +1,5 @@
 {
-    "compose_version": "0.1.0",
+    "manifest_version": "0.1.0",
     "attestation_version": "1",
     "protocol": "p2pk-simplicity",
     "description": "Hello World — Pay-to-public-key using a Simplicity checksig program on Liquid.",

@@ -55,7 +55,7 @@ export function resolveAsset(declared: unknown, at: string, context: Context): A
 		return { id: stated.id, ok: true };
 	}
 
-	const found = resolveReference(stated.reference, "asset", context.scope, context.notes);
+	const found = resolveReference(stated.reference, "asset", context.scope);
 
 	if (!found.ok) {
 		return {

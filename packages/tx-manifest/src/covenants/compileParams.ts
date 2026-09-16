@@ -1,4 +1,3 @@
-import type { NormalisationNote } from "../document/normalise";
 import { parseReference, type ReferenceScope, resolveReference } from "../document/references";
 import { type DeclaringContract, encodeContractLiteral } from "./covenantParamTypes";
 import { encodeCompileParam, encodesDeclaredType, unencodableReason } from "./paramEncoding";
@@ -13,7 +12,6 @@ export function resolveCompileParams(
 	wiring: Record<string, unknown>,
 	declaredTypes: Record<string, string>,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 	contract?: DeclaringContract,
 	declaredAtUse?: Record<string, string>,
 ): ResolveCompileParamsResult {
@@ -24,7 +22,7 @@ export function resolveCompileParams(
 			return { ok: false, reason: `Compile parameter ${name} is not a reference.` };
 		}
 
-		const found = resolveCovenantReference(reference, scope, notes);
+		const found = resolveCovenantReference(reference, scope);
 
 		if (!found.ok) {
 			const literal =
@@ -68,9 +66,8 @@ export function resolveCompileParams(
 function resolveCovenantReference(
 	reference: string,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): { ok: false; reason: string } | { ok: true; value: unknown } {
-	const found = resolveReference(reference, "compileParam", scope, notes);
+	const found = resolveReference(reference, "compileParam", scope);
 	const parsed = parseReference(reference);
 
 	if (found.ok || parsed?.form !== "bare") {

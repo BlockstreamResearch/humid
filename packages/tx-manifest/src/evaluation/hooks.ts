@@ -113,7 +113,7 @@ function valueOf(
 		return { ok: true, value: String(evaluated.value) };
 	}
 
-	const named = resolveReference(expression, "expression", scope, notes);
+	const named = resolveReference(expression, "expression", scope);
 
 	return named.ok && typeof named.value === "string"
 		? { ok: true, value: named.value }

@@ -47,7 +47,7 @@ export function resolveInputRules(
 		}
 
 		if ("from_address" in input) {
-			const address = resolveFromAddress(input.from_address, scope, notes);
+			const address = resolveFromAddress(input.from_address, scope);
 
 			if (!address.ok) {
 				return { ok: false, reason: `Input ${id}: ${address.reason}` };
@@ -113,13 +113,12 @@ function resolveSequence(
 function resolveFromAddress(
 	declared: unknown,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): { ok: false; reason: string } | { ok: true; value: string } {
 	if (typeof declared !== "string") {
 		return { ok: false, reason: "its from_address is not an address or a reference to one." };
 	}
 
-	const found = resolveReference(declared, "witnessKey", scope, notes);
+	const found = resolveReference(declared, "witnessKey", scope);
 
 	if (!found.ok) {
 		return { ok: false, reason: found.reason };
