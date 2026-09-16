@@ -5,7 +5,7 @@ import {
 	combine,
 	computed,
 	fromChain,
-	fromSite,
+	fromDapp,
 	isEstablished,
 	map,
 	type Provenanced,
@@ -13,23 +13,18 @@ import {
 	weaker,
 } from "./provenance";
 
-// AC-07's mechanism. The rules are that site provenance never becomes wallet provenance,
-// that combining takes the weakest input, and that an unprovenanced value cannot be
-// rendered — the last of which is a type property rather than a test, and is asserted at
-// the bottom by code that must not compile.
-
-describe("origins are ordered by how much the site could influence them", () => {
+describe("origins are ordered by how much the dapp could influence them", () => {
 	test("what the wallet checked against the network is the strongest", () => {
 		expect(weaker("verified", "chain")).toBe("chain");
 	});
 
-	test("what the network says beats what the wallet worked out from site inputs", () => {
+	test("what the network says beats what the wallet worked out from dapp inputs", () => {
 		expect(weaker("chain", "computed")).toBe("computed");
 	});
 
-	test("the site's word is the weakest there is", () => {
-		expect(weaker("computed", "site")).toBe("site");
-		expect(weaker("verified", "site")).toBe("site");
+	test("the dapp's word is the weakest there is", () => {
+		expect(weaker("computed", "dapp")).toBe("dapp");
+		expect(weaker("verified", "dapp")).toBe("dapp");
 	});
 
 	test("an origin combined with itself is itself", () => {
@@ -39,17 +34,15 @@ describe("origins are ordered by how much the site could influence them", () => 
 
 describe("combining values", () => {
 	test("takes the weaker of the two origins", () => {
-		const total = combine(fromChain(2n), fromSite(3n), (left, right) => left + right);
+		const total = combine(fromChain(2n), fromDapp(3n), (left, right) => left + right);
 
-		expect(total).toEqual({ origin: "site", value: 5n } as unknown as Provenanced<bigint>);
+		expect(total).toEqual({ origin: "dapp", value: 5n } as unknown as Provenanced<bigint>);
 	});
 
-	// This is the rule that matters: a number computed from something the site asserted is
-	// something the site asserted, however much arithmetic happened in between.
-	test("so arithmetic cannot launder the site's word into the wallet's", () => {
-		const laundered = combine(computed(1000n), fromSite(1n), (left, right) => left * right);
+	test("so arithmetic cannot launder the dapp's word into the wallet's", () => {
+		const laundered = combine(computed(1000n), fromDapp(1n), (left, right) => left * right);
 
-		expect(laundered.origin).toBe("site");
+		expect(laundered.origin).toBe("dapp");
 	});
 
 	test("two wallet values stay the wallet's", () => {
@@ -59,11 +52,11 @@ describe("combining values", () => {
 
 describe("deriving from one value", () => {
 	test("keeps its origin", () => {
-		expect(map(fromSite("0x01"), (value) => value.toUpperCase()).origin).toBe("site");
+		expect(map(fromDapp("0x01"), (value) => value.toUpperCase()).origin).toBe("dapp");
 	});
 
 	test("and cannot raise it, because formatting establishes nothing", () => {
-		expect(map(fromSite(1n), (value) => value + 1n).origin).toBe("site");
+		expect(map(fromDapp(1n), (value) => value + 1n).origin).toBe("dapp");
 	});
 });
 
@@ -74,14 +67,11 @@ describe("what a person is deciding about", () => {
 		expect(isEstablished(computed(1n))).toBe(true);
 	});
 
-	test("the site's word is not", () => {
-		expect(isEstablished(fromSite("a lending protocol"))).toBe(false);
+	test("the dapp's word is not", () => {
+		expect(isEstablished(fromDapp("a lending protocol"))).toBe(false);
 	});
 });
 
-// The mechanism itself: a plain value is not assignable where a provenanced one is wanted,
-// so a surface that renders only provenanced values cannot render an unprovenanced one.
-// Asserted as a compile-time fact, because that is the kind of fact it is.
 describe("an unprovenanced value cannot reach a surface that wants one", () => {
 	test("a plain value is rejected by the type", () => {
 		const render = (shown: Provenanced<string>): string => shown.value;

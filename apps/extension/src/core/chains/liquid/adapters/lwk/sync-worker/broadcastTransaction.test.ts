@@ -1,16 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 
-/**
- * How a finished transaction reaches the network, beside the PSET route rather than instead of
- * it.
- *
- * The manifest path does not produce a PSET: the contract module blinds, signs and finalises
- * internally and hands back consensus bytes. Those bytes still have to leave the service worker
- * to go out, because LWK's Esplora client does its retry and backoff through a `window` the
- * service worker does not have — so this checks the one thing a unit test can check about that
- * crossing: that the request is addressed to the offscreen document under its own operation,
- * carries the transaction, and that the answer is read back as the network's own txid.
- */
 const sent: unknown[] = [];
 let reply: unknown = { ok: true, op: "broadcastTransaction", txid: "a".repeat(64) };
 
@@ -26,9 +15,6 @@ mock.module("webextension-polyfill", () => ({
 	},
 }));
 
-// The offscreen document is a Chrome API this context does not have, and the client refuses
-// without it before it sends anything. Stubbed as already existing, because what is under test
-// is the message and the answer rather than the document's creation.
 (globalThis as { chrome?: unknown }).chrome = {
 	offscreen: {
 		createDocument: () => Promise.resolve(),
@@ -61,8 +47,6 @@ describe("broadcasting a signed transaction", () => {
 		]);
 	});
 
-	// The target is what stops another extension context answering this. A message without it is
-	// not one the offscreen document handles, which is what the guard is for.
 	test("sends a message the offscreen document recognises as its own", async () => {
 		sent.length = 0;
 		reply = { ok: true, op: "broadcastTransaction", txid: "a".repeat(64) };
@@ -72,8 +56,6 @@ describe("broadcasting a signed transaction", () => {
 		expect(isOffscreenScanMessage(sent[0])).toBe(true);
 	});
 
-	// Answering a broadcast with a scan's answer would hand back a txid nothing sent. The op is
-	// checked rather than the shape, because the two responses carry the same field names.
 	test("refuses an answer that is not this operation's", async () => {
 		reply = { ok: true, op: "broadcast", txid: "b".repeat(64) };
 
@@ -90,8 +72,6 @@ describe("broadcasting a signed transaction", () => {
 		).rejects.toThrow("the node rejected it");
 	});
 
-	// The PSET route is unchanged and still goes out under its own operation. Both exist: the
-	// ordinary send path produces a PSET and the contract path does not.
 	test("leaves the PSET route alone", async () => {
 		sent.length = 0;
 		reply = { ok: true, op: "broadcast", txid: "c".repeat(64) };

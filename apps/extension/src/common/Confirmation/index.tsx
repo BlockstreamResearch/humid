@@ -5,15 +5,8 @@ import type { ConfirmationDecision, ConfirmationRequest } from "@/helpers/backgr
 
 import { DefaultConfirmation } from "./DefaultConfirmation";
 
-/** Show a confirmation and resolve the user's decision (approval + optional result). */
 type Confirm = (request: ConfirmationRequest) => Promise<ConfirmationDecision>;
 
-/**
- * A bespoke confirmation body plugged into the host. The method (in core) picks the
- * `kind` via its confirmation data and owns the matching UI; that UI provides a
- * renderer, which the entrypoint passes to {@link ConfirmProvider}. The host stays
- * generic and knows about no specific confirmation.
- */
 export type ConfirmationRenderer = {
 	kind: string;
 	render: (props: {

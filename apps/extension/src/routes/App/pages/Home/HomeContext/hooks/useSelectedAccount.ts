@@ -6,7 +6,6 @@ import type { RenameAccountInput } from "@/core/accounts/application/accounts-rp
 
 export const ACCOUNTS_QUERY_KEY = ["accounts"] as const;
 
-/** The account axis: the account groups, the selected one, and a switch mutation. */
 export function useSelectedAccount() {
 	const queryClient = useQueryClient();
 	const query = useQuery({

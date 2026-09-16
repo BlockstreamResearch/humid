@@ -4,11 +4,6 @@ import { describe, expect, test } from "bun:test";
 import type { LiquidChainRecord } from "../chains/LiquidChainRecord";
 import { readLiquidContractIdentity } from "./contractIdentity";
 
-// The two values a person needs before a contract action can be aimed anywhere: the
-// address the contract SDK signs from, and the x-only key a covenant locking to this
-// wallet is parameterised with. Neither was reachable before, which is why a live run
-// could not be composed at all (DISC-132).
-
 const ADDRESS = "ert1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080";
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 
@@ -59,8 +54,6 @@ describe("the contract signing identity", () => {
 		expect(identity.address).toBe(`${ADDRESS}:elements-regtest`);
 	});
 
-	// The signer holds key material across the wasm boundary. Leaving one alive after the
-	// read would keep it there for as long as the worker lives.
 	test("releases the signer once the two values are out", async () => {
 		const freed: string[] = [];
 
@@ -82,10 +75,6 @@ describe("the contract signing identity", () => {
 	});
 });
 
-// The screen this serves is per-account, and the account it shows is not necessarily the
-// selected one. Reading the selected account's identity there would put one account's
-// address and key on another account's screen with nothing to say so — and those are the
-// values someone then funds and locks a covenant to.
 describe("which account it reads", () => {
 	test("follows the group index it is given, so two accounts do not answer alike", async () => {
 		const seen: number[] = [];
@@ -125,10 +114,6 @@ describe("which account it reads", () => {
 		expect(seen).toEqual([0, 3]);
 	});
 
-	// A group index says which BIP-85 child; the key source says whose seed that child is
-	// taken from. Read against the local root for an account whose seed is elsewhere, both
-	// values on the screen belong to a different account — and what a person then sends to
-	// that address cannot be spent by the transaction that signs for the real one.
 	test("follows the key source it is given, so the screen shows the key that will sign", async () => {
 		const asked: { accountGroupIndex: number; keySourceId?: string }[] = [];
 		const spy = {
@@ -176,8 +161,6 @@ describe("which account it reads", () => {
 
 		expect(asked).toEqual([
 			{ accountGroupIndex: 2, keySourceId: "key-source:hardware-1" },
-			// Nothing given means the local root, which is what an absent source already means
-			// everywhere else it is read. Passed as absent rather than as a name for it.
 			{ accountGroupIndex: 2 },
 		]);
 	});

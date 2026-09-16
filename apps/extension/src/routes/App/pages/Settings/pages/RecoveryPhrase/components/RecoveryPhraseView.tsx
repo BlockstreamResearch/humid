@@ -18,10 +18,6 @@ type RecoveryPhraseViewProps = {
 	phrase: string;
 };
 
-/**
- * Reveal screen: the mnemonic words hidden behind a blur until the user opts in, with
- * copy and a hard warning. Presentational — the caller fetches the phrase.
- */
 export function RecoveryPhraseView({ accountGroupId, phrase }: RecoveryPhraseViewProps) {
 	const [hidden, setHidden] = useState(true);
 	const [copied, setCopied] = useState(false);

@@ -20,5 +20,4 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Header with the stub account and chains — open a selector to switch. */
 export const Default: Story = {};

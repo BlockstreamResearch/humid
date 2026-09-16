@@ -24,7 +24,6 @@ import { UiSpinner } from "@/ui/UiSpinner";
 import { LiquidTxDetailSheet } from "./LiquidTxDetailSheet";
 import { LiquidTxStatusBadge } from "./LiquidTxStatus";
 
-/** Liquid asset detail body: the balance headline, the account actions, and the tx history. */
 export function LiquidAssetView({
 	actions,
 	activity,
@@ -54,7 +53,6 @@ export function LiquidAssetView({
 	);
 }
 
-/** Liquid transaction history: the section label plus the (virtualized) list body. */
 function LiquidActivityList({
 	chain,
 	decimals,
@@ -77,21 +75,12 @@ function LiquidActivityList({
 }
 
 const ESTIMATED_ROW_HEIGHT = 64;
-/** The asset page mounts this list inside a base-ui ScrollArea; its viewport is the real scroller. */
 const ACTIVITY_SCROLL_SELECTOR = '[data-slot="scroll-area-viewport"]';
 
-/** A flattened activity list entry: either a day/section header or one transaction row. */
 type ActivityRow =
 	| { kind: "header"; label: string }
 	| { item: PortfolioViewActivity; kind: "item" };
 
-/**
- * Flatten the newest-first activity into day sections. Pending entries (optimistic or still in the
- * mempool, so no block time) cluster under a single "Pending" header at the top; confirmed entries
- * are grouped by calendar day, labelled "Today" / "Yesterday" / "MMM D, YYYY". A header is emitted
- * whenever the bucket label changes, so the flat array keeps the list's existing newest-first order —
- * which the virtualizer then renders row-by-row.
- */
 function buildActivityRows(items: PortfolioViewActivity[]): ActivityRow[] {
 	const now = dayjs();
 	const todayKey = now.format("YYYY-MM-DD");
@@ -126,7 +115,6 @@ function buildActivityRows(items: PortfolioViewActivity[]): ActivityRow[] {
 	return rows;
 }
 
-/** A day/section divider in the activity list: a small muted uppercase label above its rows. */
 function ActivitySectionHeader({ label }: { label: string }) {
 	return (
 		<p className="text-muted-foreground px-1 pt-3 pb-1 text-[0.7rem] font-medium tracking-wide uppercase">
@@ -151,9 +139,6 @@ function LiquidActivityBody({
 	const [scrollMargin, setScrollMargin] = useState(0);
 	const listRef = useRef<HTMLDivElement | null>(null);
 
-	// The activity list is only one section of the asset page's shared scroll container (the balance,
-	// actions, and About panel sit above it), so we virtualize against that container — the base-ui
-	// ScrollArea viewport this list is mounted in — rather than a window or a nested scroller.
 	const setListEl = useCallback((node: HTMLDivElement | null) => {
 		listRef.current = node;
 		setScrollEl(node?.closest<HTMLElement>(ACTIVITY_SCROLL_SELECTOR) ?? null);
@@ -161,8 +146,6 @@ function LiquidActivityBody({
 
 	const { hasMore, isLoadingMore, onLoadMore } = feed;
 
-	// Flatten the newest-first entries into day sections (a header row per bucket) and virtualize over
-	// that combined array; header keys and txids are disjoint so measured sizes never collide.
 	const rows = useMemo(() => buildActivityRows(feed.items), [feed.items]);
 	const count = rows.length;
 
@@ -181,9 +164,6 @@ function LiquidActivityBody({
 		scrollMargin,
 	});
 
-	// Measure where the list starts within the scroll container so virtual rows land below the content
-	// above them. That content is fixed height, so a mount measure plus a viewport-resize observer keep
-	// the offset accurate without watching every ancestor.
 	useLayoutEffect(() => {
 		const list = listRef.current;
 
@@ -209,8 +189,6 @@ function LiquidActivityBody({
 	const virtualItems = virtualizer.getVirtualItems();
 	const lastIndex = virtualItems.at(-1)?.index ?? -1;
 
-	// Auto-load-more: once the tail row is realized (a little early, thanks to overscan) pull the next
-	// page. onLoadMore is itself a no-op while a page is in flight, so the guards are belt-and-braces.
 	useEffect(() => {
 		if (count > 0 && lastIndex >= count - 1 && hasMore && !isLoadingMore) {
 			onLoadMore();
@@ -289,7 +267,6 @@ function LiquidActivityBody({
 	);
 }
 
-/** One activity row: direction glyph, direction + (pending) status, counterparty, signed amount. */
 function LiquidActivityRow({
 	decimals,
 	item,

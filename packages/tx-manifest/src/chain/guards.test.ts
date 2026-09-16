@@ -3,25 +3,10 @@ import { describe, expect, test } from "bun:test";
 import { type ExpectedOutput, guardBuiltOutputs, guardSpentInputs } from "./guards";
 import { spentInputs, txOutsOf } from "./rawTransaction";
 
-/**
- * The guards read bytes, so every case here is built as bytes.
- *
- * Each is a real Elements transaction with the inputs and outputs the case needs, written the
- * way the chain writes them: an explicit amount is a `01` prefix and eight big-endian bytes, a
- * hidden one is a commitment prefix and thirty-two, and an issuing input carries four more
- * fields after its sequence. A fixture assembled as an object shaped like an answer would let
- * this file assert something the reader could never see.
- *
- * Every script here is hex, on both sides of every comparison. Nothing in this package decodes
- * an address — there is no bech32 reader anywhere in it — so a script and an address are simply
- * two different strings, and the guard says they disagree.
- */
-
 const A = "a".repeat(64);
 const B = "b".repeat(64);
 const C = "c".repeat(64);
 
-/** The asset the fee is paid in, and therefore the one the builder returns change in. */
 const POLICY_ASSET = "aa".repeat(32);
 const OTHER_ASSET = "bb".repeat(32);
 const WALLET_SCRIPT = `0014${"11".repeat(20)}`;
@@ -32,7 +17,6 @@ const HIDDEN_ASSET = `0a${"33".repeat(32)}`;
 const HIDDEN_VALUE = `08${"44".repeat(32)}`;
 const NONCE = `02${"55".repeat(32)}`;
 
-/** One input: outpoint, empty script, sequence, and the issuance fields when it declares one. */
 function input({
 	confidentialIssuance,
 	issuance,
@@ -47,19 +31,12 @@ function input({
 	const reversed = (txid.match(/../g) ?? []).toReversed().join("");
 	const marked = (issuance ? vout | 0x80_00_00_00 : vout) >>> 0;
 	const index = (marked.toString(16).padStart(8, "0").match(/../g) ?? []).toReversed().join("");
-	// The blinding nonce and the entropy, then the amount issued and the inflation keys. Both
-	// amounts are confidential values — a prefix and then that many bytes — so a reader stepping
-	// over a fixed width lands mid-field on the first transaction that hides one.
 	const value = confidentialIssuance ? HIDDEN_VALUE : "01".padEnd(18, "0");
 	const declared = issuance ? `${"00".repeat(32)}${"aa".repeat(32)}${value}00` : "";
 
 	return `${reversed}${index}00ffffffff${declared}`;
 }
 
-/**
- * An asset id is serialised in reverse of how it is displayed, which is why it is turned round
- * here: a fixture that wrote it forwards would be asserting against a different asset.
- */
 function assetField(assetId: string): string {
 	return `01${(assetId.match(/../g) ?? []).toReversed().join("")}`;
 }
@@ -71,7 +48,6 @@ function explicit(sats: bigint, scriptHex: string, assetId = POLICY_ASSET): stri
 	return `${assetField(assetId)}${value}00${length}${scriptHex}`;
 }
 
-/** A script's length prefix and the script, which every output ends with. */
 function scriptOf(scriptHex: string): string {
 	return `${(scriptHex.length / 2).toString(16).padStart(2, "0")}${scriptHex}`;
 }
@@ -82,17 +58,8 @@ function hidden(scriptHex: string): string {
 	return `${HIDDEN_ASSET}${HIDDEN_VALUE}${NONCE}${length}${scriptHex}`;
 }
 
-/** The fee: no script at all, which is how the network reads the amount it charges. */
 const FEE = explicit(500n, "");
 
-/**
- * A whole Elements transaction, in the order the encoding writes one.
- *
- * Version, marker, inputs, outputs, **locktime**, and only then the witnesses — which is not
- * the order Bitcoin uses, and getting it the other way round would build fixtures no real
- * transaction resembles. Each part can be overridden on its own, because a guard that reads a
- * whole transaction can only be shown to do so by handing it partial ones.
- */
 function transaction(
 	spends: Parameters<typeof input>[0][],
 	outputs: string[] = [explicit(1000n, WALLET_SCRIPT), FEE],
@@ -116,21 +83,10 @@ function transaction(
 	);
 }
 
-/**
- * A witness for one input: two range proofs and two stacks, of which one carries something.
- *
- * Four fields long whatever it holds, and not empty in all four. A transaction that sets the
- * marker and then writes a record with nothing in any part of it is one Elements rejects
- * outright — the marker is what says the record is there, and an empty record is the marker
- * contradicting itself.
- */
 const INPUT_WITNESS = "00000101aa00";
-/** The same four fields with nothing in any of them, which is the record that must be refused. */
 const EMPTY_INPUT_WITNESS = "00000000";
-/** And one for an output: a surjection proof and a range proof, both empty. */
 const OUTPUT_WITNESS = "0000";
 
-/** One of the action's own outputs, as everything about it the review settled. */
 function planned(overrides: Partial<ExpectedOutput> = {}): ExpectedOutput {
 	return {
 		asset: POLICY_ASSET,
@@ -151,8 +107,6 @@ const TAIL = {
 const SPENDS = [{ txid: A, vout: 0 }];
 
 describe("the bytes these cases are built from", () => {
-	// The fixtures come first: a guard asserted against a transaction the reader parses
-	// differently than intended would pass while proving nothing.
 	test("read back as the outpoints they were written with", () => {
 		expect(spentInputs(transaction([{ txid: A, vout: 1 }]))).toEqual({
 			ok: true,
@@ -212,9 +166,6 @@ describe("reading a transaction that is not one", () => {
 		expect(txOutsOf(whole.slice(0, whole.length - 40)).ok).toBe(false);
 	});
 
-	// The byte after the version says whether witness data follows, and says it with a nought or
-	// a one. Stepping over it without looking reads everything after this at an offset that
-	// happens to be wrong, and reports something well-formed about the wrong outputs.
 	test("a witness marker that is neither absent nor present", () => {
 		const marked = `02000000ff01${input({ txid: A, vout: 0 })}0100000000`;
 		const result = spentInputs(marked);
@@ -223,12 +174,8 @@ describe("reading a transaction that is not one", () => {
 		expect(result.ok || result.reason).toContain("witness marker");
 	});
 
-	// A count written wider than it needs to be is the same number and a different transaction.
-	// Reading both makes two byte strings one transaction, which is exactly the latitude a
-	// guard comparing bytes cannot afford.
 	test("an input count written in a wider form than the number needs", () => {
 		expect(spentInputs(transaction(SPENDS, undefined, { inputCount: "fd0100" })).ok).toBe(false);
-		// The same count written the one way the encoding permits is read.
 		expect(spentInputs(transaction(SPENDS)).ok).toBe(true);
 	});
 
@@ -236,17 +183,12 @@ describe("reading a transaction that is not one", () => {
 		expect(txOutsOf(transaction(SPENDS, undefined, { outputCount: "fd0200" })).ok).toBe(false);
 	});
 
-	// A length is a promise about how many bytes follow. One that no number can index is not a
-	// large script, it is a claim nothing can act on — and converting it before checking is how
-	// a reader turns a malformed transaction into an exception.
 	test("a script length no number can hold", () => {
 		const spend = `${(A.match(/../g) ?? []).toReversed().join("")}00000000ffffffffffffffff00ffffffff`;
 
 		expect(spentInputs(`020000000001${spend}01${FEE}00000000`).ok).toBe(false);
 	});
 
-	// The whole transaction is parsed before any of it is reported, so what follows the part a
-	// guard reads is checked too. Bytes whose prefix parses can be followed by anything.
 	test("a transaction that ends before its locktime", () => {
 		expect(spentInputs(transaction(SPENDS, undefined, { locktime: "" })).ok).toBe(false);
 		expect(txOutsOf(transaction(SPENDS, undefined, { locktime: "" })).ok).toBe(false);
@@ -259,8 +201,6 @@ describe("reading a transaction that is not one", () => {
 		expect(result.ok || result.reason).toContain("after the end");
 	});
 
-	// A transaction that says it carries witness data and then runs out part-way through it is
-	// not a transaction, and a reader that stopped at the locktime would call it one.
 	test("a transaction whose witness data is cut short", () => {
 		const built = transaction(SPENDS, [explicit(1000n, WALLET_SCRIPT), FEE], {
 			marker: "01",
@@ -285,9 +225,6 @@ describe("reading a transaction that is not one", () => {
 		expect(txOutsOf(transaction(SPENDS, undefined, { marker: "01" })).ok).toBe(false);
 	});
 
-	// Elements rejects a witness record whose every part is empty rather than reading it as a
-	// transaction without one, so a reader that accepted it would be calling something the
-	// network refuses a finished transaction.
 	test("and one whose witness record is present and empty in every part", () => {
 		const built = transaction(SPENDS, [explicit(1000n, WALLET_SCRIPT), FEE], {
 			marker: "01",
@@ -297,8 +234,6 @@ describe("reading a transaction that is not one", () => {
 		expect(txOutsOf(built).ok).toBe(false);
 	});
 
-	// The same rule one field down: an input that sets the issuance flag and then declares
-	// neither an amount nor any inflation keys has announced a record with nothing in it.
 	test("and an issuance record that declares nothing at all", () => {
 		const spend = input({ issuance: true, txid: A, vout: 2 }).replace(
 			`${"aa".repeat(32)}${"01".padEnd(18, "0")}00`,
@@ -308,9 +243,6 @@ describe("reading a transaction that is not one", () => {
 		expect(spentInputs(`020000000001${spend}01${FEE}00000000`).ok).toBe(false);
 	});
 
-	// Elements marks issuance in the top bits of the index rather than in a field of its own,
-	// so an index read without unmasking is a number no outpoint has — and the fields it
-	// announces have to be walked or the next input is read out of the middle of this one.
 	test("an issuing input is read as the outpoint it spends", () => {
 		const result = spentInputs(
 			transaction([
@@ -339,8 +271,6 @@ describe("reading a transaction that is not one", () => {
 		]);
 	});
 
-	// An issuance amount is absent, explicit, or committed to. A prefix outside that set is not
-	// a width to guess at: guessing walks thirty-two bytes into the next input's outpoint.
 	test("but not one whose issuance amount carries a prefix that means nothing there", () => {
 		const spend = input({ issuance: true, txid: A, vout: 2 }).replace(
 			`${"aa".repeat(32)}01`,
@@ -352,9 +282,6 @@ describe("reading a transaction that is not one", () => {
 });
 
 describe("an output field whose prefix means nothing at that position", () => {
-	// Each of the three fields has its own prefixes, and the same byte means different things
-	// at different positions. A reader that took any byte for a commitment would report a
-	// corrupt transaction as one full of hidden amounts — the one answer a guard cannot check.
 	const cases = [
 		{ built: `07${"33".repeat(32)}${HIDDEN_VALUE}${NONCE}00`, what: "an asset" },
 		{ built: `${HIDDEN_ASSET}07${"44".repeat(32)}${NONCE}00`, what: "a value" },
@@ -367,16 +294,12 @@ describe("an output field whose prefix means nothing at that position", () => {
 		});
 	}
 
-	// The value commitment's own parities are `08` and `09`, and an asset's are `0a` and `0b`.
-	// Neither is interchangeable, which is the whole reason the table is per field.
 	test("an asset commitment written with a value's parity is refused", () => {
 		const built = `08${"33".repeat(32)}${HIDDEN_VALUE}${NONCE}00`;
 
 		expect(txOutsOf(transaction(SPENDS, [built, FEE])).ok).toBe(false);
 	});
 
-	// A nonce has no explicit form at all, so `01` there is not a shorter nonce — it is bytes
-	// being read at an offset nothing else in this transaction agrees with.
 	test("and an explicit nonce, which the encoding has no form for", () => {
 		const built = `${HIDDEN_ASSET}${HIDDEN_VALUE}01${"55".repeat(32)}00`;
 
@@ -391,8 +314,6 @@ describe("an output field whose prefix means nothing at that position", () => {
 			assetForm: "commitment",
 			nonceForm: "commitment",
 			scriptPubKeyHex: "",
-			// The output's own bytes, which are the ones just written: an output carried out to
-			// be spent has to be what the transaction holds rather than a re-encoding of it.
 			txOutHex: built,
 			valueForm: "commitment",
 		});
@@ -400,10 +321,6 @@ describe("an output field whose prefix means nothing at that position", () => {
 });
 
 describe("an output written as neither one shape nor the other", () => {
-	// An output is blinded or open as a whole. A committed value beside a published asset says
-	// how much of what is being sent while claiming to hide it; a committed value with no nonce
-	// is an amount nobody, the recipient included, can ever recover. Reduced to "did an amount
-	// come back as a number", both are indistinguishable from the real thing.
 	test("a committed value beside an explicit asset is refused, not read as hidden", () => {
 		const mixed = `${assetField(POLICY_ASSET)}${HIDDEN_VALUE}${NONCE}${scriptOf(WALLET_SCRIPT)}`;
 		const result = guardBuiltOutputs(transaction(SPENDS, [mixed, FEE]), {
@@ -425,8 +342,6 @@ describe("an output written as neither one shape nor the other", () => {
 		expect(result.ok).toBe(false);
 	});
 
-	// The same rule from the other side: an open output carries no nonce, because a nonce is
-	// what a hidden one is unblinded with and an open one has nothing to unblind.
 	test("and an open output carrying one anyway", () => {
 		const mixed = `${assetField(POLICY_ASSET)}01${1000n.toString(16).padStart(16, "0")}${NONCE}${scriptOf(WALLET_SCRIPT)}`;
 		const result = guardBuiltOutputs(transaction(SPENDS, [mixed, FEE]), {
@@ -461,8 +376,6 @@ describe("a transaction that spends what it was supposed to", () => {
 		).toEqual({ ok: true });
 	});
 
-	// A txid is thirty-two bytes and the case it is written in is not part of which output it
-	// names. Two sides spelling it differently must not be two different outputs.
 	test("whatever case either side wrote the transaction id in", () => {
 		expect(
 			guardSpentInputs(transaction(SPENDS), {
@@ -485,7 +398,6 @@ describe("a transaction that spends what it was supposed to", () => {
 		expect(result.ok || result.reason).toContain(`${C}:3`);
 	});
 
-	// A transaction that spends less than the action requires is not a safer version of it.
 	test("and refuses one the action required and the transaction left out", () => {
 		const result = guardSpentInputs(transaction(SPENDS), {
 			covenantInputs: [{ txid: B, vout: 4 }],
@@ -496,9 +408,6 @@ describe("a transaction that spends what it was supposed to", () => {
 		expect(result.ok || result.reason).toContain(`${B}:4`);
 	});
 
-	// Comparing sets answers "was every one of these mentioned" and cannot answer "how many
-	// times". A transaction spending one output twice is not a transaction at all, and a guard
-	// that could not see it would be answering a different question than the one it is for.
 	test("refuses a transaction that spends one output twice", () => {
 		const result = guardSpentInputs(
 			transaction([
@@ -524,8 +433,6 @@ describe("a transaction that spends what it was supposed to", () => {
 		expect(result.ok).toBe(false);
 	});
 
-	// The same collapse from the other side: a wallet that asked for one output twice has
-	// already lost track of what it is spending, and is in no position to check anything.
 	test("and refuses an expectation that names one output twice", () => {
 		const result = guardSpentInputs(transaction(SPENDS), {
 			covenantInputs: [],
@@ -584,8 +491,6 @@ describe("a transaction that carries the outputs the wallet planned", () => {
 		expect(guardBuiltOutputs(built, { ...TAIL, outputs: [planned()] })).toEqual({ ok: true });
 	});
 
-	// The failure the blinding half of this guard exists for. The amount is on the chain and no
-	// later step can take it back, so the transaction is refused rather than returned.
 	test("refuses when an output the protocol hides came back published", () => {
 		const built = transaction(SPENDS, [explicit(1000n, WALLET_SCRIPT), FEE]);
 		const result = guardBuiltOutputs(built, {
@@ -597,8 +502,6 @@ describe("a transaction that carries the outputs the wallet planned", () => {
 		expect(result.ok || result.reason).toContain("principal_claimed");
 	});
 
-	// The opposite failure, which costs more: a covenant output built hidden is one its own
-	// contract can never read, and nobody finds out until they try to spend it.
 	test("and when one it leaves open came back hidden", () => {
 		const built = transaction(SPENDS, [hidden(WALLET_SCRIPT), FEE]);
 		const result = guardBuiltOutputs(built, { ...TAIL, outputs: [planned()] });
@@ -623,8 +526,6 @@ describe("a transaction that carries the outputs the wallet planned", () => {
 		expect(result.ok || result.reason).toContain("999");
 	});
 
-	// The right amount of the wrong thing is not the right output, and on a chain with more
-	// than one asset that is a transaction nobody agreed to rather than a rounding error.
 	test("refuses an output paid in an asset the action did not plan for it", () => {
 		const built = transaction(SPENDS, [explicit(1000n, WALLET_SCRIPT, OTHER_ASSET), FEE]);
 		const result = guardBuiltOutputs(built, { ...TAIL, outputs: [planned()] });
@@ -633,9 +534,6 @@ describe("a transaction that carries the outputs the wallet planned", () => {
 		expect(result.ok || result.reason).toContain("asset");
 	});
 
-	// A hidden output states its script and nothing else, so the script is what is compared —
-	// and it is compared, because an output the protocol wanted hidden is still an output that
-	// has to go somewhere the action chose.
 	test("refuses a hidden output paid to the wrong script", () => {
 		const built = transaction(SPENDS, [hidden(ELSEWHERE_SCRIPT), FEE]);
 		const result = guardBuiltOutputs(built, {
@@ -659,8 +557,6 @@ describe("a transaction that carries the outputs the wallet planned", () => {
 });
 
 describe("what the builder is allowed to add after them", () => {
-	// The attack the tail check exists for. A finalizer that may append anything scripted can
-	// append an output of its own, give it the blinding the guard expects of change, and pass.
 	test("refuses an output of the module's own beside the change", () => {
 		const built = transaction(SPENDS, [
 			explicit(1000n, WALLET_SCRIPT),
@@ -693,8 +589,6 @@ describe("what the builder is allowed to add after them", () => {
 		expect(result.ok || result.reason).toContain("the change");
 	});
 
-	// Only the asset the fee is paid in has change the builder appends; every other asset's
-	// surplus is an exact figure the review builds as one of the action's own outputs.
 	test("refuses change in an asset the builder had no business creating", () => {
 		const built = transaction(SPENDS, [
 			explicit(1000n, WALLET_SCRIPT),
@@ -722,8 +616,6 @@ describe("what the builder is allowed to add after them", () => {
 		expect(result.ok || result.reason).toContain("two fees");
 	});
 
-	// The fee is the one figure taken from the module, and it is taken in order to be checked:
-	// what it says it charged against what it actually wrote.
 	test("refuses a fee other than the one the module reported", () => {
 		const built = transaction(SPENDS, [explicit(1000n, WALLET_SCRIPT), explicit(9000n, "")]);
 		const result = guardBuiltOutputs(built, { ...TAIL, outputs: [planned()] });
@@ -732,9 +624,6 @@ describe("what the builder is allowed to add after them", () => {
 		expect(result.ok || result.reason).toContain("9000");
 	});
 
-	// A fee pays the network in the money the network takes. Reading which asset that is off
-	// the fee output itself would make the check circular — it would be the right asset by
-	// definition — so it is stated on the review and compared against.
 	test("refuses a fee paid in something other than the network's own asset", () => {
 		const built = transaction(SPENDS, [
 			explicit(1000n, WALLET_SCRIPT),
@@ -746,8 +635,6 @@ describe("what the builder is allowed to add after them", () => {
 		expect(result.ok || result.reason).toContain("fee");
 	});
 
-	// The network reads the fee's amount in order to charge it, so a hidden one is not a
-	// transaction anything can accept.
 	test("and refuses a fee whose amount is hidden", () => {
 		const built = transaction(SPENDS, [explicit(1000n, WALLET_SCRIPT), hidden("")]);
 		const result = guardBuiltOutputs(built, { ...TAIL, outputs: [planned()] });
@@ -756,9 +643,6 @@ describe("what the builder is allowed to add after them", () => {
 		expect(result.ok || result.reason).toContain("fee");
 	});
 
-	// The last output is the fee because it has no script, not because it happens to carry the
-	// right number. An output that pays the fee's amount to somebody's script is change-shaped
-	// money leaving the transaction, and the fee itself is then missing entirely.
 	test("refuses a scripted output standing in for the fee", () => {
 		const built = transaction(SPENDS, [
 			explicit(1000n, WALLET_SCRIPT),
@@ -770,8 +654,6 @@ describe("what the builder is allowed to add after them", () => {
 		expect(result.ok || result.reason).toContain("fee");
 	});
 
-	// The fee is last in what this builder produces, and a transaction that puts it elsewhere
-	// is one this wallet has no account of. Refusing is the safe direction: nothing is returned.
 	test("and one whose fee is not where the builder puts it", () => {
 		const built = transaction(SPENDS, [
 			explicit(1000n, WALLET_SCRIPT),

@@ -46,9 +46,6 @@ export const getLiquidBalance = createWalletMethod<
 	execute: async ({ context, review }) => {
 		const { account, requestedAsset } = review;
 
-		// Snapshot-first: when a persisted portfolio snapshot exists for this account+chain, serve the
-		// balance from it with no scan. A miss (cold cache, or a non-selected account that has no
-		// snapshot) falls through to the live scan below; reads never trigger a sync.
 		if (context.readPortfolioSnapshot && account.accountGroupId) {
 			const snapshot = await context.readPortfolioSnapshot(account.accountGroupId, account.chainId);
 
@@ -60,7 +57,6 @@ export const getLiquidBalance = createWalletMethod<
 				return {
 					accountIdentifier: account.accountIdentifier,
 					assetId: requestedAsset.assetId,
-					// An asset absent from the snapshot (not held / zero balance) reads as "0".
 					balance: asset?.amountSats ?? "0",
 					chainId: account.chainId,
 					policyAssetId: account.policyAssetId,

@@ -19,7 +19,6 @@ import { useAsyncAction } from "./useAsyncAction";
 
 type OverlayProps = { open: boolean; onOpenChange: (open: boolean) => void };
 
-/** Sign an arbitrary message with the spend key of a wallet-owned address. */
 export function SignMessageDialog({ open, onOpenChange }: OverlayProps) {
 	const { address, wallet } = useHumidContext();
 	const [message, setMessage] = useState("");

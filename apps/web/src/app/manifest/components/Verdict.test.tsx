@@ -4,11 +4,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { Verdict } from "./Verdict";
 
-// The claims this page makes, at the only place they can be checked: the text a reader actually
-// meets. Rendered to a string rather than to a DOM, because this repository has no DOM in its
-// tests and react-dom is already here — the assertions below are about words on a screen, and a
-// string carries those.
-
 function render(inspection: Parameters<typeof Verdict>[0]["inspection"]): string {
 	return renderToStaticMarkup(<Verdict inspection={inspection} />);
 }
@@ -49,8 +44,6 @@ describe("the answer this page came to give", () => {
 		expect(html.indexOf("action Pay")).toBeLessThan(html.indexOf("unimplemented-construct"));
 	});
 
-	// The single most misreadable thing on the page. A document can be flawless in every way a
-	// document can be judged and still be unbuildable for want of money.
 	test("never lets no-refusal read as a promise that the wallet would build", () => {
 		const html = render({ ...NOTHING_ASKED, refusal: undefined });
 
@@ -79,8 +72,6 @@ describe("what was never asked, beside the answer", () => {
 		expect(html).toContain("chain read");
 	});
 
-	// Nothing that says a check was not made may hide behind a click: the absence of a
-	// refusal is only honest beside the list of what was never asked.
 	test("puts nothing unchecked inside a disclosure", () => {
 		const html = render({
 			constructs: [],
@@ -110,8 +101,6 @@ describe("what was never asked, beside the answer", () => {
 		expect(html).toContain("Not decidable from a document at all");
 	});
 
-	// Between skipped and done there is a third answer, and the page has to carry it or a check
-	// that read one of its two places is read as one that passed.
 	test("keeps a half-answered check apart from both a skipped one and a passed one", () => {
 		const html = render({
 			...NOTHING_ASKED,
@@ -151,8 +140,6 @@ describe("what was never asked, beside the answer", () => {
 });
 
 describe("the runtime's own names for its refusals", () => {
-	// A person cannot act on a reject token; they can act on the sentence beside it. The
-	// token stays for whoever is chasing one into the code, and stops being what they meet first.
 	test("never puts a token where the heading goes", () => {
 		const html = render({
 			...NOTHING_ASKED,
@@ -176,8 +163,6 @@ describe("the runtime's own names for its refusals", () => {
 });
 
 describe("older spellings, said once", () => {
-	// A renaming that succeeded changed nothing about the answer, so what is
-	// worth saying is that the document belongs to an earlier generation — one sentence, here.
 	test("counts them and says they changed nothing about the answer", () => {
 		const html = render({
 			...NOTHING_ASKED,
@@ -200,8 +185,6 @@ describe("older spellings, said once", () => {
 });
 
 describe("more than one field would refuse", () => {
-	// A protocol refusing on one decorative field reads as hopeless when the field table below
-	// says a few fixable gaps, and the runtime names only the first by design.
 	test("says how many fields would refuse, not only which one the wallet names", () => {
 		const html = render({
 			...NOTHING_ASKED,

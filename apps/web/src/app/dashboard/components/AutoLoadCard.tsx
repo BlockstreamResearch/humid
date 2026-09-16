@@ -10,11 +10,6 @@ import { formatError, summarizeResult } from "../lib/format";
 import { methodState, type MethodState } from "../lib/method-state";
 import { PolicyBadge } from "./PolicyBadge";
 
-/**
- * What a real dapp does on connect: auto-invoke only the methods `humid_methodPolicy` marks silent,
- * so balances load without a prompt storm. Needs-approval methods are deliberately skipped here —
- * their own Call buttons trigger the wallet confirmation on demand.
- */
 const AUTO_LOAD_READS = ["getBalance", "getUTXOs", "getWalletDescriptor"] as const;
 type AutoLoadRead = (typeof AUTO_LOAD_READS)[number];
 
@@ -30,8 +25,6 @@ export function AutoLoadCard() {
 	const run = async () => {
 		setPending(true);
 
-		// Fire the silent reads together, exactly as a real dapp would on connect; the skipped
-		// (needs-approval / unsupported) ones resolve immediately, so order is preserved.
 		const collected = await Promise.all(
 			AUTO_LOAD_READS.map(async (method): Promise<AutoLoadEntry> => {
 				const state = methodState(method, session, chainId, isSilent);
@@ -103,7 +96,6 @@ export function AutoLoadCard() {
 	);
 }
 
-/** Run one silent read through the typed client, matching each method's own card defaults. */
 function runAutoLoadRead(
 	method: AutoLoadRead,
 	wallet: WalletClient,

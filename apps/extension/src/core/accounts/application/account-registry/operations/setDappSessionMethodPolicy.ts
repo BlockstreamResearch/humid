@@ -3,7 +3,6 @@ import type { DappSessionId } from "../model/identifiers";
 
 export type SetDappSessionMethodPolicyInput = {
 	accountModel: AccountModelState;
-	/** Method → run-without-confirmation. Only keys already in the session's surface are applied. */
 	methods: Record<string, boolean>;
 	sessionId: DappSessionId;
 	updatedAt?: number;
@@ -11,16 +10,9 @@ export type SetDappSessionMethodPolicyInput = {
 
 export type SetDappSessionMethodPolicyResult = {
 	accountModel: AccountModelState;
-	/** True when the session existed and at least one of its methods changed value. */
 	updated: boolean;
 };
 
-/**
- * Flip the run-without-confirmation flags of an injected dapp session's methods — the per-method
- * toggles a user edits from the connected-dapps settings. Only methods already in the session's
- * surface are touched (a settings edit can never widen the grant, mirroring connect-time). No-op
- * (updated:false) when the session is unknown or nothing actually changed.
- */
 export function setDappSessionMethodPolicy(
 	input: SetDappSessionMethodPolicyInput,
 ): SetDappSessionMethodPolicyResult {

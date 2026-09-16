@@ -7,10 +7,6 @@ import { UiSpinner } from "@/ui/UiSpinner";
 import { ConnectedDappsListView } from "./components/ConnectedDappsListView";
 import { Route } from "./route";
 
-/**
- * Per-account connected dapps (container): resolves the account from the route param, then lists the
- * dapps connected to it, each drilling into its per-method policy. Unknown ids fall back to settings.
- */
 export function ConnectedDappsListPage() {
 	const { accountGroupId } = Route.useParams();
 	const accounts = useSelectedAccount();

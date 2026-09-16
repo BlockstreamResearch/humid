@@ -7,7 +7,6 @@ type Props = {
 	request: ConfirmationRequest;
 };
 
-/** Default confirmation body: a title, an optional message, and accept/reject buttons. */
 export function DefaultConfirmation({ onConfirm, onDecline, request }: Props) {
 	return (
 		<div className="bg-background text-foreground flex size-full flex-col items-center gap-2 p-4 text-center">

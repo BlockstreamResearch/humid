@@ -14,21 +14,18 @@ import { type AssetMetadata, resolveIssuedAssetMetadata } from "../wallet/resolv
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
 
-/** The inputs shared by both scan operations; `id` correlates a scan across the trace logs. */
 export type LiquidScanInput = {
 	chain: LiquidChainRecord;
 	descriptor: string;
 	id: number;
 };
 
-/** Inputs to read one asset's activity page from the wollet a prior scan cached. */
 export type LiquidReadActivityInput = LiquidScanInput & {
 	cursor: string | null;
 	limit: number;
 	rawAssetId: string;
 };
 
-/** Inputs to broadcast an already-signed, finalized PSET (base64); `id` correlates the trace logs. */
 export type LiquidBroadcastInput = {
 	chain: LiquidChainRecord;
 	id: number;
@@ -41,22 +38,14 @@ export type LiquidBroadcastTxInput = {
 	txHex: string;
 };
 
-/** Issued assets get 8 decimals until the registry pass provides their real precision. */
 const DEFAULT_ISSUED_ASSET_DECIMALS = 8;
 
-// Cached wollets accumulate scan deltas so repeat scans stay incremental while this context is
-// alive. Keyed by chain + descriptor (a wollet is bound to its network and descriptor).
 const wolletCache = new Map<string, LwkWollet>();
 
-/**
- * A wollet is bound to its network (chain id + policy asset) and descriptor, so key the cache by
- * those. Editing a custom chain's policy asset changes the network, so it keys a fresh wollet.
- */
 function wolletCacheKey(input: { chain: LiquidChainRecord; descriptor: string }): string {
 	return `${input.chain.id}:${input.chain.settings.policyAsset ?? ""}:${input.descriptor}`;
 }
 
-/** One-off full scan on a fresh wollet; returns the serialized Update for the caller to apply. */
 export async function scanFresh(input: LiquidScanInput): Promise<Uint8Array | null> {
 	const lwk = await loadLwkWasm();
 	const network = createLwkNetwork(lwk, input.chain);
@@ -75,8 +64,6 @@ export async function scanFresh(input: LiquidScanInput): Promise<Uint8Array | nu
 
 	const updateBytes = update ? update.serialize() : null;
 
-	// Free the per-scan wasm objects (client, update, and the throwaway wollet) so repeated
-	// scans don't leak wasm heap. Only scanAndRead's cached wollet is deliberately kept alive.
 	update?.free();
 	client.free();
 	wollet.free();
@@ -84,12 +71,6 @@ export async function scanFresh(input: LiquidScanInput): Promise<Uint8Array | nu
 	return updateBytes;
 }
 
-/**
- * Broadcast an already-signed, finalized PSET (base64) via the chain's Esplora client, returning the
- * resulting txid. The build/sign/finalize run in the service worker (where the keys live); only this
- * network step runs here — a `window`-having context (offscreen doc / Firefox bg page) — because
- * LWK's Esplora client does its async retry/backoff via `web_sys::window()`, which the SW lacks.
- */
 export async function broadcastPset(input: LiquidBroadcastInput): Promise<string> {
 	const lwk = await loadLwkWasm();
 	const network = createLwkNetwork(lwk, input.chain);
@@ -107,7 +88,6 @@ export async function broadcastPset(input: LiquidBroadcastInput): Promise<string
 		txid: txidString,
 	});
 
-	// Free the per-broadcast wasm objects so repeated sends don't leak wasm heap.
 	txid.free();
 	pset.free();
 	client.free();
@@ -115,14 +95,6 @@ export async function broadcastPset(input: LiquidBroadcastInput): Promise<string
 	return txidString;
 }
 
-/**
- * Broadcast an already-signed, consensus-encoded transaction, returning the resulting txid.
- *
- * Separate from `broadcastPset` because the manifest path does not produce a PSET: the contract
- * module blinds, signs and finalises internally and hands back a finished transaction. Both run
- * here rather than in the service worker for the same reason — LWK's Esplora client does its
- * async retry and backoff through `web_sys::window()`, which a service worker lacks.
- */
 export async function broadcastTransaction(input: LiquidBroadcastTxInput): Promise<string> {
 	const lwk = await loadLwkWasm();
 	const network = createLwkNetwork(lwk, input.chain);
@@ -147,7 +119,6 @@ export async function broadcastTransaction(input: LiquidBroadcastTxInput): Promi
 	return txidString;
 }
 
-/** Incremental scan on a cached wollet; reads balance and activity directly from it. */
 export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletSnapshot> {
 	const lwk = await loadLwkWasm();
 	const network = createLwkNetwork(lwk, input.chain);
@@ -166,7 +137,6 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 		wolletCache.set(cacheKey, wollet);
 	}
 
-	// A fresh client each time picks up backend-setting changes; the wollet is reused.
 	const client = createLwkBlockchainClient(lwk, input.chain, network);
 
 	console.warn("[liquid-sync] fullScan…", { id: input.id });
@@ -181,13 +151,10 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 
 	if (update) wollet.applyUpdate(update);
 
-	// Free the per-scan wasm objects; the cached wollet is intentionally kept for the next scan.
 	update?.free();
 	client.free();
 
 	const rawPolicyAssetId = network.policyAsset().toString();
-	// Asset metadata is best-effort and off the balance read, so a slow registry doesn't hold up
-	// the numbers. Activity is not read here: it's fetched per-asset on demand via `readActivity`.
 	const assets = await buildAssetBalances(
 		lwk,
 		network,
@@ -196,8 +163,6 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 		rawPolicyAssetId,
 	);
 
-	// The raw UTXO set rides along in the snapshot via the same mapping the dapp getUTXOs RPC uses,
-	// so a later step can serve getUTXOs/getBalance from the persisted snapshot instead of rescanning.
 	const utxos = readWalletUtxos(wollet);
 
 	console.warn("[liquid-sync] scanAndRead done", {
@@ -210,12 +175,6 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 	return { assets, utxos };
 }
 
-/**
- * Read one asset's transaction history from the wollet a prior `scanAndRead` cached, as an
- * offset-paginated page (newest first). A pure read — it never scans; before the first sync
- * (no cached wollet yet) it returns an empty page, and the portfolio poll's scan populates the
- * wollet for the next call. The offset crosses the boundary as an opaque cursor string.
- */
 export function readActivity(input: LiquidReadActivityInput): LiquidActivityPage {
 	const wollet = wolletCache.get(wolletCacheKey(input));
 
@@ -229,7 +188,6 @@ export function readActivity(input: LiquidReadActivityInput): LiquidActivityPage
 	return { items, nextCursor: nextOffset < all.length ? String(nextOffset) : null };
 }
 
-/** Parse the opaque activity cursor (a non-negative offset); anything invalid restarts from 0. */
 function parseActivityCursor(cursor: string | null): number {
 	if (cursor === null) return 0;
 
@@ -238,11 +196,6 @@ function parseActivityCursor(cursor: string | null): number {
 	return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
-/**
- * Attach display metadata to raw balances: the native (policy) asset from the known chain
- * asset, issued assets as short placeholders until the registry pass. The native asset is
- * always present (at zero if the wallet holds none) and leads the list.
- */
 async function buildAssetBalances(
 	lwk: LwkWasmModule,
 	network: LwkNetwork,
@@ -263,7 +216,6 @@ async function buildAssetBalances(
 		assets.push(toAssetBalance(rawPolicyAssetId, 0n, rawPolicyAssetId, undefined));
 	}
 
-	// Native first, then by descending balance so the largest holdings lead.
 	return assets.toSorted((a, b) => {
 		if (a.isNative !== b.isNative) return a.isNative ? -1 : 1;
 

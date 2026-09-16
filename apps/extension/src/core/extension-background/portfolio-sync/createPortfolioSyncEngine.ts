@@ -5,55 +5,29 @@ import type {
 
 import type { PortfolioSnapshotStore } from "./portfolioSnapshotStore";
 
-/** The current sync target: a cache key for the selected account+chain and its scan thunk. */
 export type PortfolioSyncTarget = {
 	key: string;
 	scan: () => Promise<PortfolioData>;
 };
 
 export type PortfolioSyncEngine = {
-	/** Read the cached snapshot for the current target, triggering a throttled background sync. */
 	getSnapshot: () => Promise<PortfolioSnapshot>;
-	/**
-	 * Force an immediate re-sync of the current target — bypasses the throttle but still
-	 * single-flights (joins an in-flight scan) — and resolve with the fresh snapshot.
-	 */
 	refresh: () => Promise<PortfolioSnapshot>;
-	/** Whether a scan is currently in flight for this key, so other scan paths can avoid overlapping. */
 	isSyncing: (key: string) => boolean;
 };
 
 type CacheEntry = {
 	data: PortfolioData | null;
 	error: string | null;
-	/** Whether we've tried to hydrate this key from the durable store (once per SW lifetime). */
 	hydrated: boolean;
 	inFlight: boolean;
-	/** The in-flight scan promise, shared so concurrent reads/refreshes single-flight onto it. */
 	inFlightSync: Promise<void> | null;
-	/** When we last STARTED a scan (success or failure) — the throttle key, so a failing scan backs off. */
 	lastAttemptAt: number | null;
 	syncedAt: number | null;
 };
 
-/**
- * Skip starting a fresh scan if we ATTEMPTED one within this window — success OR failure. Throttling
- * on the attempt (not the last success) means a failing / rate-limited scan backs off instead of the
- * popup's polling re-scanning on every read (which would hammer a 429ing endpoint indefinitely).
- */
 const MIN_SYNC_INTERVAL_MS = 60_000;
 
-/**
- * Decouples reading the portfolio from scanning the wallet. Reads (`getSnapshot`) return the
- * cached balance for the selected account+chain immediately and kick off a background scan;
- * the heavy scan runs off the read path (and, via the worker, off the main thread). Syncs are
- * deduped (one in-flight per key) and throttled, so the popup's polling never spams scans. The
- * cache is per (account, chain), so switching back to an already-synced account is instant.
- *
- * With a `store`, the last synced snapshot is persisted and rehydrated on the first read after the
- * MV3 service worker sleeps — so reopening the popup shows the last-known balance instantly while a
- * fresh scan runs behind it, instead of a cold empty.
- */
 export function createPortfolioSyncEngine(
 	resolveTarget: () => Promise<PortfolioSyncTarget>,
 	store?: PortfolioSnapshotStore,
@@ -79,8 +53,6 @@ export function createPortfolioSyncEngine(
 		return entry;
 	};
 
-	// Populate an empty entry from the durable store once per key (after the SW woke cold). Never
-	// clobbers data a scan already produced this lifetime.
 	const hydrate = async (key: string, entry: CacheEntry): Promise<void> => {
 		if (entry.hydrated || !store) return;
 
@@ -96,21 +68,9 @@ export function createPortfolioSyncEngine(
 		}
 	};
 
-	/**
-	 * Kick a sync for `target`, resolving when the wallet scan settles.
-	 *
-	 * Single-flight: if a scan is already running for this key, EVERY caller (a background read or a
-	 * forced refresh) joins that same in-flight promise instead of starting a second concurrent scan
-	 * — so rapid refresh clicks collapse to one wallet scan.
-	 *
-	 * Throttle: an unforced sync is skipped when we ATTEMPTED one within `MIN_SYNC_INTERVAL_MS` (a
-	 * failing scan counts, so a 429ing endpoint isn't hammered). `force` bypasses ONLY this time
-	 * throttle — never the single-flight guard above — so a manual refresh always re-scans now.
-	 */
 	const runSync = (target: PortfolioSyncTarget, options?: { force?: boolean }): Promise<void> => {
 		const entry = ensureEntry(target.key);
 
-		// Single-flight: join the scan already in progress for this key (forced or not).
 		if (entry.inFlightSync) return entry.inFlightSync;
 
 		if (
@@ -140,7 +100,6 @@ export function createPortfolioSyncEngine(
 				entry.error = null;
 				entry.syncedAt = Date.now();
 
-				// Persist the fresh snapshot so the next cold read (after the SW slept) shows it instantly.
 				void store?.save(target.key, { data: entry.data, syncedAt: entry.syncedAt });
 
 				console.warn("[liquid-sync] engine sync ok", {
@@ -158,14 +117,10 @@ export function createPortfolioSyncEngine(
 			} finally {
 				entry.inFlight = false;
 				entry.inFlightSync = null;
-				// Stamp the attempt at the END so the throttle window opens AFTER the scan settles: a
-				// slow failing scan (LWK retries a 429 for ~a minute) still leaves a full quiet gap
-				// before the next attempt, instead of re-scanning the instant it gives up.
 				entry.lastAttemptAt = Date.now();
 			}
 		})();
 
-		// Publish the in-flight promise before returning so the next caller single-flights onto it.
 		entry.inFlightSync = sync;
 
 		return sync;
@@ -186,11 +141,8 @@ export function createPortfolioSyncEngine(
 			const target = await resolveTarget();
 			const entry = ensureEntry(target.key);
 
-			// Rehydrate a cold entry from the durable store before the first read, so the popup shows
-			// the last-known balance instead of empty while the fresh scan runs.
 			await hydrate(target.key, entry);
 
-			// Fire-and-forget: the read never waits on the scan (single-flighted + throttled inside).
 			void runSync(target);
 
 			return snapshotOf(entry);
@@ -201,8 +153,6 @@ export function createPortfolioSyncEngine(
 
 			await hydrate(target.key, entry);
 
-			// Await the forced scan so the returned snapshot is the fresh one; `force` bypasses the
-			// time throttle while `runSync` still single-flights (joins any in-flight scan).
 			await runSync(target, { force: true });
 
 			return snapshotOf(entry);

@@ -46,7 +46,6 @@ function getPortfolio(): Promise<PortfolioSnapshot> {
 	return requestBackground<PortfolioSnapshot>(accountsRpc.methods.getPortfolio);
 }
 
-/** Force an immediate re-sync of the selected account's portfolio, bypassing the engine throttle. */
 function refreshPortfolio(): Promise<PortfolioSnapshot> {
 	return requestBackground<PortfolioSnapshot>(accountsRpc.methods.refreshPortfolio);
 }
@@ -55,17 +54,14 @@ function getActivity(input: GetActivityInput): Promise<ActivityPage> {
 	return requestBackground<ActivityPage>(accountsRpc.methods.getActivity, input);
 }
 
-/** Preview a send from the selected account (validate recipient, resolve asset) — no broadcast. */
 function inspectTransfer(input: SendTransferInput): Promise<TransferReview> {
 	return requestBackground<TransferReview>(accountsRpc.methods.inspectTransfer, input);
 }
 
-/** Estimate the max sendable amount (+ assumed L-BTC fee) for an asset on the selected account. */
 function estimateMaxSend(input: EstimateMaxSendInput): Promise<EstimateMaxSendResult> {
 	return requestBackground<EstimateMaxSendResult>(accountsRpc.methods.estimateMaxSend, input);
 }
 
-/** Build, sign, and broadcast a send from the selected account; resolves with the broadcast txid. */
 function sendTransfer(input: SendTransferInput): Promise<SendTransferResult> {
 	return requestBackground<SendTransferResult>(accountsRpc.methods.sendTransfer, input);
 }

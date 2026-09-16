@@ -1,24 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
-import { type ManifestReview, computed, fromSite } from "@humid/tx-manifest";
+import { type ManifestReview, computed, fromDapp } from "@humid/tx-manifest";
 
 import {
 	type AssembledTransaction,
 	type AssemblingBuilder,
 	assembleReviewedTransaction,
 } from "./assembleReviewedTransaction";
-// A substitute rather than the real module, because what is under test is what this assembles
-// and what it releases, not what the module makes of it. Its method names and shapes are the
-// real binding's — `loadSmplxWasm.test.ts` is what holds that claim true — so a substitute that
-// accepted anything could not let a call the real module refuses pass unnoticed.
 
 const COVENANT_SCRIPT = `5120${"11".repeat(32)}`;
-/**
- * What the review says the covenant was built from, carried through rather than re-resolved.
- *
- * All four, because a module spending this covenant compiles the contract again to satisfy it and
- * a compile differing in any one of them produces a different script.
- */
 const COVENANT_BUILD = {
 	argumentsJson: '{"PUB_KEY":{"type":"Pubkey","value":"0x00"}}',
 	extraLeavesJson: "[]",
@@ -29,14 +19,6 @@ const COVENANT_BUILD = {
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 const CHANGE_SCRIPT = `0014${"44".repeat(20)}`;
 const ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-/**
- * A finished transaction, written as the bytes one actually is.
- *
- * The module hands back a hex string and this module now reads it: what a builder was asked to
- * do and what came back are different facts, and the second is only in the bytes. So a
- * substitute returning a placeholder would let every guard below pass without seeing anything —
- * these fixtures are assembled field by field for the same reason the guards read them.
- */
 const CONFIDENTIAL_VALUE = `08${"44".repeat(32)}`;
 const CONFIDENTIAL_ASSET = `0a${"33".repeat(32)}`;
 const NONCE = `02${"55".repeat(32)}`;
@@ -53,20 +35,11 @@ function txIn({
 	const reversed = (txid.match(/../g) ?? []).toReversed().join("");
 	const marked = (issuance ? vout | 0x80_00_00_00 : vout) >>> 0;
 	const index = (marked.toString(16).padStart(8, "0").match(/../g) ?? []).toReversed().join("");
-	// An issuing input carries a blinding nonce, an entropy and two confidential values after
-	// its sequence — here both stated rather than hidden.
 	const declared = issuance ? `${"00".repeat(32)}${"aa".repeat(32)}${"01".padEnd(18, "0")}00` : "";
 
 	return `${reversed}${index}00ffffffff${declared}`;
 }
 
-/**
- * One output as the chain writes one.
- *
- * The asset is written in reverse of how it is displayed, which is the encoding's own rule and
- * not a detail this fixture may skip: written forwards it would be a different asset, and the
- * guard comparing it against the review would be comparing the wrong thing and agreeing.
- */
 function outputBytes(
 	scriptHex: string,
 	{ asset = ASSET, blinded = false, sats = 1000n } = {},
@@ -82,15 +55,10 @@ function outputBytes(
 	return `01${reversed}01${sats.toString(16).padStart(16, "0")}00${length}${scriptHex}`;
 }
 
-/** The fee, which has no script at all: the network reads its amount in order to charge it. */
 const FEE_OUT = outputBytes("", { sats: 300n });
-/** The covenant output the default review plans, for exactly what the review says it pays. */
 const COVENANT_OUT = outputBytes(COVENANT_SCRIPT, { sats: 50_000n });
-/** What is left over, returned to the script the caller named. */
 const CHANGE_OUT = outputBytes(CHANGE_SCRIPT, { sats: 900n });
-/** What a spend of the covenant pays back to this wallet. */
 const RECEIVED_OUT = outputBytes(WALLET_SCRIPT, { sats: 50_000n });
-/** The transaction the covenant this wallet spends sits in. */
 const COVENANT_TXID = "e".repeat(64);
 
 function signedHex(spends: Parameters<typeof txIn>[0][], outs: string[]): string {
@@ -100,7 +68,6 @@ function signedHex(spends: Parameters<typeof txIn>[0][], outs: string[]): string
 	return `0200000000${inputCount}${spends.map((spend) => txIn(spend)).join("")}${outputCount}${outs.join("")}00000000`;
 }
 
-/** What the module gives back for the default review: the one input it chose, and three outputs. */
 function signed(
 	spends: Parameters<typeof txIn>[0][] = [{ txid: "c".repeat(64), vout: 0 }],
 	outs: string[] = [COVENANT_OUT, CHANGE_OUT, FEE_OUT],
@@ -109,13 +76,10 @@ function signed(
 }
 
 const SIGNED: AssembledTransaction = signed();
-// A P2WPKH output consensus-encoded, which is what the real builder decodes and what the
-// wallet's own snapshot already holds for an output it can spend.
 const TXOUT_HEX = `01${"49".repeat(32)}0100000000000186a000160014${"00".repeat(20)}`;
 
 type Recorded = {
 	changes: { blindingKey: string | null | undefined; script: string }[];
-	/** Every covenant input added, with all nine values the module is given for it. */
 	covenants: {
 		argumentsJson: string | undefined;
 		extraLeavesJson: string | undefined;
@@ -129,7 +93,6 @@ type Recorded = {
 		witnessJson: string | undefined;
 	}[];
 	freed: number;
-	/** How many issuance reports were released, which must match how many were handed over. */
 	freedReports: number;
 	issues: {
 		assetAmountSats: bigint;
@@ -150,7 +113,6 @@ type Recorded = {
 	spends: { txOut: string; txid: string; vout: number }[];
 };
 
-/** What the derivation in the review says, so a substitute can agree with it or not. */
 const ISSUED = {
 	asset: "ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2",
 	entropy: "a".repeat(64),
@@ -159,7 +121,6 @@ const ISSUED = {
 
 const ISSUANCE_TXID = "c".repeat(64);
 
-/** One planned issuance derived from the wallet output the review selected. */
 const plannedIssuance = () => ({
 	asset: ISSUED.asset,
 	assetAmountSats: 1000n,
@@ -171,15 +132,7 @@ const plannedIssuance = () => ({
 	reissuanceToken: ISSUED.reissuanceToken,
 });
 
-// Narrow — it stands in for the four methods this module calls and nothing else — but exact
-// for each of them. A substitute that drops an argument is a substitute that cannot fail when
-// the wrong value is passed in it, which is how a bech32 address reached the real builder
-// unremarked. `loadSmplxWasm.test.ts` is what holds these signatures to the real binding.
-function substitute(
-	recorded: Recorded,
-	/** What the module claims it derived, which the wallet's own derivation is compared against. */
-	reports: Partial<typeof ISSUED> = {},
-): SmplxModule {
+function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): SmplxModule {
 	return {
 		TransactionBuilder: class {
 			addChange(script: string, blindingKey?: string | null) {
@@ -188,8 +141,6 @@ function substitute(
 			addOutput(script: string, sats: bigint, asset: string, blindingKey?: string | null) {
 				recorded.outputs.push({ asset, blindingKey, sats, script });
 			}
-			// The encoded output is recorded with the outpoint, because the module needs all three
-			// and a substitute that ignores one cannot notice it going missing.
 			addWalletInput(txid: string, vout: number, txOut: string) {
 				recorded.spends.push({ txOut, txid, vout });
 			}
@@ -284,8 +235,6 @@ function substitute(
 			setSequence(sequence: number) {
 				recorded.sequences.push(sequence);
 			}
-			// Held across the wasm boundary, so the module under test releases it. A substitute
-			// without this passes only because nothing checked that it was released.
 			free() {
 				recorded.freed += 1;
 			}
@@ -293,16 +242,8 @@ function substitute(
 	};
 }
 
-/** What this module needs of the SDK, which is what it states for itself. */
 type SmplxModule = { TransactionBuilder: new () => AssemblingBuilder };
 
-/**
- * The wallet's own output every case funds from, and the order that has only it in it.
- *
- * `selected` says which outputs the transaction spends and `inputOrder` says in which order,
- * and once a covenant is in the transaction the two are different lists. A helper that derived
- * one from the other would make it impossible to write the case where they disagree.
- */
 const WALLET_UTXO = {
 	amount: "1000000",
 	spendable: true,
@@ -311,13 +252,6 @@ const WALLET_UTXO = {
 	vout: 0,
 };
 
-/**
- * The plan, with the order defaulted from the selection unless a case states one.
- *
- * A case about which of the wallet's outputs get added says so by overriding `selected`, and
- * the order it is added in follows. A case about the order itself states `inputOrder` outright,
- * which is the only way to write one where the two disagree.
- */
 function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
 	const built = plan(overrides);
 
@@ -335,18 +269,15 @@ function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
 function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 	return {
 		action: "Pay",
-		// What a person would be shown, which this module never reads: it builds from the plan.
-		// Present because the review carries it, and stated rather than cast so that a field
-		// added to the model is a compile error here rather than a hole nobody notices.
 		confirmation: {
 			account: computed("liquid:testnet account 0"),
-			action: fromSite("Pay"),
+			action: fromDapp("Pay"),
 			covenants: [],
 			feeAsset: computed(ASSET),
 			feeSats: computed(344n),
 			hiddenAmounts: [],
 			netEffect: [{ asset: computed(ASSET), sats: computed(-50_344n) }],
-			protocol: fromSite("p2pk-simplicity"),
+			protocol: fromDapp("p2pk-simplicity"),
 			publishedAmounts: [],
 		},
 		covenantInputs: [],
@@ -358,7 +289,7 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 				role: "created",
 				scriptPubKeyHex: COVENANT_SCRIPT,
 				utxoType: "p2pk_output",
-				verified: "not-yet-on-chain",
+				verified: "not-yet-onchain",
 			},
 		],
 		changeBlinded: false,
@@ -385,7 +316,6 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 	};
 }
 
-/** The default review with its one output planned hidden, for the mixed-shape case. */
 function blindedOutputs(): ManifestReview["outputs"] {
 	return [
 		{
@@ -431,9 +361,6 @@ function subject(
 }
 
 describe("assembleReviewedTransaction", () => {
-	// The outpoint says which output; the encoding says what is in it. The module takes all
-	// three and cannot read the third off the chain, so passing two is a transaction it
-	// refuses — or worse, one it balances against an amount nobody supplied.
 	test("spends exactly the wallet outputs the review selected, with what each holds", async () => {
 		const { assemble, recorded } = subject();
 
@@ -452,8 +379,6 @@ describe("assembleReviewedTransaction", () => {
 		]);
 	});
 
-	// The builder hex-decodes every script it is given, so an address reaching it fails inside
-	// the module with an error naming neither the output nor what was wrong with it.
 	test("every output script is hex the builder can decode", async () => {
 		const { assemble, recorded } = subject();
 
@@ -466,8 +391,6 @@ describe("assembleReviewedTransaction", () => {
 		}
 	});
 
-	// Where change goes is the wallet's, and unset the module returns it to whichever address
-	// the signer derives — a decision made somewhere the wallet cannot see it.
 	test("returns change to the script the caller named, and to nothing else", async () => {
 		const { assemble, recorded } = subject();
 
@@ -476,8 +399,6 @@ describe("assembleReviewedTransaction", () => {
 		expect(recorded.changes).toEqual([{ blindingKey: undefined, script: CHANGE_SCRIPT }]);
 	});
 
-	// Nothing in this slice reads what the document wants hidden, so change is returned in the
-	// open rather than hidden against a guess at the answer.
 	test("passes no blinding key with the change", async () => {
 		const { assemble, recorded } = subject();
 
@@ -500,8 +421,6 @@ describe("assembleReviewedTransaction", () => {
 		expect(result).toEqual({ ok: true, transaction: SIGNED });
 	});
 
-	// Nothing here acquires a mnemonic, builds a signer or signs. The one thing that can is
-	// the caller's, which is what lets assembly be reviewed without a credential in reach.
 	test("signs nothing itself: the finalizer is the only thing that finishes a transaction", async () => {
 		let finalized = 0;
 		const { assemble } = subject({}, () => {
@@ -524,7 +443,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.freed).toBe(1);
 		});
 
-		// A refused action that leaks a builder leaks wasm memory a collector cannot see.
 		test("releases the builder when the finalizer fails", async () => {
 			const { assemble, recorded } = subject({}, () => {
 				throw new Error("could not balance");
@@ -568,8 +486,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.freed).toBe(1);
 		});
 
-		// A change script the module will not decode fails the same way an output does, and
-		// after every input has already been added.
 		test("releases the builder when the change script is refused", async () => {
 			const recorded: Recorded = {
 				changes: [],
@@ -601,14 +517,10 @@ describe("assembleReviewedTransaction", () => {
 
 			expect(result).toMatchObject({ ok: false });
 			expect(recorded.freed).toBe(1);
-			// Nothing is signed once the transaction could not be finished being assembled.
 			expect(finalized).toBe(0);
 		});
 	});
 
-	// AC: the finished transaction is checked against the reviewed plan out of its own consensus
-	// bytes, after the finalizer has run. Everything before this point is a request made of the
-	// module; whether the module honoured it is visible nowhere else.
 	describe("what came back, against what was agreed to", () => {
 		test("returns the transaction when the bytes are the plan", async () => {
 			const { assemble } = subject();
@@ -630,8 +542,6 @@ describe("assembleReviewedTransaction", () => {
 			}
 		});
 
-		// A transaction that spends less than the review committed to is not a safer version of
-		// it: the wallet chose those outputs, and one left out is a different transaction.
 		test("and when it leaves out one the review selected", async () => {
 			const { assemble } = subject(
 				{
@@ -652,9 +562,6 @@ describe("assembleReviewedTransaction", () => {
 			}
 		});
 
-		// The issuing input is the same outpoint the asset was derived from, and Elements writes
-		// the issuance marker into the top bits of the index. A guard that did not unmask it
-		// would refuse every transaction that creates an asset.
 		test("accepts an input that also creates an asset, as the outpoint it spends", async () => {
 			const { assemble } = subject(
 				{
@@ -720,8 +627,6 @@ describe("assembleReviewedTransaction", () => {
 			}
 		});
 
-		// The module's word is not what is read: a transaction whose bytes cannot be parsed is a
-		// transaction nothing can check, and an unchecked one is not returned.
 		test("and when what came back is not a transaction at all", async () => {
 			const { assemble } = subject({}, () => ({
 				feeSats: 300n,
@@ -755,8 +660,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(result.ok || result.reason).toContain("49999");
 		});
 
-		// The right amount of the wrong thing is not the right output. On a chain carrying more
-		// than one asset that is a transaction nobody agreed to rather than a rounding error.
 		test("and when it came back paid in another asset", async () => {
 			const { assemble } = subject({}, () =>
 				signed(undefined, [
@@ -772,8 +675,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(result.ok || result.reason).toContain("asset");
 		});
 
-		// The attack the tail check exists for: a finalizer that may append anything scripted can
-		// append an output of its own, give it the blinding the guard expects of change, and pass.
 		test("and when the module appended an output of its own beside the change", async () => {
 			const { assemble } = subject({}, () =>
 				signed(undefined, [
@@ -820,8 +721,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(result.ok || result.reason).toContain("fee");
 		});
 
-		// The fee is the one figure taken from the module, and it is taken in order to be
-		// checked: what it says it charged against what it actually wrote.
 		test("and when the fee it wrote is not the fee it reported", async () => {
 			const { assemble } = subject({}, () => ({
 				feeSats: 300n,
@@ -835,8 +734,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(result.ok || result.reason).toContain("9000");
 		});
 
-		// Comparing sets cannot answer "how many times", so a transaction spending one output
-		// twice would read as identical to one spending it once.
 		test("and when it spends one of the chosen outputs twice", async () => {
 			const { assemble } = subject({}, () =>
 				signed([
@@ -851,9 +748,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(result.ok || result.reason).toContain("twice");
 		});
 
-		// The fee is the one figure taken from the module, and the guard is told what the module
-		// reported rather than a number this module chose — so a report that does not match the
-		// bytes is caught whatever the figure happens to be.
 		test("checks the fee against whatever the module reported, not a fixed figure", async () => {
 			const { assemble } = subject({}, () => ({
 				feeSats: 450n,
@@ -864,9 +758,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(await assemble()).toMatchObject({ ok: true });
 		});
 
-		// A fee pays the network in the money the network takes, and which asset that is comes
-		// from the review rather than from the fee output itself — read off the output, the
-		// check would be true by definition.
 		test("refuses a fee paid in something other than the network's own asset", async () => {
 			const { assemble } = subject({}, () =>
 				signed(undefined, [
@@ -882,16 +773,11 @@ describe("assembleReviewedTransaction", () => {
 			expect(result.ok || result.reason).toContain("fee");
 		});
 
-		// An output is blinded or open as a whole. A committed value beside a published asset
-		// claims to hide what it is publishing, and reduced to "did an amount come back as a
-		// number" it is indistinguishable from an output that really is hidden.
 		test("refuses an output written as neither shape", async () => {
 			const mixed = `01${(ASSET.match(/../g) ?? []).toReversed().join("")}${CONFIDENTIAL_VALUE}${NONCE}${(COVENANT_SCRIPT.length / 2).toString(16).padStart(2, "0")}${COVENANT_SCRIPT}`;
 			const { assemble } = subject(
 				{ outputs: blindedOutputs() },
 				() => signed(undefined, [mixed, CHANGE_OUT, FEE_OUT]),
-				// A hidden output needs a key to hide it with, which the caller supplies; without
-				// one the action is refused long before any bytes come back.
 				{ blindingPublicKeyHex: `02${"66".repeat(32)}` },
 			);
 
@@ -901,8 +787,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(result.ok || result.reason).toContain("neither");
 		});
 
-		// The whole transaction is parsed before any of it is reported: bytes whose prefix
-		// happens to parse can carry anything at all after the part a guard reads.
 		test("refuses bytes that carry a transaction and then more", async () => {
 			const { assemble } = subject({}, () => ({
 				feeSats: 300n,
@@ -913,8 +797,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(await assemble()).toMatchObject({ ok: false, reject: "built-something-else" });
 		});
 
-		// A refusal that leaks the builder leaks wasm memory a collector cannot see, and the
-		// guard paths are the newest place that can do it.
 		test("releases the builder on the path where the bytes disagree", async () => {
 			const { assemble, recorded } = subject({}, () => signed([{ txid: "e".repeat(64), vout: 0 }]));
 
@@ -924,8 +806,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.freed).toBe(1);
 		});
 
-		// The transaction is not handed back with a warning attached: by this point the person
-		// may already have approved, so there is nothing left to ask them.
 		test("and returns no transaction with the refusal", async () => {
 			const result = await subject({}, () =>
 				signed([{ txid: "e".repeat(64), vout: 0 }]),
@@ -937,7 +817,6 @@ describe("assembleReviewedTransaction", () => {
 	});
 
 	describe("an action that spends a covenant", () => {
-		/** What the review established about the covenant, as a builder is handed it. */
 		const covenantInput = {
 			argumentsJson: COVENANT_BUILD.argumentsJson,
 			extraLeavesJson: COVENANT_BUILD.extraLeavesJson,
@@ -975,7 +854,6 @@ describe("assembleReviewedTransaction", () => {
 			],
 			...overrides,
 		});
-		/** The finished transaction for a spend: the covenant input first, then the wallet's. */
 		const spent = () =>
 			signed(
 				[
@@ -985,10 +863,6 @@ describe("assembleReviewedTransaction", () => {
 				[RECEIVED_OUT, CHANGE_OUT, FEE_OUT],
 			);
 
-		// All nine values, because every one of them decides the script the covenant locks to or
-		// what satisfies it. Sending the source and the parameters alone builds a different
-		// contract than the one the review checked against the chain, and the covenant refuses
-		// its own spend at execution — after a person has approved.
 		test("hands the module everything the review verified the covenant under", async () => {
 			const { assemble, recorded } = subject(spendingPlan(), spent);
 
@@ -1008,9 +882,6 @@ describe("assembleReviewedTransaction", () => {
 			]);
 		});
 
-		// A covenant with more than one branch is told which to run by a witness the document
-		// states outright. It crosses as the compiler's own shape — a type and a literal, both
-		// text — because the compiler is what parses SimplicityHL and this module is not.
 		test("passes the stated witness values through as the compiler's own shape", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
@@ -1032,8 +903,6 @@ describe("assembleReviewedTransaction", () => {
 			);
 		});
 
-		// Only the signer can make a signature, and naming the witness is what asks for one.
-		// A covenant that needs none must not be told to fill one that does not exist.
 		test("asks for no signature where the document declares none", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
@@ -1046,9 +915,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.covenants[0]?.signatureWitness).toBeUndefined();
 		});
 
-		// A contract asserting its own index will not run against a transaction built the other
-		// way, and nothing after signing could say why. So the order is the plan's, not this
-		// module's habit of adding every covenant first.
 		test("adds the inputs in the order the plan states, not covenants first", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
@@ -1072,9 +938,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.covenants).toHaveLength(1);
 		});
 
-		// An action whose covenant already holds everything its outputs cost is funded entirely
-		// by the covenant it spends. Refusing that for holding none of the wallet's own outputs
-		// would refuse the ordinary case of a protocol paying itself out.
 		test("builds an action funded entirely by the covenant it spends", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
@@ -1095,8 +958,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(await assemble()).toMatchObject({ ok: false });
 		});
 
-		// The lock height and the sequence are facts about the transaction rather than about any
-		// one input, and a branch guarded by a lock height reads the locktime this sets.
 		test("declares the locktime and the sequence the plan carries", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({ locktimeHeight: 3_210_987, sequence: 4_294_967_294 }),
@@ -1117,9 +978,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.sequences).toEqual([]);
 		});
 
-		// The guard reads the finished transaction's own bytes rather than this module's account
-		// of what it asked for. A covenant input the action required and the bytes do not carry
-		// is a transaction nobody agreed to.
 		test("refuses when the finished transaction does not spend the covenant", async () => {
 			const { assemble } = subject(spendingPlan(), () =>
 				signed([{ txid: "c".repeat(64), vout: 0 }], [RECEIVED_OUT, CHANGE_OUT, FEE_OUT]),
@@ -1138,9 +996,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.freed).toBe(1);
 		});
 
-		// A covenant can issue an asset on the input that spends it, and the module has one call
-		// that does both. Added twice it would spend the same output twice, which is not a
-		// transaction at all.
 		test("adds a covenant that also issues exactly once, through the one call that does both", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
@@ -1163,7 +1018,6 @@ describe("assembleReviewedTransaction", () => {
 				inflationAmountSats: 0n,
 			});
 			expect(recorded.issues).toEqual([]);
-			// The report is a handle across the wasm boundary, so it is released whatever it said.
 			expect(recorded.freedReports).toBe(1);
 		});
 
@@ -1205,8 +1059,6 @@ describe("assembleReviewedTransaction", () => {
 		});
 	});
 
-	// The wallet's own output is one the review derived from an address, not one this reads
-	// off a signer. Deriving a script from an address is public work.
 	test("pays a wallet output the script the review derived", async () => {
 		const { assemble, recorded } = subject({
 			outputs: [
@@ -1228,13 +1080,6 @@ describe("assembleReviewedTransaction", () => {
 		]);
 	});
 
-	/**
-	 * An issuing input is added once, as an issuance.
-	 *
-	 * The asset an issuance creates is a function of the output its input spends, so the two
-	 * are joined on that outpoint and on nothing else. Adding the same output again as an
-	 * ordinary wallet input would spend it twice, which is not a transaction at all.
-	 */
 	describe("an input that creates an asset", () => {
 		const issuing = { issuances: [plannedIssuance()] };
 
@@ -1246,12 +1091,7 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.issues).toEqual([
 				{
 					assetAmountSats: 1000n,
-					// Zero, always: Liquid requires a reissuance token to be held confidentially
-					// and this path builds transactions whose values are all explicit, so the
-					// review refuses any other figure long before it reaches here.
 					inflationAmountSats: 0n,
-					// A manifest declares no issuer contract at any position, so both sides commit
-					// to nothing and each says so.
 					issuerContractHex: undefined,
 					txOut: TXOUT_HEX,
 					txid: ISSUANCE_TXID,
@@ -1268,8 +1108,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.spends).toEqual([]);
 		});
 
-		// Every other selected output is still an ordinary input. Only the one the asset is
-		// derived from becomes the issuance.
 		test("while the wallet's other outputs are added as they were", async () => {
 			const { assemble, recorded } = subject({
 				...issuing,
@@ -1285,8 +1123,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.spends).toEqual([{ txOut: TXOUT_HEX, txid: "d".repeat(64), vout: 3 }]);
 		});
 
-		// The module derives the asset for itself from the same output. Two independent
-		// derivations of one fact are compared rather than one of them being trusted.
 		test("releases the module's report when the two sides agree", async () => {
 			const { assemble, recorded } = subject(issuing);
 
@@ -1321,8 +1157,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(differentToken).toMatchObject({ ok: false });
 		});
 
-		// The report is a handle across the wasm boundary like everything else the module
-		// returns. A refusal that leaks one leaks it on exactly the path a person hits.
 		test("releases the module's report on the path that refuses too", async () => {
 			const { assemble, recorded } = subject(issuing, () => SIGNED, {
 				reports: { asset: "b".repeat(64) },
@@ -1334,17 +1168,7 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.freed).toBe(1);
 		});
 
-		/**
-		 * The joins that are wrong about the whole transaction are settled before it exists.
-		 *
-		 * Each of these is a disagreement between the two lists a review carries rather than a
-		 * fault in one input, and a check made while adding inputs would find it with half the
-		 * transaction already built — leaving a builder to unwind and an error naming whichever
-		 * input it happened to reach. Nothing is constructed, so nothing has to be released.
-		 */
 		describe("what it settles before starting a builder", () => {
-			// An asset derived from an output no input spends is an id for something that would
-			// never come to exist, and the person would already have been shown it.
 			test("an issuance derived from an output this transaction does not spend", async () => {
 				const { assemble, recorded } = subject({
 					issuances: [{ ...plannedIssuance(), outpoint: { txid: "e".repeat(64), vout: 7 } }],
@@ -1362,14 +1186,6 @@ describe("assembleReviewedTransaction", () => {
 				}
 			});
 
-			/**
-			 * Two issuances claiming one output.
-			 *
-			 * Each is a well-formed id for a different asset, and both need that one output
-			 * spent to exist. A map built from them without looking keeps the last and mints one
-			 * asset while a person was shown two — silently, because nothing downstream holds
-			 * both lists.
-			 */
 			test("two issuances derived from one output", async () => {
 				const { assemble, recorded } = subject({
 					issuances: [
@@ -1390,7 +1206,6 @@ describe("assembleReviewedTransaction", () => {
 				}
 			});
 
-			// Two descriptions of one output are one output. Adding both spends it twice.
 			test("one of the wallet's outputs selected more than once", async () => {
 				const spent = {
 					amount: "1000000",
@@ -1412,8 +1227,6 @@ describe("assembleReviewedTransaction", () => {
 				}
 			});
 
-			// A txid is thirty-two bytes, and the same bytes in two cases are one output. A
-			// check spelling its own key would let this through.
 			test("and the same output written in two cases", async () => {
 				const spent = {
 					amount: "1000000",
@@ -1432,14 +1245,6 @@ describe("assembleReviewedTransaction", () => {
 		});
 	});
 
-	/**
-	 * Which outputs hide what they carry, and which do not.
-	 *
-	 * The decision is the document's and was made while reading it; the builder has never read
-	 * the document. A key is passed for the outputs the review calls hidden and for no others —
-	 * passing one to an open output hides an amount the protocol published on purpose, and
-	 * withholding one from a hidden output publishes an amount it asked to keep.
-	 */
 	describe("blinding", () => {
 		const BLINDING_KEY = `02${"55".repeat(32)}`;
 		const hiddenAndOpen = {
@@ -1476,9 +1281,6 @@ describe("assembleReviewedTransaction", () => {
 			]);
 		});
 
-		// Deliberately open under the current design, so that the money comes back in a form the
-		// next contract action can be funded from. The review says so outright rather than this
-		// module assuming it.
 		test("passes no key for change the review returns in the open", async () => {
 			const { assemble, recorded } = subject({}, () => SIGNED, {
 				blindingPublicKeyHex: BLINDING_KEY,
@@ -1499,8 +1301,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.changes).toEqual([{ blindingKey: BLINDING_KEY, script: CHANGE_SCRIPT }]);
 		});
 
-		// Publishing an amount the protocol asked to keep cannot be taken back afterwards, so
-		// nothing is built at all rather than built in the open.
 		test("refuses a hidden output it was given no key for, building nothing", async () => {
 			const { assemble, recorded } = subject(hiddenAndOpen);
 

@@ -7,7 +7,6 @@ import { ConnectedDappItemView } from "./components/ConnectedDappItemView";
 
 const LIQUID_MAINNET = "bip122:1466275836220db2944ca059a3a10ef6";
 
-/** Holds the dapp's policy so the read toggles flip in isolation, like the container's mutation would. */
 function ConnectedDappItemStory({ initial }: { initial: ConnectedDappView }) {
 	const [dapp, setDapp] = useState<ConnectedDappView>(initial);
 
@@ -38,10 +37,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/**
- * An injected dapp with the whole method surface, so the story doubles as the full policy reference:
- * every read toggle (a mix of silent/asking) above every write locked to "Always asks".
- */
 export const Injected: Story = {
 	args: {
 		initial: {
@@ -81,7 +76,6 @@ export const Injected: Story = {
 	},
 };
 
-/** A WalletConnect dapp: no configurable policy, just the read-only note and Disconnect. */
 export const WalletConnect: Story = {
 	args: {
 		initial: {

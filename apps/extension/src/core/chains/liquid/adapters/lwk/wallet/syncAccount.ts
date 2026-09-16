@@ -8,11 +8,6 @@ import { loadLwkWasm } from "../loadLwkWasm";
 import { getSyncWorkerClient } from "../sync-worker/createSyncWorkerClient";
 import { getLwkImplementation } from "./getLwkImplementation";
 
-/**
- * Sync the account by running the heavy `fullScan` in a dedicated worker (off the
- * background thread) and applying the returned `Update` to this account's wollet. Only
- * the public descriptor is sent to the worker; private keys stay in the background.
- */
 export async function scanAccount(account: LiquidWalletAccount): Promise<void> {
 	const implementation = getLwkImplementation(account);
 

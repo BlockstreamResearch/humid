@@ -13,11 +13,6 @@ type Props = {
 	onDecline: () => void;
 };
 
-/**
- * The switch-chain approval. wallet_switchChain widens THIS origin's session to a chain the wallet
- * already knows but hasn't granted this connection yet — a per-connection scope expansion, so the
- * user consents to exposing this account on that chain to the dapp (mirrors the connect grant).
- */
 export function DappSwitchChainConfirmation({ data, onConfirm, onDecline }: Props) {
 	return (
 		<div className="bg-background text-foreground flex size-full flex-col">
@@ -53,7 +48,6 @@ export function DappSwitchChainConfirmation({ data, onConfirm, onDecline }: Prop
 	);
 }
 
-/** Plugs the switch-chain confirmation into the generic confirmation host (see ConfirmProvider). */
 export const dappSwitchChainConfirmationRenderer: ConfirmationRenderer = {
 	kind: DAPP_SWITCH_CHAIN_CONFIRMATION_KIND,
 	render: ({ onConfirm, onDecline, request }) =>

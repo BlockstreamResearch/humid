@@ -1,7 +1,3 @@
-// Storybook mock for "@/core/vault". Kept self-contained (no "@/core/vault/*"
-// imports) so a simple string alias can redirect the whole module without a
-// subpath conflict. `generateSeedMaterial` mirrors src/core/vault/secrets.ts.
-
 export type VaultStatus = {
 	accountCount?: number;
 	hasVault: boolean;
@@ -54,7 +50,6 @@ export function resetVaultMock() {
 
 function settle(): Promise<VaultStatus> {
 	if (config.behavior === "pending") {
-		// Stays pending forever so loading states remain visible in the story.
 		return new Promise<VaultStatus>(() => {});
 	}
 
@@ -86,10 +81,6 @@ export function resetVault(): Promise<VaultStatus> {
 	return settle();
 }
 
-// New wallet-vault client shape. Pages import `walletVaultClient` from
-// "@/core/secure-vault/application/wallet-vault/client"; this mock is aliased in
-// place of it so stories drive create/unlock/lock/reset via the config above
-// instead of the real pegasus/extension transport.
 export const walletVaultClient = {
 	create: createVault,
 	lock: lockVault,

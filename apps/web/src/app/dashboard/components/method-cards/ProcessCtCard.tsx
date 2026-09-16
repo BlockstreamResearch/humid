@@ -13,21 +13,8 @@ import { CheckboxField, SelectField, TextAreaField, TextField } from "../fields"
 import { ResultPanel } from "../ResultPanel";
 import { RpcCard } from "../RpcCard";
 
-/**
- * The published p2pk protocol, which is the thinnest real one: no deployment values, and a
- * single kind of holding. `Pay` locks funds into it; `Receive` spends one back out, which is
- * the half that exercises the address check against the network.
- */
 const ACTIONS = ["Pay", "Receive"];
 
-/**
- * An x-only public key, which is what the p2pk contract's PUB_KEY parameter is.
- *
- * Checked here rather than left to the wallet because the mistake this catches is the
- * obvious one — pasting an address, which is the other thing the wallet shows you — and
- * a request that leaves this page is answered by the contract compiler complaining about
- * a character position.
- */
 const X_ONLY_KEY = /^(?:0x)?[0-9a-fA-F]{64}$/;
 
 export function ProcessCtCard() {
@@ -53,9 +40,6 @@ export function ProcessCtCard() {
 				? "That is an address, not a key. Receive → Unconfidential shows both — this field wants the second one."
 				: `Not an x-only public key: ${pubkey.trim().length} characters, and 64 hexadecimal ones are needed.`;
 
-	// The six parts of the request, assembled here rather than typed by hand. The wallet
-	// rebuilds the contract from `contractSources` and checks it against the chain, so what
-	// this card supplies is exactly what a real protocol's site would supply.
 	const params = {
 		action,
 		broadcast,
@@ -84,9 +68,6 @@ export function ProcessCtCard() {
 				value={action}
 			/>
 
-			{/* One key signs every contract action, and it is not the one the wallet's ordinary
-			    receive screen shows. To spend what Pay locks, this must be the wallet's own
-			    contract key — HUMID → Receive → Unconfidential. */}
 			<TextField
 				label="Recipient x-only public key — for a spendable output, the wallet's own contract key"
 				onChange={setPubkey}

@@ -23,10 +23,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Per-account settings with rename + remove + forget-wallet actions available. */
 export const Default: Story = {};
 
-/** The wallet is the only one, so "Forget wallet" is hidden — you cannot forget your last wallet. */
 export const OnlyWallet: Story = {
 	args: { canForgetWallet: false },
 };

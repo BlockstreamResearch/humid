@@ -13,12 +13,6 @@ export type CreateInjectedRpcHandlersInput = {
 	authorization: DappAuthorization;
 };
 
-/**
- * Builds the injected (dapp-facing) handler map. The surface is CAIP-25 only:
- * dapps authorize with `wallet_createSession` and invoke chain methods through
- * `wallet_invokeMethod` (CAIP-27); raw chain methods are reachable only through
- * the authorization gate. Origin is resolved authentically per request.
- */
 export function createInjectedRpcHandlers({
 	authorization,
 }: CreateInjectedRpcHandlersInput): RequestHandlerMap {

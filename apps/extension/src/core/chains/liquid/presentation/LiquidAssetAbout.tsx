@@ -18,13 +18,6 @@ import { UiCopyButton } from "@/ui/UiCopyButton";
 import type { LiquidAssetMetadata } from "../domain/LiquidAsset";
 import { liquidExplorerAssetUrl } from "./liquidExplorerAssetUrl";
 
-/**
- * A Liquid asset's "About" details — its registry trust signal (verified / unverified + issuer
- * domain), on-chain identity (asset id, decimals), and a link out to the explorer. Rendered as the
- * body of the asset header's drawer, so it's frameless (the drawer supplies the title and frame) and
- * mirrors the tx detail sheet's divided-row list. The native policy asset (L-BTC) is always verified
- * and carries no issuer, so that row is omitted for it.
- */
 export function LiquidAssetAbout({
 	chain,
 	token,
@@ -96,7 +89,6 @@ export function LiquidAssetAbout({
 	);
 }
 
-/** One label/value line in the About list: a muted label on the left, the value trailing right. */
 function AboutRow({ children, label }: { children: ReactNode; label: string }) {
 	return (
 		<div className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">

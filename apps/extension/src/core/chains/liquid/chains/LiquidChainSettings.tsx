@@ -31,12 +31,6 @@ export type LiquidChainSettingsProps = {
 	onChange: (chain: LiquidChainRecord) => void;
 };
 
-/**
- * Editable settings for an existing Liquid chain: the backend (URL + Waterfalls flag,
- * headers, request tuning) and explorer, plus the policy asset for custom (regtest)
- * chains. The network kind is a chain's fixed identity and is chosen only when adding
- * (see LiquidChainCreate), never here.
- */
 export function LiquidChainSettings({ chain, onChange }: LiquidChainSettingsProps) {
 	const settings = chain.settings;
 	const backend = settings.backend;

@@ -25,12 +25,10 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Still settling on-chain: a pulsing amber dot. */
 export const Pending: Story = {
 	args: { status: "pending" },
 };
 
-/** Confirmed on-chain: an emerald checkmark. */
 export const Confirmed: Story = {
 	args: { status: "confirmed" },
 };

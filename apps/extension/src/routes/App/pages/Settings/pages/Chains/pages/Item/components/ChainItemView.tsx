@@ -15,10 +15,6 @@ type ChainItemViewProps = {
 	onSave: () => void;
 };
 
-/**
- * Per-chain settings shell: header + Save footer around the chain-provided settings
- * (`children`), plus a Remove action for custom (removable) chains.
- */
 export function ChainItemView({
 	children,
 	chainName,

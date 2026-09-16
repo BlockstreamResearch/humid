@@ -6,10 +6,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import FormatSupport from "./index";
 import { WHERE_IT_SITS } from "./positions";
 
-// The page's whole content is the runtime's own construct table, so what is checked here is
-// that all of it arrives, that what the wallet cannot do leads, and that every gap carries its
-// reason — the part no document can ever show, because no published protocol uses any of them.
-
 function render(): string {
 	return renderToStaticMarkup(<FormatSupport />);
 }
@@ -32,8 +28,6 @@ describe("what this wallet does not implement", () => {
 		}
 	});
 
-	// The count is what an engineer came for and the one thing that must not be written down by
-	// hand: a sentence saying "eight" survives a ninth being added.
 	test("counts what is missing from the table rather than from a sentence", () => {
 		const unimplemented = describeRegistry().filter((entry) => entry.state === "unimplemented");
 
@@ -67,8 +61,6 @@ describe("the whole table, not a sample of it", () => {
 });
 
 describe("the page stands alone", () => {
-	// It holds no wallet context and reads no document: every other surface in this app reads a
-	// wallet context, and reading a missing one would throw.
 	test("renders with no wallet, no provider, no network and nothing pasted", () => {
 		const html = render();
 

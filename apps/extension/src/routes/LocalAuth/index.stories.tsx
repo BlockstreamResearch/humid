@@ -23,10 +23,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Locked vault, waiting for the password. */
 export const Empty: Story = {};
 
-/** Password entered — ready to unlock. */
 export const Filled: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
@@ -36,7 +34,6 @@ export const Filled: Story = {
 	},
 };
 
-/** Unlocking is in flight. */
 export const Unlocking: Story = {
 	parameters: { vault: { behavior: "pending" } },
 	play: async ({ canvasElement }) => {
@@ -48,7 +45,6 @@ export const Unlocking: Story = {
 	},
 };
 
-/** Wrong password — unlock fails with an inline error. */
 export const UnlockError: Story = {
 	parameters: { vault: { behavior: "error", errorMessage: UNLOCK_ERROR } },
 	play: async ({ canvasElement }) => {
@@ -60,7 +56,6 @@ export const UnlockError: Story = {
 	},
 };
 
-/** Reset request returns a still-existing vault — the cancellation notice is shown. */
 export const ResetCancelled: Story = {
 	parameters: {
 		vault: { behavior: "success", status: { hasVault: true, isUnlocked: false } },

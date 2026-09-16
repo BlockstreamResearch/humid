@@ -5,12 +5,6 @@ import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/
 
 export type WalletConnectRelayStatus = "unknown" | "connected" | "disconnected";
 
-/**
- * Serve-from-cache hook for WalletConnect read methods: reads the persisted portfolio snapshot for
- * one account group + chain (null when none is cached). Mirrors the injected dapp path's
- * `ReadPortfolioSnapshot` exactly, so WalletConnect `getBalance`/`getUTXOs` serve from the snapshot on
- * a hit (working even while the vault is locked) and fall back to a live scan on a miss; never syncs.
- */
 export type WalletConnectReadPortfolioSnapshot = (
 	accountGroupId: string,
 	chainId: string,
@@ -33,15 +27,9 @@ export type WalletConnectSupportedNamespace = {
 export type WalletConnectSupportedNamespaces = Record<string, WalletConnectSupportedNamespace>;
 
 export type WalletConnectAdapterContext = {
-	/**
-	 * The session's approved scope for the request's namespace: its authorized `methods` and CAIP-10
-	 * `accounts`. The chain adapter binds execution to those accounts, mirroring the injected
-	 * CAIP-25/27 path. Absent when the session scope can't be resolved.
-	 */
 	approvedScope?: { accounts: readonly string[]; methods: readonly string[] };
 	confirm?: WalletConnectConfirmationHandler;
 	keyManagerState: KeyManagerState;
-	/** Optional serve-from-cache hook for read methods; absent → they fall back to a live scan. */
 	readPortfolioSnapshot?: WalletConnectReadPortfolioSnapshot;
 	updateKeyManagerState?: UpdateKeyManagerState;
 };

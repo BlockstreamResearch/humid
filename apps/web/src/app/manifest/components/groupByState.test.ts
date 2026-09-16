@@ -12,11 +12,6 @@ import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk.manifest.json";
 
 import { groupByState } from "./groupByState";
 
-// What each field is comes from the package and is tested there; the order a person meets them
-// in and how many rows that is are this surface's own decisions, and both are invisible when
-// wrong — a table still renders, with the handful of fields worth reading buried under hundreds
-// that are working.
-
 function report(
 	state: ConstructState,
 	key: string = state,
@@ -96,8 +91,6 @@ describe("one row per construct, not per position", () => {
 		]);
 	});
 
-	// The same key at two kinds of position is two constructs and can be in two states. Merging
-	// them by name alone would print one row whose state is whichever the loop met last.
 	test("keeps the same key apart when it sits at different kinds of position", () => {
 		const grouped = groupByState([
 			report("shown", "description", "action Pay", "action"),
@@ -118,9 +111,6 @@ describe("one row per construct, not per position", () => {
 	});
 });
 
-// Real numbers, taken from the published protocols rather than from a document written to make
-// the assertion pass. The second figure in each name is what a row per position would draw,
-// which is what makes the collapse worth having rather than a preference.
 describe("what the published protocols draw", () => {
 	test("the deployed lending protocol: 56 rows rather than 619", () => {
 		expect(rowsFor(lendingV3Manifest)).toBe(56);

@@ -23,14 +23,12 @@ import { useAsyncAction } from "./useAsyncAction";
 
 type OverlayProps = { open: boolean; onOpenChange: (open: boolean) => void };
 
-/** The capability flags a descriptor entry exposes, rendered as small badges. */
 const CAPABILITY_FLAGS: Array<{ key: keyof LiquidWalletDescriptorEntry; label: string }> = [
 	{ key: "canDeriveScriptPubKeys", label: "Derive scripts" },
 	{ key: "canDeriveConfidentialAddresses", label: "Derive addresses" },
 	{ key: "canUnblindOutputs", label: "Unblind outputs" },
 ];
 
-/** Read the approved public wallet descriptor(s) for the connected account; loads on open. */
 export function ViewAddressesSheet({ open, onOpenChange }: OverlayProps) {
 	const { wallet } = useHumidContext();
 	const action = useAsyncAction<LiquidGetWalletDescriptorResult>();
@@ -48,11 +46,9 @@ export function ViewAddressesSheet({ open, onOpenChange }: OverlayProps) {
 
 	const handleOpenChange = (next: boolean) => {
 		onOpenChange(next);
-		// Reset after the close animation so the list doesn't flash mid-exit.
 		if (!next) window.setTimeout(action.reset, 250);
 	};
 
-	// Fetch once when the sheet opens; a manual reload is available in the footer.
 	useEffect(() => {
 		if (open && action.status === "idle") void load();
 		// eslint-disable-next-line react-hooks/exhaustive-deps

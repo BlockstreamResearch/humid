@@ -18,9 +18,6 @@ export function getWalletUtxosForAsset(
 	const implementation = getLwkImplementation(account);
 
 	try {
-		// `readWalletUtxos` yields every wallet UTXO in base units; the shared mapping filters to the
-		// requested asset and stamps the CAIP `assetId` — the exact same mapping the snapshot serve
-		// path (`getUTXOs` method) uses, so the live and cached reads can never drift.
 		return mapLiquidUtxosForAsset(readWalletUtxos(implementation.wollet), {
 			assetId: toLiquidAssetId(account.chainId, rawAssetId),
 			rawAssetId,
@@ -38,13 +35,6 @@ export function getWalletUtxosForAsset(
 	}
 }
 
-/**
- * The wallet's unspent outputs that hide nothing, for the one path that can only spend those.
- *
- * Deliberately not folded into `getWalletUtxosForAsset`. That one answers the dapp-facing
- * `getUTXOs` and the portfolio snapshot, and both describe the wallet as the chain library
- * reports it; widening them would change an existing contract to fix a different problem.
- */
 export function getExplicitWalletUtxosForAsset(
 	account: LiquidWalletAccount,
 	rawAssetId: string,

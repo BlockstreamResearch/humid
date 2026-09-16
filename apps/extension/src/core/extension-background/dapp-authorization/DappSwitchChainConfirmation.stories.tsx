@@ -22,10 +22,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The switch-chain approval: the known chain being added to this origin's session. */
 export const Default: Story = {};
 
-/** Approving fires onConfirm so the chain is added to this connection's granted scope. */
 export const Approve: Story = {
 	play: async ({ args, canvasElement }) => {
 		const canvas = within(canvasElement);

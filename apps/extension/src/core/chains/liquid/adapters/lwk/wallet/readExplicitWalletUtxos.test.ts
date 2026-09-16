@@ -2,11 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import { readExplicitWalletUtxos } from "./readExplicitWalletUtxos";
 
-/**
- * A wallet built out of the shapes the chain library returns: each transaction reports which of
- * its outputs belong to the wallet and which of its inputs spent wallet outputs, and the raw
- * output says whether the amount is hidden.
- */
 type OutputSpec = {
 	amount: string;
 	blinded: boolean;
@@ -77,8 +72,6 @@ describe("the wallet's own outputs that hide nothing", () => {
 		});
 	});
 
-	// The ordinary read already reports these, and a wallet that counted them twice would
-	// believe it has more money than it does.
 	test("a blinded output is left to the ordinary read", () => {
 		const utxos = readExplicitWalletUtxos(
 			wollet([walletTx(A, [{ amount: "30000", blinded: true, height: 12, vout: 0 }])]),
@@ -102,8 +95,6 @@ describe("the wallet's own outputs that hide nothing", () => {
 		expect(utxos.map((utxo) => utxo.txid)).toEqual([B]);
 	});
 
-	// The spending transaction can be read before the one it spends from, and a reader that
-	// decided as it went would report an output it had already been told was gone.
 	test("order does not decide it", () => {
 		const utxos = readExplicitWalletUtxos(
 			wollet([
@@ -146,10 +137,6 @@ describe("the wallet's own outputs that hide nothing", () => {
 		expect(utxos[0]?.txOut).toBe(`txout:${A}:0`);
 	});
 
-	// The contract path signs every wallet input with one key, the account's first external
-	// address. An explicit output anywhere else in the range is money the wallet owns and
-	// cannot spend here, and offering it would buy a failure at signing — after the person
-	// approved — instead of a shortfall said plainly beforehand.
 	test("an explicit output the contract path cannot sign is not offered", () => {
 		const elsewhere = readExplicitWalletUtxos(
 			wollet([walletTx(A, [{ amount: "30000", blinded: false, height: 1, index: 4, vout: 0 }])]),

@@ -6,15 +6,6 @@ import type { TxOutAtOutPoint } from "../chain/chainRead";
 import { isRefusal, type ManifestReview, reviewManifestAction } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 
-/**
- * What the runtime makes of the parts of a document that state a value rather than carry one.
- *
- * Every case here goes through `reviewManifestAction`, because the question each asks is what
- * gets built rather than what some evaluator returns: an expression the runtime read and then
- * dropped, a default that overwrote a chosen value, or a hook whose second line could not see
- * its first, are all invisible from inside the module that got them right.
- */
-
 const SOURCE_PATH = "./p2pk.simf";
 const SOURCE = readFileSync(new URL("../__fixtures__/p2pk.simf", import.meta.url), "utf8");
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -37,14 +28,12 @@ const deps = {
 		amountSats: "50000",
 		rawAssetId: POLICY_ASSET,
 		scriptPubKeyHex: DERIVED_SCRIPT,
-		// The bytes a spend would carry to the builder, stated for the same reason the amount is.
 		txOutHex: `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`,
 	}),
 	scriptPubKeyOf: () => DERIVED_SCRIPT,
 	walletScriptPubKeyHex: WALLET_SCRIPT,
 };
 
-/** The published document with the Pay action edited, so each case differs in one thing. */
 function payDocument(edit: (pay: Record<string, unknown>) => void): Record<string, unknown> {
 	const copy = structuredClone(MANIFEST);
 	const pay = (copy.actions as Record<string, Record<string, unknown>>).Pay ?? {};
@@ -70,7 +59,6 @@ async function reviewPay(
 	);
 }
 
-/** The covenant output the Pay action funds, which is the one carrying a stated amount. */
 function paid(review: ManifestReview): bigint | undefined {
 	return review.outputs.find((output) => output.id === "p2pk_out")?.sats;
 }
@@ -92,9 +80,6 @@ describe("an amount the document works out rather than states", () => {
 		}
 	});
 
-	// The three edges the reference implementation inherits from a Rust crate this runtime does
-	// not use. Each of them silently produces a number if it is not checked, and a number
-	// nobody chose is exactly what an amount must never be.
 	test("refuses rather than wrapping when it leaves the 64-bit range", async () => {
 		const result = await reviewPay(
 			payDocument((pay) => {
@@ -167,9 +152,6 @@ describe("a rule the protocol states about its own action", () => {
 		}
 	});
 
-	// A rule this runtime cannot read is refused rather than skipped: a validation exists to
-	// stop a transaction its protocol considers invalid, so ignoring one permits exactly what
-	// it was written to prevent.
 	test("and refuses a kind of rule it cannot check at all", async () => {
 		const result = await reviewPay(
 			payDocument((pay) => {
@@ -222,8 +204,6 @@ describe("what fills a parameter nobody supplied", () => {
 		}
 	});
 
-	// The order is the whole of the rule, and getting it wrong is invisible from the value
-	// alone: a default and a supplied value are both perfectly good numbers.
 	test("but never over a value the request supplied, however the document fills it", async () => {
 		const document = payDocument((pay) => {
 			const params = pay.params as Record<string, Record<string, unknown>>;
@@ -295,9 +275,6 @@ describe("the assignments an action runs before anything is built", () => {
 		}
 	});
 
-	// The format says a later assignment may read an earlier one's result. Running them all
-	// against one frozen scope produces a different transaction for exactly this document, and
-	// nothing about the finished amount would say which reading had been used.
 	test("in the order the document writes them, each seeing the one before it", async () => {
 		const result = await reviewPay(
 			payDocument((pay) => {
@@ -347,9 +324,6 @@ describe("a position the document states for a piece of the transaction", () => 
 		expect(isRefusal(result)).toBe(false);
 	});
 
-	// A covenant reads positions, so a transaction built in another order is one the network
-	// rejects after it has been signed — which is the one failure a review exists to move
-	// earlier.
 	test("and refuses by name where the wallet would put it somewhere else", async () => {
 		const result = await reviewPay(
 			payDocument((pay) => {
@@ -372,8 +346,6 @@ describe("a position the document states for a piece of the transaction", () => 
 			payDocument((pay) => {
 				const outputs = pay.outputs as Record<string, unknown>[];
 
-				// Two outputs are built: the covenant and the change the module appends. The
-				// covenant is therefore both the first and the second from the end.
 				(outputs[0] ?? {}).required_index = -2;
 			}),
 		);
@@ -437,9 +409,6 @@ describe("what an action requires of an input beyond where its money comes from"
 		expect(isRefusal(result)).toBe(false);
 	});
 
-	// One sequence is set for the whole transaction, so a relative timelock would land on the
-	// wallet's own funding outputs too — against their age rather than this input's, which is a
-	// different transaction that fails on broadcast instead of here.
 	test("but a relative timelock refuses, because one sequence covers every input", async () => {
 		const result = await reviewPay(
 			payDocument((pay) => {

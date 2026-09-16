@@ -7,7 +7,6 @@ import type { RequestHandlerMap } from "../transport";
 import { DAPP_CONNECT_LIST_ACCOUNTS_METHOD, type DappConnectAccount } from "./connectConfirmation";
 import { dappAuthorizationErrors } from "./errors";
 
-/** Non-hidden account groups a dapp may connect to, ordered by their HD `groupIndex`. */
 export function listConnectableAccountGroups(
 	accountModel: AccountModelState,
 ): AccountGroupRecord[] {
@@ -16,7 +15,6 @@ export function listConnectableAccountGroups(
 		.toSorted((left, right) => (left.groupIndex ?? 0) - (right.groupIndex ?? 0));
 }
 
-/** The wallet's currently selected account group id, or undefined when none is resolvable. */
 export function trySelectedAccountGroupId(
 	registry: AccountRegistry,
 	accountModel: AccountModelState,
@@ -28,7 +26,6 @@ export function trySelectedAccountGroupId(
 	}
 }
 
-/** The account list the connect modal renders: each group + whether it is current / already connected. */
 export function buildDappConnectAccounts(
 	accountModel: AccountModelState,
 	registry: AccountRegistry,
@@ -45,10 +42,6 @@ export function buildDappConnectAccounts(
 	}));
 }
 
-/**
- * Account groups the origin's active injected session already grants. The connect modal pre-checks
- * these on a reconnect so a user's previously-authorized accounts aren't silently dropped.
- */
 export function connectedAccountGroupIdsForOrigin(
 	registry: AccountRegistry,
 	accountModel: AccountModelState,
@@ -63,11 +56,6 @@ export function connectedAccountGroupIdsForOrigin(
 	return session ? [...session.scope.accountGroupIds] : [];
 }
 
-/**
- * Popup-facing handler for {@link DAPP_CONNECT_LIST_ACCOUNTS_METHOD}: the connect modal calls it
- * after unlocking a locked wallet to load the selectable accounts. Never reachable from a dapp
- * (the transport routes injected senders to a separate registry).
- */
 export function createDappConnectInternalHandlers(dependencies: {
 	getAccountModel: () => AccountModelState | null;
 	registry: AccountRegistry;

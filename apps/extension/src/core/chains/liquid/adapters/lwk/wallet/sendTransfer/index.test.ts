@@ -1,13 +1,6 @@
 // oxlint-disable no-extraneous-class -- this stands in for a chain-library class the real code constructs with new; a function would not be substitutable for it
 import { describe, expect, mock, test } from "bun:test";
 
-/**
- * Which builder call a recipient gets, and nothing else.
- *
- * The substitutes hold themselves to the chain library's own rule — the ordinary recipient path
- * refuses an address with no blinding key, and the explicit path refuses one that has it — so a
- * branch chosen wrongly here fails the way it would fail in a browser rather than passing green.
- */
 type Recorded = { calls: string[] };
 
 const recorded: Recorded = { calls: [] };
@@ -42,7 +35,7 @@ function makeBuilder() {
 			return builder;
 		},
 		drainLbtcTo() {
-			recorded.calls.push("drain");
+			recorded.calls.push("sendAll");
 
 			return builder;
 		},
@@ -101,7 +94,6 @@ const account = {
 	rawPolicyAssetId: POLICY,
 } as never;
 
-/** An asset that is not the network's own, so the issued-asset branches can be reached. */
 const TOKEN = "b".repeat(64);
 
 async function send(overrides: Record<string, unknown> = {}, rawAssetId = POLICY) {
@@ -122,8 +114,6 @@ describe("which builder call a recipient gets", () => {
 		expect(recorded.calls).toEqual(["lbtc:5000"]);
 	});
 
-	// Without this the wallet cannot pay an explicit output at all, and a contract action can
-	// only spend an explicit one — so nobody could fund one, including from their own wallet.
 	test("an unconfidential recipient takes the explicit path", async () => {
 		blinded = false;
 
@@ -138,9 +128,6 @@ describe("which builder call a recipient gets", () => {
 		expect(recorded.calls).toEqual(["asset:5000"]);
 	});
 
-	// One call takes either asset, because it is told which one. A protocol's own token has to
-	// be payable to an unconfidential address for the same reason the network's own does: a
-	// covenant reads exact amounts and cannot introspect a commitment.
 	test("an unconfidential recipient of an issued asset takes the same explicit path", async () => {
 		blinded = false;
 
@@ -148,13 +135,13 @@ describe("which builder call a recipient gets", () => {
 		expect(recorded.calls).toEqual(["explicit:5000"]);
 	});
 
-	test("draining takes the address as it is, either way", async () => {
+	test("sending all takes the address as it is, either way", async () => {
 		blinded = false;
 		await send({ sendAll: true });
-		expect(recorded.calls).toEqual(["drain"]);
+		expect(recorded.calls).toEqual(["sendAll"]);
 
 		blinded = true;
 		await send({ sendAll: true });
-		expect(recorded.calls).toEqual(["drain"]);
+		expect(recorded.calls).toEqual(["sendAll"]);
 	});
 });

@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { UiCopyButton } from "./UiCopyButton";
 
-/** A reusable button-ish shell so the trigger reads as an actual control in isolation. */
 const TRIGGER_CLASS =
 	"inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-accent";
 
@@ -27,22 +26,18 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The built-in look: a copy icon + the default "Copy" label, swapping to a checkmark + "Copied". */
 export const Default: Story = {};
 
-/** The built-in look with a custom label. */
 export const CustomLabel: Story = {
 	args: { label: "Copy address" },
 };
 
-/** A verbatim node child — rendered as-is, with no copied-state affordance of its own. */
 export const NodeChildren: Story = {
 	args: {
 		children: <span className="text-primary font-medium underline">Copy transaction id</span>,
 	},
 };
 
-/** A function child that reads the transient `copied` flag to swap its own content. */
 export const RenderChildren: Story = {
 	args: {
 		children: (copied: boolean) => (
@@ -53,7 +48,6 @@ export const RenderChildren: Story = {
 	},
 };
 
-/** A long value: the click still copies the whole string; only the label is shown. */
 export const LongValue: Story = {
 	args: {
 		label: "Copy descriptor",

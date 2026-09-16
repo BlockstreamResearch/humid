@@ -10,18 +10,10 @@ export type RevokeAccountFromDappSessionInput = {
 
 export type RevokeAccountFromDappSessionResult = {
 	accountModel: AccountModelState;
-	/** True when the session existed and had granted this account group. */
 	revoked: boolean;
-	/** True when removing the account emptied the session's account set, so it was deleted entirely. */
 	sessionRemoved: boolean;
 };
 
-/**
- * Drop one authorized account group from a dapp session's scope — the per-account "disconnect" a
- * user triggers from the popup. When it was the session's last account the grant is empty, so the
- * whole session is deleted (a full disconnect for that origin). No-op (revoked:false) when the
- * session is unknown or never granted that account.
- */
 export function revokeAccountFromDappSession(
 	input: RevokeAccountFromDappSessionInput,
 ): RevokeAccountFromDappSessionResult {

@@ -1,15 +1,3 @@
-/**
- * Is the wasm the build will bundle the wasm that was last compiled?
- *
- * `smplx-wasm` is a `file:` dependency, and the installer hard-links its JavaScript glue while
- * copying the module itself. So a rebuilt artifact reaches the bundle half-updated: the glue
- * carries the new signatures and the module carries the old code, which ignores every argument
- * the old signature did not have. Nothing fails — the call is made, the extra values are
- * dropped, and the wallet builds a different contract than the one it verified.
- *
- * That cost an afternoon once. This makes it a one-line failure instead.
- */
-
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

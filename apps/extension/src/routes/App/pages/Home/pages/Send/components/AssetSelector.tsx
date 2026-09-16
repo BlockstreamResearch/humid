@@ -20,10 +20,6 @@ function AssetGlyph({ symbol }: { symbol: string }) {
 	);
 }
 
-/**
- * Asset picker for the Send form. With a single sendable asset (the common L-BTC-only case) it
- * renders a static row; with more than one it becomes a dropdown over the account's held assets.
- */
 export function AssetSelector({
 	assets,
 	onSelect,

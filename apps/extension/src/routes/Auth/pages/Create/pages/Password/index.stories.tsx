@@ -19,7 +19,6 @@ async function fillPasswords(canvasElement: HTMLElement, password: string, confi
 const meta = {
 	title: "Pages/Auth/Create/Step 2 Password",
 	component: AuthCreatePasswordPage,
-	// Root material must already exist in context, otherwise the page redirects back to step 1.
 	decorators: [
 		(Story) => (
 			<AuthCreateProvider initialSeedMaterial={SAMPLE_SEED_MATERIAL}>
@@ -35,10 +34,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Initial state: empty form, "Create vault" disabled. */
 export const Empty: Story = {};
 
-/** Both fields match and meet the length requirement — submit is enabled. */
 export const Valid: Story = {
 	play: async ({ canvasElement }) => {
 		await fillPasswords(canvasElement, "super-secret-pass", "super-secret-pass");
@@ -48,7 +45,6 @@ export const Valid: Story = {
 	},
 };
 
-/** Confirmation does not match the password. */
 export const Mismatch: Story = {
 	play: async ({ canvasElement }) => {
 		await fillPasswords(canvasElement, "super-secret-pass", "different-pass");
@@ -58,7 +54,6 @@ export const Mismatch: Story = {
 	},
 };
 
-/** Password shorter than the 8-character minimum. */
 export const TooShort: Story = {
 	play: async ({ canvasElement }) => {
 		await fillPasswords(canvasElement, "short", "short");
@@ -70,7 +65,6 @@ export const TooShort: Story = {
 	},
 };
 
-/** Submission in flight — the vault request never resolves. */
 export const Submitting: Story = {
 	parameters: { vault: { behavior: "pending" } },
 	play: async ({ canvasElement }) => {
@@ -82,7 +76,6 @@ export const Submitting: Story = {
 	},
 };
 
-/** The vault request fails and the error is shown. */
 export const SubmitError: Story = {
 	parameters: { vault: { behavior: "error", errorMessage: CREATE_ERROR } },
 	play: async ({ canvasElement }) => {

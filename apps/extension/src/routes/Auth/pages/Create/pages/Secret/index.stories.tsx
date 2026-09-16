@@ -24,10 +24,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Create tab: a fresh BIP-39 recovery phrase is generated and shown for backup. */
 export const Create: Story = {};
 
-/** Import tab: an empty 12-word grid ready for manual entry or paste-to-fill. */
 export const Import: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);

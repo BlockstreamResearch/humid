@@ -14,10 +14,6 @@ import {
 } from "./liquidStoryFixtures";
 import { LiquidTxDetailSheet } from "./LiquidTxDetailSheet";
 
-/**
- * The sheet is controlled by `item` (non-null opens it). The harness starts open so the drawer is
- * visible on load, and wires a trigger button so it can be re-opened after closing.
- */
 function DetailSheetHarness({
 	chain,
 	decimals,
@@ -72,22 +68,18 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** A confirmed send: signed amount, "Confirmed" status, and the network fee. */
 export const ConfirmedSent: Story = {
 	args: { item: confirmedSent },
 };
 
-/** A confirmed receive. */
 export const ConfirmedReceived: Story = {
 	args: { item: confirmedReceived },
 };
 
-/** An optimistic pending send: the amber "Pending" status and an unknown ("—") fee. */
 export const PendingSent: Story = {
 	args: { item: pendingSent },
 };
 
-/** With no explorer configured, the "view on explorer" button is omitted. */
 export const NoExplorer: Story = {
 	args: { chain: mockLiquidChainNoExplorer, item: confirmedSent },
 };

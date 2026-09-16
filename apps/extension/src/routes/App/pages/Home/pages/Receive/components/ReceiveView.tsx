@@ -20,7 +20,6 @@ import { UiTooltip, UiTooltipContent, UiTooltipProvider, UiTooltipTrigger } from
 const CONFIDENTIAL_TAB = "confidential";
 const UNCONFIDENTIAL_TAB = "unconfidential";
 
-/** A label and the sentence that says what the value under it is for. */
 function LabelWithHint({ hint, label }: { hint: string; label: string }) {
 	return (
 		<div className="flex items-center justify-center gap-1.5">
@@ -40,7 +39,6 @@ function LabelWithHint({ hint, label }: { hint: string; label: string }) {
 	);
 }
 
-/** One address as a QR, its own text, and a way to take it out. */
 function AddressPanel({ address, hint, label }: { address: string; hint: string; label: string }) {
 	return (
 		<div className="flex flex-col items-center gap-4">
@@ -67,7 +65,6 @@ function AddressPanel({ address, hint, label }: { address: string; hint: string;
 	);
 }
 
-/** A value that is not an address: shown as text, with the same label and hint treatment. */
 function ValueRow({ hint, label, value }: { hint: string; label: string; value: string }) {
 	return (
 		<div className="border-border/60 flex w-full flex-col items-center gap-2 border-t pt-4">
@@ -88,25 +85,6 @@ function ValueRow({ hint, label, value }: { hint: string; label: string; value: 
 	);
 }
 
-/**
- * Presentational Receive screen.
- *
- * Two addresses rather than one, because this wallet has two and they are not
- * interchangeable. The confidential one is blinded and moves along the descriptor; the
- * unconfidential one is unblinded and fixed at the first external index, and is the only
- * one a contract action can be funded from. Money paid to the first cannot pay for one,
- * which is a thing to learn before a faucet payment rather than after.
- *
- * They are named for what they are rather than for what they are used for: the difference
- * that decides which one to pay is blinding and derivation, and a reader who knows that
- * needs no product word for it.
- *
- * The unconfidential address is read only once its tab is opened: answering loads the
- * contract module, which is several megabytes, and most visits here only want an address.
- *
- * The page owns its own scroll, per the app shell's contract — the shell bounds the region
- * and pins the footer beneath it, so anything taller than the popup has to scroll here.
- */
 export function ReceiveView({
 	address,
 	accountName,

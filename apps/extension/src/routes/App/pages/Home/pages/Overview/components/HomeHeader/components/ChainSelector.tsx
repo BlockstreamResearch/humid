@@ -26,7 +26,6 @@ function ChainDot({ chainId }: { chainId: string }) {
 	);
 }
 
-/** Chain switcher — renders every chain in the store; no chain-specific logic. */
 export function ChainSelector() {
 	const { chain, chains, selectChain } = useHome();
 

@@ -12,14 +12,8 @@ import { useSelectedAccount } from "./hooks/useSelectedAccount";
 
 export type HomeContextValue = ReturnType<typeof useHomeValue>;
 
-// Exported so Storybook/tests can inject a mock value (see ./mock).
 export const HomeContext = createContext<HomeContextValue | null>(null);
 
-/**
- * Provides the home area's main data. Resolves the account and chain axes from the
- * background and handles their load state here (loading / error), like the reference
- * `ProjectRouteProvider`, before the value is assembled.
- */
 export function HomeProvider({ children }: PropsWithChildren) {
 	const chains = useChains();
 	const accounts = useSelectedAccount();

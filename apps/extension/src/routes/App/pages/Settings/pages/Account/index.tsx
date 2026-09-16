@@ -10,10 +10,6 @@ import { UiSpinner } from "@/ui/UiSpinner";
 import { AccountDetailView } from "./components/AccountDetailView";
 import { Route } from "./route";
 
-/**
- * Per-account settings (container): resolves the account from the route param and wires
- * rename + remove. Unknown ids fall back to the settings root; removal returns there.
- */
 export function SettingsAccountPage() {
 	const { accountGroupId } = Route.useParams();
 	const navigate = useNavigate();
@@ -32,8 +28,6 @@ export function SettingsAccountPage() {
 
 	if (!account) return <Navigate replace to="/app/settings" />;
 
-	// Forgetting a wallet destroys its seed, so it is only offered when another wallet survives it —
-	// mirroring the backend's last-wallet guard (a surviving group = a group under a different wallet).
 	const canForgetWallet = accounts.accountGroups.some(
 		(group) => group.walletId !== account.walletId,
 	);

@@ -3,11 +3,6 @@ import { describe, expect, test } from "bun:test";
 import { normaliseManifest } from "./normalise";
 import { describeConstructs, describeRegistry, inspectConstructs } from "./registry";
 
-// The table is what every refusal about a construct is decided by, and it is now also what two
-// pages are drawn from. What has to hold is that the two readings are the same reading: a
-// construct that refuses and a construct that is reported cannot disagree, because a table that
-// says one thing to a wallet and another to a developer is worse than no table.
-
 const normalise = (raw: Record<string, unknown>) => normaliseManifest(raw).manifest;
 
 describe("what the runtime registers, with no document in hand", () => {
@@ -26,8 +21,6 @@ describe("what the runtime registers, with no document in hand", () => {
 		expect(describeRegistry().some((entry) => entry.state === "unrecognised")).toBe(false);
 	});
 
-	// The two keys any JSON document may carry at any depth are answered once rather than listed
-	// at every position, so they are the entries with no position of their own.
 	test("carries the keys answered at every position with no position", () => {
 		const everywhere = describeRegistry().filter((entry) => entry.site === undefined);
 
@@ -56,8 +49,6 @@ describe("what one document declares, read from the same table", () => {
 		]);
 	});
 
-	// The same finding, twice, from the two readers. A construct that refuses and is not
-	// reported — or is reported as working — is the drift this shares a traversal to prevent.
 	test("agrees with the refusal reader about what is unhandled", () => {
 		const manifest = normalise({ actions: { Pay: { args: {} } }, nobody_lists_this: 1 });
 		const unhandled = describeConstructs(manifest).filter(

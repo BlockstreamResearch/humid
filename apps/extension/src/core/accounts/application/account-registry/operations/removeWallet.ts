@@ -16,17 +16,6 @@ export type RemoveWalletResult = {
 	removedAccountGroupIds: AccountGroupId[];
 };
 
-/**
- * Removes a whole wallet from the account model — the exact inverse of `importSeedWallet`. It deletes
- * every account group of the wallet (with their materialized chain accounts + addresses), the wallet
- * record, and its key source. The plaintext seed lives in the key manager's `secretMaterials`, keyed
- * by the returned `keySourceId`, so the caller (`removeWalletFromKeyManagerState`) purges it there.
- *
- * Guard: forgetting a wallet destroys its seed, so this refuses to forget the last remaining wallet —
- * that would leave the vault with zero accounts and no way back in. (Removing a single account is the
- * separate, guarded `removeAccountGroup` flow; this is its whole-wallet counterpart.) Reassigns the
- * selected group when it pointed at a removed one. Chain-agnostic — no signing or chain specifics.
- */
 export function removeWallet(input: RemoveWalletInput): RemoveWalletResult {
 	const wallet = input.accountModel.wallets[input.walletId];
 
@@ -51,8 +40,6 @@ export function removeWallet(input: RemoveWalletInput): RemoveWalletResult {
 	const chainAccounts = { ...input.accountModel.chainAccounts };
 	const addresses = { ...input.accountModel.addresses };
 
-	// Thread the dapp-session prune across every removed group: each pass strips that group (and its
-	// chain accounts) from any session it was authorized in, deleting sessions left with no account.
 	let dappSessionsModel = input.accountModel;
 
 	for (const accountGroupId of removedAccountGroupIds) {
@@ -94,11 +81,6 @@ export function removeWallet(input: RemoveWalletInput): RemoveWalletResult {
 	};
 }
 
-/**
- * When the forgotten wallet held the selected group, fall to the surviving group with the lowest
- * `groupIndex` (ties broken by creation order) — deterministic and stable with how the account list
- * is ordered. The guard above guarantees at least one survivor, so this always resolves.
- */
 function pickFallbackSelectedGroupId(survivingGroups: AccountGroupRecord[]): AccountGroupId {
 	const [fallback] = survivingGroups.toSorted(
 		(left, right) =>

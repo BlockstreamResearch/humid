@@ -13,16 +13,6 @@ const bindings = smplxWasmBindings as unknown as SmplxWasmBindings;
 
 let smplxWasmInitializePromise: Promise<void> | null = null;
 
-/**
- * Loads the Simplex SDK wasm module, initializing it once per execution context.
- *
- * Deliberately mirrors `loadLwkWasm`: same streaming-with-fallback instantiation and the
- * same wasm-bindgen start handshake, because both modules are produced the same way and a
- * second shape here would be a difference nobody could explain later.
- *
- * Unlike lwk, this module needs no network, so it can be initialized in any context the
- * extension runs in rather than only where a `window` exists.
- */
 export async function loadSmplxWasm(): Promise<SmplxWasmModule> {
 	smplxWasmInitializePromise ??= initializeSmplxWasm();
 

@@ -10,7 +10,6 @@ import type {
 	ScanInput,
 } from "./createWorkerScanClient";
 
-/** Discriminator so only the offscreen document (not other extension contexts) handles these. */
 export const OFFSCREEN_SCAN_TARGET = "liquid-offscreen-scan";
 
 export type OffscreenScanMessage =
@@ -61,8 +60,6 @@ export function isOffscreenScanMessage(value: unknown): value is OffscreenScanMe
 	);
 }
 
-// runtime messaging serializes as JSON (not structured clone), so the scan's Update bytes have
-// to cross the SW↔offscreen boundary as base64 rather than a raw Uint8Array.
 export function bytesToBase64(bytes: Uint8Array): string {
 	let binary = "";
 	const chunkSize = 0x8000;

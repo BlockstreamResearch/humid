@@ -7,10 +7,6 @@ export type FindDappSessionInput = {
 	transport: DappSessionTransport;
 };
 
-/**
- * Returns the active (non-expired) session for an origin on a transport, or null.
- * When several match, the most recently updated one wins.
- */
 export function findDappSession(
 	accountModel: AccountModelState,
 	input: FindDappSessionInput,

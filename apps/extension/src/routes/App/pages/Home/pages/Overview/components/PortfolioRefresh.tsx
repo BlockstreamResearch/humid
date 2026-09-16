@@ -8,15 +8,8 @@ import { usePortfolioRefresh } from "@/routes/App/pages/Home/HomeContext/hooks/u
 import { cn } from "@/theme/utils.ts";
 import { UiButton } from "@/ui/UiButton/base";
 
-/** How often to re-tick the "Updated Xm ago" label so it ages without a fresh sync. */
 const FRESHNESS_TICK_MS = 30_000;
 
-/**
- * Portfolio freshness row under the balance headline: a relative "Updated Xm ago" label plus a
- * manual refresh button that force-syncs the selected account (bypassing the engine throttle). The
- * button disables and spins while a refresh is in flight, so mashing it can't queue extra scans; the
- * label ticks on an interval so it ages between syncs.
- */
 export function PortfolioRefresh() {
 	const { accountGroup, chain, portfolio } = useHome();
 	const { isRefreshing, refresh } = usePortfolioRefresh({

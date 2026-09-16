@@ -7,75 +7,26 @@ import {
 } from "./normalise";
 import { namedUtxoTypes } from "./sites";
 
-/**
- * The shapes a reference can take.
- *
- * These are not variations on a syntax; they are different lookups that happen to be written as
- * strings. `instance` is this deployment's field values, `params` and `args` are the request's,
- * `bare` is whichever of the last two has the name, and `input-attribute` is something about a
- * transaction input the wallet would have had to read the chain to know.
- *
- * `input-attribute` names something about a transaction input that only the wallet can know:
- * what the chain reported at the outpoint it spends, or — where the input issues an asset —
- * what that issuance turned out to create. It resolves against inputs this action already
- * resolved and against nothing else, so a name for an input that was never resolved is
- * refused as the lookup it is rather than falling through to something that happens to
- * resolve.
- */
 export type ReferenceForm = "args" | "bare" | "input-attribute" | "instance" | "params";
 
 export type ParsedReference = {
-	/** The attribute being read, for the input-attribute form. */
 	attribute?: string;
-	/** Whether the document used a spelling the format has deprecated. */
 	deprecated?: boolean;
 	form: ReferenceForm;
-	/** The name being looked up. */
 	name: string;
 };
 
-/**
- * What a reference can be resolved against.
- *
- * Everything is optional except the request's parameters, because a reference resolves against
- * whatever exists at the moment it is asked, and saying "there is no deployment to read that
- * from" is more useful than resolving it to zero.
- */
 export type ReferenceScope = {
 	args?: Record<string, unknown>;
-	/**
-	 * What the wallet established about each named input, keyed by the manifest's id.
-	 *
-	 * Written by the review as each input resolves rather than supplied by a caller: an
-	 * input's asset and amount are things the wallet read or derived, and a caller holding
-	 * them would be telling the wallet what it just worked out.
-	 */
 	inputs?: Record<string, Record<string, unknown>>;
-	/** This deployment's field values. */
 	instance?: Record<string, unknown>;
 	params: Record<string, unknown>;
 };
 
-/**
- * The value and how it was found — and deliberately nothing about how it was spelled.
- *
- * Two documents writing one lookup in two accepted spellings must be indistinguishable to
- * everything downstream, so a deprecation marker cannot ride on the result. That a deprecated
- * spelling was used is recorded on the notes channel instead, where it informs a reader without
- * changing a value.
- */
 export type ReferenceResolution =
 	| { form: ReferenceForm; ok: true; value: unknown }
 	| { ok: false; reason: string };
 
-/**
- * A position in a manifest where a reference may appear, and the forms it accepts there.
- *
- * This is the cornerstone: a reference means what its position says it may mean, not what its
- * text looks like. The same string is a legitimate compile parameter in one place and nonsense
- * in another, and the difference is not detectable from the string. Listing the accepted forms
- * per site makes the wrong ones unrepresentable rather than a mistake to be caught downstream.
- */
 export type ReferenceSiteKind =
 	| "amount"
 	| "asset"
@@ -87,77 +38,39 @@ export type ReferenceSiteKind =
 	| "witnessValue";
 
 const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: string }> = {
-	/** An output's amount, or an input's minimum. */
 	amount: {
 		accepts: ["instance", "params", "args", "input-attribute", "bare"],
 		describes: "an amount",
 	},
-	/**
-	 * The asset an input or output carries.
-	 *
-	 * Every form the corpus writes at this position: this deployment's fields, the request's
-	 * parameters and arguments, a bare name, and an attribute of an input the wallet already
-	 * resolved — `payout_in.asset`, which says "the same asset that one arrived in" without
-	 * naming it.
-	 */
 	asset: {
 		accepts: ["instance", "params", "args", "input-attribute", "bare"],
 		describes: "an asset",
 	},
-	/** A value compiled into a contract, which therefore decides its address. */
 	compileParam: {
 		accepts: ["instance", "params", "args", "bare"],
 		describes: "a compile parameter",
 	},
-	/** Where an output pays, when it names a parameter rather than a keyword. */
 	destination: { accepts: ["params"], describes: "a destination" },
-	/**
-	 * One term of an expression: a validation's condition, a computed parameter, a hook's value.
-	 *
-	 * The widest position there is, because an expression is written wherever a value can be
-	 * worked out rather than stated, and every form the narrower positions accept somewhere is
-	 * accepted here. It is still a position rather than a hole: a term illegal here is refused
-	 * as a position error rather than as arithmetic.
-	 */
 	expression: {
 		accepts: ["instance", "params", "args", "input-attribute", "bare"],
 		describes: "an expression",
 	},
-	/**
-	 * How many units an issuance creates, which is not an amount anyone pays.
-	 *
-	 * An attribute of a resolved input is absent because the issuance is what makes that
-	 * input's asset what it is, so reading one here would be reading the answer out of the
-	 * question.
-	 */
 	issuedAmount: {
 		accepts: ["instance", "params", "args", "bare"],
 		describes: "an issued amount",
 	},
-	/** The key a witness is produced from, and the address an input must be funded from. */
 	witnessKey: {
 		accepts: ["instance", "params", "args", "bare"],
 		describes: "a witness key",
 	},
-	/**
-	 * A name appearing inside the typed value a witness states.
-	 *
-	 * An attribute of a resolved input is absent because no published protocol reads one here,
-	 * and admitting a form nothing exercises is admitting one nothing checks. A bare name is
-	 * absent because the language's own words — `Left`, `Right`, `u32` — are bare names, and a
-	 * position that resolved them would rewrite the branch the document chose.
-	 */
 	witnessValue: {
 		accepts: ["instance", "params", "args"],
 		describes: "part of a witness value",
 	},
 };
 
-/** The namespaces a prefixed reference can name, and what each canonically resolves as. */
 const NAMESPACES: Record<string, { deprecated: boolean; form: ReferenceForm }> = {
 	args: { deprecated: false, form: "args" },
-	// The format is mid-rename from compile_params. to instance.; both are live in the corpus,
-	// and one manifest generation writes each. They are the same lookup.
 	compile_params: { deprecated: true, form: "instance" },
 	instance: { deprecated: false, form: "instance" },
 	params: { deprecated: false, form: "params" },
@@ -166,13 +79,6 @@ const NAMESPACES: Record<string, { deprecated: boolean; form: ReferenceForm }> =
 const NAME = "[A-Za-z_][A-Za-z0-9_]*";
 const REFERENCE = new RegExp(`^\\$?(?<head>${NAME})(?:\\.(?<tail>${NAME}))?$`);
 
-/**
- * Reads one reference, or reports that the text is not one.
- *
- * Deliberately not an expression parser: `params.a + 1` is an expression whose terms happen to
- * include a reference, and evaluating it belongs to the slice that owns arithmetic. This returns
- * nothing for it rather than resolving the first term and losing the rest.
- */
 export function parseReference(text: string): ParsedReference | undefined {
 	const match = REFERENCE.exec(text.trim());
 	const head = match?.groups?.head;
@@ -197,21 +103,9 @@ export function parseReference(text: string): ParsedReference | undefined {
 		};
 	}
 
-	// Anything else with one dot names an input and an attribute of it — `amount_sat`, `asset`,
-	// or something the wallet derived by reading the chain at that input's outpoint.
 	return { attribute: tail, form: "input-attribute", name: head };
 }
 
-/**
- * Resolves one reference at one site.
- *
- * A refusal names both the text and what was wrong with it, because the reader of that message
- * is a person deciding whether to trust a site, not the author of the manifest.
- *
- * `notes` collects the deprecated spellings encountered. It is optional because most callers
- * only want the value; a caller building something a person will read passes one so the
- * document's generation can be reported.
- */
 export function resolveReference(
 	text: string,
 	site: ReferenceSiteKind,
@@ -247,9 +141,6 @@ function lookUp(
 			return read(scope.args, reference.name, "args");
 		}
 
-		// Tried as a parameter first and then as an argument, which is the order the format's own
-		// reference implementation uses. An unqualified word is ambiguous by design: the format
-		// offers no way to say which of the two was meant.
 		case "bare": {
 			if (reference.name in scope.params) {
 				return { ok: true, value: scope.params[reference.name] };
@@ -304,31 +195,14 @@ function read(
 	return { ok: true, value: source[name] };
 }
 
-/** One reference the runtime found, and the position that says what it may mean. */
 export type ReferenceOccurrence = {
-	/** Where it is, in the document's own terms. */
 	at: string;
 	site: ReferenceSiteKind;
 	text: string;
 };
 
-/** Destination words that are keywords rather than references. */
 const DESTINATION_KEYWORDS = new Set(["change", "wallet"]);
 
-/**
- * Every reference an action reaches, with the site each one sits at.
- *
- * This is the enumeration the rest of the runtime asks instead of searching a document for
- * reference-shaped text. The difference is not tidiness: a search finds `params.pubkey` inside a
- * description and treats it as a reference, and misses one at a position it did not think to
- * look. Positions are declared here once.
- *
- * The positions listed are the ones this slice resolves — a covenant's compile wiring at both
- * places it can be written, an output's amount, and an output's destination — together with the
- * fields of a deployment an action creates, which are read at the compile-parameter position
- * because that is what they are compiled into. A position this runtime does not yet read is
- * absent rather than guessed at, and anything reading one is refused where it is reached.
- */
 export function actionReferences(
 	manifest: NormalisedManifest,
 	action: NormalisedAction,
@@ -370,8 +244,6 @@ export function actionReferences(
 		}
 	}
 
-	// The fields of the deployment this action creates, which are values it compiles covenants
-	// from — including a tapleaf's own wiring, written as an object carrying the reference.
 	for (const [name, value] of Object.entries(
 		asRecord(asRecord(action.node.create_instance)?.fields) ?? {},
 	)) {
@@ -388,8 +260,6 @@ export function actionReferences(
 		}
 	}
 
-	// A covenant's parameters can also be wired on the utxo type itself rather than at the site
-	// that names it, so the types this action reaches are part of its reference surface.
 	for (const name of namedUtxoTypes(action.node)) {
 		addWiring(
 			`utxo type ${name} / script`,
@@ -400,34 +270,6 @@ export function actionReferences(
 	return found;
 }
 
-/**
- * Every place the action reads the field values of a deployment it did not create.
- *
- * Two kinds of reading, and leaving out either would ask a site for the wrong thing. The first is
- * a reference that names the deployment outright — `instance.X`, or the deprecated
- * `compile_params.X` spelling of it. The second is the one the corpus actually writes most:
- * `{"ASSET_B": "ASSET_B"}`, a bare name at a compile-parameter position, which means the
- * request's own parameter where the request supplied one and the deployment's field where it did
- * not.
- *
- * **A bare name counts only where the class declares a field of that name.** The compile-parameter
- * position is also where a document writes a bare *value* — `{"WITH_BURN": "false"}`, `{"SLOT_COUNT":
- * "2"}` — and `false` is a perfectly well-formed name. Nothing about the text tells the two apart;
- * only the compiler can, and it is not asked until much later. What the document itself says is
- * enough: a name the class declares as a field is a field, and a name it declares nowhere is a
- * value. Reading it the other way asks a site for a deployment file to answer the word `false`.
- *
- * What the request already filled is subtracted for the same reason — a name it supplied is not a
- * reading of anything else. So is a field the constructor's own new deployment declares, and that
- * subtraction applies to **both** spellings rather than only to the bare one: a constructor that
- * works out a covenant hash and then wires `instance.HASH` into the covenant it creates is naming
- * the deployment it is in the middle of writing, and there is no earlier file that could hold it.
- *
- * Returned rather than reduced to a flag because a free action reaching for a deployment is a
- * document that cannot be satisfied rather than a request that is short a file: fields belong to a
- * class, and an action declared outside one has no deployment to read. Naming the positions is
- * what lets that be said rather than merely detected.
- */
 export function instanceReferences(
 	manifest: NormalisedManifest,
 	action: NormalisedAction,
@@ -441,11 +283,6 @@ export function instanceReferences(
 	return actionReferences(manifest, action).filter((occurrence) => {
 		const reference = parseReference(occurrence.text);
 
-		// A field this very action creates is answered by the deployment it is creating, whichever
-		// way the document spells the reading. A constructor works out a covenant hash and then
-		// wires the covenant it creates to `instance.HASH` — naming the deployment it is in the
-		// middle of writing, not one that came before it — so counting that as a read would demand
-		// a file for a value nothing else could have held.
 		if (reference === undefined || created.has(reference.name)) {
 			return false;
 		}

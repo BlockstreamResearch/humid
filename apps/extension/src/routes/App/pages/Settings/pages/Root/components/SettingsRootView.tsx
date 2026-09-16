@@ -17,7 +17,6 @@ import { UiBadge } from "@/ui/UiBadge";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiScrollArea } from "@/ui/UiScrollArea";
 
-// Idle auto-lock choices shown in Settings (must mirror AUTO_LOCK_MINUTES_OPTIONS on the backend).
 const AUTO_LOCK_OPTIONS: { label: string; minutes: number }[] = [
 	{ label: "5 minutes", minutes: 5 },
 	{ label: "15 minutes", minutes: 15 },
@@ -36,7 +35,6 @@ type SettingsRootViewProps = {
 	selectedAccountGroupId: AccountGroupId | null;
 };
 
-/** Settings landing: general vault actions + the account list (switch / drill in). */
 export function SettingsRootView({
 	accountGroups,
 	autoLockMinutes,
@@ -147,8 +145,6 @@ function AccountRow({
 	onSwitch: (accountGroupId: AccountGroupId) => void;
 	selected: boolean;
 }) {
-	// Only wallets added via the Import flow carry `imported`; the onboarding wallet is
-	// always "generated", so the primary account is never badged as imported.
 	const isImported = group.metadata?.imported === true;
 
 	return (
@@ -185,7 +181,6 @@ function AccountRow({
 	);
 }
 
-/** A settings row for a not-yet-available action (no backend / pending a decision). */
 function DisabledRow({
 	icon,
 	label,

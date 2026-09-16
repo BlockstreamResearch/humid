@@ -17,5 +17,4 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Entry screen shown when no local vault exists yet. */
 export const Default: Story = {};

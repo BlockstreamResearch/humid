@@ -28,11 +28,6 @@ type SendFormProps = {
 	selectedAsset: SendableAsset | null;
 };
 
-/**
- * Step 1 of the Send flow: recipient, amount (human units), and asset. Validation state (non-empty
- * recipient + positive, representable amount) is computed by the container and passed as `canContinue`;
- * this view only collects input and hands "Continue" back up to trigger the preview.
- */
 export function SendForm({
 	amount,
 	assets,

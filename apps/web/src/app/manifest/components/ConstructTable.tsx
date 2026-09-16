@@ -4,12 +4,6 @@ import { Badge } from "@/components/ui/badge";
 
 import { type ConstructGroup, groupByState } from "./groupByState";
 
-/**
- * What each state means, in the words a protocol author would use.
- *
- * The state names are the runtime's; these sentences are what a person reading the table
- * actually needs, and they say what happens rather than what the field is called.
- */
 const MEANING: Record<ConstructState, { badge: BadgeVariant; sentence: string }> = {
 	"acted-on": { badge: "default", sentence: "Read, and it changes what gets signed." },
 	"never-read": {
@@ -29,17 +23,6 @@ const MEANING: Record<ConstructState, { badge: BadgeVariant; sentence: string }>
 
 type BadgeVariant = "default" | "destructive" | "ghost" | "secondary";
 
-/**
- * Every construct this document declares, once each, against what the runtime does with it.
- *
- * One row per construct rather than per position, because a key genuinely recurs — dozens of
- * places in a deployed protocol — and a row per place is hundreds of rows saying a few dozen
- * things. The places are still all here, under the row that counts them.
- *
- * The two states that mean nothing is wrong open collapsed. That is the whole of what was
- * unreadable: not that the information was present, but that hundreds of rows of "this field
- * works" came before the ones that said anything else.
- */
 export function ConstructTable({ constructs }: { constructs: ConstructReport[] }) {
 	if (constructs.length === 0) {
 		return <p className="text-muted-foreground text-sm">This document declares no fields.</p>;
@@ -102,11 +85,6 @@ function Rows({ group }: { group: ConstructGroup }) {
 	);
 }
 
-/**
- * Where one construct sits, said as a place when there is one and as a count when there are
- * many. The places themselves follow underneath either way, so the count is a headline rather
- * than a substitute.
- */
 function whereOf(row: { at: string[] }): string {
 	if (row.at.length === 1) {
 		return row.at[0] ?? "";
@@ -115,13 +93,6 @@ function whereOf(row: { at: string[] }): string {
 	return `${row.at.length} positions`;
 }
 
-/**
- * How much this group holds, said before it is opened.
- *
- * A collapsed group whose size is unknown is a page hiding something; a collapsed group that
- * says how many constructs and how many positions it holds is a page that has already answered
- * the only question the reader had about it.
- */
 function countOf(group: ConstructGroup): string {
 	const positions = group.rows.reduce((total, row) => total + row.at.length, 0);
 	const constructs = `${group.rows.length} ${group.rows.length === 1 ? "field" : "fields"}`;

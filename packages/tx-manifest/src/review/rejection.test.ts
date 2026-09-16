@@ -6,18 +6,6 @@ import type { TxOutAtOutPoint } from "../chain/chainRead";
 import { isRefusal, type RejectToken, reviewManifestAction } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 
-/**
- * Every refusal arrives with a name a program can branch on, beside the sentence a person
- * reads.
- *
- * The two are different audiences and neither substitutes for the other. A site told only
- * "this wallet cannot do that" cannot tell a document it must rewrite from a state file it
- * must refresh, and a person told only `unproducible-witness` has been told nothing. So both
- * are asserted here, and the token is asserted through the public seam rather than against
- * the table that produces it — a token no refusal actually carries is a vocabulary rather
- * than an answer.
- */
-
 const SOURCE_PATH = "./p2pk.simf";
 const SOURCE = readFileSync(new URL("../__fixtures__/p2pk.simf", import.meta.url), "utf8");
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -48,7 +36,6 @@ const chainHolding = (scriptPubKeyHex: string) => async (): Promise<TxOutAtOutPo
 	amountSats: "50000",
 	rawAssetId: POLICY_ASSET,
 	scriptPubKeyHex,
-	// The bytes a spend would carry to the builder, stated for the same reason the amount is.
 	txOutHex: `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`,
 });
 
@@ -65,7 +52,6 @@ function request(
 	};
 }
 
-/** The published document with one path edited, so each case differs in exactly one thing. */
 function edited(edit: (manifest: Record<string, unknown>) => void): Record<string, unknown> {
 	const copy = structuredClone(MANIFEST);
 
@@ -142,9 +128,6 @@ describe("every refusal carries a name as well as a reason", () => {
 		expect(refusal?.reason).toContain("sacrifice_to");
 	});
 
-	// Read, and shown, and deciding nothing. A document carrying one is not a document this
-	// wallet has only partly read, so it is built rather than refused — which is the whole
-	// reason the table records why a key is unread rather than only that it is.
 	test("but not a construct that is known and decides nothing", async () => {
 		const result = await reviewManifestAction(
 			request({
@@ -240,9 +223,6 @@ describe("every refusal carries a name as well as a reason", () => {
 		expect(refusal?.reject).toBe("no-fee-rate");
 	});
 
-	// An asset the document names as a lookup and nothing resolves. This wallet funds an action
-	// asset by asset, so which asset is being moved is a question about money rather than about
-	// the document — and not knowing what is being paid in is exactly the moment not to pay.
 	test("an asset the wallet could not establish", async () => {
 		const refusal = await refusalOf({
 			manifest: edited((manifest) => {
@@ -255,10 +235,6 @@ describe("every refusal carries a name as well as a reason", () => {
 		expect(refusal?.reject).toBe("foreign-asset");
 	});
 
-	// A reader that returns rather than throws has still not necessarily answered. Each of these
-	// reaches the headroom the wallet over-selects by, which converts the rate to a whole number
-	// of base units — and converting any of them throws out of the review entirely, so a caller
-	// promised a refusal would get an exception instead.
 	for (const [what, rate] of [
 		["a fee rate that is not a number", Number.NaN],
 		["a fee rate with no upper bound", Number.POSITIVE_INFINITY],
@@ -272,10 +248,6 @@ describe("every refusal carries a name as well as a reason", () => {
 		});
 	}
 
-	// Zero is not in that set and is deliberately allowed: a node with no traffic really does
-	// answer zero, the arithmetic is sound at it, and what it produces is a transaction that
-	// over-selects by nothing — a shortfall named as one if it does not fit, rather than a
-	// refusal for a rate the network genuinely quoted.
 	test("but a fee rate of zero is a rate, and is built at", async () => {
 		const result = await reviewManifestAction(request(), {
 			...deps,
@@ -297,15 +269,6 @@ describe("every refusal carries a name as well as a reason", () => {
 	});
 });
 
-/**
- * Declarations a document makes and this runtime cannot read.
- *
- * Every case here would once have read as a declaration that was not there — a rule nothing
- * checked, a hook that set nothing, a position nobody honoured — and none of them says that.
- * Each has to come back as a refusal rather than as a transaction built from half a document,
- * and none may throw: a caller promised a `ReviewRefusal` gets one or the contract is not a
- * contract.
- */
 describe("a declaration this runtime cannot read is refused, never passed over", () => {
 	const cases: {
 		edit: (pay: Record<string, unknown>) => void;
@@ -447,9 +410,6 @@ describe("a declaration this runtime cannot read is refused, never passed over",
 
 			expect(refusal?.reject).toBe(reject);
 
-			// Where the token alone would not tell the two apart. A position this runtime cannot
-			// read and one it read and could not honour are both `unbuildable-position`, and only
-			// the sentence says which happened.
 			if (says !== undefined) {
 				expect(refusal?.reason).toContain(says);
 			}
@@ -458,9 +418,6 @@ describe("a declaration this runtime cannot read is refused, never passed over",
 });
 
 describe("what the chain reader says an output holds", () => {
-	// The reader is the wallet's own and what it hands back is text. An empty string converts
-	// to zero, a hexadecimal one to a number in a base nobody meant, and a fraction throws — out
-	// of a function whose whole contract is to answer with a refusal instead.
 	for (const amountSats of [
 		"",
 		"0x2710",

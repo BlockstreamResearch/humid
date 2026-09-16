@@ -4,11 +4,9 @@ import type { ComponentProps, ReactNode } from "react";
 
 type Icon = ComponentProps<typeof HugeiconsIcon>["icon"];
 
-/** Shared layout for a settings row; the caller wraps it in a button / Link / div. */
 export const settingsRowClass =
 	"flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors";
 
-/** Row body: leading icon, label, and a trailing slot (defaults to a chevron). */
 export function SettingsRowContent({
 	icon,
 	label,
@@ -33,7 +31,6 @@ export function SettingsRowContent({
 	);
 }
 
-/** Trailing badge for a row whose action has no backend yet / is pending a decision. */
 export function SettingsRowSoon() {
 	return (
 		<span className="text-muted-foreground rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">

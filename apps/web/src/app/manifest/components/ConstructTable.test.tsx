@@ -5,10 +5,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { ConstructTable } from "./ConstructTable";
 
-// The five states and the positions come from the package and are tested there; what is checked
-// here is that a reader is shown the state, the field, where it sits, how many places that is,
-// and — the part a state name alone does not carry — what that state means for them.
-
 function report(
 	state: ConstructState,
 	key: string = state,
@@ -82,9 +78,6 @@ describe("a key that recurs draws one row", () => {
 });
 
 describe("what is working opens closed", () => {
-	// Not hidden and not dropped: the count is visible without clicking and the rows are one
-	// click away. What is removed is meeting hundreds of rows that say a field works before
-	// reaching the few that say anything else.
 	test("puts the states that mean nothing is wrong behind a disclosure", () => {
 		const html = render([report("acted-on", "chain"), report("shown", "description")]);
 

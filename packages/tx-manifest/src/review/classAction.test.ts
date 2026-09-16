@@ -8,20 +8,6 @@ import groupedVaultlet from "../__fixtures__/vaultlet.manifest.json";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { isRefusal, reviewManifestAction } from "./index";
 
-/**
- * An action declared inside a class, reviewed end to end — both halves of what that means.
- *
- * A class method reads the field values of one deployment and derives its covenant from them; a
- * constructor has no deployment to read, so it works one out — covenant script hashes and all —
- * and derives from what it worked out. Before either was possible, an action inside a class was
- * not found at all, and one that was found had no name in its wiring that could be resolved.
- *
- * The contracts are compiled by a substitute. This package holds no compiler by design: a wallet
- * supplies one, and what a real one makes of these arguments is the adapter's own question. What
- * is checked here is what the compiler is asked for and what the review reports having
- * established.
- */
-
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const ASSET_STATED = `a0${"00".repeat(30)}0a`;
 const ASSET_COMMITTED = `0a${"00".repeat(30)}a0`;
@@ -33,21 +19,7 @@ const DERIVED_SCRIPT = `5120${"11".repeat(32)}`;
 const ELSEWHERE_SCRIPT = `5120${"22".repeat(32)}`;
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 
-/**
- * What the chain reports a spent covenant holds, beside where it pays.
- *
- * Stated rather than omitted because a covenant output on this network cannot be confidential
- * and still work — a Simplicity program reads exact amounts through jets that cannot
- * introspect a commitment — so a reader that left these out would stand in for something no
- * legitimate deployment produces, and the review refuses it rather than assuming a balance.
- */
 const COVENANT_TXOUT = `01${"aa".repeat(32)}010000000000000064000022${"00".repeat(34)}`;
-/**
- * The covenant output exactly as a chain read hands it back.
- *
- * Stated rather than left out because a covenant spend carries these bytes to the builder, and
- * a reader that omitted them would be standing in for one no wallet ships.
- */
 const COVENANT_HOLDING = {
 	amountSats: "50000",
 	rawAssetId: POLICY_ASSET,
@@ -61,10 +33,8 @@ const SOURCES = Object.fromEntries(
 	]),
 );
 
-/** What the vault contract declares about the two parameters the document writes as values. */
 const DECLARED = { SLOT_COUNT: "u8", WITH_BURN: "bool" };
 
-/** This deployment's field values, in the nested shape a current tool writes. */
 const DEPLOYMENT = {
 	instance: {
 		class: "vaultlet_contract",
@@ -117,7 +87,7 @@ function review(
 
 					return { address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT };
 				},
-				contractParamTypes: () => DECLARED,
+				covenantParamTypes: () => DECLARED,
 				fundingUtxos: FUNDING,
 				network: "liquid",
 				policyAsset: POLICY_ASSET,
@@ -174,11 +144,6 @@ describe("a class method against a deployment that exists", () => {
 		expect(isRefusal(reviewed) ? undefined : reviewed.boundTo).toBe("vaultlet_contract");
 	});
 
-	/**
-	 * Every value in this covenant's wiring is a bare name, and every one of them is a field of
-	 * the deployment rather than a parameter of the action — which declares none. The types come
-	 * from the class's own field declarations, which is the only place they are stated.
-	 */
 	test("rebuilds its covenant from the deployment's own fields, at the class's declared types", async () => {
 		const { compiled, result } = review(withdraw(groupedVaultlet));
 
@@ -213,12 +178,6 @@ describe("a class method against a deployment that exists", () => {
 		]);
 	});
 
-	/**
-	 * The review carries the derivation itself rather than the fact that one happened. Anything
-	 * that goes on to spend this covenant rebuilds it from exactly what was verified here;
-	 * resolving the request a second time would be a second answer to the same question, and
-	 * nothing downstream could tell the two apart.
-	 */
 	test("carries out what it compiled with, so nothing has to resolve the references again", async () => {
 		const { compiled, result } = review(withdraw(groupedVaultlet));
 		const reviewed = await result;
@@ -236,11 +195,6 @@ describe("a class method against a deployment that exists", () => {
 		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain("not the contract the site");
 	});
 
-	/**
-	 * A method belongs to a class and therefore to a deployment. Refused before anything is
-	 * compiled, naming the part of the request that was absent rather than failing later on a
-	 * name nobody could resolve.
-	 */
 	test("refuses without the deployment file, naming it", async () => {
 		const { compiled, result } = review({ ...withdraw(groupedVaultlet), instance: undefined });
 		const reviewed = await result;
@@ -249,7 +203,6 @@ describe("a class method against a deployment that exists", () => {
 		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain(
 			"is a method of vaultlet_contract",
 		);
-		// Named by position, so a person can see which readings needed it.
 		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain(
 			"utxo type vault / script / RESERVE_COV_HASH",
 		);
@@ -261,8 +214,6 @@ describe("a class method against a deployment that exists", () => {
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed) ? [] : reviewed.outputs).toEqual([
-			// An output paid to this wallet is not change, so the format's own order decides it —
-			// and on this network silence means hidden.
 			{
 				asset: POLICY_ASSET,
 				blinded: true,
@@ -291,9 +242,6 @@ describe("the constructor of the same class", () => {
 		expect(reviewed.createdInstance?.rounds).toBe(3);
 	});
 
-	// A field the document works out rather than states: the format writes arithmetic and a
-	// literal into the same slot, and a runtime that recorded the arithmetic as its own text
-	// would compile the covenant against the string rather than the number.
 	test("works out a field the document computes rather than recording its text", async () => {
 		const document = structuredClone(groupedVaultlet) as Record<string, unknown>;
 		const classes = document.classes as Record<string, { methods: Record<string, unknown> }>;
@@ -312,9 +260,6 @@ describe("the constructor of the same class", () => {
 		}
 	});
 
-	// The other half of the same rule, and the one that keeps it safe: a literal is left
-	// exactly as written. Thirty-two zero bytes is a perfectly good expression that evaluates
-	// to `0`, which is a different value at every position that compiles it.
 	test("and leaves a literal alone, however much it looks like arithmetic", async () => {
 		const { result } = review(openVault(groupedVaultlet));
 		const reviewed = await result;
@@ -324,18 +269,12 @@ describe("the constructor of the same class", () => {
 		);
 	});
 
-	/**
-	 * What a person is shown for a contract with no history. Not "unverified", which is what a
-	 * check that failed would be, and not "verified", which would claim a comparison nobody could
-	 * make: the wallet derived the address itself from the deployment it just worked out, and that
-	 * is a different fact rather than a weaker one.
-	 */
 	test("reports the covenant it creates as one with nothing yet to compare against", async () => {
 		const { result } = review(openVault(groupedVaultlet));
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed) ? [] : reviewed.covenants.map((found) => found.verified)).toEqual([
-			"not-yet-on-chain",
+			"not-yet-onchain",
 		]);
 	});
 
@@ -351,7 +290,7 @@ describe("the constructor of the same class", () => {
 			{
 				accountLabel: "liquid:testnet account 0",
 				compile: () => ({ address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT }),
-				contractParamTypes: () => DECLARED,
+				covenantParamTypes: () => DECLARED,
 				fundingUtxos: FUNDING,
 				network: "liquid",
 				policyAsset: POLICY_ASSET,
@@ -369,10 +308,6 @@ describe("the constructor of the same class", () => {
 		expect(asked).toBe(0);
 	});
 
-	/**
-	 * The covenant it creates is built from the deployment it just worked out, not from the
-	 * request — `RESERVE_COV_HASH` is a value no request could have supplied.
-	 */
 	test("derives the covenant it creates from the deployment it worked out", async () => {
 		const { compiled, result } = review(openVault(groupedVaultlet));
 		const reviewed = await result;
@@ -399,16 +334,10 @@ describe("the constructor of the same class", () => {
 	});
 });
 
-/**
- * The same protocol, published in the generation before its container was renamed. Both are in
- * the corpus and both locate real money, so a runtime that read one and refused the other would
- * be refusing against funds that are demonstrably there.
- */
 describe("both generations of the same document", () => {
 	test("review a class method identically", async () => {
 		const grouped = review(withdraw(groupedVaultlet));
 		const current = review(withdraw(currentVaultlet));
-		// Everything but the spellings each recorded, which are the one thing that must differ.
 		const { normalisation: _grouped, ...groupedReview } = (await grouped.result) as Record<
 			string,
 			unknown
@@ -431,7 +360,6 @@ describe("both generations of the same document", () => {
 		);
 	});
 
-	/** The value each was read as is the same; which spelling it was written in is still said. */
 	test("differ only in the spellings each records having rewritten", async () => {
 		const grouped = await review(withdraw(groupedVaultlet)).result;
 
@@ -444,11 +372,6 @@ describe("both generations of the same document", () => {
 });
 
 describe("what a review still refuses", () => {
-	/**
-	 * A set of covenant hashes with no order to compile them in has no value to settle on.
-	 * Refused rather than built from the last round, which would be an address nobody checked —
-	 * and this one is an address the transaction would pay to.
-	 */
 	test("a deployment whose covenant hashes never settle", async () => {
 		const { compiled, result } = review({
 			action: "Knot",
@@ -496,14 +419,6 @@ describe("what a review still refuses", () => {
 	});
 });
 
-/**
- * The mode a protocol says its contracts were built in, followed rather than assumed.
- *
- * It changes the commitment merkle root, so the same document with and without it describes
- * covenants at two different addresses, and both compile. A wallet ignoring it would derive a
- * well-formed address for a contract nobody deployed, then refuse against the money that is
- * actually there and report that the site had lied.
- */
 describe("the build mode a document declares", () => {
 	test("reaches the compiler for an ordinary derivation", async () => {
 		const plain = review(withdraw(groupedVaultlet));
@@ -551,10 +466,6 @@ describe("the build mode a document declares", () => {
 		);
 	});
 
-	/**
-	 * There is no third mode to build in. Refused before anything is compiled, because picking one
-	 * would be this wallet deciding what the protocol meant about an address.
-	 */
 	test("a mode that cannot be read refuses before any contract is compiled", async () => {
 		const { compiled, result } = review({
 			action: "Withdraw",
@@ -573,15 +484,6 @@ describe("the build mode a document declares", () => {
 	});
 });
 
-/**
- * What the review hands on about a covenant is everything the covenant was built from.
- *
- * A module that spends this covenant compiles the contract again to satisfy it. A compile that
- * differs in the source, the parameters, the leaves or the mode produces a different script, which
- * the covenant's own execution rejects — after a person has approved a transaction the wallet had
- * already checked. So all four travel, and the source travels as text: a path is a key into a
- * request, and asking the request again is the second resolution this exists to prevent.
- */
 describe("the derivation the review carries out", () => {
 	test("is everything the covenant was compiled from, with nothing left to look up", async () => {
 		const { compiled, result } = review(withdraw(groupedVaultlet));
@@ -607,10 +509,6 @@ describe("the derivation the review carries out", () => {
 		});
 	});
 
-	/**
-	 * Recompiling from the finding alone reproduces the same script. That is the property the
-	 * finding exists for: nothing downstream reaches back into the request.
-	 */
 	test("recompiles to the same script without the request", async () => {
 		const { compiled, result } = review(withdraw(groupedVaultlet));
 		const reviewed = await result;
@@ -641,11 +539,6 @@ describe("the derivation the review carries out", () => {
 	});
 });
 
-/**
- * A compiler failing is a refusal, never a rejected promise. The review runs before the permission
- * gate, so a caller that sees an exception here cannot tell a wallet that declined from a wallet
- * that broke, and has nothing to show the person either way.
- */
 describe("when the hash compiler fails", () => {
 	test("a compiler that throws becomes a refusal naming the field", async () => {
 		const { result } = review(openVault(groupedVaultlet), {
@@ -667,7 +560,6 @@ describe("when the hash compiler fails", () => {
 		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain("not bytes");
 	});
 
-	/** The same, for the compiler that derives an address rather than a hash. */
 	test("a covenant compiler that throws becomes a refusal naming the contract", async () => {
 		const reviewed = await reviewManifestAction(
 			{
@@ -681,7 +573,7 @@ describe("when the hash compiler fails", () => {
 				compile: () => {
 					throw new Error("wasm module not loaded");
 				},
-				contractParamTypes: () => DECLARED,
+				covenantParamTypes: () => DECLARED,
 				fundingUtxos: FUNDING,
 				network: "liquid",
 				policyAsset: POLICY_ASSET,

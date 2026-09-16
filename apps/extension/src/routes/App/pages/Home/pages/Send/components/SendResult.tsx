@@ -6,10 +6,6 @@ import { cn } from "@/theme/utils.ts";
 import { UiButtonVariants } from "@/ui/UiButton/base";
 import { UiCopyButton } from "@/ui/UiCopyButton";
 
-/**
- * Step 3 of the Send flow: the broadcast succeeded. Shows the txid (copyable) and, when the chain
- * exposes an explorer URL, a "view on explorer" link. "Done" returns to the home overview.
- */
 export function SendResult({ explorerUrl, txid }: { explorerUrl: string | null; txid: string }) {
 	return (
 		<div className="flex size-full min-h-0 flex-col">

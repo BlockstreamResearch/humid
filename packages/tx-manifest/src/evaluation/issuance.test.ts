@@ -18,8 +18,6 @@ describe("the issuance an input declares", () => {
 });
 
 describe("what this wallet will mint", () => {
-	// The whole capability: a new issuance of an explicit, positive amount, with no
-	// reissuance token minted alongside it.
 	test("a new asset, derived from the very output the input spends", () => {
 		const result = resolve({ asset_amount_sat: 1000, kind: "new" });
 		const derived = deriveNewIssuance(OUTPOINT);
@@ -46,7 +44,6 @@ describe("what this wallet will mint", () => {
 		expect(result.ok ? result.issuance.assetAmountSats : 0n).toBe(21n);
 	});
 
-	// Base units stay exact end to end; a double rounds past 2^53.
 	test("and keeps a supply beyond a double's range exact", () => {
 		const result = resolve(
 			{ asset_amount_sat: "params.supply", kind: "new" },
@@ -56,8 +53,6 @@ describe("what this wallet will mint", () => {
 		expect(result.ok ? result.issuance.assetAmountSats : 0n).toBe(9_007_199_254_740_993n);
 	});
 
-	// Moving the issuance to another output mints a different asset, which is the whole
-	// reason the outpoint is settled before anything else.
 	test("changing the output it derives from changes the asset", () => {
 		const here = resolve({ asset_amount_sat: 1, kind: "new" });
 		const there = resolveIssuance(
@@ -74,12 +69,6 @@ describe("what this wallet will mint", () => {
 });
 
 describe("what it will not mint, and says so rather than modelling", () => {
-	/**
-	 * A reissuance mints an asset that already exists, so it is derived from the entropy the
-	 * first issuance left behind rather than from anything in this transaction — and that
-	 * entropy reaches a request nowhere. Deriving it from this input's outpoint instead would
-	 * mint a different asset under the protocol's name.
-	 */
 	test("a reissuance, because it has nothing to derive the asset from", () => {
 		const result = resolve({ asset_amount_sat: 1000, kind: "reissue" });
 
@@ -92,12 +81,6 @@ describe("what it will not mint, and says so rather than modelling", () => {
 		}
 	});
 
-	/**
-	 * Liquid requires a reissuance token to be held confidentially, and this path builds
-	 * transactions whose values are all explicit — a covenant cannot introspect a blinded
-	 * value, which is why the whole path is explicit. Minting one anyway produces a token
-	 * nobody can spend.
-	 */
 	test("a reissuance token, because it would have to be confidential to be spendable", () => {
 		const result = resolve({ asset_amount_sat: 1000, inflation_amount_sat: 1, kind: "new" });
 
@@ -109,7 +92,6 @@ describe("what it will not mint, and says so rather than modelling", () => {
 		}
 	});
 
-	// Zero is the case this wallet does run, and it is not the same as one.
 	test("but a stated zero of them is the ordinary case and is built", () => {
 		expect(resolve({ asset_amount_sat: 1000, inflation_amount_sat: 0, kind: "new" }).ok).toBe(true);
 	});
@@ -154,12 +136,6 @@ describe("what it will not mint, and says so rather than modelling", () => {
 	});
 });
 
-/**
- * An issuing input's `asset` is what it creates, not what the output it spends held.
- *
- * That is the whole reason a protocol writes the name: an action that mints a token and pays
- * it out has no other way to say which asset the output pays in.
- */
 describe("what an issuance says about itself, for a later name to read", () => {
 	test("the asset it creates and the token that would reissue it", () => {
 		const result = resolve({ asset_amount_sat: 1000, kind: "new" });

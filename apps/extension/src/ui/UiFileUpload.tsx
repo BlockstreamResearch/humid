@@ -27,15 +27,12 @@ function buildAcceptObject(acceptedFileTypes?: string[]) {
 
 	acceptedFileTypes.forEach((type) => {
 		if (type.startsWith(".")) {
-			// Collect extensions to map to their MIME types
 			extensions.push(type);
 		} else {
-			// Already a MIME type
 			acceptObject[type] = [];
 		}
 	});
 
-	// Map common extensions to MIME types
 	if (extensions.length > 0) {
 		const extensionToMime: Record<string, string> = {
 			".png": "image/png",
@@ -87,55 +84,6 @@ function formatAcceptedTypes(acceptedFileTypes?: string[]): string {
 	return `Accepted file types: ${formatted}`;
 }
 
-/**
- * File upload component with drag & drop support, file type and size validation
- *
- * @example
- * // Allow all file types with default 50MB limit
- * <UiFileUpload files={files} onFilesChange={setFiles} />
- *
- * @example
- * // Accept only images with custom max size
- * <UiFileUpload
- *   files={files}
- *   onFilesChange={setFiles}
- *   acceptedFileTypes={['image/*']}
- *   maxFileSize={10 * 1024 * 1024} // 10MB
- * />
- *
- * @example
- * // Accept specific image formats
- * <UiFileUpload
- *   files={files}
- *   onFilesChange={setFiles}
- *   acceptedFileTypes={['.png', '.jpg', '.jpeg', '.gif']}
- * />
- *
- * @example
- * // Accept PDFs and Word documents
- * <UiFileUpload
- *   files={files}
- *   onFilesChange={setFiles}
- *   acceptedFileTypes={['application/pdf', '.doc', '.docx']}
- * />
- *
- * @example
- * // Mix of MIME types and extensions
- * <UiFileUpload
- *   files={files}
- *   onFilesChange={setFiles}
- *   acceptedFileTypes={['image/*', 'application/pdf', '.txt']}
- *   maxFileSize={100 * 1024 * 1024} // 100MB
- * />
- *
- * @example
- * // Disabled state
- * <UiFileUpload
- *   files={files}
- *   onFilesChange={setFiles}
- *   disabled={true}
- * />
- */
 export default function UiFileUpload({
 	files,
 	onFilesChange,

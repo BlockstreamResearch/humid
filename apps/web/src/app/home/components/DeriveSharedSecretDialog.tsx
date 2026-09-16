@@ -24,7 +24,6 @@ import { useAsyncAction } from "./useAsyncAction";
 
 type OverlayProps = { open: boolean; onOpenChange: (open: boolean) => void };
 
-/** Derive a SLIP-0017 shared secret (ECDH → HKDF-SHA256) against a peer's public key. */
 export function DeriveSharedSecretDialog({ open, onOpenChange }: OverlayProps) {
 	const { wallet } = useHumidContext();
 	const [identity, setIdentity] = useState(DEFAULT_IDENTITY_URI);
