@@ -3,10 +3,20 @@ import {
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
 
-import type { LiquidUtxoSnapshot } from "../../../application/backends/LiquidWalletBackend";
+import type {
+	LiquidBlindingSecrets,
+	LiquidUtxoSnapshot,
+} from "../../../application/backends/LiquidWalletBackend";
 import type { LwkWasmModule } from "../loadLwkWasm";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
+
+type LwkTxOutSecrets = {
+	asset: () => { toString: () => string };
+	assetBlindingFactor: () => { toString: () => string };
+	value: () => bigint;
+	valueBlindingFactor: () => { toString: () => string };
+};
 
 type LwkTxOutView = {
 	isPartiallyBlinded: () => boolean;
@@ -16,7 +26,9 @@ type LwkTxOutView = {
 export function readWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[] {
 	const txOutByOutpoint = createTxOutLookup(wollet);
 
-	return wollet.utxos().map((utxo) => {
+	const snapshots: LiquidUtxoSnapshot[] = [];
+
+	for (const utxo of wollet.utxos()) {
 		const unblinded = utxo.unblinded();
 		const outpoint = utxo.outpoint();
 		const txid = outpoint.txid().toString();
@@ -32,19 +44,38 @@ export function readWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[] {
 		}
 
 		const spendable = utxo.height() !== undefined;
+		const confidential = rawTxOut.isPartiallyBlinded();
 
-		return {
+		const snapshot: LiquidUtxoSnapshot = {
 			address: utxo.address().toString(),
 			amountSats: unblinded.value().toString(),
-			confidential: rawTxOut.isPartiallyBlinded(),
+			confidential,
+			derivationPath: `${utxo.extInt()}/${utxo.wildcardIndex()}`,
 			rawAssetId: unblinded.asset().toString(),
 			scriptPubKey: utxo.scriptPubkey().toString(),
 			spendable,
 			txid,
 			txOut: rawTxOut.toString(),
 			vout,
-		} satisfies LiquidUtxoSnapshot;
-	});
+		};
+
+		if (confidential) {
+			snapshot.blindingSecrets = secretsOf(unblinded);
+		}
+
+		snapshots.push(snapshot);
+	}
+
+	return snapshots;
+}
+
+function secretsOf(unblinded: LwkTxOutSecrets): LiquidBlindingSecrets {
+	return {
+		asset: unblinded.asset().toString(),
+		assetBlindingFactor: unblinded.assetBlindingFactor().toString(),
+		value: Number(unblinded.value()),
+		valueBlindingFactor: unblinded.valueBlindingFactor().toString(),
+	};
 }
 
 function createTxOutLookup(wollet: LwkWollet): Map<string, LwkTxOutView> {

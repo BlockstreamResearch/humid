@@ -227,17 +227,12 @@ describe("which of the wallet's outputs may be spent", () => {
 		}
 	});
 
-	test("refuses when only confidential outputs would cover it, and explains", async () => {
+	test("funds from a confidential output like any other", async () => {
 		const result = await pay({
 			holdings: { [TOKEN]: [utxo("1000000", TOKEN_TXID, { confidential: true })] },
 		});
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reason).toContain("confidential outputs");
-			expect(result.reason).toContain("cannot spend");
-		}
+		expect(isRefusal(result)).toBe(false);
 	});
 });
 
@@ -415,7 +410,7 @@ describe("an action that creates an asset", () => {
 		]);
 	});
 
-	test("explains a confidential candidate rather than saying there is none", async () => {
+	test("derives an issuance from a confidential candidate", async () => {
 		const result = await reviewManifestAction(
 			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
 			{
@@ -430,25 +425,18 @@ describe("an action that creates an asset", () => {
 		expect(isRefusal(result)).toBe(true);
 
 		if (isRefusal(result)) {
-			expect(result.reason).toContain("confidential outputs");
-			expect(result.reason).toContain("unblinded address");
 			expect(result.reason).toContain("500");
-			expect(result.reason).not.toContain("1000");
+			expect(result.reason).not.toContain("cannot spend");
 		}
 	});
 
-	test("and still explains it once the open candidates are exhausted", async () => {
+	test("and takes a confidential candidate once the open ones are used", async () => {
 		const result = await twoIssuances([
 			utxo("1000", "a".repeat(64)),
 			utxo("900000", "b".repeat(64), { confidential: true }),
 		]);
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reason).toContain("confidential outputs");
-			expect(result.reason).toContain("900000");
-		}
+		expect(isRefusal(result)).toBe(false);
 	});
 });
 

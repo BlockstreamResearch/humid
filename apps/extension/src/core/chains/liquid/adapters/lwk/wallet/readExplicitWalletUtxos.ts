@@ -65,6 +65,7 @@ export function readExplicitWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[]
 				address: owned.address().toString(),
 				amountSats: unblinded.value().toString(),
 				confidential: false,
+				derivationPath: `${CHAIN_EXTERNAL}/${SIGNING_INDEX}`,
 				rawAssetId: unblinded.asset().toString(),
 				scriptPubKey: owned.scriptPubkey().toString(),
 				spendable: owned.height() !== undefined,

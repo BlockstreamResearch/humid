@@ -1,6 +1,6 @@
 import { byOutpoint, outpointKey } from "../chain/outpoint";
 import type { AssetEntry } from "../evaluation/assetLedger";
-import { type SelectableUtxo, selectCoins, toSats, withheldSentence } from "./coinSelection";
+import { type SelectableUtxo, selectCoins, toSats } from "./coinSelection";
 
 export type AssetHoldings = (asset: string) => SelectableUtxo[];
 
@@ -86,13 +86,10 @@ export function fundAssets(
 }
 
 function shortOf(asset: string, needed: bigint, pool: SelectableUtxo[]): string {
-	const distinct = byOutpoint(pool.filter((utxo) => utxo.spendable));
-	const usable = distinct
-		.filter((utxo) => !utxo.confidential)
-		.reduce((sum, utxo) => sum + toSats(utxo.amount), 0n);
-
-	return (
-		`This action pays ${needed} of ${asset}, and this account holds ${usable} of it.` +
-		withheldSentence(distinct.filter((utxo) => utxo.confidential))
+	const usable = byOutpoint(pool.filter((utxo) => utxo.spendable)).reduce(
+		(sum, utxo) => sum + toSats(utxo.amount),
+		0n,
 	);
+
+	return `This action pays ${needed} of ${asset}, and this account holds ${usable} of it.`;
 }

@@ -70,16 +70,44 @@ export type LiquidAssetBalance = {
 	symbol: string;
 };
 
+/** What the wallet unblinded of its own output, for a module that holds no blinding key. */
+export type LiquidBlindingSecrets = {
+	asset: string;
+	assetBlindingFactor: string;
+	value: number;
+	valueBlindingFactor: string;
+};
+
 export type LiquidUtxoSnapshot = {
 	address: string;
 	amountSats: string;
+	/** Present only where the output is blinded, because only then is there anything to say. */
+	blindingSecrets?: LiquidBlindingSecrets;
 	confidential: boolean;
+	/**
+	 * Relative to the account, as `chain/index`. The key that signs this input.
+	 *
+	 * Optional because a portfolio snapshot cached before this existed carries none. An input
+	 * without one is refused rather than signed with the account's first key, which is the
+	 * wrong key for every index but the first.
+	 */
+	derivationPath?: string;
 	rawAssetId: string;
 	scriptPubKey: string;
 	spendable: boolean;
 	txid: string;
 	txOut: string;
 	vout: number;
+};
+
+/**
+ * A wallet output the contract flow may fund from, with what the signing module needs.
+ *
+ * This never leaves the wallet. `LiquidUTXO` is what a dapp is answered with.
+ */
+export type LiquidFundingUtxo = LiquidUTXO & {
+	blindingSecrets?: LiquidBlindingSecrets;
+	derivationPath?: string;
 };
 
 export type LiquidWalletSnapshot = {
@@ -107,6 +135,8 @@ export type LiquidWalletBackend = {
 	) => Promise<LiquidWalletDescriptorEntry[]>;
 	getUtxos: (account: LiquidWalletAccount, rawAssetId: string) => LiquidUTXO[];
 	getExplicitUtxos: (account: LiquidWalletAccount, rawAssetId: string) => LiquidUTXO[];
+	/** As `getUtxos`, but carrying what only the wallet knows. Never answered to a dapp. */
+	getFundingUtxos: (account: LiquidWalletAccount, rawAssetId: string) => LiquidFundingUtxo[];
 	getTipHeight: (account: LiquidWalletAccount) => number;
 	inspectTransfer: (
 		account: LiquidWalletAccount,

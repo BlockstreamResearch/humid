@@ -53,7 +53,7 @@ import { estimateFeeSats } from "../fee";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { resolveActionRequirements } from "../request/requirements";
 import { type AssetHoldings, fundAssets } from "./assetFunding";
-import { type SelectableUtxo, toSats, withheldSentence } from "./coinSelection";
+import { type SelectableUtxo, toSats } from "./coinSelection";
 
 export type CovenantFinding = CovenantDerivation & {
 	role: "created" | "spent";
@@ -815,6 +815,7 @@ export async function reviewManifestAction(
 
 	const estimatedFeeSats = estimateFeeSats(
 		{
+			blindedOutputs: outputs.filter((output) => output.blinded).length + (changeBlinded ? 1 : 0),
 			covenantInputs: covenants.filter((found) => found.role === "spent").length,
 			issuingInputs: issued.issuances.length,
 			outputs: outputs.length,
@@ -910,7 +911,7 @@ function resolveIssuances(
 	};
 
 	const spareIn = (asset: string): SelectableUtxo | undefined =>
-		candidatesIn(asset).find((utxo) => !utxo.confidential && !taken.has(outpointKey(utxo)));
+		candidatesIn(asset).find((utxo) => !taken.has(outpointKey(utxo)));
 
 	for (const entry of asArray(action.node.inputs)) {
 		const declared = asRecord(entry);
@@ -972,16 +973,11 @@ function resolveIssuances(
 		const funding = spareIn(asset.id);
 
 		if (!funding) {
-			const withheld = candidatesIn(asset.id).filter(
-				(utxo) => utxo.confidential && !taken.has(outpointKey(utxo)),
-			);
-
 			return {
 				ok: false,
 				reason:
 					`Input ${id} issues an asset, which needs one of this wallet's own outputs in ` +
-					`${asset.id} to derive it from, and there is none left to use.` +
-					withheldSentence(withheld),
+					`${asset.id} to derive it from, and there is none left to use.`,
 				reject: "shortfall",
 			};
 		}
