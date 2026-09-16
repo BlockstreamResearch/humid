@@ -149,6 +149,30 @@ describe("a chain of fields that each read the one before", () => {
 	});
 });
 
+function leafyWith(
+	extraLeaves: unknown[],
+	hashCovenant: ReturnType<typeof recordingCompiler>["hashCovenant"],
+) {
+	return resolveCreatedInstance(
+		{
+			isConstructor: true,
+			name: "Leafy",
+			node: {
+				create_instance: {
+					fields: {
+						X: { compute: "tapleaf", extra_leaves: extraLeaves, simf: "./reserve.simf" },
+					},
+				},
+			},
+		},
+		{ contractSources: SOURCES, hashCovenant, scope: { params: { TIMEOUT: "900000" } } },
+	);
+}
+
+function leafy(extraLeaves: unknown[]) {
+	return leafyWith(extraLeaves, recordingCompiler().hashCovenant);
+}
+
 describe("which actions create a deployment", () => {
 	test("the one carrying the block does, and the one that only spends does not", () => {
 		expect(createsInstance(OPEN_VAULT)).toBe(true);
@@ -442,28 +466,95 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 		expect(result.ok ? "" : result.reason).toContain("contract");
 	});
 
-	test("a tapleaf carrying extra leaves this runtime cannot encode", () => {
-		const { hashCovenant } = recordingCompiler();
-		const result = resolveCreatedInstance(
-			{
-				isConstructor: true,
-				name: "Leafy",
-				node: {
-					create_instance: {
-						fields: {
-							X: {
-								compute: "tapleaf",
-								extra_leaves: [{ payload: ["0x00"], type: "tapdata" }],
-								simf: "./reserve.simf",
-							},
-						},
-					},
-				},
-			},
-			{ contractSources: SOURCES, hashCovenant, scope: { params: {} } },
-		);
+	test("a state leaf that is not the width a contract reads one at", () => {
+		const result = leafy([{ payload: ["0x00"], type: "tapdata" }]);
 
 		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("extra_leaves");
+		expect(result.ok ? "" : result.reason).toContain("a leaf is 32");
+	});
+
+	test("a state leaf of some other kind than the one state is carried in", () => {
+		const result = leafy([{ payload: [`0x${"00".repeat(32)}`], type: "tapscript" }]);
+
+		expect(result.ok).toBe(false);
+		expect(result.ok ? "" : result.reason).toContain("tapdata");
+	});
+
+	test("a multi-byte value that does not say which end its bytes run from", () => {
+		const result = leafy([
+			{ payload: [{ pad_to: 32, align: "right", type: "u64", value: "7" }], type: "tapdata" },
+		]);
+
+		expect(result.ok).toBe(false);
+		expect(result.ok ? "" : result.reason).toContain("which end");
+	});
+
+	test("a value padded out without saying which end of the padding it sits at", () => {
+		const result = leafy([
+			{ payload: [{ endian: "be", pad_to: 32, type: "u64", value: "7" }], type: "tapdata" },
+		]);
+
+		expect(result.ok).toBe(false);
+		expect(result.ok ? "" : result.reason).toContain("which end");
+	});
+});
+
+// A contract's address commits to its state, so these leaves are as load bearing as the program.
+// What makes one encodable is that the document said enough: the width, the byte order, and which
+// end of the padding the value sits at.
+describe("the state a contract's address commits to", () => {
+	function hashOf(extraLeaves: unknown[]) {
+		const { calls, hashCovenant } = recordingCompiler();
+		const result = leafyWith(extraLeaves, hashCovenant);
+
+		return { calls, result };
+	}
+
+	test("is encoded and handed to the compiler, rather than refused", () => {
+		const { calls, result } = hashOf([
+			{ payload: [`0x${"00".repeat(31)}01`], type: "tapdata" },
+			{
+				payload: [{ align: "right", endian: "be", pad_to: 32, type: "u64", value: "1000" }],
+				type: "tapdata",
+			},
+		]);
+
+		expect(result.ok).toBe(true);
+		expect(JSON.parse(calls[0]?.extraLeavesJson ?? "[]")).toEqual([
+			`${"00".repeat(31)}01`,
+			`${"00".repeat(24)}00000000000003e8`,
+		]);
+	});
+
+	test("reads a value through the scope the rest of the deployment is read through", () => {
+		const { calls } = hashOf([
+			{
+				payload: [{ align: "right", endian: "be", pad_to: 32, type: "u64", value: "TIMEOUT" }],
+				type: "tapdata",
+			},
+		]);
+
+		expect(JSON.parse(calls[0]?.extraLeavesJson ?? "[]")).toEqual([
+			`${"00".repeat(24)}00000000000dbba0`,
+		]);
+	});
+
+	test("and takes the other end of a number when the document asks for it", () => {
+		const { calls } = hashOf([
+			{
+				payload: [{ align: "right", endian: "le", pad_to: 32, type: "u64", value: "1000" }],
+				type: "tapdata",
+			},
+		]);
+
+		expect(JSON.parse(calls[0]?.extraLeavesJson ?? "[]")).toEqual([
+			`${"00".repeat(24)}e803000000000000`,
+		]);
+	});
+
+	test("a contract with no state hands the compiler no leaves", () => {
+		const { calls } = hashOf([]);
+
+		expect(calls[0]?.extraLeavesJson).toBe("[]");
 	});
 });

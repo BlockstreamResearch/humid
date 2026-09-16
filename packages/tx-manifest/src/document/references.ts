@@ -28,6 +28,7 @@ export type ReferenceSiteKind =
 	| "destination"
 	| "expression"
 	| "issuedAmount"
+	| "stateLeaf"
 	| "witnessKey"
 	| "witnessValue";
 
@@ -52,6 +53,10 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 	issuedAmount: {
 		accepts: ["instance", "params", "args", "bare"],
 		describes: "an issued amount",
+	},
+	stateLeaf: {
+		accepts: ["instance", "params", "args", "bare"],
+		describes: "part of a state leaf",
 	},
 	witnessKey: {
 		accepts: ["instance", "params", "args", "bare"],
