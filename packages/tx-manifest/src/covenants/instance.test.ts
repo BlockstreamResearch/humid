@@ -75,6 +75,80 @@ function open(params: Record<string, unknown> = PARAMS) {
 	};
 }
 
+// Every field here is a covenant hash wired to the one before it, and they are declared backwards
+// so that reading only the round before would advance the chain one link per round and recompile
+// every link each time. What that costs grows with the square of the chain; reaching them in
+// dependency order costs one compile each, twice.
+describe("a chain of fields that each read the one before", () => {
+	const LINKS = 5;
+
+	function chained(): NormalisedAction {
+		const fields: Record<string, unknown> = { OWNER_PUB_KEY: "$params.OWNER_PUB_KEY" };
+
+		for (let index = LINKS - 1; index >= 0; index -= 1) {
+			fields[`LINK_${index}`] = {
+				params: {
+					RESERVE_COV_HASH: {
+						type: index === 0 ? "pubkey" : "bytes32",
+						value: index === 0 ? "OWNER_PUB_KEY" : `LINK_${index - 1}`,
+					},
+				},
+				simf: "./guard.simf",
+				type: "tapleaf",
+			};
+		}
+
+		return {
+			isConstructor: true,
+			name: "Chain",
+			node: { create_instance: { fields } },
+		};
+	}
+
+	function settleChain() {
+		const { calls, hashCovenant } = recordingCompiler();
+
+		return {
+			calls,
+			result: resolveCreatedInstance(chained(), {
+				contractSources: SOURCES,
+				hashCovenant,
+				scope: { params: PARAMS },
+			}),
+		};
+	}
+
+	test("settles however long the chain is, in the two rounds a single field takes", () => {
+		const { result } = settleChain();
+
+		expect(result.ok).toBe(true);
+		expect(result.ok ? result.instance.rounds : 0).toBe(2);
+	});
+
+	test("and compiles each link once per round rather than once per link per round", () => {
+		const { calls } = settleChain();
+
+		expect(calls).toHaveLength(LINKS * 2);
+	});
+
+	test("with every link settled to a hash of its own", () => {
+		const { result } = settleChain();
+
+		if (!result.ok) {
+			throw new Error(result.reason);
+		}
+
+		const hashes = Array.from(
+			{ length: LINKS },
+			(_, index) => result.instance.fields[`LINK_${index}`],
+		);
+
+		expect(new Set(hashes).size).toBe(LINKS);
+		expect(hashes.every((hash) => hash?.length === 64)).toBe(true);
+		expect(hashes.some((hash) => hash === COVENANT_HASH_SEED)).toBe(false);
+	});
+});
+
 describe("which actions create a deployment", () => {
 	test("the one carrying the block does, and the one that only spends does not", () => {
 		expect(createsInstance(OPEN_VAULT)).toBe(true);
@@ -102,10 +176,13 @@ describe("the deployment a constructor creates", () => {
 		expect(result.ok ? result.instance.fields.GUARD_COV_HASH : "").toHaveLength(64);
 	});
 
-	test("settles a hash that depends on another hash, and says in how many rounds", () => {
+	// Two is the fewest any deployment can take: one round to compute the fields and one to find
+	// they did not move. A chain reached in dependency order settles in that minimum however long
+	// it is, where reading only the round before would take one round per link.
+	test("settles a hash that depends on another hash in the fewest rounds there are", () => {
 		const { result } = open();
 
-		expect(result.ok ? result.instance.rounds : 0).toBe(3);
+		expect(result.ok ? result.instance.rounds : 0).toBe(2);
 	});
 
 	test("compiles the guard against the reserve's settled hash, not against the seed", () => {
@@ -258,11 +335,11 @@ describe("a covenant hash that names another through the deployment", () => {
 		};
 	}
 
-	test("settles through an explicit instance reference", () => {
+	test("settles through an explicit instance reference, in the same fewest rounds", () => {
 		const { result } = settle("instance.RESERVE_COV_HASH");
 
 		expect(result.ok).toBe(true);
-		expect(result.ok ? result.instance.rounds : 0).toBe(3);
+		expect(result.ok ? result.instance.rounds : 0).toBe(2);
 	});
 
 	test("and compiles the dependant against the settled hash, not the seed", () => {
