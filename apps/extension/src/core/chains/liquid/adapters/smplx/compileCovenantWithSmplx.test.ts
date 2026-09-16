@@ -10,6 +10,8 @@ import { smplx } from "./smplxWasmForTests";
 
 const PROBE_SOURCE = "fn main() { assert!(jet::eq_32(witness::A, witness::B)); }";
 const SCRIPT = `5120${"11".repeat(32)}`;
+const CMR = "cc".repeat(32);
+const TAPLEAF_HASH = "1e".repeat(32);
 
 type Construction = [
 	source: string,
@@ -18,7 +20,14 @@ type Construction = [
 	includeDebugSymbols?: boolean | null,
 ];
 
-function recording(answers: { address?: () => string; scriptPubKeyHex?: () => string } = {}) {
+function recording(
+	answers: {
+		address?: () => string;
+		commitmentMerkleRoot?: () => string;
+		scriptPubKeyHex?: () => string;
+		tapleafHash?: () => string;
+	} = {},
+) {
 	const built: Construction[] = [];
 	let freed = 0;
 
@@ -32,8 +41,14 @@ function recording(answers: { address?: () => string; scriptPubKeyHex?: () => st
 				address() {
 					return answers.address?.() ?? "tex1p_derived";
 				}
+				commitmentMerkleRoot() {
+					return answers.commitmentMerkleRoot?.() ?? CMR;
+				}
 				free() {
 					freed += 1;
+				}
+				tapleafHash() {
+					return answers.tapleafHash?.() ?? TAPLEAF_HASH;
 				}
 				scriptPubKeyHex() {
 					return answers.scriptPubKeyHex?.() ?? SCRIPT;
@@ -43,6 +58,40 @@ function recording(answers: { address?: () => string; scriptPubKeyHex?: () => st
 		released: () => freed,
 	};
 }
+
+// The address says where a contract's funds sit, and it moves with the arguments the contract was
+// compiled against and with the network it was compiled for. Two deployments of the same contract
+// share no part of it. What does not move is the Commitment Merkle Root, which is the program, and
+// the tapleaf hash, which is the leaf a spend commits to.
+describe("what a compiled covenant is reported as", () => {
+	async function compiled() {
+		const { module } = recording();
+
+		return await createSmplxCovenantCompiler(module)({
+			argumentsJson: "{}",
+			extraLeavesJson: "[]",
+			includeDebugSymbols: false,
+			network: "liquidtestnet",
+			source: PROBE_SOURCE,
+		});
+	}
+
+	test("carries what the contract is, not only where its funds sit", async () => {
+		expect(await compiled()).toEqual({
+			address: "tex1p_derived",
+			cmr: CMR,
+			scriptPubKeyHex: SCRIPT,
+			tapleafHash: TAPLEAF_HASH,
+		});
+	});
+
+	test("and reports them apart, because they answer different questions", async () => {
+		const answered = await compiled();
+
+		expect(answered.cmr).not.toBe(answered.tapleafHash);
+		expect(answered.cmr).not.toBe(answered.scriptPubKeyHex);
+	});
+});
 
 describe("createSmplxCovenantCompiler", () => {
 	test("forwards the source, the arguments, the leaves and the build mode", () => {

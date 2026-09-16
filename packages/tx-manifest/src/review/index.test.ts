@@ -15,7 +15,12 @@ const MANIFEST = p2pkManifest as unknown as Record<string, unknown>;
 const DERIVED = "tex1p_derived";
 const DERIVED_SCRIPT = `5120${"11".repeat(32)}`;
 const ELSEWHERE_SCRIPT = `5120${"22".repeat(32)}`;
-const COMPILED = { address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT };
+const COMPILED = {
+	address: DERIVED,
+	cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+	scriptPubKeyHex: DERIVED_SCRIPT,
+	tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+};
 
 const compile = () => COMPILED;
 const scriptPubKeyOf = () => DERIVED_SCRIPT;
@@ -93,7 +98,9 @@ describe("reviewManifestAction", () => {
 						role: "created",
 						scriptPubKeyHex: DERIVED_SCRIPT,
 						source: SOURCE,
+						cmr: "cc".repeat(32),
 						sourcePath: SOURCE_PATH,
+						tapleafHash: "1e".repeat(32),
 						utxoType: "p2pk_output",
 						verified: "not-yet-onchain",
 					},

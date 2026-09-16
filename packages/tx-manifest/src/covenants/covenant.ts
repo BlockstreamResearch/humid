@@ -6,7 +6,23 @@ import type { CovenantParamTypes } from "./covenantParamTypes";
 
 export type CompiledCovenant = {
 	address: string;
+	/**
+	 * The Commitment Merkle Root, identifying the program itself.
+	 *
+	 * The address answers where the funds sit, and moves with the arguments the contract was
+	 * compiled against and with the network it was compiled for. This answers what the contract is,
+	 * and does not.
+	 */
+	cmr: string;
 	scriptPubKeyHex: string;
+	/**
+	 * The tapleaf hash, identifying the leaf the program sits in.
+	 *
+	 * This is what a taproot spend commits to and what a signature over the input covers, so it is
+	 * the half of a contract's identity that says where it is being spent from rather than what it
+	 * is.
+	 */
+	tapleafHash: string;
 };
 
 export type CompileCovenant = (input: {
@@ -24,11 +40,13 @@ export type CovenantParamTypesOf = (
 export type CovenantDerivation = {
 	address: string;
 	argumentsJson: string;
+	cmr: string;
 	extraLeavesJson: string;
 	includeDebugSymbols: boolean;
 	scriptPubKeyHex: string;
 	source: string;
 	sourcePath: string;
+	tapleafHash: string;
 	utxoType: string;
 };
 
@@ -114,11 +132,13 @@ export async function deriveCovenantAddress(
 			derivation: {
 				address: compiled.address,
 				argumentsJson,
+				cmr: compiled.cmr,
 				extraLeavesJson,
 				includeDebugSymbols: input.includeDebugSymbols,
 				scriptPubKeyHex: compiled.scriptPubKeyHex,
 				source,
 				sourcePath,
+				tapleafHash: compiled.tapleafHash,
 				utxoType: input.utxoType,
 			},
 			ok: true,

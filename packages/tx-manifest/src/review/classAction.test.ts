@@ -85,7 +85,12 @@ function review(
 						source: input.source,
 					});
 
-					return { address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT };
+					return {
+						address: DERIVED,
+						cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+						scriptPubKeyHex: DERIVED_SCRIPT,
+						tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+					};
 				},
 				covenantParamTypes: () => DECLARED,
 				fundingUtxos: FUNDING,
@@ -166,12 +171,14 @@ describe("a class method against a deployment that exists", () => {
 			{
 				address: DERIVED,
 				argumentsJson: expect.any(String),
+				cmr: "cc".repeat(32),
 				extraLeavesJson: "[]",
 				includeDebugSymbols: false,
 				role: "spent",
 				scriptPubKeyHex: DERIVED_SCRIPT,
 				source: SOURCES["./vault.simf"],
 				sourcePath: "./vault.simf",
+				tapleafHash: "1e".repeat(32),
 				utxoType: "vault",
 				verified: "matches-chain",
 			},
@@ -289,7 +296,12 @@ describe("the constructor of the same class", () => {
 			} as ParsedLiquidProcessCtParams,
 			{
 				accountLabel: "liquid:testnet account 0",
-				compile: () => ({ address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT }),
+				compile: () => ({
+					address: DERIVED,
+					cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+					scriptPubKeyHex: DERIVED_SCRIPT,
+					tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+				}),
 				covenantParamTypes: () => DECLARED,
 				fundingUtxos: FUNDING,
 				network: "liquid",
@@ -394,7 +406,12 @@ describe("what a review still refuses", () => {
 			} as ParsedLiquidProcessCtParams,
 			{
 				accountLabel: "liquid:testnet account 0",
-				compile: () => ({ address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT }),
+				compile: () => ({
+					address: DERIVED,
+					cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+					scriptPubKeyHex: DERIVED_SCRIPT,
+					tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+				}),
 				fundingUtxos: FUNDING,
 				network: "liquid",
 				policyAsset: POLICY_ASSET,

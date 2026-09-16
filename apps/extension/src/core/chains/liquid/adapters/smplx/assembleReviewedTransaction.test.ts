@@ -11,10 +11,12 @@ import {
 const COVENANT_SCRIPT = `5120${"11".repeat(32)}`;
 const COVENANT_BUILD = {
 	argumentsJson: '{"PUB_KEY":{"type":"Pubkey","value":"0x00"}}',
+	cmr: "cc".repeat(32),
 	extraLeavesJson: "[]",
 	includeDebugSymbols: false,
 	source: "fn main() { }",
 	sourcePath: "./p2pk.simf",
+	tapleafHash: "1e".repeat(32),
 };
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 const CHANGE_SCRIPT = `0014${"44".repeat(20)}`;
