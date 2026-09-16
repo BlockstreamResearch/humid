@@ -16,9 +16,15 @@ export function getWalletReceiveAddress(account: LiquidWalletAccount): {
 export function getWalletSigningAddress(account: LiquidWalletAccount): {
 	address: string;
 	index: number;
+	unconfidential: string;
 } {
 	const implementation = getLwkImplementation(account);
 	const result = implementation.wollet.address(SIGNING_ADDRESS_INDEX);
+	const address = result.address();
 
-	return { address: result.address().toString(), index: result.index() };
+	return {
+		address: address.toString(),
+		index: result.index(),
+		unconfidential: address.toUnconfidential().toString(),
+	};
 }

@@ -40,7 +40,10 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 			async getReceiveAddress(input) {
 				const account = await walletBackend.resolveAccount(input);
 
-				return walletBackend.getReceiveAddress(account);
+				return {
+					...walletBackend.getReceiveAddress(account),
+					unconfidential: walletBackend.getSigningAddress(account).unconfidential,
+				};
 			},
 			async inspectTransfer(input, transfer) {
 				const account = await walletBackend.resolveAccount(input);

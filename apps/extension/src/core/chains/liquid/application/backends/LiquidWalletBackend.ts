@@ -96,7 +96,11 @@ export type LiquidWalletBackend = {
 	getActivity: (account: LiquidWalletAccount, rawAssetId: string) => LiquidActivityEntry[];
 	getBalance: (account: LiquidWalletAccount, rawAssetId: string) => string;
 	getReceiveAddress: (account: LiquidWalletAccount) => { address: string; index: number };
-	getSigningAddress: (account: LiquidWalletAccount) => { address: string; index: number };
+	getSigningAddress: (account: LiquidWalletAccount) => {
+		address: string;
+		index: number;
+		unconfidential: string;
+	};
 	getDescriptorEntries: (
 		account: LiquidWalletAccount,
 		params: LiquidGetWalletDescriptorParams,

@@ -17,10 +17,6 @@ import type { Caip25Scopes } from "@/core/caip25";
 import { addUnlockedChainRecord } from "@/core/chains/application/chain-store/addChainRecord";
 import { getUnlockedChainStoreState } from "@/core/chains/application/chain-store/secureChainStore";
 import {
-	type LiquidContractIdentity,
-	readLiquidContractIdentity,
-} from "@/core/chains/liquid/application/contractIdentity";
-import {
 	buildLiquidDappAccountScope,
 	resolveAccountGroupIdsForIdentifiers,
 } from "@/core/chains/liquid/application/dappAccountScope";
@@ -243,32 +239,6 @@ const init = async () => {
 
 	const getReceiveAddress = async (): Promise<ReceiveAddress> =>
 		liquidChainGroup.accountRuntime.getReceiveAddress((await resolveSelectedLiquidAccount()).input);
-
-	const readContractIdentity = async (accountGroupId?: string): Promise<LiquidContractIdentity> => {
-		const { input } = await resolveSelectedLiquidAccount();
-
-		const group =
-			accountGroupId === undefined
-				? undefined
-				: Object.values(input.keyManagerState.accountModel.accountGroups).find(
-						(candidate) => candidate.id === accountGroupId,
-					);
-
-		if (accountGroupId !== undefined && !group) {
-			throw new Error(`No account group ${accountGroupId}.`);
-		}
-
-		const keySourceId = group
-			? input.keyManagerState.accountModel.wallets[group.walletId]?.keySourceId
-			: input.keySourceId;
-
-		return readLiquidContractIdentity({
-			accountGroupIndex: group ? (group.groupIndex ?? 0) : input.accountGroupIndex,
-			chain: input.chain,
-			keyManagerState: input.keyManagerState,
-			...(keySourceId === undefined ? {} : { keySourceId }),
-		});
-	};
 
 	const inspectTransfer = async (input: SendTransferInput): Promise<TransferReview> =>
 		liquidChainGroup.accountRuntime.inspectTransfer(
@@ -534,7 +504,6 @@ const init = async () => {
 				getActivity,
 				getPortfolio,
 				getReceiveAddress,
-				readContractIdentity,
 				inspectTransfer,
 				purgeAccountPortfolio,
 				purgeAccountWalletConnectSessions,
