@@ -17,6 +17,7 @@ import type {
 export type LiquidReceiveAddress = {
 	address: string;
 	index: number;
+	unconfidential: string;
 };
 
 export type LiquidPortfolio = {

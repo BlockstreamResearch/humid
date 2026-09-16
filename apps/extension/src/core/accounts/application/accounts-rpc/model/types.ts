@@ -43,6 +43,7 @@ export type RecoveryPhrase = {
 export type ReceiveAddress = {
 	address: string;
 	index: number;
+	unconfidential: string;
 };
 
 export type SendTransferInput = {

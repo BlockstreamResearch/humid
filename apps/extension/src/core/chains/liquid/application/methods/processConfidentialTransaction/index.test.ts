@@ -227,7 +227,11 @@ function walletBackend(log: Journal, overrides: Record<string, unknown> = {}) {
 	return {
 		getExplicitUtxos: (_account: unknown, asset: string) =>
 			asset === POLICY_ASSET ? [explicitUtxo] : [],
-		getSigningAddress: () => ({ address: "tex1q_signing", index: 0 }),
+		getSigningAddress: () => ({
+			address: "tex1q_signing",
+			index: 0,
+			unconfidential: "tex1q_signing_unconfidential",
+		}),
 		getTipHeight: () => 3_210_987,
 		getUtxos: () => [],
 		syncAccount: async () => {
