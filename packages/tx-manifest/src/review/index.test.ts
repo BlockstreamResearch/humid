@@ -6,30 +6,20 @@ import type { TxOutAtOutPoint } from "../chain/chainRead";
 import { isRefusal, reviewManifestAction } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 
-// The fixture is the published p2pk manifest and its contract source, unmodified. What the
-// review is expected to report comes from that document and from the compiler fake below —
-// never from re-deriving it the way the code under test does.
-
 const SOURCE_PATH = "./p2pk.simf";
 const SOURCE = readFileSync(new URL("../__fixtures__/p2pk.simf", import.meta.url), "utf8");
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const TXID = "b".repeat(64);
 const MANIFEST = p2pkManifest as unknown as Record<string, unknown>;
 
-// A compile yields both spellings of where the covenant is. They are distinct on purpose:
-// the address is what a person is shown, the scriptPubKey is what an output pays to and what
-// the chain is compared against, and only one of them is hex.
 const DERIVED = "tex1p_derived";
 const DERIVED_SCRIPT = `5120${"11".repeat(32)}`;
-/** A script that is not the covenant's, for the cases where the chain must disagree. */
 const ELSEWHERE_SCRIPT = `5120${"22".repeat(32)}`;
 const COMPILED = { address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT };
 
 const compile = () => COMPILED;
-/** The same compiler again, for the hashes a document works out for itself. */
 const scriptPubKeyOf = () => DERIVED_SCRIPT;
 
-/** The wallet's own side of the transaction: where it pays, what it holds, what a fee costs. */
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 const fundingUtxos = [
@@ -37,7 +27,6 @@ const fundingUtxos = [
 ];
 const readFeeRate = async () => 1000;
 
-/** What every case shares; individual tests override only what they exercise. */
 const deps = {
 	accountLabel: "liquid:testnet account 0",
 	compile,
@@ -49,27 +38,15 @@ const deps = {
 	walletScriptPubKeyHex: WALLET_SCRIPT,
 };
 
-/**
- * What the chain says sits at an outpoint, as a reader that reports everything.
- *
- * The amount and the asset are stated rather than left out, because a covenant output on this
- * network cannot be confidential and still work — a Simplicity program reads exact amounts
- * through jets that cannot introspect a commitment — so a reader that omitted them would be
- * standing in for something no legitimate deployment produces, and the review refuses it.
- */
 const chainHolding = (scriptPubKeyHex: string) => async (): Promise<TxOutAtOutPoint> => ({
 	amountSats: COVENANT_HOLDS,
 	rawAssetId: POLICY_ASSET,
 	scriptPubKeyHex,
-	// The bytes a spend of this covenant would carry to the builder. Stated rather than left
-	// out: a chain read that reported no bytes is one no wallet ships.
 	txOutHex: COVENANT_TXOUT,
 });
 
-/** One explicit output, written the way the chain writes one. */
 const COVENANT_TXOUT = `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`;
 
-/** What every covenant in these cases is holding, in the asset the network charges fees in. */
 const COVENANT_HOLDS = "50000";
 
 function request(
@@ -85,7 +62,6 @@ function request(
 	};
 }
 
-/** The Receive action, which spends the covenant the state file locates. */
 const spendRequest = (state?: unknown) =>
 	request({
 		action: "Receive",
@@ -96,10 +72,8 @@ const spendRequest = (state?: unknown) =>
 const oneCovenantUtxo = { utxos: [{ txid: TXID, utxo_type: "p2pk_output", vout: 0 }] };
 
 describe("reviewManifestAction", () => {
-	// Pay creates a covenant output. There is nothing on chain yet, so the wallet reports what
-	// it derived and says plainly that it has not compared it against anything.
 	describe("creating a covenant", () => {
-		test("reports the derived covenant as not yet on chain", async () => {
+		test("reports the derived covenant as not yet onchain", async () => {
 			const result = await reviewManifestAction(request(), {
 				...deps,
 				readTxOut: chainHolding(DERIVED_SCRIPT),
@@ -121,7 +95,7 @@ describe("reviewManifestAction", () => {
 						source: SOURCE,
 						sourcePath: SOURCE_PATH,
 						utxoType: "p2pk_output",
-						verified: "not-yet-on-chain",
+						verified: "not-yet-onchain",
 					},
 				]);
 			}
@@ -160,19 +134,11 @@ describe("reviewManifestAction", () => {
 				readTxOut: chainHolding(DERIVED_SCRIPT),
 			});
 
-			// PUB_KEY is wired to params.pubkey, declared `pubkey` by the action.
 			expect(seen).toEqual([JSON.stringify({ PUB_KEY: { type: "Pubkey", value: `0x${PUBKEY}` } })]);
 		});
 	});
 
-	// Receive spends the covenant. This is where the wallet's derivation is checked against
-	// something it did not get from the requester.
 	describe("spending a covenant", () => {
-		// Receive's output pays what the covenant input turned out to hold — `p2pk_in.amount_sat`,
-		// a figure the wallet read from the chain rather than one the document states. So the
-		// review resolving at all is the whole of what this asserts: the covenant was rebuilt,
-		// compared against what is at the outpoint, and the amount that reads it came out as
-		// what the chain reported.
 		test("gets past verification when the rebuilt contract locks the funds that are there", async () => {
 			const result = await reviewManifestAction(spendRequest(oneCovenantUtxo), {
 				...deps,
@@ -277,8 +243,6 @@ describe("reviewManifestAction", () => {
 		}
 	});
 
-	// Everything below is the transaction the review settles, so that what a person approves
-	// is what gets signed rather than a description of it reassembled afterwards.
 	describe("the transaction it settles", () => {
 		test("pays the covenant output the script it derived, not the address it is shown as", async () => {
 			const result = await reviewManifestAction(request(), {
@@ -290,9 +254,6 @@ describe("reviewManifestAction", () => {
 
 			if (!isRefusal(result)) {
 				expect(result.outputs).toEqual([
-					// A covenant output is answered before the format's precedence is consulted: a
-					// Simplicity program reads exact amounts through jets that cannot introspect a
-					// commitment, so a hidden one is an output its own contract could never check.
 					{
 						asset: POLICY_ASSET,
 						blinded: false,
@@ -305,8 +266,6 @@ describe("reviewManifestAction", () => {
 			}
 		});
 
-		// The builder hex-decodes every script it is handed, so a bech32 address fails inside
-		// the module with an error naming neither the output nor what was wrong with it.
 		test("gives every output a script the builder can decode", async () => {
 			const result = await reviewManifestAction(request(), {
 				...deps,
@@ -324,8 +283,6 @@ describe("reviewManifestAction", () => {
 			}
 		});
 
-		// Change carries no amount, because change is whatever is left after the fee — and the
-		// fee is not known until the transaction has a shape.
 		test("plans no output for the change the action declares", async () => {
 			const result = await reviewManifestAction(request(), {
 				...deps,
@@ -353,9 +310,6 @@ describe("reviewManifestAction", () => {
 			}
 		});
 
-		// The fee is the wallet's business: the request carries none, and an action is refused
-		// rather than built when no rate can be established. A default here would quietly turn
-		// "we do not know" into "we are sure".
 		test("refuses when no fee rate can be established, rather than assuming one", async () => {
 			const result = await reviewManifestAction(request(), {
 				...deps,

@@ -16,10 +16,6 @@ type ChainAddFormProps = {
 	onSubmit: (chain: ChainRecord) => void;
 };
 
-/**
- * The common add-chain form: the shared shell (name + save) around the selected chain
- * group's own Create body. Chain-group-agnostic — each group plugs in its Create.
- */
 export function ChainAddForm({ error, groupUi, isSubmitting, onSubmit }: ChainAddFormProps) {
 	const [draft, setDraft] = useState<ChainRecord>(() => groupUi.createDraft(""));
 	const Create = groupUi.Create;

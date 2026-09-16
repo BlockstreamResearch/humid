@@ -16,5 +16,4 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The reveal screen with the phrase hidden by default (toggle the eye to reveal). */
 export const Default: Story = {};

@@ -25,11 +25,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 	);
 }
 
-/**
- * Step 2 of the Send flow: the preview returned by `accounts.inspectTransfer`. Shows amount, asset,
- * and recipient, and — per ELIP-1 — a clear warning when the recipient address is unconfidential, so
- * the user knows the transfer's amount and asset will be publicly visible before confirming.
- */
 export function SendReview({
 	amountLabel,
 	error,

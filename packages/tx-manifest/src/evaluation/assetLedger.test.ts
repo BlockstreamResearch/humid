@@ -39,8 +39,6 @@ const PARAMS = { amount_sat: 1000, fee_sat: 700, pubkey: PUBKEY, token: TOKEN };
 describe("which asset a declared site is in", () => {
 	const context = { policyAsset: POLICY_ASSET, scope: { params: {} } };
 
-	// A site that says nothing is paying in the one asset every reader of the document already
-	// shares, which is the one the network charges its fees in.
 	test("nothing stated means the asset the network charges fees in", () => {
 		expect(resolveAsset(undefined, "output out", context)).toEqual({
 			id: POLICY_ASSET,
@@ -61,7 +59,6 @@ describe("which asset a declared site is in", () => {
 		).toEqual({ id: TOKEN, ok: true });
 	});
 
-	// Not knowing what is being paid in is exactly the moment not to pay.
 	test("a lookup nothing resolves is not an asset yet", () => {
 		const resolved = resolveAsset("instance.PRINCIPAL", "output out", context);
 
@@ -80,13 +77,6 @@ describe("which asset a declared site is in", () => {
 		expect(resolved.ok ? "" : resolved.reason).toContain("another lookup");
 	});
 
-	/**
-	 * A literal id and a lookup are different statements, and they stay different.
-	 *
-	 * The corpus states an asset as a lookup far more often than as an id, so the two meet
-	 * constantly — and a runtime that read one as the other would be answering a question
-	 * about the spelling rather than about the money.
-	 */
 	test("a literal id and a lookup resolving elsewhere stay distinct and exact", () => {
 		const other = "aa".repeat(32);
 		const supplied = { policyAsset: POLICY_ASSET, scope: { params: { token: other } } };
@@ -95,7 +85,6 @@ describe("which asset a declared site is in", () => {
 		expect(resolveAsset("params.token", "output two", supplied)).toEqual({ id: other, ok: true });
 	});
 
-	// The keyword and the id are the same asset, whichever the lookup lands on.
 	test("a lookup that resolves to the network's own asset is that asset", () => {
 		expect(
 			resolveAsset("params.token", "output out", {
@@ -114,8 +103,6 @@ describe("reading one action as a statement about several assets", () => {
 
 		if (result.ok) {
 			expect(result.ledger.entries).toEqual([
-				// The network's own asset is always part of the reckoning, whether or not the
-				// action mentions it: the fee is paid in it and the wallet pays the fee.
 				{
 					asset: POLICY_ASSET,
 					change: { blinded: false, id: "change_out" },
@@ -144,8 +131,6 @@ describe("reading one action as a statement about several assets", () => {
 		expect(result.ok ? result.ledger.walletInputs : []).toEqual([{ asset: TOKEN, id: "token_in" }]);
 	});
 
-	// What a covenant already holds is netted against what the outputs cost — within one asset
-	// and never across two.
 	test("nets what the transaction already brings, asset by asset", () => {
 		const result = ledgerOf(PARAMS, [
 			{ asset: TOKEN, id: "token_in", sats: 400n },
@@ -163,8 +148,6 @@ describe("reading one action as a statement about several assets", () => {
 		]);
 	});
 
-	// A plan that ever stopped lining up with the document is refused here, rather than
-	// silently attributing an amount to the wrong asset.
 	test("refuses a plan that does not line up with the outputs the document declares", () => {
 		const { action, plan, scope } = payToken(PARAMS);
 		const result = assetLedger(action, plan.outputs.slice(1), {
@@ -184,13 +167,6 @@ describe("reading one action as a statement about several assets", () => {
 		expect(result.ok ? "" : result.reject).toBe("foreign-asset");
 	});
 
-	/**
-	 * The check that keeps a document's word about a covenant honest.
-	 *
-	 * A covenant input's asset is whatever the chain says is at that outpoint. The document
-	 * states one too, and the two disagreeing means the covenant is not holding what the
-	 * action says it holds — which would fund the stated asset and strand the real one.
-	 */
 	test("refuses a covenant input the chain says holds a different asset", () => {
 		const action: NormalisedAction = {
 			isConstructor: false,

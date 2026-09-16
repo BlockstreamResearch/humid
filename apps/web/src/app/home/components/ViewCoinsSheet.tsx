@@ -22,7 +22,6 @@ import { useAsyncAction } from "./useAsyncAction";
 type OverlayProps = { open: boolean; onOpenChange: (open: boolean) => void };
 type Utxo = LiquidGetUTXOsResult["utxos"][number];
 
-/** Read the wallet's coins (UTXOs) for the policy asset or a supplied asset id; loads on open. */
 export function ViewCoinsSheet({ open, onOpenChange }: OverlayProps) {
 	const { chainId, supportedChains, wallet } = useHumidContext();
 	const network = supportedChains.find((chain) => chain.caipNetworkId === chainId);
@@ -42,7 +41,6 @@ export function ViewCoinsSheet({ open, onOpenChange }: OverlayProps) {
 
 	const handleOpenChange = (next: boolean) => {
 		onOpenChange(next);
-		// Reset after the close animation so the list doesn't flash mid-exit.
 		if (!next) {
 			window.setTimeout(() => {
 				setAssetId("");
@@ -51,7 +49,6 @@ export function ViewCoinsSheet({ open, onOpenChange }: OverlayProps) {
 		}
 	};
 
-	// Fetch once when the sheet opens; a manual reload is available in the footer.
 	useEffect(() => {
 		if (open && action.status === "idle") void load();
 		// eslint-disable-next-line react-hooks/exhaustive-deps

@@ -19,5 +19,4 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The Overview tab: header over the scrolling balance, actions, and token list. */
 export const Default: Story = {};

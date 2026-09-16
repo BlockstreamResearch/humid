@@ -4,17 +4,6 @@ import { Label } from "@/components/ui/label";
 
 import type { SuppliedSource } from "../contractSources";
 
-/**
- * The contracts a document references, and which of them this page has been handed.
- *
- * A version this wallet does not ship can be asked for in two places, and one of them is
- * inside the contract source. Nothing about a document says what its contracts contain, so
- * this is the only way the second half of that check can run at all — and until it does, the
- * page says so rather than reporting the check as done.
- *
- * The files never leave the page. They are read in the browser, the same way the document in
- * the textarea is, which is what lets this ask for them at all.
- */
 export function ContractSourceList({
 	contracts,
 	onClear,

@@ -11,6 +11,5 @@ export type ChainGroup<
 	chains: readonly TChain[];
 	id: ChainGroupId;
 	walletConnectAdapter: WalletConnectNamespaceAdapter;
-	/** The chain's RPC surface: JSON-RPC dispatcher plus the method names it advertises. */
 	walletRpcDispatcher: WalletMethodRegistry<TContext>;
 };

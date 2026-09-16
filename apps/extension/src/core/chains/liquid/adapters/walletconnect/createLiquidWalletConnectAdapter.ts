@@ -52,11 +52,6 @@ export function createLiquidWalletConnectAdapter({
 			const chain = await resolveUnlockedLiquidChain(chainId);
 			const { approvedScope } = context;
 
-			// A WalletConnect session approves a method surface, never a per-method "run without
-			// asking" — the proposal has no permission UI — so every request confirms with the user.
-			// The approved accounts still bind execution to the authorized set (via `accountScope`),
-			// as on the injected CAIP-25/27 path; an unresolvable scope leaves that binding on the
-			// default account, with the confirmation as the gate.
 			const accountScope = approvedScope
 				? buildLiquidDappAccountScope({
 						accountGroupIds: resolveAccountGroupIdsForIdentifiers(

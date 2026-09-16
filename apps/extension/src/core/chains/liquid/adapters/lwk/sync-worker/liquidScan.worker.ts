@@ -1,8 +1,6 @@
 import { readActivity, scanAndRead, scanFresh } from "./liquidScanCore";
 import type { SyncWorkerRequest, SyncWorkerResponse } from "./protocol";
 
-// Minimal dedicated-worker surface. Declaring it locally avoids pulling the `webworker`
-// TS lib, which clashes with the project's `DOM` lib on globals like `self`.
 type WorkerScope = {
 	addEventListener: (
 		type: "message",
@@ -13,8 +11,6 @@ type WorkerScope = {
 
 const ctx = self as unknown as WorkerScope;
 
-// Thin message loop around the shared scan core. Used where dedicated Workers exist (e.g. a
-// Firefox background page); MV3 service workers can't spawn Workers and scan inline instead.
 async function handle(request: SyncWorkerRequest): Promise<void> {
 	try {
 		if (request.op === "scan") {

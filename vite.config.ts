@@ -9,9 +9,6 @@ import webExtension, { readJsonFile } from "vite-plugin-web-extension";
 
 import { manifestVersion } from "./scripts/manifestVersion.ts";
 
-// Paths passed to `readJsonFile` are resolved against process.cwd() (the workspace root), so they
-// carry the `apps/extension/` prefix. Paths *inside* the manifest (and the additionalInputs below)
-// are resolved against Vite's `root` (set to "apps/extension"), so those stay bare `src/...`.
 const manifest = readJsonFile("apps/extension/src/manifest.json");
 
 function isBuildWatchCommand() {
@@ -40,7 +37,6 @@ function getAdditionalInputs() {
 	return [...getWebAccessibleResourceInputs(), "src/notification.html", "src/offscreen.html"];
 }
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
 	const isDevelopment = mode === "development";
 	const isAnalyze = mode === "analyze";
@@ -48,9 +44,6 @@ export default defineConfig(({ mode }) => {
 		isBuildWatchCommand() && process.env.HUMID_EXTENSION_AUTO_LAUNCH !== "true";
 
 	return {
-		// Vite runs from the workspace root, but the extension's sources live in apps/extension. Point
-		// `root` there so the manifest's bare `src/...` entry paths resolve and the emitted bundle stays
-		// structured as a plain extension (dist/src/..., dist/icon/...).
 		root: "apps/extension",
 		server: {
 			sourcemapIgnoreList: false,
@@ -102,9 +95,6 @@ export default defineConfig(({ mode }) => {
 		build: {
 			target: "esnext",
 			sourcemap: true,
-			// Hoist the output out of `root` (apps/extension) back to the workspace-root dist/, so the
-			// unpacked extension keeps loading from humid/dist as before. `emptyOutDir` is required
-			// because the target lives outside Vite's `root`.
 			outDir: path.resolve(process.cwd(), "dist"),
 			emptyOutDir: true,
 		},

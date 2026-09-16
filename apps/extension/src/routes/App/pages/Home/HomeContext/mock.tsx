@@ -14,11 +14,6 @@ import UiPageBackgroundWrp from "@/ui/UiPageBackgroundWrp";
 import type { Portfolio } from "./hooks/usePortfolio";
 import { HomeContext } from "./index";
 
-// Interactive stub of the home context for Storybook/tests. Account and chain
-// selection is local so stories stay interactive without a background; portfolio is
-// the rich display scaffolding (there is no portfolio backend yet). Shape matches
-// HomeContextValue.
-
 const CHAINS: ChainRecord[] = [
 	{ chainGroupId: "liquid", id: LIQUID_MAINNET_CHAIN_ID, name: "Liquid", settings: {} },
 	{ chainGroupId: "liquid", id: LIQUID_TESTNET_CHAIN_ID, name: "Liquid Testnet", settings: {} },
@@ -113,11 +108,8 @@ function useMockHomeValue() {
 	);
 }
 
-// Story/test-only client so components that reach for React Query (e.g. the portfolio refresh
-// mutation) render without a backend; there are no real queries here.
 const mockQueryClient = new QueryClient();
 
-/** Story/test provider: injects the interactive mock value into HomeContext. */
 export function MockHomeProvider({ children }: PropsWithChildren) {
 	const value = useMockHomeValue();
 

@@ -21,8 +21,6 @@ function scope(params: Record<string, unknown>): ReferenceScope {
 }
 
 describe("planAction", () => {
-	// Pay declares two outputs: the covenant, whose amount is params.amount_sat, and an
-	// optional change output.
 	test("resolves the covenant amount from the request's parameters", () => {
 		const result = planAction(PAY, scope({ amount_sat: 50_000, pubkey: PUBKEY }));
 
@@ -30,8 +28,6 @@ describe("planAction", () => {
 
 		if (result.ok) {
 			expect(result.plan.fundingSats).toBe(50_000n);
-			// A covenant output could never hide what it carries, whatever the document says,
-			// so its blinding is answered before the format's own order is consulted.
 			expect(result.plan.outputs).toContainEqual({
 				blinding: { blinding: "open", decidedBy: "unblindable" },
 				id: "p2pk_out",
@@ -54,7 +50,6 @@ describe("planAction", () => {
 		}
 	});
 
-	// Amounts are base units and must survive past 2^53, which a number cannot.
 	test("keeps an amount beyond a double's range exact", () => {
 		const huge = "9007199254740993";
 		const result = planAction(PAY, scope({ amount_sat: huge, pubkey: PUBKEY }));

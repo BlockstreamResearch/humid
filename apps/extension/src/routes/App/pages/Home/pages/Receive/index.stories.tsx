@@ -11,7 +11,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Receive screen with a stub Liquid address + QR. */
 export const Default: Story = {
 	args: {
 		accountName: "Account 1",
@@ -20,7 +19,6 @@ export const Default: Story = {
 	},
 };
 
-/** The contract tab once the identity has been read: an address that never changes, and a key. */
 export const ContractIdentity: Story = {
 	args: {
 		...Default.args,
@@ -31,7 +29,6 @@ export const ContractIdentity: Story = {
 	},
 };
 
-/** The contract tab when the background could not answer. */
 export const ContractIdentityFailed: Story = {
 	args: {
 		...Default.args,

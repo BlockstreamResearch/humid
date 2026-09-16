@@ -29,14 +29,9 @@ export default function Dashboard() {
 	);
 }
 
-/**
- * A thin consumer of {@link useHumidContext}: all wallet plumbing (provider, session, policy, typed
- * calls, events) lives in the context, so this only lays out the cards and shows the two edge states.
- */
 function DebugDashboard() {
 	const { hasProvider } = useHumidContext();
 
-	// getUTXOs feeds the first wallet-owned address into signMessage — the one bit of shared card state.
 	const [knownAddress, setKnownAddress] = useState("");
 
 	if (!hasProvider) return <NotDetectedCard />;

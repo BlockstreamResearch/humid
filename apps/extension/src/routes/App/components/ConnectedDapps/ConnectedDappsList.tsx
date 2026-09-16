@@ -7,10 +7,6 @@ import type { ConnectedDappView } from "@/core/dapp-sessions/model";
 import { ConnectedDappRow } from "./ConnectedDappRow";
 import { connectedDappKey } from "./useConnectedDapps";
 
-/**
- * Presentational connected-dapps list — the ordered waterfall (loading → error → empty → data). The
- * container supplies the (already account-scoped) dapps and the revoke handler.
- */
 export function ConnectedDappsList({
 	dapps,
 	isError,

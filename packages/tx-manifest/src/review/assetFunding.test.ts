@@ -46,8 +46,6 @@ describe("funding an action asset by asset", () => {
 		).toEqual([["900"], ["1500"]]);
 	});
 
-	// The fee is charged in one asset and is added to that one alone. A second asset picking up
-	// a second fee would make the wallet demand money nobody is asking for.
 	test("adds the fee to the network's own asset and to no other", () => {
 		const short = fund([entry(POLICY, 0n)], { [POLICY]: [utxo("400")] }, 500n);
 		const exact = fund([entry(TOKEN, 400n, { change: CHANGE })], { [TOKEN]: [utxo("400")] }, 500n);
@@ -65,8 +63,6 @@ describe("funding an action asset by asset", () => {
 		expect(result.ok && result.funded.map((funded) => funded.changeSats)).toEqual([0n, 500n]);
 	});
 
-	// What a covenant already holds is what the wallet does not have to find. Netting it per
-	// asset is what lets an action pay out of the covenant it spends.
 	test("counts what the transaction already brings before asking the wallet for anything", () => {
 		const result = fund([entry(POLICY, 0n), entry(TOKEN, 1000n, { held: 1000n })], {
 			[POLICY]: [utxo("9000")],
@@ -81,8 +77,6 @@ describe("funding an action asset by asset", () => {
 			[TOKEN]: [utxo("500"), utxo("50")],
 		});
 
-		// Four hundred short, and the largest single output covers it. A wallet that had ignored
-		// what the covenant holds would have taken both and still been short.
 		expect(result.ok && result.funded[1]?.selected.map((one) => one.amount)).toEqual(["500"]);
 		expect(result.ok && result.funded[1]?.changeSats).toBe(100n);
 	});
@@ -101,7 +95,6 @@ describe("when one asset cannot be funded", () => {
 		expect(result.ok ? "" : result.reject).toBe("shortfall");
 	});
 
-	// The refusal for another asset never mentions the fee, because no fee is charged in it.
 	test("and never explains a shortfall in one asset by the fee charged in another", () => {
 		const result = fund([entry(TOKEN, 1000n)], { [TOKEN]: [utxo("40")] });
 
@@ -117,8 +110,6 @@ describe("when one asset cannot be funded", () => {
 		expect(result.ok ? "" : result.reason).toContain("unblinded address");
 	});
 
-	// Surplus with nowhere declared to go is value the transaction would destroy, so it is
-	// refused rather than built. The network's own asset is exempt: its surplus is the fee's.
 	test("a surplus the document declares no change output for is refused", () => {
 		const result = fund([entry(TOKEN, 1000n)], { [TOKEN]: [utxo("1500")] });
 
@@ -147,8 +138,6 @@ describe("an output already committed to for an issuance", () => {
 		});
 	}
 
-	// It is an input of this transaction whether or not the arithmetic would have chosen it, so
-	// what it brings counts and it is never chosen twice.
 	test("counts towards its own asset and is not selected again", () => {
 		const result = withReserved([entry(TOKEN, 1000n, { change: CHANGE })], {
 			[TOKEN]: [reserved, utxo("400")],

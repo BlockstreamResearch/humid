@@ -14,12 +14,6 @@ export type RemoveAccountGroupResult = {
 	accountModel: AccountModelState;
 };
 
-/**
- * Removes an account group and its materialized chain accounts + addresses. A group can
- * only be removed while its wallet has another group, so "remove account" never destroys
- * a seed (forgetting a whole wallet/seed is a separate flow). Reassigns the selected
- * group if the removed one was selected. Chain-agnostic — no signing, no chain specifics.
- */
 export function removeAccountGroup(input: RemoveAccountGroupInput): RemoveAccountGroupResult {
 	const group = input.accountModel.accountGroups[input.accountGroupId];
 
@@ -47,9 +41,6 @@ export function removeAccountGroup(input: RemoveAccountGroupInput): RemoveAccoun
 
 	removeAccountGroupEntities({ accountGroups, addresses, chainAccounts }, group);
 
-	// Prune the removed group from any dapp session it was authorized in (deleting a session left with
-	// no authorized account). Runs off `input.accountModel` — before the deletions above are committed —
-	// because it reads the group's chain-account ids to strip them from each session's scope.
 	const { dappSessions } = pruneDappSessionsForRemovedAccountGroup(input.accountModel, group, now);
 
 	const selectedAccountGroupId =
@@ -78,15 +69,6 @@ export function removeAccountGroup(input: RemoveAccountGroupInput): RemoveAccoun
 	};
 }
 
-/**
- * Purge a removed account group from every dapp session that authorized it. For each injected session
- * whose scope granted this group, strip the group's chain-account ids from the scope, then reuse
- * {@link revokeAccountFromDappSession}'s prune→delete-if-empty on the account grant itself — so a
- * session left authorizing no account is deleted entirely (a full disconnect for that origin). Pure
- * and synchronous, and reads `group.chainAccountIds` off the passed record, so it must run BEFORE the
- * group's chain accounts are deleted. Shared so `removeAccountGroup` (one group) and `removeWallet`
- * (its whole loop of groups) prune identically; returns the model with only `dappSessions` changed.
- */
 export function pruneDappSessionsForRemovedAccountGroup(
 	accountModel: AccountModelState,
 	group: AccountGroupRecord,
@@ -98,9 +80,6 @@ export function pruneDappSessionsForRemovedAccountGroup(
 
 	if (affectedSessions.length === 0) return accountModel;
 
-	// Drop the removed group's chain accounts from every affected session's scope first — the account-
-	// grant prune below (revokeAccountFromDappSession) only touches `accountGroupIds`. Mutating a fresh
-	// copy, the same controlled-mutation shape revokeAccountFromDappSession itself uses.
 	const removedChainAccountIds = new Set<ChainAccountId>(group.chainAccountIds);
 	const dappSessions = { ...accountModel.dappSessions };
 
@@ -116,8 +95,6 @@ export function pruneDappSessionsForRemovedAccountGroup(
 		};
 	}
 
-	// Then reuse the shared prune→delete-if-empty for the account grant on each affected session: a
-	// session left authorizing no account is deleted entirely (a full disconnect for that origin).
 	let model: AccountModelState = { ...accountModel, dappSessions };
 
 	for (const session of affectedSessions) {

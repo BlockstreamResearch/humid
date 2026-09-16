@@ -5,7 +5,6 @@ import { Link } from "@tanstack/react-router";
 import { cn } from "@/theme/utils.ts";
 import { UiButtonVariants } from "@/ui/UiButton/base";
 
-/** Primary money actions: Receive opens the receive screen; Send opens the send flow. */
 export function QuickActions({ assetId }: { assetId?: string }) {
 	return (
 		<div className="flex gap-2">

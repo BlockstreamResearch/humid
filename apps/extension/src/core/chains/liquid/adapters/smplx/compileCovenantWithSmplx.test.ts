@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-	createSmplxContractParamTypes,
+	createSmplxCovenantParamTypes,
 	createSmplxCovenantCompiler,
 	createSmplxScriptPubKeyCompiler,
 } from "./compileCovenantWithSmplx";
@@ -11,7 +11,6 @@ import { smplx } from "./smplxWasmForTests";
 const PROBE_SOURCE = "fn main() { assert!(jet::eq_32(witness::A, witness::B)); }";
 const SCRIPT = `5120${"11".repeat(32)}`;
 
-/** Everything one covenant was constructed with, which is what the module is told. */
 type Construction = [
 	source: string,
 	argumentsJson?: string | null,
@@ -19,13 +18,6 @@ type Construction = [
 	includeDebugSymbols?: boolean | null,
 ];
 
-/**
- * A substitute that records how each covenant was constructed and how many were released.
- *
- * The real module can say neither: a handle across the wasm boundary does not report what it was
- * built from, and nothing observes a free. Both are exactly what this adapter is responsible for,
- * so they are what a substitute is here to see.
- */
 function recording(answers: { address?: () => string; scriptPubKeyHex?: () => string } = {}) {
 	const built: Construction[] = [];
 	let freed = 0;
@@ -53,11 +45,6 @@ function recording(answers: { address?: () => string; scriptPubKeyHex?: () => st
 }
 
 describe("createSmplxCovenantCompiler", () => {
-	/**
-	 * All four build inputs reach the module, and none of them is left to its default. Passing
-	 * nothing is not the same as passing "none": the module's own default is a different taproot
-	 * tree and a different commitment root, so it is a different address — and one that compiles.
-	 */
 	test("forwards the source, the arguments, the leaves and the build mode", () => {
 		const { built, module } = recording();
 
@@ -91,8 +78,6 @@ describe("createSmplxCovenantCompiler", () => {
 	});
 
 	describe("what it releases", () => {
-		// The covenant is a handle across the wasm boundary, so it is released here rather than
-		// left to a collector that does not know it holds wasm memory.
 		test("releases the covenant it compiled", () => {
 			const { module, released } = recording();
 
@@ -107,8 +92,6 @@ describe("createSmplxCovenantCompiler", () => {
 			expect(released()).toBe(1);
 		});
 
-		// A compile that throws holds the same handle as one that does not, which is why this is
-		// a `finally` and not a trailing call.
 		test("releases the covenant when reading it throws", () => {
 			const { module, released } = recording({
 				address: () => {
@@ -131,11 +114,6 @@ describe("createSmplxCovenantCompiler", () => {
 });
 
 describe("createSmplxScriptPubKeyCompiler", () => {
-	/**
-	 * The network is bound rather than asked for: a script's bytes do not depend on it — a network
-	 * decides how those bytes are rendered as an address — so it is this wallet's own setting, and
-	 * a port taking it per call would invite a caller to vary something that cannot vary.
-	 */
 	test("binds the network and forwards everything the document decided", () => {
 		const { built, module } = recording();
 		const hex = createSmplxScriptPubKeyCompiler(
@@ -152,11 +130,6 @@ describe("createSmplxScriptPubKeyCompiler", () => {
 		expect(built).toEqual([[PROBE_SOURCE, "{}", "[]", true]]);
 	});
 
-	/**
-	 * Synchronous, because the review calls it inside a fixed point: a set of covenant hashes that
-	 * name each other is settled by recompiling all of them together, once per round, and an
-	 * asynchronous step there would make the number of rounds depend on scheduling.
-	 */
 	test("answers without a promise", () => {
 		const { module } = recording();
 		const answer = createSmplxScriptPubKeyCompiler(
@@ -194,11 +167,10 @@ describe("createSmplxScriptPubKeyCompiler", () => {
 	});
 });
 
-/** The port, reading a fixed answer, for the cases that are about the answer's shape. */
 const answering = (answer: string) =>
-	createSmplxContractParamTypes({ covenantParameterTypes: () => answer });
+	createSmplxCovenantParamTypes({ covenantParameterTypes: () => answer });
 
-describe("createSmplxContractParamTypes", () => {
+describe("createSmplxCovenantParamTypes", () => {
 	test("reads the types the compiler reports for a contract", () => {
 		expect(answering('{"SLOT_COUNT":"u8","WITH_BURN":"bool"}')(PROBE_SOURCE)).toEqual({
 			SLOT_COUNT: "u8",
@@ -213,7 +185,7 @@ describe("createSmplxContractParamTypes", () => {
 	test("passes the source through unchanged", () => {
 		const asked: string[] = [];
 
-		createSmplxContractParamTypes({
+		createSmplxCovenantParamTypes({
 			covenantParameterTypes: (source: string) => {
 				asked.push(source);
 
@@ -224,12 +196,6 @@ describe("createSmplxContractParamTypes", () => {
 		expect(asked).toEqual([PROBE_SOURCE]);
 	});
 
-	/**
-	 * A malformed answer throws rather than being passed through half-read. The review catches it
-	 * and reports the contract as one that did not compile, which is what it is — whereas a
-	 * partially-read map would silently leave a parameter untyped, and an untyped parameter is one
-	 * the wallet then declines to encode for a reason about the wrong thing.
-	 */
 	test("throws on an answer that is not JSON at all", () => {
 		expect(() => answering("not json")(PROBE_SOURCE)).toThrow();
 	});
@@ -245,12 +211,6 @@ describe("createSmplxContractParamTypes", () => {
 	});
 });
 
-/**
- * The same three ports against the real wasm module.
- *
- * A substitute can agree with itself about anything; only the module can say what a source
- * actually compiles to, and that both spellings of where a covenant sits come from one compile.
- */
 describe("against the module this wallet ships", () => {
 	const compile = createSmplxCovenantCompiler(smplx);
 	const asked = {
@@ -272,8 +232,6 @@ describe("against the module this wallet ships", () => {
 		const compiled = await compile(asked);
 		const covenant = new smplx.Covenant(PROBE_SOURCE, "{}", "[]", false);
 
-		// A failing assertion throws, and the handle it holds is the same one a passing assertion
-		// holds — so the release is a `finally` here for the reason it is one in production.
 		try {
 			expect(compiled.address).toBe(covenant.address("liquid-testnet"));
 			expect(compiled.scriptPubKeyHex).toBe(covenant.scriptPubKeyHex("liquid-testnet"));
@@ -282,7 +240,6 @@ describe("against the module this wallet ships", () => {
 		}
 	});
 
-	/** The flag changes the commitment root, so the same source lands somewhere else entirely. */
 	test("builds a different covenant in the other mode", async () => {
 		const plain = await compile(asked);
 		const debug = await compile({ ...asked, includeDebugSymbols: true });
@@ -291,8 +248,6 @@ describe("against the module this wallet ships", () => {
 	});
 
 	test("hashes the same script the full compile locks to", () => {
-		// Released the way production releases one. A handle constructed inside the assertion is a
-		// handle nothing frees, and it holds wasm memory a collector does not know about.
 		const covenant = new smplx.Covenant(PROBE_SOURCE, "{}", "[]", false);
 
 		try {
@@ -304,12 +259,8 @@ describe("against the module this wallet ships", () => {
 		}
 	});
 
-	// Awaited because the port the review declares accepts an answer either way round: this
-	// adapter answers at once, and one reading a contract across a boundary that cannot would
-	// answer with a promise. The caller is written for both, so the test reads it as the caller
-	// does rather than as this implementation happens to.
 	test("reads what the module says a contract's parameters are", async () => {
-		const declared = await createSmplxContractParamTypes(smplx)(
+		const declared = await createSmplxCovenantParamTypes(smplx)(
 			"fn main() { assert!(jet::eq_8(param::SLOTS, 2)); }",
 		);
 

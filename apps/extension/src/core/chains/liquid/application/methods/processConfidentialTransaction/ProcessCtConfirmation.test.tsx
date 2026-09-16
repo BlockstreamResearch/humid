@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { computed, fromSite, type ShownConfirmation, verified } from "@humid/tx-manifest";
+import { computed, fromDapp, type ShownConfirmation, verified } from "@humid/tx-manifest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
@@ -12,21 +12,16 @@ import {
 	processCtConfirmationRenderer,
 } from "./ProcessCtConfirmation";
 
-// What this surface is handed, what it will accept, and what a person actually reads on it.
-// The property that cannot be tested here is enforced by the type: every value it displays is
-// provenanced, so an unattributed one cannot reach it at all — that is asserted in the
-// package, where the brand lives.
-
 const FEE_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 const TOKEN = "aa".repeat(32);
 
 const MODEL: ShownConfirmation = {
 	account: computed("liquid:testnet account 0"),
-	action: fromSite("Receive"),
+	action: fromDapp("Receive"),
 	covenants: [
 		{
 			address: verified("tex1p_derived"),
-			utxoType: fromSite("p2pk_output"),
+			utxoType: fromDapp("p2pk_output"),
 			verified: computed(true),
 		},
 	],
@@ -35,11 +30,11 @@ const MODEL: ShownConfirmation = {
 	hiddenAmounts: [
 		{
 			decidedBy: computed("this protocol asks for it to be hidden"),
-			id: fromSite("received_out"),
+			id: fromDapp("received_out"),
 		},
 	],
 	netEffect: [{ asset: computed(FEE_ASSET), sats: computed("-50500") }],
-	protocol: fromSite("p2pk-simplicity"),
+	protocol: fromDapp("p2pk-simplicity"),
 	publishedAmounts: [
 		{
 			id: computed("change"),
@@ -49,7 +44,7 @@ const MODEL: ShownConfirmation = {
 			),
 		},
 	],
-	summary: fromSite("Spend a p2pk output back into your wallet."),
+	summary: fromDapp("Spend a p2pk output back into your wallet."),
 };
 
 const payload = (shown: unknown = MODEL, broadcast = false) => ({
@@ -67,7 +62,6 @@ const markup = (shown: ShownConfirmation = MODEL, broadcast = false) =>
 		/>,
 	);
 
-/** The same model with one field replaced by something that came off a wire. */
 const spoiled = (field: keyof ShownConfirmation, value: unknown) => ({ ...MODEL, [field]: value });
 
 describe("the payload this surface accepts", () => {
@@ -88,9 +82,6 @@ describe("the payload this surface accepts", () => {
 		expect(isProcessCtConfirmationData("a string")).toBe(false);
 	});
 
-	// The kind alone is what the host selects on, so everything below says the right kind and
-	// is still not something this surface can render. Each of them reached the markup before
-	// the model was checked all the way down, and each of them threw inside it.
 	test("refuses its own kind with nothing, or something that is not a model, behind it", () => {
 		expect(isProcessCtConfirmationData({ kind: PROCESS_CT_CONFIRMATION_KIND })).toBe(false);
 		expect(isProcessCtConfirmationData(payload(null))).toBe(false);
@@ -105,8 +96,6 @@ describe("the payload this surface accepts", () => {
 		).toBe(false);
 	});
 
-	// An origin outside the published vocabulary never came from this package, and a screen
-	// that rendered one would have no sentence to put under the value.
 	test("refuses an origin this wallet has no word for", () => {
 		expect(
 			isProcessCtConfirmationData(payload(spoiled("action", { origin: "trusted", value: "Pay" }))),
@@ -119,8 +108,6 @@ describe("the payload this surface accepts", () => {
 		expect(isProcessCtConfirmationData(payload(spoiled("feeSats", computed(344))))).toBe(false);
 	});
 
-	// A fee is what this costs. A negative one is not a figure the wallet produces, and it
-	// would print as a gain under a heading that says otherwise.
 	test("refuses a fee with a sign on it, and keeps the sign on a balance change", () => {
 		expect(isProcessCtConfirmationData(payload(spoiled("feeSats", computed("-344"))))).toBe(false);
 		expect(
@@ -136,7 +123,7 @@ describe("the payload this surface accepts", () => {
 			isProcessCtConfirmationData(payload(spoiled("netEffect", [{ asset: computed(TOKEN) }]))),
 		).toBe(false);
 		expect(
-			isProcessCtConfirmationData(payload(spoiled("hiddenAmounts", [{ id: fromSite("out") }]))),
+			isProcessCtConfirmationData(payload(spoiled("hiddenAmounts", [{ id: fromDapp("out") }]))),
 		).toBe(false);
 		expect(
 			isProcessCtConfirmationData(
@@ -145,8 +132,6 @@ describe("the payload this surface accepts", () => {
 		).toBe(false);
 	});
 
-	// The covenant row carries three facts and the screen shows all three, so a row short of
-	// one of them is a row this surface cannot write.
 	test("refuses a covenant row that does not carry its type or its verdict", () => {
 		expect(
 			isProcessCtConfirmationData(
@@ -155,14 +140,14 @@ describe("the payload this surface accepts", () => {
 		).toBe(false);
 		expect(
 			isProcessCtConfirmationData(
-				payload(spoiled("covenants", [{ address: verified("tex1p"), utxoType: fromSite("p2pk") }])),
+				payload(spoiled("covenants", [{ address: verified("tex1p"), utxoType: fromDapp("p2pk") }])),
 			),
 		).toBe(false);
 		expect(
 			isProcessCtConfirmationData(
 				payload(
 					spoiled("covenants", [
-						{ address: verified("tex1p"), utxoType: fromSite("p2pk"), verified: computed("yes") },
+						{ address: verified("tex1p"), utxoType: fromDapp("p2pk"), verified: computed("yes") },
 					]),
 				),
 			),
@@ -170,7 +155,7 @@ describe("the payload this surface accepts", () => {
 	});
 
 	test("refuses a summary that is present and unattributed", () => {
-		expect(isProcessCtConfirmationData(payload(spoiled("summary", "the site says so")))).toBe(
+		expect(isProcessCtConfirmationData(payload(spoiled("summary", "the dapp says so")))).toBe(
 			false,
 		);
 	});
@@ -181,8 +166,6 @@ describe("which body the host is given", () => {
 		expect(processCtConfirmationRenderer.kind).toBe(PROCESS_CT_CONFIRMATION_KIND);
 	});
 
-	// Nothing, so the host keeps looking. This is the only case where nothing is the right
-	// answer: the payload is somebody else's.
 	test("nothing at all for a payload that is not its own", () => {
 		expect(
 			processCtConfirmationRenderer.render({
@@ -203,7 +186,6 @@ describe("which body the host is given", () => {
 		).not.toBeNull();
 	});
 
-	/** The rendered body for a payload of this kind, whatever is behind it. */
 	const rendered = (shown: unknown, onConfirm: () => void = () => {}) =>
 		renderToStaticMarkup(
 			processCtConfirmationRenderer.render({
@@ -213,9 +195,6 @@ describe("which body the host is given", () => {
 			}) as never,
 		);
 
-	// The host picks a body by kind and shows what it picked. There is nothing behind this
-	// one, so returning nothing here would leave a person facing an empty screen with no way
-	// to decline — which is worse than the payload that caused it.
 	test("and a refusal, not nothing, for one of its own kind it cannot read", () => {
 		const html = rendered({});
 
@@ -231,8 +210,6 @@ describe("which body the host is given", () => {
 		expect(html).not.toContain("Decline");
 	});
 
-	// The point of the refusal body: there is no path from an unreadable payload to an
-	// approval, and no button that could be pressed into becoming one.
 	test("and cannot approve anything, because it holds nothing that would", () => {
 		let confirmed = 0;
 
@@ -242,9 +219,6 @@ describe("which body the host is given", () => {
 });
 
 describe("the fee, which is a price rather than a balance change", () => {
-	// The balance lines carry a sign because they say which way money moved. The fee is what
-	// this transaction costs, and it was rendered by the same function — so a wallet paying a
-	// fee printed "+0.00000108 L-BTC" one line under "−0.00000108 L-BTC" for the same amount.
 	test("is written without a sign", () => {
 		expect(feeLine("108")).toBe("0.00000108 L-BTC");
 	});
@@ -254,8 +228,6 @@ describe("the fee, which is a price rather than a balance change", () => {
 	});
 });
 
-// One balance change per asset reaches this surface, and only one of them is in an asset this
-// wallet knows how to name and how to divide.
 describe("a balance change in each asset the action moves", () => {
 	test("the network's own asset is shown by name, divided the way it divides", () => {
 		expect(netEffectLine({ asset: FEE_ASSET, sats: "-50500" }, FEE_ASSET)).toEqual({
@@ -263,9 +235,6 @@ describe("a balance change in each asset the action moves", () => {
 		});
 	});
 
-	// A protocol's own token divides however that protocol says, which this wallet was never
-	// told. Base units and the id are what it can stand behind; "0.00000001 L-BTC" beside a
-	// one-of-a-kind token would be two lies in five characters.
 	test("and any other asset is shown in base units, beside the id it is", () => {
 		expect(netEffectLine({ asset: TOKEN, sats: "-1" }, FEE_ASSET)).toEqual({
 			asset: TOKEN,
@@ -278,8 +247,6 @@ describe("a balance change in each asset the action moves", () => {
 	});
 });
 
-// What a person actually reads. Every value on this screen is accompanied by where it came
-// from, and the sentence for the site's word is the one that has to be unmistakable.
 describe("what the screen says", () => {
 	test("shows the balance change, the fee and the acting account", () => {
 		const html = markup();
@@ -289,12 +256,12 @@ describe("what the screen says", () => {
 		expect(html).toContain("liquid:testnet account 0");
 	});
 
-	test("attributes the site's own words to the site, in words", () => {
+	test("attributes the dapp's own words to the dapp, in words", () => {
 		const html = markup();
 
 		expect(html).toContain("p2pk-simplicity");
 		expect(html).toContain("Spend a p2pk output back into your wallet.");
-		expect(html).toContain("claimed by the site");
+		expect(html).toContain("claimed by the dapp");
 	});
 
 	test("and says which of the wallet's findings it checked against the network", () => {
@@ -305,44 +272,34 @@ describe("what the screen says", () => {
 		expect(html).toContain("checked by this wallet against the network");
 	});
 
-	test("says a covenant it could not compare is not on chain yet", () => {
+	test("says a covenant it could not compare is not onchain yet", () => {
 		const html = markup({
 			...MODEL,
 			covenants: [
 				{
 					address: computed("tex1p_derived"),
-					utxoType: fromSite("p2pk_output"),
+					utxoType: fromDapp("p2pk_output"),
 					verified: computed(false),
 				},
 			],
 		});
 
-		expect(html).toContain("Contract, not yet on chain");
+		expect(html).toContain("Contract, not yet onchain");
 		expect(html).toContain("worked out by this wallet");
 	});
 
-	// What the protocol calls a covenant is on the screen beside the address the wallet
-	// derived, and is labelled as the protocol's word. A person reading a name next to a
-	// checked address should be able to tell which half of that line the wallet vouches for.
-	test("names what the protocol calls each covenant, as the site's word", () => {
+	test("names what the protocol calls each covenant, as the dapp's word", () => {
 		const html = markup();
 		const utxoType = html.indexOf("p2pk_output");
 
 		expect(utxoType).toBeGreaterThan(-1);
 
-		// The attribution follows the name rather than sitting somewhere else on the screen.
-		// Found first, then placed: an absent one indexes as -1, which is less than any
-		// distance and would otherwise pass this as though it were right beside the name.
-		const attribution = html.indexOf("claimed by the site", utxoType);
+		const attribution = html.indexOf("claimed by the dapp", utxoType);
 
 		expect(attribution).toBeGreaterThan(utxoType);
 		expect(attribution - utxoType).toBeLessThan(200);
 	});
 
-	// Two values on one row, and two attributions. The name is the protocol's word for the
-	// output and the sentence under it is this wallet's reading of the document; one label
-	// under the pair would leave a person unable to tell which of them the wallet stands
-	// behind, which is the only question this screen exists to answer.
 	test("attributes a hidden amount's name separately from the word that hid it", () => {
 		const html = markup();
 		const name = html.indexOf("received_out");
@@ -351,13 +308,10 @@ describe("what the screen says", () => {
 
 		expect(name).toBeGreaterThan(-1);
 		expect(decision).toBeGreaterThan(name);
-		// The name is the site's and says so before the sentence beneath it begins.
-		expect(between).toContain("claimed by the site");
+		expect(between).toContain("claimed by the dapp");
 		expect(html.slice(decision)).toContain("worked out by this wallet");
 	});
 
-	// The published row's name is usually the wallet's own word for its change rather than
-	// anything the document wrote, so its attribution is not the one under the sentence.
 	test("and a published amount's name separately from the reason it was published", () => {
 		const html = markup();
 		const name = html.indexOf(">change<");
@@ -368,14 +322,12 @@ describe("what the screen says", () => {
 		expect(html.slice(name, reason)).toContain("worked out by this wallet");
 	});
 
-	// The same row when the document did name the output: then the name is the site's word
-	// and the sentence beside it is still the wallet's, and the screen says both.
-	test("marking that name as the site's where the document wrote one", () => {
+	test("marking that name as the dapp's where the document wrote one", () => {
 		const html = markup({
 			...MODEL,
 			publishedAmounts: [
 				{
-					id: fromSite("token_change"),
+					id: fromDapp("token_change"),
 					reason: computed("this protocol asks for it to be hidden"),
 				},
 			],
@@ -385,13 +337,13 @@ describe("what the screen says", () => {
 		expect(name).toBeGreaterThan(-1);
 		expect(
 			html.slice(name, html.indexOf("this protocol asks for it to be hidden", name)),
-		).toContain("claimed by the site");
+		).toContain("claimed by the dapp");
 	});
 
 	test("names every amount it hides and whose word decided that", () => {
 		const html = markup();
 
-		expect(html).toContain("Amount hidden on chain");
+		expect(html).toContain("Amount hidden onchain");
 		expect(html).toContain("received_out");
 		expect(html).toContain("this protocol asks for it to be hidden");
 	});
@@ -399,12 +351,10 @@ describe("what the screen says", () => {
 	test("and every amount it publishes over the format, with the word it set aside", () => {
 		const html = markup();
 
-		expect(html).toContain("Amount published on chain");
+		expect(html).toContain("Amount published onchain");
 		expect(html).toContain("so your next action can spend it");
 	});
 
-	// A token this wallet was never told how to divide is shown in base units beside its id,
-	// and never under the network asset's name.
 	test("shows a protocol's own token in base units, never as L-BTC", () => {
 		const html = markup({
 			...MODEL,
@@ -416,9 +366,6 @@ describe("what the screen says", () => {
 		expect(html).not.toContain("−1 L-BTC");
 	});
 
-	// What this screen asks for is authorisation and nothing beyond it. Whether the signed
-	// transaction is handed back or sent is decided where it is sent, and a button here saying
-	// so would describe something this surface does not do.
 	test("offers to sign, and says nothing about sending", () => {
 		const html = markup();
 
@@ -431,24 +378,17 @@ describe("what the screen says", () => {
 	test("omits the summary a protocol did not write", () => {
 		const { summary: _summary, ...withoutSummary } = MODEL;
 
-		expect(markup(withoutSummary)).not.toContain("What the site says this does");
+		expect(markup(withoutSummary)).not.toContain("What the dapp says this does");
 	});
 });
 
-/**
- * Which of the two authorisations this screen is asking for.
- *
- * A signature handed back to the site and a signature broadcast are different things to agree
- * to, and the request says which. A screen that showed one word for both would be asking a
- * person to approve something the wallet knew and did not tell them.
- */
 describe("what the button says it will do", () => {
 	test("offers to sign, for a request that will not send", () => {
 		const rendered = markup(MODEL, false);
 
 		expect(rendered).toContain(">Sign<");
 		expect(rendered).not.toContain("Sign and send");
-		expect(rendered).toContain("handed back to the site rather than sent");
+		expect(rendered).toContain("handed back to the dapp rather than sent");
 	});
 
 	test("offers to sign and send, for a request that will", () => {
@@ -458,9 +398,6 @@ describe("what the button says it will do", () => {
 		expect(rendered).toContain("signed and sent");
 	});
 
-	// Not defaulted. A payload that omits it cannot say which of the two questions is being
-	// asked, and reading the absence as the quieter answer would put "Sign" on a screen that is
-	// about to broadcast.
 	test("refuses a payload that does not say", () => {
 		expect(isProcessCtConfirmationData({ kind: PROCESS_CT_CONFIRMATION_KIND, shown: MODEL })).toBe(
 			false,

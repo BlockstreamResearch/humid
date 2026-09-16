@@ -3,10 +3,6 @@ import { describe, expect, test } from "bun:test";
 import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
 import { parseLiquidProcessCtParams } from "./validation";
 
-// AC-13's other half: a site cannot set the fee. The request contract has no place to put
-// one, and a request that invents one is refused rather than quietly stripped — a site that
-// believes it set the fee and was ignored is a site that will keep believing it.
-
 const base = {
 	action: "Pay",
 	contractSources: { "./p2pk.simf": "fn main() { }" },
@@ -37,8 +33,6 @@ describe("parseLiquidProcessCtParams", () => {
 		expect(parseLiquidProcessCtParams({ ...base, manifest: undefined }).ok).toBe(false);
 	});
 
-	// The caller needs to know which field was wrong, not only that something was. It is a
-	// value rather than a thrown transport error because this package has no transport.
 	test("and says which field, so the caller can name it", () => {
 		const parsed = parseLiquidProcessCtParams({ ...base, manifest: undefined });
 

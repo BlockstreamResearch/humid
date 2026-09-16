@@ -5,18 +5,6 @@ import { evaluateCondition } from "./evaluate";
 
 export type ValidationFailure = { reason: string };
 
-/**
- * Checks the rules an action declares about itself, before anything is built.
- *
- * A validation exists so a protocol can stop a transaction it considers invalid, and the
- * wallet is the only thing in a position to honour that — the site asking for the action is
- * the party the rule is written against. So a rule that fails refuses, and a rule this runtime
- * cannot read refuses too: reading half a rule permits exactly what it was written to prevent.
- *
- * Only `arithmetic` rules, which is every rule the corpus contains. A `simplicity_hl` rule is a
- * contract to execute rather than a condition to evaluate, and `utxo_exists` is a chain
- * question nothing here asks; both are refused by name.
- */
 export function checkValidations(
 	action: NormalisedAction,
 	scope: ReferenceScope,
@@ -53,13 +41,6 @@ export function checkValidations(
 	return undefined;
 }
 
-/**
- * What the person is told when a rule fails.
- *
- * The protocol's own message when it wrote one, because it knows what the rule means and this
- * wallet does not — attributed to the protocol rather than stated as the wallet's own finding,
- * which is the same rule that governs every other piece of site-authored text.
- */
 function message(validation: Record<string, unknown> | undefined, id: string): string {
 	const error = validation?.error;
 	const declared = typeof error === "string" ? error : asRecord(error)?.message;

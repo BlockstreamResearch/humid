@@ -15,11 +15,6 @@ function createEmptyWords(): string[] {
 	return Array.from({ length: MNEMONIC_WORD_COUNT }, () => "");
 }
 
-/**
- * Legacy clipboard read via a hidden textarea. Runs synchronously inside the click
- * gesture and works in extension pages holding the `clipboardRead` permission —
- * more reliable there than the async Clipboard API. Returns "" when unavailable.
- */
 function readClipboardViaExecCommand(): string {
 	try {
 		const textarea = document.createElement("textarea");
@@ -37,15 +32,6 @@ function readClipboardViaExecCommand(): string {
 	}
 }
 
-/**
- * Manages the 12-word import grid: per-input state, focus tracking, and paste.
- *
- * - A field paste / typed space fills forward from that field (additive).
- * - The Paste button and clipboard read overwrite from the first field.
- *
- * In both cases the split is on whitespace and anything past the last slot is
- * truncated.
- */
 export function useMnemonicImport() {
 	const [words, setWords] = useState<string[]>(createEmptyWords);
 	const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -81,7 +67,6 @@ export function useMnemonicImport() {
 			onChange: (event: ChangeEvent<HTMLInputElement>) => {
 				const value = event.target.value;
 
-				// A space (typed or pasted mid-field) distributes forward from this field.
 				if (/\s/.test(value)) {
 					fillWords(value, index, false);
 					return;
@@ -102,11 +87,6 @@ export function useMnemonicImport() {
 		[words, fillWords],
 	);
 
-	/**
-	 * Paste button: read the clipboard and overwrite the whole grid from the start.
-	 * Tries the legacy in-gesture path first (reliable in extension popups), then the
-	 * async Clipboard API. Returns the read error so the UI can surface it.
-	 */
 	const pasteFromClipboard = useCallback(async (): Promise<{ error?: string; ok: boolean }> => {
 		const legacyText = readClipboardViaExecCommand();
 

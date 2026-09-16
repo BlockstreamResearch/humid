@@ -4,42 +4,16 @@ import type { NormalisationNote, NormalisedAction } from "../document/normalise"
 import { type ReferenceScope, resolveReference } from "../document/references";
 import type { PlannedOutput } from "./plan";
 
-/**
- * What one asset costs this transaction, and what the transaction already brings in it.
- *
- * One of these per asset, rather than one number for the whole transaction. A single running
- * total is only sound while there is a single asset: added together, three units of a
- * one-of-a-kind token and three thousand base units of money make six of nothing, and a wallet
- * that funds six of nothing is a wallet that funds neither.
- */
 export type AssetEntry = {
-	/** The asset id, as the chain writes it. */
 	asset: string;
-	/**
-	 * The declared output this asset's surplus returns to, when the document declares one.
-	 *
-	 * Only the asset the network charges its fees in can be left to the signing module, because
-	 * only that one has a fee taken out of it and therefore an amount nobody knows until the
-	 * transaction has been weighed. Every other asset's change is an exact figure, and an exact
-	 * figure needs an output to land in.
-	 */
 	change?: { blinded: boolean; id: string };
-	/**
-	 * Base units this transaction already brings in this asset before the wallet adds any of
-	 * its own: what the covenants it spends hold, and what its issuances create.
-	 */
 	held: bigint;
-	/** Base units the action's outputs pay in this asset. Change is not counted; it has no amount. */
 	needed: bigint;
 };
 
-/** Which asset each piece of an action is in, and what each of those assets needs. */
 export type AssetLedger = {
-	/** Every asset this action moves, in the order a person reading the document meets it. */
 	entries: AssetEntry[];
-	/** The asset of each planned output, in the plan's own order. */
 	outputs: string[];
-	/** Every input the wallet has to find for itself, in the order the action declares them. */
 	walletInputs: { asset: string; id: string }[];
 };
 
@@ -47,19 +21,9 @@ export type AssetLedgerResult =
 	| { ok: false; reason: string; reject: "document-fault" | "foreign-asset" }
 	| { ok: true; ledger: AssetLedger };
 
-/** What this transaction brings in an asset without the wallet spending anything of its own. */
 export type HeldValue = {
 	asset: string;
-	/**
-	 * Whether the transaction creates these units rather than finding them at an outpoint.
-	 *
-	 * One input can bring both: a covenant holding one asset, spent on the path that mints
-	 * another, arrives here twice under one id. Both are really in the transaction and both are
-	 * counted — but only the first is what the input *spends*, and it is the only one the
-	 * document's word about that input can be checked against.
-	 */
 	created?: true;
-	/** The input this value arrives on, so a disagreement can name it. */
 	id: string;
 	sats: bigint;
 };
@@ -72,14 +36,6 @@ type Context = {
 
 export type AssetResolution = { ok: false; reason: string } | { ok: true; id: string };
 
-/**
- * Which asset a declared `asset` field is, once the deployment and the request have been read.
- *
- * The corpus states an asset as a lookup far more often than as an id — every asset in every
- * published protocol, in fact — so this is where most of them first become a thing rather than
- * a spelling. A site that states none is stating the asset the network charges fees in: that is
- * the only asset a document can leave unsaid and still be understood by everyone reading it.
- */
 export function resolveAsset(declared: unknown, at: string, context: Context): AssetResolution {
 	if (declared === undefined) {
 		return { id: context.policyAsset.trim().toLowerCase(), ok: true };
@@ -136,18 +92,6 @@ export function resolveAsset(declared: unknown, at: string, context: Context): A
 	};
 }
 
-/**
- * Reads one action as a statement about several assets rather than about one amount.
- *
- * Everything here is a rule of the format: an output pays in the asset it states, an input
- * arrives in the asset it states, a covenant holds whatever the chain says it holds, and an
- * issuance creates what it declares. Nothing recognises a protocol, a deployment or a name.
- *
- * The plan is read positionally against the action's own outputs, which is exactly how the plan
- * was built — one planned output per declared record, in order. The ids are compared as well, so
- * a plan that ever stopped lining up is refused here rather than silently attributing an amount
- * to the wrong asset.
- */
 export function assetLedger(
 	action: NormalisedAction,
 	planned: PlannedOutput[],
@@ -182,16 +126,10 @@ export function assetLedger(
 		return created;
 	};
 
-	// The asset the network charges its fees in is always part of the reckoning, whether or not
-	// the action mentions it: the fee is paid in it and the wallet pays the fee.
 	entryFor(context.policyAsset.trim().toLowerCase());
 
 	const walletInputs: { asset: string; id: string }[] = [];
 	const outputs: string[] = [];
-	// Only what the chain reports, keyed by the input it arrived on. An input that issues an
-	// asset also reports one here, under the same id — and letting that win turns the check
-	// below into a comparison of the document's word against the asset this very input just
-	// created, which disagree for every covenant-sourced issuance and should.
 	const heldById = new Map(
 		context.held.filter((value) => value.created !== true).map((value) => [value.id, value]),
 	);
@@ -213,9 +151,6 @@ export function assetLedger(
 		entryFor(resolved.id);
 
 		if (typeof asRecord(declared.utxo_source)?.utxo_type === "string") {
-			// A covenant input's asset is whatever the chain says is at that outpoint. The document
-			// states one too, and the two disagreeing means the covenant is not holding what the
-			// action says it holds — which would fund the stated asset and strand the real one.
 			const held = heldById.get(id);
 
 			if (declared.asset !== undefined && held && held.asset !== resolved.id) {
@@ -265,12 +200,6 @@ export function assetLedger(
 		outputs.push(resolved.id);
 
 		if (output.target.kind === "change") {
-			// A document declaring two change outputs for one asset has named one place for its
-			// surplus twice, and there is no reading of that the wallet is entitled to pick. Both
-			// of the obvious ones are decisions the document did not make: taking the first
-			// silently drops a declaration that may hide what the second publishes, or pay it
-			// somewhere else entirely, and splitting the surplus between them invents a division
-			// nothing asked for. So it is refused, and the refusal names both.
 			if (entry.change) {
 				return {
 					ok: false,

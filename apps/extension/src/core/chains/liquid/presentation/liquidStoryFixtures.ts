@@ -9,12 +9,6 @@ import { truncateMiddle } from "@/helpers/formatters";
 import type { LiquidAssetMetadata } from "../domain/LiquidAsset";
 import { LIQUID_TESTNET_CHAIN_ID } from "../domain/LiquidChain";
 
-// Shared mock data for the Liquid presentation stories. One module so every story renders the
-// exact same chains / tokens / activity, and the values line up with the real display models
-// (raw bigint amounts formatted at render, full 64-hex ids, a `metadata` blob that populates the
-// whole LiquidAssetMetadata shape the components cast `token.metadata` to).
-
-/** A Liquid testnet chain that exposes an explorer base URL (so "view on explorer" links render). */
 export const mockLiquidChain: ChainRecord = {
 	chainGroupId: "liquid",
 	id: LIQUID_TESTNET_CHAIN_ID,
@@ -22,7 +16,6 @@ export const mockLiquidChain: ChainRecord = {
 	settings: { explorerUrl: "https://blockstream.info/liquidtestnet" },
 };
 
-/** The same chain with no explorer configured — drives the null-explorer variants (no link button). */
 export const mockLiquidChainNoExplorer: ChainRecord = {
 	chainGroupId: "liquid",
 	id: LIQUID_TESTNET_CHAIN_ID,
@@ -30,7 +23,6 @@ export const mockLiquidChainNoExplorer: ChainRecord = {
 	settings: {},
 };
 
-/** The native policy asset (L-BTC): always verified, no issuer. */
 export const nativeToken: PortfolioViewAsset = {
 	amount: 245_000_000n,
 	decimals: 8,
@@ -40,7 +32,6 @@ export const nativeToken: PortfolioViewAsset = {
 	symbol: "L-BTC",
 };
 
-/** An issued asset that resolved in the registry: verified, with an issuer domain. */
 export const issuedVerifiedToken: PortfolioViewAsset = {
 	amount: 42_210_000_000n,
 	decimals: 8,
@@ -54,7 +45,6 @@ export const issuedVerifiedToken: PortfolioViewAsset = {
 	symbol: "USDt",
 };
 
-/** An issued asset that did NOT resolve in the registry: unverified, no issuer, name falls back to the id. */
 export const issuedUnverifiedToken: PortfolioViewAsset = {
 	amount: 1_500_000n,
 	decimals: 2,
@@ -68,7 +58,6 @@ const SENT_TXID = "d7dac82bea7d3738ba3b3b4d2eeab89dbcc0ad1d6f2a90d3f79f18721a108
 const RECEIVED_TXID = "a94059e6e943633c1353e9dc247a6f6fb91e393dfdf21e5ba6185a87fc82f8c1";
 const PENDING_TXID = "bdc8f312bbbc5555698bc1b8bb4d636f457b355536ed3c51c1c5002389d26d48";
 
-/** A confirmed outgoing transfer, with a known network fee. */
 export const confirmedSent: PortfolioViewActivity = {
 	amount: 12_500_000n,
 	counterparty: truncateMiddle(SENT_TXID),
@@ -80,7 +69,6 @@ export const confirmedSent: PortfolioViewActivity = {
 	timestamp: new Date("2026-05-03T00:00:00Z").getTime(),
 };
 
-/** A confirmed incoming transfer. */
 export const confirmedReceived: PortfolioViewActivity = {
 	amount: 8_000_000n,
 	counterparty: truncateMiddle(RECEIVED_TXID),
@@ -92,7 +80,6 @@ export const confirmedReceived: PortfolioViewActivity = {
 	timestamp: new Date("2026-04-28T00:00:00Z").getTime(),
 };
 
-/** An optimistic, just-broadcast send: no block timestamp yet, unknown fee. */
 export const pendingSent: PortfolioViewActivity = {
 	amount: 5_000_000n,
 	counterparty: truncateMiddle(PENDING_TXID),
@@ -104,10 +91,6 @@ export const pendingSent: PortfolioViewActivity = {
 	timestamp: null,
 };
 
-/**
- * A deterministic 64-hex id derived from a seed, so repeated renders (and pages) keep stable keys.
- * Not cryptographic — it only needs to be well-shaped and unique per seed for the virtualized list.
- */
 function hexId(seed: number): string {
 	let out = "";
 	let state = (seed * 2_654_435_761 + 1) >>> 0;
@@ -122,7 +105,6 @@ function hexId(seed: number): string {
 
 const LONG_LIST_BASE_MS = new Date("2026-07-08T00:00:00Z").getTime();
 
-/** A short "MMM D, YYYY" date `i` days before the fixed base — descending as the index grows. */
 function descendingDate(i: number): string {
 	return new Date(LONG_LIST_BASE_MS - i * 86_400_000).toLocaleDateString("en-US", {
 		day: "numeric",
@@ -131,11 +113,6 @@ function descendingDate(i: number): string {
 	});
 }
 
-/**
- * A run of `count` varied confirmed activity items (alternating sent/received, descending dates,
- * unique ids), starting at index `start` so successive pages don't collide. Used for the
- * virtualization / load-more story.
- */
 export function makeLongItems(count: number, start = 0): PortfolioViewActivity[] {
 	return Array.from({ length: count }, (_, offset): PortfolioViewActivity => {
 		const index = start + offset;
@@ -155,7 +132,6 @@ export function makeLongItems(count: number, start = 0): PortfolioViewActivity[]
 	});
 }
 
-/** Build an activity feed around a set of items; override the paging/loading flags per story. */
 export function feed(
 	items: PortfolioViewActivity[],
 	overrides?: Partial<PortfolioViewActivityFeed>,

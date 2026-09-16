@@ -1,24 +1,12 @@
 import { LIQUID_WALLET_RPC_METHODS } from "@/core/chains/liquid/domain/LiquidRpc";
 
-/** A dapp RPC method as the permission UIs present it: its id, human copy, and whether it's opt-in. */
 export type WalletMethodPresentation = {
 	description: string;
 	id: string;
 	label: string;
-	/**
-	 * True for a read a user may let a dapp run without a per-call confirmation; false for an act
-	 * (signing, sending) that always confirms. The read/write line lives only here, in the UI — the
-	 * engine treats every method the same. Drives which methods the connect modal offers as checkboxes
-	 * and which the settings page locks to "Always asks".
-	 */
 	preApprovable: boolean;
 };
 
-/**
- * Every dapp RPC method with its presentation, in render order (reads first). Hand-written on purpose:
- * it draws the line between a read a user may let a dapp poll and an act they should weigh each time.
- * Shared by the connect modal and the connected-dapp settings page so both label a method the same.
- */
 export const WALLET_METHOD_PRESENTATION: WalletMethodPresentation[] = [
 	{
 		description: "See this account's asset balances.",
@@ -82,11 +70,6 @@ export const WALLET_METHOD_PRESENTATION: WalletMethodPresentation[] = [
 	},
 ];
 
-/**
- * The subset a user may pre-approve at connect time (the reads), in render order. Every other method
- * a session carries is absent here — with nothing to opt into it can never run without a prompt, so
- * it confirms on every call. Absence is the design, not an oversight.
- */
 export const PRE_APPROVABLE_METHODS: WalletMethodPresentation[] = WALLET_METHOD_PRESENTATION.filter(
 	(method) => method.preApprovable,
 );

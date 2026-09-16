@@ -23,10 +23,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The add-chain approval: proposed name, network, and (security-sensitive) backend URL. */
 export const Default: Story = {};
 
-/** Approving fires onConfirm so the wallet mints its own id and persists the chain. */
 export const Approve: Story = {
 	play: async ({ args, canvasElement }) => {
 		const canvas = within(canvasElement);

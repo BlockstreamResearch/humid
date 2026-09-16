@@ -9,11 +9,6 @@ import zeroconfManifest from "@humid/tx-manifest/fixtures/current/zeroconf.manif
 
 import { readDocument } from "./readDocument";
 
-// The page's own half of the reading. The package decides whether parsed JSON is a document;
-// this decides what happens to text that never became JSON, which is most of what a person
-// pastes. The two failures need different sentences — a truncated document is a syntax problem
-// and the wrong file is not — so the split is tested rather than assumed.
-
 function read(text: string, options?: Parameters<typeof readDocument>[1]) {
 	const result = readDocument(text, options);
 
@@ -52,19 +47,12 @@ describe("what the textarea currently holds", () => {
 
 		expect(result.rewrites).toHaveLength(1);
 		expect(result.constructs.length).toBeGreaterThan(0);
-		// A count rather than a list, so a refusal that stops needing more than the document — or
-		// a new one that does — fails here and gets looked at.
 		expect(result.unreachable).toHaveLength(12);
 		expect(result.unreachable).toContain("unbuildable-position");
 		expect(result.unreachable).toContain("built-something-else");
-		// Which asset a document means is resolved against a deployment and a request, and what
-		// this wallet does about one is a question about a balance. Neither is on this page.
 		expect(result.unreachable).toContain("foreign-asset");
 	});
 
-	// The compiler version is no longer something this page waits to be told. It reads the one
-	// constant this repository ships, which is the one the extension reads, so the check runs
-	// on a document that references no contracts rather than being reported as unrun.
 	test("answers the compiler check from the version this repository ships", () => {
 		const result = read('{ "chain": "liquid" }');
 
@@ -73,8 +61,6 @@ describe("what the textarea currently holds", () => {
 	});
 });
 
-// The compiler check is the one thing on this page a person can complete, and it is declared in
-// two places: the document, and a directive inside each contract source.
 describe("the compiler check, which is declared in two places", () => {
 	const document = JSON.stringify(lastWillManifest);
 
@@ -105,7 +91,6 @@ describe("the compiler check, which is declared in two places", () => {
 
 		expect(result.refusal?.reject).toBe("foreign-compiler");
 		expect(result.refusal?.reason).toContain("./last_will.simf");
-		// The version this page and the wallet both read, rather than one a person typed.
 		expect(result.refusal?.reason).toContain(SMPLX_COMPILER_VERSION);
 	});
 
@@ -121,9 +106,6 @@ describe("the compiler check, which is declared in two places", () => {
 	});
 });
 
-// The corpus this runtime is built against, read through the page rather than through the
-// package. A document dropping out of this list is the page and the wallet disagreeing, which
-// is the whole failure this page exists to prevent.
 describe("the published protocols, read by the page", () => {
 	test.each([
 		["dex", dexManifest],
@@ -135,8 +117,6 @@ describe("the published protocols, read by the page", () => {
 		expect(read(JSON.stringify(manifest)).refusal).toBeUndefined();
 	});
 
-	// And that is not the same as the wallet building any of them. Every one of these still has
-	// twelve refusals ahead of it that no reading of a document can reach.
 	test.each([
 		["dex", dexManifest],
 		["lending_v3", lendingV3Manifest],

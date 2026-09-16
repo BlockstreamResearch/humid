@@ -23,7 +23,6 @@ import { useAsyncAction } from "./useAsyncAction";
 
 type OverlayProps = { open: boolean; onOpenChange: (open: boolean) => void };
 
-/** Prove ownership of the SLIP-0013 identity by signing a hex challenge. */
 export function ProveIdentityDialog({ open, onOpenChange }: OverlayProps) {
 	const { wallet } = useHumidContext();
 	const [challenge, setChallenge] = useState(DEFAULT_IDENTITY_CHALLENGE);

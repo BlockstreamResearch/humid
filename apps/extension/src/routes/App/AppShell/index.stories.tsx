@@ -13,7 +13,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The shell hosting the Overview tab: page body above the shared, pinned footer. */
 export const Default: Story = {
 	args: {
 		children: (

@@ -12,20 +12,11 @@ export type ScanAndReadResult = {
 	utxos: LiquidUtxoSnapshot[];
 };
 
-/** Inputs to broadcast an already-signed, finalized PSET (base64) built in the service worker. */
 export type BroadcastInput = { chain: ScanInput["chain"]; psetBase64: string };
 
-/**
- * Inputs to broadcast an already-signed, consensus-encoded transaction.
- *
- * The manifest path produces one of these rather than a PSET: the contract module blinds,
- * signs and finalises internally and hands back a finished transaction. Beside the PSET
- * route rather than in place of it — the ordinary send path still produces a PSET.
- */
 export type BroadcastTxInput = { chain: ScanInput["chain"]; txHex: string };
 export type BroadcastResult = { txid: string };
 
-/** Inputs to read one asset's activity page from the worker's cached wollet. */
 export type ReadActivityInput = ScanInput & {
 	cursor: string | null;
 	limit: number;
@@ -39,7 +30,6 @@ export type ActivityPageResult = {
 
 type SuccessResponse = Extract<SyncWorkerResponse, { ok: true }>;
 
-/** A promise-per-request handle to a scan backend (a dedicated worker, offscreen, or inline). */
 export type SyncWorkerClient = {
 	broadcast: (input: BroadcastInput) => Promise<BroadcastResult>;
 	broadcastTransaction: (input: BroadcastTxInput) => Promise<BroadcastResult>;
@@ -48,11 +38,6 @@ export type SyncWorkerClient = {
 	scanAndRead: (input: ScanInput) => Promise<ScanAndReadResult>;
 };
 
-/**
- * Client backed by a dedicated `Worker` running the heavy LWK scans. Usable wherever `Worker`
- * exists — a Firefox background page, or our Chrome offscreen document — but not directly in an
- * MV3 service worker (which can't spawn workers; that context messages the offscreen document).
- */
 export function createWorkerScanClient(): SyncWorkerClient {
 	const worker = new Worker(new URL("./liquidScan.worker.ts", import.meta.url), {
 		type: "module",
@@ -80,7 +65,6 @@ export function createWorkerScanClient(): SyncWorkerClient {
 	});
 
 	worker.addEventListener("error", (event) => {
-		// A worker-level failure can't be tied to one request, so fail every in-flight scan.
 		console.error(
 			"[liquid-sync] sync worker crashed",
 			event.message,
@@ -106,16 +90,11 @@ export function createWorkerScanClient(): SyncWorkerClient {
 
 	return {
 		broadcastTransaction() {
-			// Same reason as `broadcast` below: LWK's Esplora client needs a `window` this
-			// context does not have.
 			return Promise.reject(
 				new Error("The dedicated worker cannot broadcast; use the offscreen or inline client."),
 			);
 		},
 		broadcast() {
-			// LWK can't run in a dedicated Worker (Esplora's async retry/sleep needs a `window` a
-			// Worker lacks), so this path never broadcasts — the offscreen/inline clients do. Present
-			// only to satisfy SyncWorkerClient; this worker client is unused since the scan moved off it.
 			return Promise.reject(
 				new Error(
 					"The dedicated sync worker cannot broadcast; use the offscreen or inline client.",

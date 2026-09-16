@@ -7,37 +7,9 @@ import {
 
 export type EvaluationResult = { ok: true; value: bigint } | { ok: false; reason: string };
 
-/**
- * The range every value in an expression must stay inside.
- *
- * The format defines no arithmetic. The reference implementation hands expressions to a
- * third-party crate's signed 64-bit integer mode, so signed 64-bit is the range real
- * manifests were authored against and matching it is not a choice. What that crate does at
- * the edges is a choice, and it is made below.
- */
 const I64_MAX = 2n ** 63n - 1n;
 const I64_MIN = -(2n ** 63n);
 
-/**
- * Evaluates one amount expression against the values available at a site.
- *
- * Three properties are inherited from the behaviour real manifests were written against, and
- * are not ours to vary: arithmetic is signed rather than unsigned, so an intermediate may go
- * negative and come back; division truncates toward zero; and only the caller checks the final
- * value for being negative, because an amount and a difference are different questions.
- *
- * Three are ours, because the reference inherits them from a Rust crate this runtime does not
- * use, and inheriting them by accident is how amounts diverge silently:
- *
- * - **Leaving the 64-bit range is an error, never a wrap.** A wrapped amount is a different
- *   amount, and nothing downstream could tell.
- * - **Division or remainder by zero is an error**, rather than any particular value.
- * - **A negative exponent is an error**, where the reference leaves the call unexpanded and
- *   carries on with text that then fails to parse somewhere less informative.
- *
- * Every term resolves through the same site table as a bare reference, so a term that is
- * illegal at this position is refused as a position error rather than as arithmetic.
- */
 export function evaluateExpression(
 	text: string,
 	site: ReferenceSiteKind,
@@ -54,9 +26,6 @@ export function evaluateExpression(
 	const value = readSum(reader);
 
 	if (!value.ok) {
-		// Every refusal carries the expression it came from. The reader of this message is a
-		// person deciding whether to trust a site, and "this amount divides by zero" without the
-		// amount leaves them nothing to act on or report.
 		return { ok: false, reason: `${value.reason} The expression was "${text}".` };
 	}
 
@@ -99,8 +68,6 @@ function tokenise(text: string): { ok: true; tokens: Token[] } | { ok: false } {
 			continue;
 		}
 
-		// A name may carry the reference syntax — a `$` prefix and one dotted segment — so the
-		// whole term reaches the resolver as it was written.
 		const name = /^\$?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?/.exec(text.slice(at));
 
 		if (name) {
@@ -267,12 +234,6 @@ function readTerm(reader: Reader): EvaluationResult {
 	return peek(reader)?.text === "(" ? readCall(reader, token.text) : readReference(reader, token);
 }
 
-/**
- * `pow` is the only function the format has, and the reference expands it before evaluating
- * rather than passing it through. Anything else named like a call is refused by name: a
- * function nobody implements silently returning something is how an amount goes wrong without
- * an error.
- */
 function readCall(reader: Reader, name: string): EvaluationResult {
 	if (name !== "pow") {
 		return { ok: false, reason: `This amount calls "${name}", which this runtime does not have.` };
@@ -343,14 +304,6 @@ function bounded(value: bigint): EvaluationResult {
 		: { ok: true, value };
 }
 
-/**
- * Evaluates a validation's condition: two amounts and one comparison between them.
- *
- * Deliberately not a boolean expression language. Every validation in the corpus is one
- * comparison, and a rule this runtime read only half of would be worse than one it refused
- * outright — a validation exists to stop a transaction its protocol considers invalid, so
- * getting it wrong permits exactly what it was written to prevent.
- */
 export function evaluateCondition(
 	text: string,
 	site: ReferenceSiteKind,

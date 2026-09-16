@@ -4,10 +4,6 @@ export type AsyncStatus = "idle" | "pending" | "success" | "error";
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
-/**
- * Track a single wallet action's lifecycle for an overlay: pending / success / error plus the last
- * result. `run` returns a discriminated result so the caller can fire a toast without re-reading state.
- */
 export function useAsyncAction<T>() {
 	const [status, setStatus] = useState<AsyncStatus>("idle");
 	const [data, setData] = useState<T | undefined>(undefined);

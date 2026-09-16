@@ -7,10 +7,6 @@ import {
 
 import { AddAccountView } from "./components/AddAccountView";
 
-/**
- * Add account (container): wires create/import and returns to settings on success.
- * The account type is fixed to Liquid until more types exist (see the view's TODO).
- */
 export function SettingsAddAccountPage() {
 	const navigate = useNavigate();
 	const { createAccount, importAccount } = useAccountActions();

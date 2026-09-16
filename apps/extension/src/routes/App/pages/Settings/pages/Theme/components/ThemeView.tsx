@@ -44,7 +44,6 @@ type ThemeViewProps = {
 	theme: Theme;
 };
 
-/** Theme picker: lets the user select light, dark, or the current system appearance. */
 export function ThemeView({ onThemeChange, systemTheme, theme }: ThemeViewProps) {
 	return (
 		<div className="flex size-full min-h-0 flex-col">

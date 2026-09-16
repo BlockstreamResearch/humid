@@ -1,16 +1,5 @@
 import type { NormalisationNote } from "@humid/tx-manifest";
 
-/**
- * The renamings themselves, against the fields they renamed.
- *
- * What is worth knowing from a rewrite is that the document belongs to an earlier generation of
- * the format, and that is one sentence, which lives in the verdict. What is left here is a
- * lookup, for someone who has the document open and wants to know which of its keys the runtime
- * knows by another name.
- *
- * Nothing is rendered when nothing was renamed. The verdict has already said so, and a second
- * statement of it here would be the page repeating itself at the reader.
- */
 export function RewriteList({ rewrites }: { rewrites: NormalisationNote[] }) {
 	if (rewrites.length === 0) {
 		return null;

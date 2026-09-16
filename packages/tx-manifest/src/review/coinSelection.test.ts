@@ -24,7 +24,6 @@ describe("selectCoins", () => {
 		}
 	});
 
-	// Fewer inputs is a smaller transaction and therefore a smaller fee.
 	test("takes the largest first and stops once covered", () => {
 		const result = selectCoins([utxo("10000"), utxo("90000"), utxo("20000")], 50_000n, 0n);
 
@@ -54,8 +53,6 @@ describe("selectCoins", () => {
 		expect(result).toMatchObject({ ok: false });
 	});
 
-	// Base units past a double's range have to stay exact, or a large balance rounds into a
-	// wrong decision.
 	test("keeps amounts beyond a double's range exact", () => {
 		const result = selectCoins([utxo("9007199254740993")], 9_007_199_254_740_992n, 1n);
 
@@ -66,17 +63,12 @@ describe("selectCoins", () => {
 		}
 	});
 
-	// The wallet does not select what it cannot leave a fee out of, so it never selects
-	// nothing and calls that a selection.
 	test("does not leave the selection short when the last output is exactly enough", () => {
 		const result = selectCoins([utxo("55000")], 50_000n, 5_000n);
 
 		expect(result).toMatchObject({ ok: true });
 	});
 
-	// Which of two equal outputs gets spent must be the wallet's answer, not the sort
-	// implementation's. A comparator that never returns 0 contradicts itself on a tie and a
-	// sort may act on either answer, so the same request could select different outputs twice.
 	test("keeps equal amounts in the order the wallet listed them", () => {
 		const first = utxo("40000", { txid: `a${"0".repeat(63)}` });
 		const second = utxo("40000", { txid: `b${"0".repeat(63)}` });
@@ -105,14 +97,6 @@ describe("selectCoins", () => {
 		}
 	});
 
-	/**
-	 * A confidential output cannot fund a contract action.
-	 *
-	 * Unblinding one needs the secrets that go with it, and nothing in this package or in the
-	 * module that signs is ever handed one — an outpoint and its bytes is the whole of what
-	 * they get. Selecting one produces a transaction that fails inside the signing module, far
-	 * from the output that caused it.
-	 */
 	describe("what it will not spend", () => {
 		test("never selects a confidential output, however much it holds", () => {
 			const result = selectCoins(
@@ -137,8 +121,6 @@ describe("selectCoins", () => {
 			]);
 		});
 
-		// A person looking at a balance that covers the amount has to be told why it does not
-		// count, rather than told they are short of money they can see.
 		test("and refuses when the balance only covers it with them, saying so", () => {
 			const result = selectCoins(
 				[
@@ -165,7 +147,6 @@ describe("selectCoins", () => {
 			}
 		});
 
-		// Nothing is said about money that was never there to begin with.
 		test("but says nothing about confidential outputs when there are none", () => {
 			const result = selectCoins(
 				[{ amount: "500", spendable: true, txOut: "00", txid: "b".repeat(64), vout: 0 }],
@@ -176,8 +157,6 @@ describe("selectCoins", () => {
 			expect(result.ok ? "" : result.reason).not.toContain("confidential");
 		});
 
-		// An output is the same output however many times it is described. Two of them selected
-		// is one output spent twice, which is not a transaction at all.
 		test("takes an outpoint once, however many objects describe it", () => {
 			const duplicated = {
 				amount: "900",

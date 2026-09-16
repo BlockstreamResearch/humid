@@ -6,7 +6,6 @@ import { LiquidChainSettings } from "@/core/chains/liquid/chains/LiquidChainSett
 
 import { ChainItemView } from "./components/ChainItemView";
 
-/** The per-chain shell wrapping the Liquid chain's own settings (network, backend, explorer). */
 function LiquidChainStory({ initial }: { initial: LiquidChainRecord }) {
 	const [chain, setChain] = useState<LiquidChainRecord>(initial);
 	const removable = chain.settings.network === "regtest";
@@ -33,7 +32,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** A built-in chain: network Liquid, Esplora backend, explorer URL. */
 export const Liquid: Story = {
 	args: {
 		initial: {
@@ -49,7 +47,6 @@ export const Liquid: Story = {
 	},
 };
 
-/** A custom (regtest) chain with an authenticated backend: the policy-asset and header fields. */
 export const Regtest: Story = {
 	args: {
 		initial: {
@@ -68,7 +65,6 @@ export const Regtest: Story = {
 	},
 };
 
-/** A Waterfalls backend with the advanced knobs (utxo-only, timeout, concurrency) set. */
 export const Waterfalls: Story = {
 	args: {
 		initial: {

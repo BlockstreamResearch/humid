@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** Copies text to the clipboard and exposes a transient `copied` flag. */
 export function useCopyToClipboard(resetMs = 1500) {
 	const [copied, setCopied] = useState(false);
 	const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -19,9 +18,7 @@ export function useCopyToClipboard(resetMs = 1500) {
 
 				if (timeoutRef.current) clearTimeout(timeoutRef.current);
 				timeoutRef.current = setTimeout(() => setCopied(false), resetMs);
-			} catch {
-				// Clipboard write is unavailable; keep the flag false.
-			}
+			} catch {}
 		},
 		[resetMs],
 	);

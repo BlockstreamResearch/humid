@@ -17,11 +17,6 @@ import {
 	pendingSent,
 } from "./liquidStoryFixtures";
 
-/**
- * The asset page mounts the view inside a base-ui ScrollArea — the virtualized activity list finds
- * that viewport (`data-slot="scroll-area-viewport"`) as its scroller, so the stories reproduce the
- * same wrapper (and inner padding) the real `AssetPage` uses.
- */
 function AssetViewFrame({ children }: { children: ReactNode }) {
 	return (
 		<div className="flex size-full min-h-0 flex-col">
@@ -52,8 +47,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The native L-BTC asset with a couple of confirmed transactions. (Asset identity lives in the
- * header's About drawer now — see the LiquidAssetAbout and AssetHeader stories.) */
 export const Native: Story = {
 	args: {
 		activity: feed([confirmedSent, confirmedReceived]),
@@ -61,7 +54,6 @@ export const Native: Story = {
 	},
 };
 
-/** An issued asset (USDt): the same view with a different token's symbol, decimals, and history. */
 export const IssuedAsset: Story = {
 	args: {
 		activity: feed([confirmedReceived, confirmedSent]),
@@ -69,7 +61,6 @@ export const IssuedAsset: Story = {
 	},
 };
 
-/** An optimistic "Pending" send sitting on top of the confirmed history. */
 export const WithPendingTx: Story = {
 	args: {
 		activity: feed([pendingSent, confirmedSent, confirmedReceived]),
@@ -77,7 +68,6 @@ export const WithPendingTx: Story = {
 	},
 };
 
-/** No transactions yet — the empty-state copy. */
 export const EmptyActivity: Story = {
 	args: {
 		activity: feed([]),
@@ -85,7 +75,6 @@ export const EmptyActivity: Story = {
 	},
 };
 
-/** The first load, before any activity page has resolved. */
 export const LoadingActivity: Story = {
 	args: {
 		activity: feed([], { isLoading: true }),
@@ -93,7 +82,6 @@ export const LoadingActivity: Story = {
 	},
 };
 
-/** The activity query failed. */
 export const ActivityError: Story = {
 	args: {
 		activity: feed([], { error: true }),
@@ -104,11 +92,6 @@ export const ActivityError: Story = {
 const LONG_LIST_MAX = 100;
 const LONG_LIST_PAGE = 25;
 
-/**
- * A long, paginated history: the list virtualizes (only the visible window is in the DOM), and
- * scrolling near the bottom auto-loads the next page — showing the load-more footer while it fetches
- * — until the source is exhausted.
- */
 function LongHistoryHarness() {
 	const [items, setItems] = useState(() => makeLongItems(50));
 	const [isLoadingMore, setIsLoadingMore] = useState(false);

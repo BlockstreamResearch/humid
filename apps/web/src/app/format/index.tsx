@@ -5,20 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 import { WHERE_IT_SITS } from "./positions";
 
-/**
- * What this wallet reads of the transaction-manifest format, and what it does not.
- *
- * The manifest page answers a question about one document. This one answers a question no
- * document can: a construct nobody has published is invisible in every document there is, and
- * every construct the format defines and this wallet does not implement is in that position.
- * Every published protocol therefore inspects clean while they stand, which is why this is a
- * page rather than a section beside a box someone pastes into.
- *
- * It reads nothing from that page and nothing from anywhere else. Its whole content is the
- * runtime's own construct table, so it cannot describe a wallet that differs from the one that
- * runs — including the reason beside each gap, which is data the table refuses to compile
- * without rather than a sentence written here.
- */
 export default function FormatSupport() {
 	const entries = describeRegistry();
 
@@ -108,12 +94,6 @@ function Section({
 	);
 }
 
-/**
- * How much of the format this is, said before any of it is read.
- *
- * Counted from the table rather than written down, so the sentence cannot fall behind the thing
- * it describes — which is the same reason this page exists at all.
- */
 function summaryOf(entries: ConstructRegistryEntry[]): string {
 	const positioned = entries.filter((entry) => entry.site !== undefined);
 	const kinds = new Set(positioned.map((entry) => entry.site)).size;

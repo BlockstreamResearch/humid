@@ -7,11 +7,6 @@ import { HomeHeader } from "./components/HomeHeader";
 import { PortfolioRefresh } from "./components/PortfolioRefresh";
 import { TokenList } from "./components/TokenList";
 
-/**
- * Overview tab (the home landing): a pinned account header over a scrolling body —
- * balance headline, primary actions, and the token list. Portfolio comes from the
- * home context (background-backed; rich in Storybook via MockHomeProvider).
- */
 export function OverviewPage() {
 	const { portfolio } = useHome();
 

@@ -22,19 +22,11 @@ export async function resolveSessionRequest(
 		approvedScope: resolveApprovedScope(walletKit, event.topic, adapter.namespace),
 		confirm: getBackgroundOptions().confirm,
 		keyManagerState,
-		// Same serve-from-cache hook the injected dapp path uses: the adapter spreads it into the
-		// dispatched context so WC getBalance/getUTXOs serve from the snapshot when one exists.
 		readPortfolioSnapshot: getBackgroundOptions().readPortfolioSnapshot,
 		updateKeyManagerState: walletVaultBackground.keyManager.updateState,
 	});
 }
 
-/**
- * The methods + accounts the session granted for this namespace, read from the live WalletConnect
- * session. Undefined when the session or its namespace can't be found — the adapter then has no
- * account binding to apply, and every request confirms with the user rather than hard-failing a
- * legitimate one.
- */
 function resolveApprovedScope(
 	walletKit: WalletKitClient,
 	topic: string,

@@ -2,10 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import { matchContractSources } from "./contractSources";
 
-// A document references a contract by a path relative to itself and a person hands over a file.
-// What must never happen here is a file reaching the reader under a path the document did not
-// ask for: the compiler check would then be answered by a source nothing in the document names.
-
 describe("matching supplied files onto the paths a document uses", () => {
 	test("puts a file under the path whose last segment is its name", () => {
 		const { sources } = matchContractSources(
@@ -35,8 +31,6 @@ describe("matching supplied files onto the paths a document uses", () => {
 		expect(unmatched).toEqual(["something_else.simf"]);
 	});
 
-	// A name that merely appears inside another is not the same file, and treating it as one
-	// would answer a check with the wrong source.
 	test("does not match a name that is only a suffix of the real one", () => {
 		const { sources, unmatched } = matchContractSources(
 			["./asset_auth_vault.simf"],

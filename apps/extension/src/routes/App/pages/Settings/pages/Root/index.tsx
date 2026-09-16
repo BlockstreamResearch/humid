@@ -10,11 +10,6 @@ import { SettingsRootView } from "./components/SettingsRootView";
 
 const AUTO_LOCK_QUERY_KEY = ["wallet-vault", "auto-lock"] as const;
 
-/**
- * Settings root (container): reads the account axis and wires the vault lock + idle auto-lock, then
- * hands display data + handlers to the presentational view. Storybook renders the view directly
- * with mock data.
- */
 export function SettingsRootPage() {
 	const accounts = useSelectedAccount();
 	const navigate = useNavigate();

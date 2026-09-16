@@ -11,8 +11,6 @@ import { useState } from "react";
 import { MockHomeProvider } from "../../HomeContext/mock";
 import { AssetPage } from "./index";
 
-// A standalone router that mirrors the real chain (/app → pathless home →
-// asset/$assetId) so the page's `Route.useParams()` resolves in isolation.
 function createAssetStoryRouter() {
 	const rootRoute = createRootRoute();
 	const appRoute = createRoute({ getParentRoute: () => rootRoute, path: "/app" });
@@ -48,7 +46,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The L-BTC asset: back header, balance headline, actions, and activity. */
 export const Default: Story = {
 	render: () => <AssetStory />,
 };

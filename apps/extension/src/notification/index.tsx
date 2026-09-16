@@ -29,10 +29,6 @@ if (!rootElement) {
 	throw new Error("Notification root element was not found");
 }
 
-// Confirmations shown in the notification window: the generic host + the dapp renderers
-// (connect, add-chain, switch-chain) and the contract action, which is the one that shows
-// values alongside where each of them came from. Unregistered, the host has no body for the
-// contract action's kind and a person is asked to approve a blank screen.
 const confirmationRenderers = [
 	dappConnectConfirmationRenderer,
 	dappAddChainConfirmationRenderer,

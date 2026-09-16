@@ -11,13 +11,6 @@ export const liquidContractRpc = {
 
 export type LiquidContractIdentityInput = { accountGroupId?: AccountGroupId };
 
-/**
- * Reads the address and key that contract actions are signed with, for one account.
- *
- * Popup-only: the transport dispatches injected senders to a separate registry, so a
- * dapp cannot reach this. The account is named rather than assumed to be the selected
- * one, because the screen this serves is per-account and the two differ.
- */
 export function createLiquidContractInternalHandlers(
 	readContractIdentity: (accountGroupId?: AccountGroupId) => Promise<LiquidContractIdentity>,
 ): RequestHandlerMap {

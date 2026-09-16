@@ -4,11 +4,6 @@ import flatManifest from "../__fixtures__/p2pk.manifest.json";
 import { inspectManifestDocument } from "./inspect";
 import type { ConstructState } from "./registry";
 
-// Expectations come from what this surface exists to guarantee, not from what the readers
-// behind it happen to return. The sharpest is that the absence of a refusal must never be
-// readable as a promise that a wallet would build the action: most of this runtime's refusals
-// cannot be decided from a document at all.
-
 const flat = flatManifest as unknown as Record<string, unknown>;
 
 function inspect(document: unknown, options = {}) {
@@ -25,7 +20,6 @@ function stateOf(document: unknown, key: string): ConstructState | undefined {
 	return inspect(document).constructs.find((report) => report.key === key)?.state;
 }
 
-// A person pastes text, so most of what arrives is not a manifest.
 describe("a document it cannot read", () => {
 	test("says so for text that parsed to a string", () => {
 		const result = inspectManifestDocument("not a manifest");
@@ -53,7 +47,6 @@ describe("a document it cannot read", () => {
 	});
 });
 
-// Four states plus the fifth no criterion counts: a key no site lists.
 describe("what each declared construct is", () => {
 	test("a construct that decides what gets signed is acted on", () => {
 		expect(stateOf(flat, "utxo_types")).toBe("acted-on");
@@ -98,8 +91,6 @@ describe("what each declared construct is", () => {
 	});
 });
 
-// A rewrite is a document from an older generation of the format, and saying so is the point:
-// silently accepting one hides that the format moved.
 describe("what an older spelling was rewritten to", () => {
 	test("reports the rename with where it was found and both names", () => {
 		const [rewrite] = inspect({ compose_version: "1.0" }).rewrites;
@@ -125,7 +116,6 @@ describe("what an older spelling was rewritten to", () => {
 	});
 });
 
-// The refusal is only ever half the answer, and the half that is missing has to arrive with it.
 describe("what it would refuse on, and what it never asked", () => {
 	test("reports the first refusal with its stable token", () => {
 		const result = inspect({ chain: "bitcoin" });
@@ -140,9 +130,6 @@ describe("what it would refuse on, and what it never asked", () => {
 		);
 	});
 
-	// The mode is read by the normaliser and refused on by the review once it has found an
-	// action. Nothing about that reading needs an action, so a document stating it unreadably is
-	// refused here too — otherwise this page calls clean a document the wallet turns away.
 	test("refuses a build mode that is neither on nor off, which the review also refuses", () => {
 		expect(inspect({ compile_debug_symbols: "yes" }).refusal?.reject).toBe("unreadable-build-mode");
 	});
@@ -153,12 +140,7 @@ describe("what it would refuse on, and what it never asked", () => {
 		expect(unreachable).toContain("covenant-mismatch");
 		expect(unreachable).toContain("shortfall");
 		expect(unreachable).toContain("no-fee-rate");
-		// Which asset a document means is a lookup resolved against a deployment and a request,
-		// and what this wallet does about one is a question about a balance. Neither is in the
-		// document, so the refusal that names an asset is not decidable here.
 		expect(unreachable).toContain("foreign-asset");
-		// The signing module disagreeing with the wallet is decided after a transaction has been
-		// built, which is further from a document than any of the others here.
 		expect(unreachable).toContain("built-something-else");
 		expect(unreachable).toHaveLength(12);
 	});
@@ -184,10 +166,6 @@ describe("what it would refuse on, and what it never asked", () => {
 	});
 });
 
-// A compiler version is declared twice — once by the document and once by a directive inside
-// each contract source — so a reader given only the version has answered one of the two. That
-// is neither skipped nor done, and reporting it as either is this surface's own failure mode
-// happening one level down.
 describe("a check that read one of the two places that decide it", () => {
 	test("names the sources it did not read, and does not call the check skipped", () => {
 		const result = inspect(flat, { compilerVersion: "0.4.0" });
@@ -228,8 +206,6 @@ describe("a check that read one of the two places that decide it", () => {
 	});
 });
 
-// The contracts a document names are what a caller holding files has to be told before it can
-// hand any of them over.
 describe("the contracts the document references", () => {
 	test("names them under the paths the document itself uses", () => {
 		expect(inspect(flat).contracts).toEqual(["./p2pk.simf"]);
@@ -240,8 +216,6 @@ describe("the contracts the document references", () => {
 	});
 });
 
-// The reason this is a package function rather than a page: the page must not be able to
-// reach a network, and neither must this.
 describe("what it does not do", () => {
 	test("leaves the document it was given untouched", () => {
 		const document = { actions: { Pay: { deploy: true } }, compose_version: "1.0" };

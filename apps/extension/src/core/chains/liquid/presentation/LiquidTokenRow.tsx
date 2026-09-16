@@ -3,7 +3,6 @@ import { formatUnits } from "@/helpers/formatters";
 
 import type { LiquidAssetMetadata } from "../domain/LiquidAsset";
 
-/** Liquid token-list row content: the asset glyph, its symbol + name, and balance. */
 export function LiquidTokenRow({ token }: { token: PortfolioViewAsset }) {
 	const metadata = token.metadata as LiquidAssetMetadata;
 

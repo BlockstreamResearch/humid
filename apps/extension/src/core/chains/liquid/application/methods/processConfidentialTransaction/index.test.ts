@@ -14,14 +14,6 @@ import {
 } from "./index";
 import { PROCESS_CT_CONFIRMATION_KIND } from "./ProcessCtConfirmation";
 
-/**
- * The whole method, driven without a browser.
- *
- * Every seam it reaches through is substituted — the contract module, the chain reads, the key
- * material, the broadcast — so what is asserted here is the method's own order and its own
- * refusals rather than what any of those do. The manifest and the contract source are the
- * published p2pk fixture, unmodified: the thinnest real protocol there is.
- */
 const SOURCE_PATH = "./p2pk.simf";
 const SOURCE = readFileSync(
 	new URL(
@@ -42,14 +34,6 @@ const SIGNED_TXID = "f".repeat(64);
 const SENT_TXID = "a".repeat(64);
 const FEE_SATS = 344n;
 
-/**
- * The finished transaction, written as the bytes one actually is.
- *
- * The method checks what came back against what was agreed to by reading these bytes rather
- * than by asking the module — a module's account of itself cannot answer whether it did
- * something it was not asked to. So a placeholder here would let that check pass without
- * seeing anything, which is the one thing this fixture exists to prevent.
- */
 function txIn(txid: string, vout: number): string {
 	const reversed = (txid.match(/../g) ?? []).toReversed().join("");
 	const index = ((vout >>> 0).toString(16).padStart(8, "0").match(/../g) ?? [])
@@ -59,7 +43,6 @@ function txIn(txid: string, vout: number): string {
 	return `${reversed}${index}00ffffffff`;
 }
 
-/** One explicit output as the chain writes one: the asset reversed, then eight value bytes. */
 function txOut(scriptHex: string, sats: bigint, asset = POLICY_ASSET): string {
 	const reversed = (asset.match(/../g) ?? []).toReversed().join("");
 	const length = (scriptHex.length / 2).toString(16).padStart(2, "0");
@@ -67,13 +50,6 @@ function txOut(scriptHex: string, sats: bigint, asset = POLICY_ASSET): string {
 	return `01${reversed}01${sats.toString(16).padStart(16, "0")}00${length}${scriptHex}`;
 }
 
-/**
- * One output whose amount and asset are commitments rather than numbers.
- *
- * The guard reads the finished transaction's own bytes, so an output the document wants hidden
- * has to actually be written hidden here — a blinding key handed to the builder is a request,
- * and whether it was applied is only visible in the encoding.
- */
 function hiddenOut(scriptHex: string): string {
 	const length = (scriptHex.length / 2).toString(16).padStart(2, "0");
 
@@ -87,13 +63,11 @@ function transaction(inputs: string[], outputs: string[]): string {
 	);
 }
 
-/** What Pay builds: the covenant output, the change the module appends, and the fee. */
 const SIGNED_HEX = transaction(
 	[txIn(FUNDING_TXID, 0)],
 	[txOut(COVENANT_SCRIPT, 1000n), txOut(SIGNER_SCRIPT, 998_656n), txOut("", FEE_SATS)],
 );
 
-/** What the wallet's own scan reports, in the shape the backend hands over. */
 const explicitUtxo = {
 	address: "tex1q_signing",
 	amount: "1000000",
@@ -107,20 +81,11 @@ const explicitUtxo = {
 	vout: 0,
 };
 
-/**
- * The covenant output, written the way the chain writes one.
- *
- * Built from the same asset, amount and script the chain reader below reports, rather than from
- * arbitrary bytes: these are what the wallet hands the builder for the input it is spending, and
- * a fixture whose bytes said something else would let the covenant path pass while carrying an
- * output that has nothing to do with what the review established.
- */
 const COVENANT_HELD_SATS = 50_000n;
 const COVENANT_TXOUT = txOut(COVENANT_SCRIPT, COVENANT_HELD_SATS);
 
 type Journal = {
 	broadcasts: { txHex: string }[];
-	/** Every covenant input the builder was given, with the values it is spent under. */
 	covenantInputs: {
 		signatureWitness: string | undefined;
 		source: string;
@@ -128,16 +93,12 @@ type Journal = {
 		txid: string;
 		vout: number;
 	}[];
-	/** What the signer hands back, so a case can return the transaction its own plan builds. */
 	finalizedHex: string;
-	/** Every wasm handle taken and released, so a leak is visible rather than assumed. */
 	freed: string[];
 	mnemonicRequests: { accountGroupIndex?: number; keySourceId?: string }[];
-	/** Whether the mnemonic was still reachable after the call that used it returned. */
 	mnemonicHeldAfter: boolean;
 	steps: string[];
 	taken: string[];
-	/** Every ordinary wallet input the builder was given. */
 	walletInputs: { txOutHex: string; txid: string; vout: number }[];
 };
 
@@ -155,12 +116,6 @@ function journal(): Journal {
 	};
 }
 
-/**
- * A stand-in for the contract module, exact in the names and arities this method calls.
- *
- * A substitute that accepted anything could not notice a call the real module refuses, which is
- * the whole reason it records what it was handed rather than only that it was called.
- */
 function smplxSubstitute(log: Journal) {
 	class Covenant {
 		constructor(
@@ -338,8 +293,6 @@ function dependencies(
 			let held: string | undefined = "abandon abandon about";
 			const answer = await use(held);
 
-			// Taken away again, which is the whole of what the callback shape buys: after this
-			// there is no handle a later caller could reach the credential through.
 			held = undefined;
 			log.mnemonicHeldAfter = held !== undefined;
 
@@ -405,9 +358,6 @@ async function failing(
 }
 
 describe("the order a contract action happens in", () => {
-	// The review is what establishes that each contract is the one the site describes. It runs
-	// before the gate deliberately: a standing permission skips the prompt, and if the check sat
-	// behind the prompt it would be skipped with it.
 	test("reviews before it asks, and signs only after agreement", async () => {
 		const { log } = await run(payRequest());
 
@@ -438,8 +388,6 @@ describe("the order a contract action happens in", () => {
 		expect(log.taken).not.toContain("signer");
 	});
 
-	// What the person is shown says which of the two authorisations is being asked for, because
-	// a signature handed back and a signature broadcast are different things to agree to.
 	test("tells the confirmation whether this will be sent", async () => {
 		const shown: unknown[] = [];
 		const log = journal();
@@ -480,8 +428,6 @@ describe("what comes back", () => {
 		expect(log.broadcasts).toEqual([{ txHex: SIGNED_HEX }]);
 	});
 
-	// The deployment outlives the transaction, and half its fields are functions of outputs the
-	// wallet chose. A caller working them out again afterwards would be guessing which.
 	test("carries no deployment for an action that creates none", async () => {
 		const { result } = await run(payRequest());
 
@@ -497,9 +443,6 @@ describe("what it refuses, and how", () => {
 		expect(data).toMatchObject({ reason: "invalid_manifest_request" });
 	});
 
-	// The sentence is for a person; the token beside it is for the site. Every refusal on this
-	// path shares one wire code, so without the token a caller telling "this wallet will never
-	// build that" from "your state file is out of date" would have to parse English.
 	test("carries the review's own reject token beside the sentence", async () => {
 		const { data, message } = await failing({
 			...receiveRequest(),
@@ -546,8 +489,6 @@ describe("what it refuses, and how", () => {
 });
 
 describe("what it holds, and for how long", () => {
-	// Every one of these is wasm memory. A collector that does not know it holds any will not
-	// release them, and a refused action would leak a signer and a transaction.
 	test("releases every handle it took, on the path that succeeds", async () => {
 		const { log } = await run(payRequest());
 
@@ -582,9 +523,6 @@ describe("what it holds, and for how long", () => {
 		expect(log.mnemonicHeldAfter).toBe(false);
 	});
 
-	// A session may authorise a group whose seed is not the local root. A signer built without
-	// the source this account was resolved against signs with the wrong key — a valid signature,
-	// over a transaction a person approved for a different account.
 	test("asks for the mnemonic of exactly the account and key source that were resolved", async () => {
 		const { log } = await run(payRequest(), {
 			dependencies: {
@@ -608,26 +546,13 @@ describe("what it holds, and for how long", () => {
 	});
 });
 
-/**
- * The Receive action end to end, which is the path the covenant work exists for.
- *
- * Every other case here holds one seam still. This one runs the public method over a real
- * covenant spend — the state file names an outpoint, the chain reader answers with the output's
- * own bytes, the review verifies the covenant against them, the person approves, and the
- * assembler drives the builder — so it is the only thing that says the review's covenant facts
- * and the assembler's builder calls are wired to each other rather than merely each correct.
- */
 describe("spending a covenant, end to end", () => {
-	/** What the builder is expected to be handed, and therefore what it must give back. */
 	const receiveTransaction = (outputs: string[]) =>
 		transaction([txIn(COVENANT_TXID, 0), txIn(FUNDING_TXID, 0)], outputs);
 
 	test("carries the covenant and the wallet's fee input into the builder", async () => {
 		const log = journal();
 
-		// The reclaimed funds are hidden — the document says nothing about that output and this
-		// network's silence means hidden — and the change is published, which is this wallet's
-		// own override so the next action of a protocol can be funded from it.
 		log.finalizedHex = receiveTransaction([
 			hiddenOut(WALLET_SCRIPT),
 			txOut(SIGNER_SCRIPT, 999_656n),
@@ -637,10 +562,6 @@ describe("spending a covenant, end to end", () => {
 		const method = createProcessLiquidConfidentialTransaction(dependencies(log));
 		const result = (await method(receiveRequest(false), context(log))) as LiquidProcessCtResult;
 
-		// The covenant, with the bytes the chain reader answered with and the witness the
-		// document says a signature goes in. The source is the contract the request supplied,
-		// which is what the review compiled and compared against the chain — so this is the
-		// join: what the review established reaches the builder unchanged.
 		expect(log.covenantInputs).toEqual([
 			{
 				signatureWitness: "SIGNATURE",
@@ -651,14 +572,10 @@ describe("spending a covenant, end to end", () => {
 			},
 		]);
 
-		// And the wallet's own output beside it, which is what pays the fee. A covenant spend
-		// that reached the builder without this would be a transaction with nothing to charge.
 		expect(log.walletInputs).toEqual([
 			{ txOutHex: explicitUtxo.txOut, txid: FUNDING_TXID, vout: 0 },
 		]);
 
-		// It got as far as a finished transaction, which means every guard between the plan and
-		// the bytes agreed: what was spent, what was paid, and which of it was hidden.
 		expect(result).toMatchObject({
 			broadcast: false,
 			feeSats: FEE_SATS.toString(),
@@ -667,8 +584,6 @@ describe("spending a covenant, end to end", () => {
 		});
 		expect(log.steps).toContain("confirm");
 		expect(log.broadcasts).toEqual([]);
-		// Nothing of the wasm is still held: the covenant compiles, the signer and the builder
-		// are all handles, and a covenant spend takes more of them than any other path.
 		expect(log.freed.toSorted()).toEqual(log.taken.toSorted());
 	});
 });

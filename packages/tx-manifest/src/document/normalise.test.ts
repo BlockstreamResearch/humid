@@ -5,16 +5,6 @@ import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
 import groupedVaultlet from "../__fixtures__/vaultlet.manifest.json";
 import { declaredFields, findAction, normaliseInstance, normaliseManifest } from "./normalise";
 
-/**
- * One document, two generations, one reading.
- *
- * The corpus renamed a container and both halves of it at once — `classes.methods` became
- * `contract_templates.actions` — and the same protocol is published in both. A wallet that read
- * one would be as blind to the other generation as it was to this one, and the money the older
- * documents locate is demonstrably on chain. So the two normalise to one shape, and every test
- * below that names one spelling asserts the other produces the same answer.
- */
-
 const GROUPED = groupedVaultlet as unknown as Record<string, unknown>;
 const CURRENT = currentVaultlet as unknown as Record<string, unknown>;
 
@@ -44,11 +34,6 @@ describe("the two container generations", () => {
 		}
 	});
 
-	/**
-	 * The class is where a deployment's field types are stated — there is nowhere else — and it is
-	 * reached through the same container list the actions were found through. A reader that looked
-	 * for one name would find the fields of half the corpus.
-	 */
 	test("reach the same declared fields from a method in either", () => {
 		for (const document of [GROUPED, CURRENT]) {
 			const manifest = normaliseManifest(document).manifest;
@@ -65,11 +50,6 @@ describe("the two container generations", () => {
 		}
 	});
 
-	/**
-	 * A rewrite is never silent. Both documents are rewritten — one's flag, the other's container
-	 * — and each records what it was found under, so a reader can say which generation a document
-	 * came from without the value it produced depending on the answer.
-	 */
 	test("record the spelling each document was written in", () => {
 		expect(normaliseManifest(GROUPED).notes).toEqual([
 			{ at: "action OpenVault", canonical: "is_constructor", found: "deploy" },
@@ -110,11 +90,6 @@ describe("a deployment's field values", () => {
 		});
 	});
 
-	/**
-	 * A file carrying both is not a conflict to resolve by merging. The nested form is what a
-	 * current tool writes, so it wins outright — layering the legacy map underneath would let a
-	 * stale value the newer half replaced come back.
-	 */
 	test("take the nested shape outright when a file carries both", () => {
 		const { instance } = normaliseInstance({
 			instance: { fields: { TIMEOUT: "1" } },
@@ -128,12 +103,6 @@ describe("a deployment's field values", () => {
 		expect(normaliseInstance(undefined).instance.fields).toEqual({});
 	});
 
-	/**
-	 * A file naming a class and no fields has no fields. Reading its top level as the fields
-	 * themselves would make a deployment holding one field called `instance` whose value is an
-	 * object — which resolves, encodes as nothing, and refuses somewhere further on for a reason
-	 * about the wrong thing.
-	 */
 	test("are empty for a file that names its class and writes no fields", () => {
 		const { instance } = normaliseInstance({ instance: { class: "vaultlet_contract" } });
 

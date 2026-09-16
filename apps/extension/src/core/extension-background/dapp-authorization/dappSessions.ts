@@ -20,27 +20,14 @@ import { dappAuthorizationErrors } from "./errors";
 export type DappSessionsHandlersDependencies = {
 	getAccountModel: () => AccountModelState | null;
 	registry: AccountRegistry;
-	/** Persist an account-model mutation (wraps the unlocked key-manager update). */
 	updateAccountModel: (
 		update: (accountModel: AccountModelState) => AccountModelState,
 	) => Promise<AccountModelState>;
-	/** Active WalletConnect sessions (summaries from the WalletKit client). */
 	listWalletConnectSessions: () => WalletConnectSessionSummary[];
-	/**
-	 * Map a WalletConnect session's CAIP-10 accounts back to the account groups that own them, so a WC
-	 * dapp lists under the same accounts as an injected one. Chain-specific (injected from background).
-	 */
 	resolveWalletConnectAccountGroupIds: (session: WalletConnectSessionSummary) => string[];
-	/** End a WalletConnect session entirely (v1: no per-account WalletConnect removal). */
 	disconnectWalletConnect: (topic: string) => Promise<void>;
 };
 
-/**
- * Popup-facing handlers to view + revoke connected dapps. The injected sessions come from the account
- * model (per-account grants); the WalletConnect sessions come from the WalletKit client and are
- * attributed to accounts via {@link DappSessionsHandlersDependencies.resolveWalletConnectAccountGroupIds}.
- * Never reachable from a dapp — the transport routes injected senders to a separate registry.
- */
 export function createDappSessionsInternalHandlers(
 	deps: DappSessionsHandlersDependencies,
 ): RequestHandlerMap {
@@ -59,7 +46,6 @@ export function createDappSessionsInternalHandlers(
 	};
 }
 
-/** The unified connected-dapp list (injected + WalletConnect), unfiltered — the UI scopes by account. */
 function buildConnectedDappViews(deps: DappSessionsHandlersDependencies): ConnectedDappView[] {
 	const accountModel = deps.getAccountModel();
 
@@ -85,8 +71,6 @@ async function applyRevoke(
 	input: DappSessionRevokeInput,
 ): Promise<void> {
 	if (input.transport === "walletconnect") {
-		// WalletKit notifies the peer (session_delete) on its own point-to-point transport — no
-		// broadcast needed. v1 disconnects the whole session (no per-account WalletConnect removal).
 		await deps.disconnectWalletConnect(input.topic);
 
 		return;
@@ -108,9 +92,7 @@ async function applyRevoke(
 
 	if (!outcome.revoked) return;
 
-	// The dapp's authorized account set shrank; if it lost the session entirely, signal that too. Both
 	// are global injected broadcasts — each dapp re-queries its own origin-scoped session to derive its
-	// new view (or its disconnect). Mirrors createDappAuthorization.revokeSession.
 	emitWalletEvent("accountsChanged");
 	if (outcome.sessionRemoved) emitWalletEvent("wallet_sessionChanged");
 }
@@ -133,7 +115,6 @@ async function applySetPolicy(
 		return result.accountModel;
 	});
 
-	// The dapp's method policy changed; broadcast so each connected dapp re-reads its origin-scoped
 	// session (wallet_getSession) and picks up the new silent-vs-prompt set. Injected global broadcast.
 	if (updated) emitWalletEvent("wallet_sessionChanged");
 }

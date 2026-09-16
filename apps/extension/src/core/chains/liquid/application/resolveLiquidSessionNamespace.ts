@@ -19,7 +19,6 @@ export type LiquidSessionNamespaceProposal = {
 };
 
 export type ResolveLiquidSessionNamespaceInput = {
-	/** The RPC methods to advertise for this namespace (the router's registered methods). */
 	methods: readonly string[];
 	proposal: LiquidSessionNamespaceProposal;
 	walletBackend: LiquidWalletBackend;
@@ -45,7 +44,6 @@ export async function resolveLiquidSessionNamespace({
 
 					return account.accountIdentifier;
 				} catch {
-					// A chain is advertised only when the current vault can derive a real account for it.
 					return null;
 				}
 			}),

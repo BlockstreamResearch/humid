@@ -24,11 +24,6 @@ type Props = {
 	onDecline: () => void;
 };
 
-/**
- * The connect modal. When the wallet is locked (`requiresUnlock`), it shows an unlock step first;
- * unlocking loads the account model in the background, after which the same window renders the
- * account + permission approval.
- */
 export function DappConnectConfirmation({ data, onConfirm, onDecline }: Props) {
 	const [unlocked, setUnlocked] = useState(!data.requiresUnlock);
 
@@ -126,19 +121,13 @@ function UnlockStep({
 }
 
 function ConnectApproval({ data, onConfirm, onDecline }: Props) {
-	// A checkbox needs both sides: a method this modal knows how to describe, and one this session
-	// actually offers.
 	const preApprovable = PRE_APPROVABLE_METHODS.filter((method) => data.methods.includes(method.id));
-	// Accounts are passed in when the wallet was already unlocked; otherwise they are loaded here
-	// after unlocking (the account list only exists in memory while the vault is unlocked).
 	const [accounts, setAccounts] = useState<DappConnectAccount[]>(data.accounts);
 	const [accountsError, setAccountsError] = useState<string | null>(null);
 	const [loadingAccounts, setLoadingAccounts] = useState(data.accounts.length === 0);
-	// Authorization is per account: the current account starts checked; the user can add more.
 	const [grantedAccounts, setGrantedAccounts] = useState<Set<string>>(() =>
 		defaultGrantedAccounts(data.accounts),
 	);
-	// Every permission starts off — nothing runs unasked until the user opts in.
 	const [grantedMethods, setGrantedMethods] = useState<Set<string>>(() => new Set());
 
 	useEffect(() => {
@@ -283,7 +272,6 @@ function ConnectApproval({ data, onConfirm, onDecline }: Props) {
 	);
 }
 
-/** Plugs the connect confirmation into the generic confirmation host (see ConfirmProvider). */
 export const dappConnectConfirmationRenderer: ConfirmationRenderer = {
 	kind: DAPP_CONNECT_CONFIRMATION_KIND,
 	render: ({ onConfirm, onDecline, request }) =>
@@ -293,8 +281,6 @@ export const dappConnectConfirmationRenderer: ConfirmationRenderer = {
 };
 
 function defaultGrantedAccounts(accounts: DappConnectAccount[]): Set<string> {
-	// Pre-check the current account AND any the origin's existing session already granted, so a
-	// reconnect keeps the previously-authorized accounts instead of silently dropping them.
 	return new Set(
 		accounts
 			.filter((account) => account.isCurrent || account.isConnected)

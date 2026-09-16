@@ -2,18 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import { assetFromEntropy, deriveNewIssuance } from "./issuance";
 
-/**
- * Assets that exist on Liquid, and the outputs they were issued from.
- *
- * The derivation is nowhere in the format's own documents, so an expectation written from
- * this implementation would prove only that it is consistent with itself. Each case below is
- * one asset the chain already carries: its issuance outpoint, the issuer contract that
- * issuance committed to, and the asset and reissuance-token ids that came out. Anything but
- * the exact rule Elements uses reproduces none of them.
- *
- * Read on 2026-08-13 from Blockstream's Liquid Esplora, `GET /liquid/api/asset/<id>`, which
- * reports each asset's `issuance_prevout`, `contract_hash` and `reissuance_token`.
- */
 const ON_CHAIN = [
 	{
 		asset: "ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2",
@@ -29,8 +17,6 @@ const ON_CHAIN = [
 		name: "Scamcoinbot token",
 		reissuanceToken: "2f7179e260a8046f02be25dec6abcf0a2c1bd3e6e13dd29ed67570e1e71a55b7",
 		txid: "fc2535f2e4fc2ef1d19b832248e3edc2c3f4c4e3ee9c2bc51777bd738a6f9582",
-		// The index is part of what is hashed, so at least one case has to be issued from
-		// somewhere other than the first output or a reader of the index proves nothing.
 		vout: 10,
 	},
 	{
@@ -66,8 +52,6 @@ describe("the asset a first issuance creates", () => {
 		});
 	}
 
-	// Every issuance a manifest declares commits to nothing, so the default is the case this
-	// wallet actually runs and it must be the empty commitment rather than a repeat of one.
 	test("commits to no issuer contract unless one is given", () => {
 		const [known] = ON_CHAIN;
 
@@ -102,8 +86,6 @@ describe("the asset a first issuance creates", () => {
 });
 
 describe("the asset a reissuance mints", () => {
-	// A reissuance has no outpoint to derive from: it mints the asset that already exists,
-	// which is why the entropy is the thing a protocol has to have kept.
 	test("is the same asset, from the entropy the first issuance left", () => {
 		const [known] = ON_CHAIN;
 

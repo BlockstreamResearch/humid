@@ -44,7 +44,6 @@ type AccountDetailViewProps = {
 	removeError: string | null;
 };
 
-/** Per-account settings: breadcrumb header + the account actions (rename, remove, forget wallet). */
 export function AccountDetailView({
 	accountGroupId,
 	accountName,

@@ -13,7 +13,6 @@ function pluralize(count: number, noun: string): string {
 	return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-/** One connected dapp: identity + transport + granted-scope summary + a per-account disconnect. */
 export function ConnectedDappRow({
 	dapp,
 	isRevoking,

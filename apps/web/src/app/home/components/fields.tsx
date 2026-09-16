@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-/** A labeled single-line input for the overlay forms. */
 export function TextField({
 	disabled,
 	hint,
@@ -43,7 +42,6 @@ export function TextField({
 	);
 }
 
-/** A labeled multi-line input for the overlay forms. */
 export function TextAreaField({
 	disabled,
 	hint,
@@ -78,7 +76,6 @@ export function TextAreaField({
 	);
 }
 
-/** A read-only, copyable result row (signature, txid, public key). */
 export function ResultField({ label, value }: { label: string; value: string }) {
 	const [copied, setCopied] = useState(false);
 
@@ -107,7 +104,6 @@ export function ResultField({ label, value }: { label: string; value: string }) 
 	);
 }
 
-/** A label / value line for the transfer review step. */
 export function ReviewRow({
 	label,
 	value,

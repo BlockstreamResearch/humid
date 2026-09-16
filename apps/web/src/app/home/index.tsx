@@ -4,10 +4,6 @@ import { useHumidContext } from "@/contexts/Web3Provider/HumidProvider";
 import { HeroCard } from "./components/HeroCard";
 import { HomeActions } from "./components/HomeActions";
 
-/**
- * The product Home: an identity-first hero (network, "signed in as", balance) with a row of primary
- * actions. A thin consumer of {@link useHumidContext} — all wallet plumbing lives in the context.
- */
 export default function Home({
 	onOpenDeveloper,
 	onOpenFormatSupport,
@@ -29,9 +25,6 @@ export default function Home({
 			<HeroCard />
 			{hasProvider && isConnected ? <HomeActions /> : null}
 
-			{/* The offline pages sit beside Developer rather than inside it: the cards there are all
-			    ways of driving a wallet and disappear when none is installed, which is exactly when
-			    reading a document — or the table the wallet reads one by — is most useful. */}
 			<div className="mt-auto flex flex-wrap justify-center gap-1 pt-6">
 				<Button
 					variant="ghost"

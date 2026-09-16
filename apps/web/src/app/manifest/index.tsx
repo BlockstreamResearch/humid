@@ -12,42 +12,10 @@ import { Verdict } from "./components/Verdict";
 import { matchContractSources, type SuppliedSource } from "./contractSources";
 import { readDocument } from "./readDocument";
 
-/**
- * What this wallet would do with a txManifest document, without building anything from it.
- *
- * The page answers one question and answers it first: would this wallet refuse, and why.
- * Everything else is under it — an account of everything the reader computed, one region per
- * field of its return value, is a dump of a data structure rather than an answer, and leaves
- * the person holding the document to work out which part of it bore on anything.
- *
- * What the reader was never able to check sits inside the verdict rather than below it, because
- * the absence of a refusal is only honest beside the list of what was never asked; see
- * {@link Verdict}.
- *
- * Everything shown comes from `@humid/tx-manifest` — the same package the wallet itself reads a
- * document with — so this page cannot describe a parser that differs from the one that runs.
- *
- * It connects to nothing. There is no wallet here, no chain read and no request, which is both
- * the point and the limit.
- *
- * The compiler version is no longer asked for. It is one constant this repository ships and the
- * extension reads the same one, so a field here could only disagree with the wallet — and left
- * blank, as it opened, it reported a check as not run that the wallet could have answered.
- *
- * The contract sources are still asked for in the input card rather than reported as results,
- * because that is what they are: a compiler version is declared twice and the second
- * declaration lives inside the source, which this page has no way to fetch. Unanswered is a
- * real state and the one this opens in — the check needing them is reported as not run, which
- * is not the same as passing.
- */
 export default function ManifestInspector() {
 	const [text, setText] = useState("");
 	const [suppliedSources, setSuppliedSources] = useState<SuppliedSource[]>([]);
 
-	// Read twice, because a file arrives under the name it has on a disk and the reader wants it
-	// under the path the document references it by — and only the document says what those paths
-	// are. The first read asks that question, which no supplied source can change the answer to,
-	// and the second is the one the page reports.
 	const { document, matched } = useMemo(() => {
 		const referenced = readDocument(text);
 		const byReferencedPath = matchContractSources(

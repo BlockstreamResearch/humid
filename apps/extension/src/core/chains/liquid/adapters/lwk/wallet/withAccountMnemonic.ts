@@ -14,24 +14,6 @@ export type AccountMnemonicRequest = {
 	keySourceId?: KeySourceId;
 };
 
-/**
- * Runs `use` with the account's BIP-39 mnemonic, and takes it away again afterwards.
- *
- * The mnemonic is the whole account secret. It exists here only for the duration of one
- * call, in one place, and every wasm object that held it on the way is freed before this
- * returns — including when `use` throws. Nothing is cached and nothing is returned, so
- * there is no handle a later caller could reach it through.
- *
- * The derivation is LWK's, unchanged from how accounts are resolved everywhere else:
- * group 0 is the master seed's own mnemonic; group N derives a BIP-85 child at index N.
- * Duplicating that math here rather than reusing it would be a second place for the
- * account model to drift.
- *
- * Why this exists at all: smplx signs and blinds from one source, and blinding derives
- * from SLIP77 material an extended private key does not carry. Handing over the mnemonic
- * is the accepted debt recorded in this change's specification, not a shortcut — and the
- * conditions that should reopen it are recorded there too.
- */
 export async function withAccountMnemonic<T>(
 	request: AccountMnemonicRequest,
 	use: (mnemonic: string) => Promise<T> | T,
