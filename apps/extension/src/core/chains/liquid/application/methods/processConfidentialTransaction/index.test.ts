@@ -50,7 +50,7 @@ function txOut(scriptHex: string, sats: bigint, asset = POLICY_ASSET): string {
 	return `01${reversed}01${sats.toString(16).padStart(16, "0")}00${length}${scriptHex}`;
 }
 
-function hiddenOut(scriptHex: string): string {
+function blindedOut(scriptHex: string): string {
 	const length = (scriptHex.length / 2).toString(16).padStart(2, "0");
 
 	return `0a${"33".repeat(32)}08${"44".repeat(32)}02${"55".repeat(32)}${length}${scriptHex}`;
@@ -565,7 +565,7 @@ describe("spending a covenant, end to end", () => {
 		const log = journal();
 
 		log.finalizedHex = receiveTransaction([
-			hiddenOut(WALLET_SCRIPT),
+			blindedOut(WALLET_SCRIPT),
 			txOut(SIGNER_SCRIPT, 999_656n),
 			txOut("", FEE_SATS),
 		]);

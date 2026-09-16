@@ -1,4 +1,4 @@
-export type Blinding = "hidden" | "open";
+export type Blinding = "blinded" | "open";
 
 export type BlindingWord = "chain" | "document" | "output" | "spendable-change" | "unblindable";
 
@@ -22,7 +22,7 @@ export function resolveBlinding(input: {
 
 	const format = byPrecedence(input);
 
-	if (input.change && format.blinding === "hidden") {
+	if (input.change && format.blinding === "blinded") {
 		return { blinding: "open", decidedBy: "spendable-change", overrode: format.decidedBy };
 	}
 
@@ -31,14 +31,14 @@ export function resolveBlinding(input: {
 
 function byPrecedence(input: { declared?: unknown; documentDefault?: unknown }): BlindingDecision {
 	if (typeof input.declared === "boolean") {
-		return { blinding: input.declared ? "hidden" : "open", decidedBy: "output" };
+		return { blinding: input.declared ? "blinded" : "open", decidedBy: "output" };
 	}
 
 	if (typeof input.documentDefault === "boolean") {
-		return { blinding: input.documentDefault ? "hidden" : "open", decidedBy: "document" };
+		return { blinding: input.documentDefault ? "blinded" : "open", decidedBy: "document" };
 	}
 
-	return { blinding: "hidden", decidedBy: "chain" };
+	return { blinding: "blinded", decidedBy: "chain" };
 }
 
 export function describeBlinding(decision: BlindingDecision): string {
@@ -54,11 +54,11 @@ export function describePublishedChange(overrode?: BlindingWord): string {
 function sentenceFor(word: BlindingWord): string {
 	switch (word) {
 		case "document": {
-			return "this protocol hides its outputs by default";
+			return "this protocol blinds its outputs by default";
 		}
 
 		case "output": {
-			return "this protocol asks for it to be hidden";
+			return "this protocol asks for it to be blinded";
 		}
 
 		case "spendable-change": {
@@ -70,7 +70,7 @@ function sentenceFor(word: BlindingWord): string {
 		}
 
 		default: {
-			return "nothing says otherwise and this network hides an output by default";
+			return "nothing says otherwise and this network blinds an output by default";
 		}
 	}
 }

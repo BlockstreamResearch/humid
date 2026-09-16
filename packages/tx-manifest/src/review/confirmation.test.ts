@@ -214,41 +214,41 @@ function saying(confidential: boolean | undefined): Record<string, unknown> {
 	return document;
 }
 
-describe("what a person is told about a hidden amount", () => {
-	async function hidden(manifest: Record<string, unknown>) {
-		return (await shown(manifest)).hiddenAmounts.map((row) => ({
+describe("what a person is told about a blinded amount", () => {
+	async function blinded(manifest: Record<string, unknown>) {
+		return (await shown(manifest)).blindedAmounts.map((row) => ({
 			decidedBy: row.decidedBy.value,
 			id: row.id.value,
 		}));
 	}
 
 	test("when the protocol asked for it outright", async () => {
-		expect(await hidden(saying(true))).toContainEqual({
-			decidedBy: "this protocol asks for it to be hidden",
+		expect(await blinded(saying(true))).toContainEqual({
+			decidedBy: "this protocol asks for it to be blinded",
 			id: "received_out",
 		});
 	});
 
-	test("when nobody said anything and this network's own answer is to hide", async () => {
-		expect(await hidden(saying(undefined))).toContainEqual({
-			decidedBy: "nothing says otherwise and this network hides an output by default",
+	test("when nobody said anything and this network's own answer is to blind", async () => {
+		expect(await blinded(saying(undefined))).toContainEqual({
+			decidedBy: "nothing says otherwise and this network blinds an output by default",
 			id: "received_out",
 		});
 	});
 
 	test("when the document states it for the whole file", async () => {
-		expect(await hidden({ ...saying(undefined), confidential_outputs: true })).toContainEqual({
-			decidedBy: "this protocol hides its outputs by default",
+		expect(await blinded({ ...saying(undefined), confidential_outputs: true })).toContainEqual({
+			decidedBy: "this protocol blinds its outputs by default",
 			id: "received_out",
 		});
 	});
 
 	test("and says nothing about an output the protocol leaves in the open", async () => {
-		expect((await hidden(saying(false))).map((row) => row.id)).not.toContain("received_out");
+		expect((await blinded(saying(false))).map((row) => row.id)).not.toContain("received_out");
 	});
 
 	test("the sentence is the wallet's and the name beside it is the dapp's", async () => {
-		const [row] = (await shown(saying(true))).hiddenAmounts;
+		const [row] = (await shown(saying(true))).blindedAmounts;
 
 		expect(row?.decidedBy.origin).toBe("computed");
 		expect(row?.id.origin).toBe("dapp");
@@ -291,18 +291,18 @@ describe("what a person is told about an amount this wallet published", () => {
 			{
 				id: "change",
 				reason:
-					"nothing says otherwise and this network hides an output by default, and this " +
+					"nothing says otherwise and this network blinds an output by default, and this " +
 					"wallet publishes it anyway so your next action can spend it",
 			},
 		]);
 	});
 
-	test("naming the protocol's own word when it asked for hidden change outright", async () => {
+	test("naming the protocol's own word when it asked for blinded change outright", async () => {
 		expect(await published(changeSaying(true))).toEqual([
 			{
 				id: "change",
 				reason:
-					"this protocol asks for it to be hidden, and this wallet publishes it anyway so " +
+					"this protocol asks for it to be blinded, and this wallet publishes it anyway so " +
 					"your next action can spend it",
 			},
 		]);
@@ -313,16 +313,16 @@ describe("what a person is told about an amount this wallet published", () => {
 			{
 				id: "change",
 				reason:
-					"nothing says otherwise and this network hides an output by default, and this " +
+					"nothing says otherwise and this network blinds an output by default, and this " +
 					"wallet publishes it anyway so your next action can spend it",
 			},
 		]);
 	});
 
-	test("and no longer counts that change among the amounts it hides", async () => {
+	test("and no longer counts that change among the amounts it blinds", async () => {
 		const model = await shown(changeSaying(undefined));
 
-		expect(model.hiddenAmounts.map((row) => row.id.value)).not.toContain("fee_change");
+		expect(model.blindedAmounts.map((row) => row.id.value)).not.toContain("fee_change");
 	});
 });
 

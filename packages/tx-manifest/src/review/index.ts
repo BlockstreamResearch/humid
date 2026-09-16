@@ -485,13 +485,13 @@ export async function reviewManifestAction(
 	const networkChange = plan.plan.outputs.filter(
 		(planned, at) => planned.target.kind === "change" && ledger.outputs[at] === policyAsset,
 	);
-	const changeBlinded = networkChange[0]?.blinding.blinding === "hidden";
+	const changeBlinded = networkChange[0]?.blinding.blinding === "blinded";
 	const changeOverrode: BlindingWord | undefined =
 		networkChange.length === 0 ? "chain" : networkChange[0]?.blinding.overrode;
 
 	const foreign = plan.plan.outputs.find(
 		(planned) =>
-			planned.blinding.blinding === "hidden" &&
+			planned.blinding.blinding === "blinded" &&
 			planned.target.kind !== "change" &&
 			planned.target.kind !== "wallet",
 	);
@@ -626,7 +626,7 @@ export async function reviewManifestAction(
 			outputAt.set(planned.id, outputs.length);
 			outputs.push({
 				asset,
-				blinded: planned.blinding.blinding === "hidden",
+				blinded: planned.blinding.blinding === "blinded",
 				decidedBy: planned.blinding.decidedBy,
 				id: planned.id,
 				...(planned.blinding.overrode === undefined ? {} : { overrode: planned.blinding.overrode }),
@@ -663,7 +663,7 @@ export async function reviewManifestAction(
 		outputAt.set(planned.id, outputs.length);
 		outputs.push({
 			asset,
-			blinded: planned.blinding.blinding === "hidden",
+			blinded: planned.blinding.blinding === "blinded",
 			decidedBy: planned.blinding.decidedBy,
 			id: planned.id,
 			sats: planned.sats,
