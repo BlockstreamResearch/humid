@@ -704,20 +704,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.issues).toEqual([]);
 			expect(recorded.freedReports).toBe(1);
 		});
-
-		test("refuses when the module derives a different asset than the wallet did", async () => {
-			const { assemble, recorded } = subject(
-				spendingPlan({
-					issuances: [{ ...plannedIssuance(), outpoint: { txid: COVENANT_TXID, vout: 1 } }],
-				}),
-				spent,
-				{ reports: { asset: "d".repeat(64) } },
-			);
-
-			expect(await assemble()).toMatchObject({ ok: false, reject: "built-something-else" });
-			expect(recorded.freedReports).toBe(1);
-			expect(recorded.freed).toBe(1);
-		});
 	});
 
 	describe("what it will not build", () => {
@@ -807,49 +793,11 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.spends).toEqual([{ txOut: TXOUT_HEX, txid: "d".repeat(64), vout: 3 }]);
 		});
 
-		test("releases the module's report when the two sides agree", async () => {
+		test("releases the module's report", async () => {
 			const { assemble, recorded } = subject(issuing);
 
 			expect(await assemble()).toMatchObject({ ok: true });
 			expect(recorded.freedReports).toBe(1);
-		});
-
-		test("refuses when the module reports a different asset", async () => {
-			const { assemble } = subject(issuing, () => SIGNED, {
-				reports: { asset: "b".repeat(64) },
-			});
-
-			const result = await assemble();
-
-			expect(result).toMatchObject({ ok: false });
-
-			if (!result.ok) {
-				expect(result.reason).toContain("mint_in");
-				expect(result.reason).toContain("asset");
-			}
-		});
-
-		test("and when it reports a different entropy or reissuance token", async () => {
-			const differentEntropy = await subject(issuing, () => SIGNED, {
-				reports: { entropy: "b".repeat(64) },
-			}).assemble();
-			const differentToken = await subject(issuing, () => SIGNED, {
-				reports: { reissuanceToken: "b".repeat(64) },
-			}).assemble();
-
-			expect(differentEntropy).toMatchObject({ ok: false });
-			expect(differentToken).toMatchObject({ ok: false });
-		});
-
-		test("releases the module's report on the path that refuses too", async () => {
-			const { assemble, recorded } = subject(issuing, () => SIGNED, {
-				reports: { asset: "b".repeat(64) },
-			});
-
-			await assemble();
-
-			expect(recorded.freedReports).toBe(1);
-			expect(recorded.freed).toBe(1);
 		});
 
 		describe("what it settles before starting a builder", () => {

@@ -18,9 +18,9 @@ const NO_OUTPOINT = 0xff_ff_ff_ff;
 
 const WITNESS_PRESENT = 0x01;
 
-export type FieldForm = "commitment" | "explicit" | "null";
+type FieldForm = "commitment" | "explicit" | "null";
 
-export type ParsedTxOut = {
+type ParsedTxOut = {
 	amountSats?: string;
 	assetForm: FieldForm;
 	nonceForm: FieldForm;
@@ -30,13 +30,11 @@ export type ParsedTxOut = {
 	valueForm: FieldForm;
 };
 
-export type ParsedTransaction = { spent: Outpoint[]; txOuts: ParsedTxOut[] };
+type ParsedTransaction = { spent: Outpoint[]; txOuts: ParsedTxOut[] };
 
-export type ParseResult =
-	| { ok: false; reason: string }
-	| { ok: true; transaction: ParsedTransaction };
+type ParseResult = { ok: false; reason: string } | { ok: true; transaction: ParsedTransaction };
 
-export type TxOutAt = { ok: false; reason: string } | { ok: true; txOut: ParsedTxOut };
+type TxOutAt = { ok: false; reason: string } | { ok: true; txOut: ParsedTxOut };
 
 export function txOutAt(transactionHex: string, vout: number): TxOutAt {
 	if (!Number.isInteger(vout) || vout < 0) {

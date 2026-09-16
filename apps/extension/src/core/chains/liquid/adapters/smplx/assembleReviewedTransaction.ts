@@ -169,28 +169,6 @@ export async function assembleReviewedTransaction(
 
 		const placed = new Set<string>();
 
-		const disagreement = (
-			issuance: ManifestReview["issuances"][number],
-			reported: AssembledIssuanceReport,
-		): AssembleResult | undefined => {
-			try {
-				const difference = firstDisagreement(issuance, reported);
-
-				return difference === undefined
-					? undefined
-					: {
-							ok: false,
-							reason:
-								`Input ${issuance.inputId} creates an asset the signing module does not ` +
-								`agree about: the ${difference.what} the wallet derived is ${difference.mine} ` +
-								`and the module reports ${difference.theirs}.`,
-							reject: "built-something-else",
-						};
-			} finally {
-				reported.free();
-			}
-		};
-
 		for (const planned of review.inputOrder) {
 			const key =
 				planned.source === "covenant" ? outpointKey(planned.covenant) : outpointKey(planned.utxo);
@@ -220,9 +198,8 @@ export async function assembleReviewedTransaction(
 					continue;
 				}
 
-				const refusal = disagreement(
-					issuance,
-					builder.addCovenantIssuanceInput(
+				builder
+					.addCovenantIssuanceInput(
 						covenant.txid,
 						covenant.vout,
 						covenant.txOutHex,
@@ -235,12 +212,8 @@ export async function assembleReviewedTransaction(
 						undefined,
 						covenant.extraLeavesJson,
 						covenant.includeDebugSymbols,
-					),
-				);
-
-				if (refusal) {
-					return refusal;
-				}
+					)
+					.free();
 
 				continue;
 			}
@@ -253,21 +226,16 @@ export async function assembleReviewedTransaction(
 				continue;
 			}
 
-			const refusal = disagreement(
-				issuance,
-				builder.addWalletIssuanceInput(
+			builder
+				.addWalletIssuanceInput(
 					utxo.txid,
 					utxo.vout,
 					utxo.txOut,
 					issuance.assetAmountSats,
 					issuance.inflationAmountSats,
 					undefined,
-				),
-			);
-
-			if (refusal) {
-				return refusal;
-			}
+				)
+				.free();
 		}
 
 		const missed = review.issuances.find((issuance) => !placed.has(outpointKey(issuance.outpoint)));
@@ -320,19 +288,6 @@ function witnessValuesJson(values: StaticWitness[] | undefined): string | undefi
 			values.map(({ name, simplicityType, value }) => [name, { type: simplicityType, value }]),
 		),
 	);
-}
-
-function firstDisagreement(
-	mine: ManifestReview["issuances"][number],
-	theirs: Omit<AssembledIssuanceReport, "free">,
-): { mine: string; theirs: string; what: string } | undefined {
-	const compared = [
-		{ mine: mine.asset, theirs: theirs.assetId, what: "asset" },
-		{ mine: mine.entropy, theirs: theirs.entropy, what: "entropy" },
-		{ mine: mine.reissuanceToken, theirs: theirs.reissuanceTokenId, what: "reissuance token" },
-	];
-
-	return compared.find((field) => field.mine.toLowerCase() !== field.theirs.toLowerCase());
 }
 
 function outpointKey(outpoint: { txid: string; vout: number }): string {
