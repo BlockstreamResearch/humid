@@ -9,22 +9,15 @@ const PER_COVENANT_INPUT = 87n;
 const PER_ISSUING_INPUT = 74n;
 
 /**
- * What a blinded output costs beyond an open one.
+ * The shape a fee is worked out from.
  *
- * An open output is the 67 above. A blinded one also carries a rangeproof over its amount and a
- * surjection proof over its asset, both witness data, and both far larger than the output itself.
- *
- * This is deliberately generous. The number only decides how much this wallet selects: the fee
- * actually paid is worked out by the signing module from the finished transaction. Selecting a
- * little too much costs an extra input; selecting too little fails after the person has already
- * agreed to the transaction, which is the worse of the two. It has not been calibrated against
- * measured transactions and should be, once there are some to measure.
+ * Blinding is deliberately absent. A blinded output carries a rangeproof over its amount and a
+ * surjection proof over its asset, both far larger than the output itself, and it would be natural
+ * to charge for them. Elements does not: the weight a fee is taken on discounts confidential proofs
+ * away, so a blinded output weighs exactly what an open one weighs. `feeEstimate.test.ts` measures
+ * that against the signing module rather than leaving it stated here.
  */
-const PER_BLINDED_OUTPUT = 1100n;
-
 export type TransactionShape = {
-	/** How many of `outputs` are blinded. The rest are open. */
-	blindedOutputs?: number;
 	covenantInputs: number;
 	issuingInputs: number;
 	outputs: number;
@@ -37,8 +30,7 @@ export function estimateVsize(shape: TransactionShape): bigint {
 		PER_WALLET_INPUT * BigInt(shape.walletInputs) +
 		PER_OUTPUT * BigInt(shape.outputs) +
 		PER_COVENANT_INPUT * BigInt(shape.covenantInputs) +
-		PER_ISSUING_INPUT * BigInt(shape.issuingInputs) +
-		PER_BLINDED_OUTPUT * BigInt(shape.blindedOutputs ?? 0)
+		PER_ISSUING_INPUT * BigInt(shape.issuingInputs)
 	);
 }
 

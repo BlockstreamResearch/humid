@@ -43,28 +43,6 @@ describe("estimateVsize", () => {
 	});
 });
 
-describe("what a blinded output costs", () => {
-	const open = { covenantInputs: 0, issuingInputs: 0, outputs: 2, walletInputs: 1 };
-
-	test("a blinded output is dearer than an open one, by a wide margin", () => {
-		const blinded = estimateVsize({ ...open, blindedOutputs: 1 });
-
-		expect(blinded).toBeGreaterThan(estimateVsize(open));
-		expect(blinded - estimateVsize(open)).toBeGreaterThan(500n);
-	});
-
-	test("and each one costs the same again", () => {
-		const one = estimateVsize({ ...open, blindedOutputs: 1 }) - estimateVsize(open);
-		const two = estimateVsize({ ...open, blindedOutputs: 2 }) - estimateVsize(open);
-
-		expect(two).toBe(one * 2n);
-	});
-
-	test("saying nothing about blinding costs nothing, so an open plan is unchanged", () => {
-		expect(estimateVsize({ ...open, blindedOutputs: 0 })).toBe(estimateVsize(open));
-	});
-});
-
 describe("estimateFeeSats", () => {
 	const shape = { covenantInputs: 0, issuingInputs: 0, outputs: 1, walletInputs: 1 };
 

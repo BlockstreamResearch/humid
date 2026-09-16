@@ -815,7 +815,6 @@ export async function reviewManifestAction(
 
 	const estimatedFeeSats = estimateFeeSats(
 		{
-			blindedOutputs: outputs.filter((output) => output.blinded).length + (changeBlinded ? 1 : 0),
 			covenantInputs: covenants.filter((found) => found.role === "spent").length,
 			issuingInputs: issued.issuances.length,
 			outputs: outputs.length,
