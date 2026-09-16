@@ -1,5 +1,5 @@
 import { asArray, asRecord } from "../document/json";
-import type { NormalisationNote, NormalisedAction } from "../document/normalise";
+import type { NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, parseReference, resolveReference } from "../document/references";
 
 export type StaticWitness = {
@@ -17,7 +17,6 @@ export const STATIC_WITNESS = "simplicityhl";
 export function resolveStaticWitnesses(
 	action: NormalisedAction,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): StaticWitnessResult {
 	const witnesses = new Map<string, StaticWitness[]>();
 
@@ -50,7 +49,7 @@ export function resolveStaticWitnesses(
 				};
 			}
 
-			const filled = fill(value, scope, notes);
+			const filled = fill(value, scope);
 
 			if (!filled.ok) {
 				return { ok: false, reason: `The witness ${name} on input ${id}: ${filled.reason}` };
@@ -72,7 +71,6 @@ const NAMED = /\$?[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*/g;
 function fill(
 	value: string,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): { ok: false; reason: string } | { ok: true; value: string } {
 	let failure: string | undefined;
 
@@ -85,7 +83,7 @@ function fill(
 			return text;
 		}
 
-		const found = resolveReference(text, "witnessValue", scope, notes);
+		const found = resolveReference(text, "witnessValue", scope);
 
 		if (!found.ok) {
 			failure ??= found.reason;

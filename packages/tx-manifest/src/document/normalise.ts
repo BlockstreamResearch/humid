@@ -43,29 +43,13 @@ export function normaliseManifest(raw: Record<string, unknown>): NormaliseManife
 			actions: normaliseActions(raw, notes),
 			buildMode: readBuildMode(raw, notes),
 			chain: asString(raw.chain),
-			node: normaliseTopLevel(raw, notes),
+			node: { ...raw },
 			protocol: asString(raw.protocol),
 			raw,
 			utxoTypes: asRecord(raw.utxo_types) ?? {},
 		},
 		notes,
 	};
-}
-
-function normaliseTopLevel(
-	raw: Record<string, unknown>,
-	notes: NormalisationNote[],
-): Record<string, unknown> {
-	const node = { ...raw };
-	const version = pick(node, "manifest_version", "compose_version", "manifest", notes);
-
-	delete node.compose_version;
-
-	if (version !== undefined) {
-		node.manifest_version = version;
-	}
-
-	return node;
 }
 
 function readBuildMode(raw: Record<string, unknown>, notes: NormalisationNote[]): BuildMode {

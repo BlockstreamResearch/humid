@@ -116,9 +116,7 @@ describe("nothing load-bearing is stepped over in silence", () => {
 
 describe("the version field cannot decide the generation", () => {
 	test("every document in every generation declares the same format version", () => {
-		const declared = new Set(
-			Object.values(ALL).map((document) => document.manifest_version ?? document.compose_version),
-		);
+		const declared = new Set(Object.values(ALL).map((document) => document.manifest_version));
 
 		expect([...declared]).toEqual(["0.1.0"]);
 	});
@@ -128,20 +126,11 @@ describe("the version field cannot decide the generation", () => {
 			const withoutVersion = { ...document };
 
 			delete withoutVersion.manifest_version;
-			delete withoutVersion.compose_version;
 
 			expect({ [name]: normaliseManifest(withoutVersion).manifest.actions }).toEqual({
 				[name]: normaliseManifest(document).manifest.actions,
 			});
 		}
-	});
-
-	test("and the oldest spelling of it is answered rather than refused", () => {
-		const unread = loadBearing(inspectConstructs(normalised(OLDER["p2pk-grouped"] ?? {}))).map(
-			(finding) => finding.key,
-		);
-
-		expect(unread).not.toContain("compose_version");
 	});
 });
 
@@ -181,37 +170,21 @@ describe("both generations of a protocol are read the same way", () => {
 	});
 });
 
-describe("both reference spellings are live in the corpus", () => {
-	test("two protocols still carry the older spelling", () => {
+describe("the corpus carries one reference spelling", () => {
+	test("every instance reference in every document is written the canonical way", () => {
 		const older = Object.entries(ALL)
 			.filter(([, document]) => spellings(document).deprecated > 0)
 			.map(([name]) => name)
 			.toSorted();
 
-		expect(older).toEqual(["current/last_will", "last_will", "lending"]);
+		expect(older).toEqual([]);
 	});
 
-	test("the rest carry the current one, so neither can be dropped", () => {
-		const current = Object.entries(ALL)
-			.filter(([, document]) => spellings(document).current > 0)
-			.map(([name]) => name)
-			.toSorted();
-
-		expect(current).toEqual([
-			"current/dex",
-			"current/lending_v2",
-			"current/lending_v3",
-			"dex",
-			"lending_v2",
-			"lending_v3",
-		]);
-	});
-
-	test("and the reader resolves both to the same lookup", () => {
+	test("and the namespace that was removed no longer reads as one", () => {
 		expect(parseReference("compile_params.OWNER")).toMatchObject({
-			deprecated: true,
-			form: "instance",
-			name: "OWNER",
+			attribute: "OWNER",
+			form: "input-attribute",
+			name: "compile_params",
 		});
 		expect(parseReference("instance.OWNER")).toMatchObject({ form: "instance", name: "OWNER" });
 	});
@@ -252,15 +225,13 @@ function spellings(document: Record<string, unknown>): { current: number; deprec
 			continue;
 		}
 
-		const reference = parseReference(text);
+		if (text.replace(/^\$/, "").startsWith("compile_params.")) {
+			deprecated += 1;
 
-		if (reference?.form !== "instance") {
 			continue;
 		}
 
-		if (reference.deprecated) {
-			deprecated += 1;
-		} else {
+		if (parseReference(text)?.form === "instance") {
 			current += 1;
 		}
 	}

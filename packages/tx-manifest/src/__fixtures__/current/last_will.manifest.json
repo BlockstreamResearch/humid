@@ -123,7 +123,7 @@
                                     "sig_type": "sig_hash_all",
                                     "source": {
                                         "type": "wallet",
-                                        "key": "compile_params.COLD_PUB_KEY"
+                                        "key": "instance.COLD_PUB_KEY"
                                     },
                                     "description": "BIP340 signature from the cold key."
                                 }
@@ -161,7 +161,7 @@
                                     "sig_type": "sig_hash_all",
                                     "source": {
                                         "type": "wallet",
-                                        "key": "compile_params.HOT_PUB_KEY"
+                                        "key": "instance.HOT_PUB_KEY"
                                     },
                                     "description": "BIP340 signature from the hot key."
                                 }
@@ -191,7 +191,7 @@
                                 "utxo_type": "last_will"
                             },
                             "sequence": {
-                                "relative_blocks": "compile_params.INHERIT_BLOCKS"
+                                "relative_blocks": "instance.INHERIT_BLOCKS"
                             },
                             "witnesses": {
                                 "SPEND_PATH": {
@@ -205,7 +205,7 @@
                                     "sig_type": "sig_hash_all",
                                     "source": {
                                         "type": "wallet",
-                                        "key": "compile_params.INHERITOR_PUB_KEY"
+                                        "key": "instance.INHERITOR_PUB_KEY"
                                     },
                                     "description": "BIP340 signature from the heir's key."
                                 }

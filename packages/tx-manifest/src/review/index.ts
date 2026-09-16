@@ -400,7 +400,7 @@ export async function reviewManifestAction(
 		covenants.push({ ...derived.derivation, role: "created", verified: "not-yet-onchain" });
 	}
 
-	const stated = resolveStaticWitnesses(action, scope, notes);
+	const stated = resolveStaticWitnesses(action, scope);
 
 	if (!stated.ok) {
 		return { reason: stated.reason, refused: true, reject: "document-fault" };

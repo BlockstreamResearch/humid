@@ -18,9 +18,9 @@ const NO_OUTPOINT = 0xff_ff_ff_ff;
 
 const WITNESS_PRESENT = 0x01;
 
-export type FieldForm = "commitment" | "explicit" | "null";
+type FieldForm = "commitment" | "explicit" | "null";
 
-export type ParsedTxOut = {
+type ParsedTxOut = {
 	amountSats?: string;
 	assetForm: FieldForm;
 	nonceForm: FieldForm;
@@ -30,23 +30,11 @@ export type ParsedTxOut = {
 	valueForm: FieldForm;
 };
 
-export type ParsedTransaction = { spent: Outpoint[]; txOuts: ParsedTxOut[] };
+type ParsedTransaction = { spent: Outpoint[]; txOuts: ParsedTxOut[] };
 
-export type ParseResult =
-	| { ok: false; reason: string }
-	| { ok: true; transaction: ParsedTransaction };
+type ParseResult = { ok: false; reason: string } | { ok: true; transaction: ParsedTransaction };
 
-export type SpentInputs = { ok: true; spent: Outpoint[] } | { ok: false; reason: string };
-
-export function spentInputs(transactionHex: string): SpentInputs {
-	const parsed = parseTransaction(transactionHex);
-
-	return parsed.ok ? { ok: true, spent: parsed.transaction.spent } : parsed;
-}
-
-export type TxOutsOf = { ok: true; txOuts: ParsedTxOut[] } | { ok: false; reason: string };
-
-export type TxOutAt = { ok: false; reason: string } | { ok: true; txOut: ParsedTxOut };
+type TxOutAt = { ok: false; reason: string } | { ok: true; txOut: ParsedTxOut };
 
 export function txOutAt(transactionHex: string, vout: number): TxOutAt {
 	if (!Number.isInteger(vout) || vout < 0) {
@@ -69,13 +57,7 @@ export function txOutAt(transactionHex: string, vout: number): TxOutAt {
 		: { ok: true, txOut };
 }
 
-export function txOutsOf(transactionHex: string): TxOutsOf {
-	const parsed = parseTransaction(transactionHex);
-
-	return parsed.ok ? { ok: true, txOuts: parsed.transaction.txOuts } : parsed;
-}
-
-export function parseTransaction(transactionHex: string): ParseResult {
+function parseTransaction(transactionHex: string): ParseResult {
 	const bytes = decodeHex(transactionHex);
 
 	if (!bytes) {

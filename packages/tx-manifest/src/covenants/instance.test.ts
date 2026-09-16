@@ -280,12 +280,6 @@ describe("a covenant hash that names another through the deployment", () => {
 		expect(result.instance.fields.RESERVE_COV_HASH).not.toBe(COVENANT_HASH_SEED);
 	});
 
-	test("identically under the deprecated compile_params. spelling", () => {
-		expect(settle("compile_params.RESERVE_COV_HASH").result).toEqual(
-			settle("instance.RESERVE_COV_HASH").result,
-		);
-	});
-
 	test("and identically to the bare name the same reading is also written as", () => {
 		expect(settle("RESERVE_COV_HASH").result).toEqual(settle("instance.RESERVE_COV_HASH").result);
 	});

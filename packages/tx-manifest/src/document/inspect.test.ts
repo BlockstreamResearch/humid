@@ -92,16 +92,6 @@ describe("what each declared construct is", () => {
 });
 
 describe("what an older spelling was rewritten to", () => {
-	test("reports the rename with where it was found and both names", () => {
-		const [rewrite] = inspect({ compose_version: "1.0" }).rewrites;
-
-		expect(rewrite).toEqual({
-			at: "manifest",
-			canonical: "manifest_version",
-			found: "compose_version",
-		});
-	});
-
 	test("reports a rename inside an action against that action", () => {
 		const rewrite = inspect({ actions: { Pay: { deploy: true } } }).rewrites.find(
 			(note) => note.canonical === "is_constructor",
@@ -218,7 +208,7 @@ describe("the contracts the document references", () => {
 
 describe("what it does not do", () => {
 	test("leaves the document it was given untouched", () => {
-		const document = { actions: { Pay: { deploy: true } }, compose_version: "1.0" };
+		const document = { actions: { Pay: { deploy: true } } };
 		const before = JSON.stringify(document);
 
 		inspectManifestDocument(document);

@@ -273,7 +273,7 @@ function readCall(reader: Reader, name: string): EvaluationResult {
 }
 
 function readReference(reader: Reader, token: Token): EvaluationResult {
-	const found = resolveReference(token.text, reader.site, reader.scope, reader.notes);
+	const found = resolveReference(token.text, reader.site, reader.scope);
 
 	if (!found.ok) {
 		return found;

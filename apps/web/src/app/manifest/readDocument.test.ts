@@ -43,7 +43,7 @@ describe("what the textarea currently holds", () => {
 	});
 
 	test("a document is read, and carries every answer the page draws", () => {
-		const result = read('{ "compose_version": "1.0", "chain": "liquid" }');
+		const result = read('{ "actions": { "Pay": { "deploy": true } }, "chain": "liquid" }');
 
 		expect(result.rewrites).toHaveLength(1);
 		expect(result.constructs.length).toBeGreaterThan(0);

@@ -168,8 +168,8 @@ describe("older spellings, said once", () => {
 			...NOTHING_ASKED,
 			refusal: undefined,
 			rewrites: [
-				{ at: "manifest", canonical: "manifest_version", found: "compose_version" },
-				{ at: "manifest", canonical: "params", found: "compile_params" },
+				{ at: "action Pay", canonical: "is_constructor", found: "deploy" },
+				{ at: "instance", canonical: "instance.fields", found: "instance_params" },
 			],
 		});
 

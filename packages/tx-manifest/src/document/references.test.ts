@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import type { NormalisationNote } from "./normalise";
 import { parseReference, type ReferenceScope, resolveReference } from "./references";
 
 const SCOPE: ReferenceScope = {
@@ -40,15 +39,12 @@ describe("the namespaces a reference can name", () => {
 		});
 	});
 
-	test("reads the deprecated compile_params. namespace as the same lookup", () => {
-		const notes: NormalisationNote[] = [];
-		const deprecated = resolveReference("compile_params.TIMEOUT", "compileParam", SCOPE, notes);
+	test("no longer reads compile_params. as a namespace of its own", () => {
+		const removed = resolveReference("compile_params.TIMEOUT", "compileParam", SCOPE);
 
-		expect(deprecated).toEqual(resolveReference("instance.TIMEOUT", "compileParam", SCOPE));
-		expect(notes).toContainEqual({
-			at: "a compile parameter",
-			canonical: "instance.",
-			found: "compile_params.",
+		expect(removed).toEqual({
+			ok: false,
+			reason: '"compile_params.TIMEOUT" cannot be used as a compile parameter.',
 		});
 	});
 

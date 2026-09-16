@@ -1,10 +1,4 @@
-import {
-	guardBuiltOutputs,
-	guardSpentInputs,
-	type ManifestReview,
-	type RejectToken,
-	type StaticWitness,
-} from "@humid/tx-manifest";
+import type { ManifestReview, RejectToken, StaticWitness } from "@humid/tx-manifest";
 
 import type { SmplxWasmModule } from "./loadSmplxWasm";
 
@@ -175,28 +169,6 @@ export async function assembleReviewedTransaction(
 
 		const placed = new Set<string>();
 
-		const disagreement = (
-			issuance: ManifestReview["issuances"][number],
-			reported: AssembledIssuanceReport,
-		): AssembleResult | undefined => {
-			try {
-				const difference = firstDisagreement(issuance, reported);
-
-				return difference === undefined
-					? undefined
-					: {
-							ok: false,
-							reason:
-								`Input ${issuance.inputId} creates an asset the signing module does not ` +
-								`agree about: the ${difference.what} the wallet derived is ${difference.mine} ` +
-								`and the module reports ${difference.theirs}.`,
-							reject: "built-something-else",
-						};
-			} finally {
-				reported.free();
-			}
-		};
-
 		for (const planned of review.inputOrder) {
 			const key =
 				planned.source === "covenant" ? outpointKey(planned.covenant) : outpointKey(planned.utxo);
@@ -226,9 +198,8 @@ export async function assembleReviewedTransaction(
 					continue;
 				}
 
-				const refusal = disagreement(
-					issuance,
-					builder.addCovenantIssuanceInput(
+				builder
+					.addCovenantIssuanceInput(
 						covenant.txid,
 						covenant.vout,
 						covenant.txOutHex,
@@ -241,12 +212,8 @@ export async function assembleReviewedTransaction(
 						undefined,
 						covenant.extraLeavesJson,
 						covenant.includeDebugSymbols,
-					),
-				);
-
-				if (refusal) {
-					return refusal;
-				}
+					)
+					.free();
 
 				continue;
 			}
@@ -259,21 +226,16 @@ export async function assembleReviewedTransaction(
 				continue;
 			}
 
-			const refusal = disagreement(
-				issuance,
-				builder.addWalletIssuanceInput(
+			builder
+				.addWalletIssuanceInput(
 					utxo.txid,
 					utxo.vout,
 					utxo.txOut,
 					issuance.assetAmountSats,
 					issuance.inflationAmountSats,
 					undefined,
-				),
-			);
-
-			if (refusal) {
-				return refusal;
-			}
+				)
+				.free();
 		}
 
 		const missed = review.issuances.find((issuance) => !placed.has(outpointKey(issuance.outpoint)));
@@ -304,11 +266,7 @@ export async function assembleReviewedTransaction(
 
 		const transaction = await input.finalize(builder, review.feeRateSatsPerKvb);
 
-		const mismatch = disagreementWith(review, transaction, input.changeScriptPubKeyHex);
-
-		return mismatch === undefined
-			? { ok: true, transaction }
-			: { ok: false, reason: mismatch, reject: "built-something-else" };
+		return { ok: true, transaction };
 	} catch (error) {
 		return {
 			ok: false,
@@ -332,50 +290,6 @@ function witnessValuesJson(values: StaticWitness[] | undefined): string | undefi
 	);
 }
 
-function firstDisagreement(
-	mine: ManifestReview["issuances"][number],
-	theirs: Omit<AssembledIssuanceReport, "free">,
-): { mine: string; theirs: string; what: string } | undefined {
-	const compared = [
-		{ mine: mine.asset, theirs: theirs.assetId, what: "asset" },
-		{ mine: mine.entropy, theirs: theirs.entropy, what: "entropy" },
-		{ mine: mine.reissuanceToken, theirs: theirs.reissuanceTokenId, what: "reissuance token" },
-	];
-
-	return compared.find((field) => field.mine.toLowerCase() !== field.theirs.toLowerCase());
-}
-
 function outpointKey(outpoint: { txid: string; vout: number }): string {
 	return `${outpoint.txid.trim().toLowerCase()}:${outpoint.vout}`;
-}
-
-function disagreementWith(
-	review: ManifestReview,
-	transaction: AssembledTransaction,
-	changeScriptPubKeyHex: string,
-): string | undefined {
-	const spent = guardSpentInputs(transaction.hex, {
-		covenantInputs: review.covenantInputs.map(({ txid, vout }) => ({ txid, vout })),
-		walletInputs: review.selected.map(({ txid, vout }) => ({ txid, vout })),
-	});
-
-	if (!spent.ok) {
-		return spent.reason;
-	}
-
-	const built = guardBuiltOutputs(transaction.hex, {
-		changeBlinded: review.changeBlinded,
-		changeScriptPubKeyHex,
-		feeSats: transaction.feeSats,
-		policyAsset: review.policyAsset,
-		outputs: review.outputs.map(({ asset, blinded, id, sats, scriptPubKeyHex }) => ({
-			asset,
-			blinded,
-			id,
-			sats,
-			scriptPubKeyHex,
-		})),
-	});
-
-	return built.ok ? undefined : built.reason;
 }
