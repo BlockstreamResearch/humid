@@ -22,6 +22,7 @@ export { type ShownConfirmation, describeOrigin, toShownConfirmation } from "./c
 export { type Provenanced, computed, fromDapp, verified } from "./confirmation/provenance";
 
 export { type TransactionShape, estimateFeeSats, estimateVsize } from "./fee";
+export { type EncodeStateLeavesResult, encodeStateLeaves } from "./covenants/stateLeaves";
 export type { SelectableUtxo } from "./review/coinSelection";
 
 export {

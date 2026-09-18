@@ -1,9 +1,10 @@
-import { asArray, asRecord } from "../document/json";
+import { asRecord } from "../document/json";
 import type { NormalisationNote, NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { computedValue, computesValue } from "../evaluation/computedValue";
 import { resolveCompileParams } from "./compileParams";
 import { COVENANT_HASH_SEED, type HashCovenant, ITERATION_BOUND } from "./covenantHash";
+import { encodeStateLeaves } from "./stateLeaves";
 
 export type CreatedInstance = { fields: Record<string, string>; rounds: number };
 
@@ -82,13 +83,6 @@ export function resolveCreatedInstance(
 			};
 		}
 
-		if (asArray(node.extra_leaves).length > 0) {
-			return {
-				ok: false,
-				reason: `Field ${name} carries extra_leaves, which this runtime does not encode yet.`,
-			};
-		}
-
 		const simf = node.simf;
 
 		if (typeof simf !== "string") {
@@ -146,9 +140,19 @@ export function resolveCreatedInstance(
 				return { ok: false, reason: `Computing ${name}: ${resolved.reason}` };
 			}
 
+			const stateLeaves = encodeStateLeaves(node.extra_leaves, {
+				at: `Field ${name}`,
+				...(input.notes === undefined ? {} : { notes: input.notes }),
+				scope,
+			});
+
+			if (!stateLeaves.ok) {
+				return { ok: false, reason: `Computing ${name}: ${stateLeaves.reason}` };
+			}
+
 			const hashed = input.hashCovenant({
 				argumentsJson: JSON.stringify(resolved.arguments),
-				extraLeavesJson: "[]",
+				extraLeavesJson: JSON.stringify(stateLeaves.leaves),
 				source,
 			});
 

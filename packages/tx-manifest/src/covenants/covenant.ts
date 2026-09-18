@@ -1,8 +1,9 @@
-import { asArray, asRecord } from "../document/json";
+import { asRecord } from "../document/json";
 import type { NormalisationNote, NormalisedManifest } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
 import { resolveCompileParams } from "./compileParams";
 import type { CovenantParamTypes } from "./covenantParamTypes";
+import { encodeStateLeaves } from "./stateLeaves";
 
 export type CompiledCovenant = {
 	address: string;
@@ -88,13 +89,6 @@ export async function deriveCovenantAddress(
 		return { ok: false, reason: `The source of ${sourcePath} was not supplied.` };
 	}
 
-	if (asArray(script?.extra_leaves).length > 0) {
-		return {
-			ok: false,
-			reason: `Utxo type "${input.utxoType}" declares extra_leaves, which this runtime does not encode yet.`,
-		};
-	}
-
 	const wiring = { ...asRecord(script?.compile_params), ...input.wiring };
 
 	let declaring: { declares: CovenantParamTypes; source: string } | undefined;
@@ -116,8 +110,18 @@ export async function deriveCovenantAddress(
 		return params;
 	}
 
+	const stateLeaves = encodeStateLeaves(script?.extra_leaves, {
+		at: `Utxo type "${input.utxoType}"`,
+		...(input.notes === undefined ? {} : { notes: input.notes }),
+		scope: input.scope,
+	});
+
+	if (!stateLeaves.ok) {
+		return { ok: false, reason: stateLeaves.reason };
+	}
+
 	const argumentsJson = JSON.stringify(params.arguments);
-	const extraLeavesJson = "[]";
+	const extraLeavesJson = JSON.stringify(stateLeaves.leaves);
 
 	try {
 		const compiled = await input.compile({

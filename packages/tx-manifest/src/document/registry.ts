@@ -248,6 +248,9 @@ const SITES = {
 	script: {
 		constructs: {
 			compile_params: READ,
+			// A contract's state, which its address commits to: each leaf is a hidden tapleaf beside
+			// the program, so the value decides where the funds are rather than merely describing
+			// them. Read, and every leaf encoded to the thirty-two bytes a contract reads one at.
 			extra_leaves: READ,
 			source: READ,
 			type: READ,
