@@ -50,7 +50,12 @@ async function derive(input: { covenantParamTypes?: () => Record<string, string>
 				source: asked.source,
 			});
 
-			return { address: "ex1p_recorded", scriptPubKeyHex: `5120${"00".repeat(32)}` };
+			return {
+				address: "ex1p_recorded",
+				cmr: "cc".repeat(32),
+				scriptPubKeyHex: `5120${"00".repeat(32)}`,
+				tapleafHash: "1e".repeat(32),
+			};
 		},
 		...input,
 		contractSources: { "./vault.simf": SOURCE },
@@ -118,7 +123,12 @@ describe("what it refuses rather than getting wrong", () => {
 		const action = findAction(manifest, "Withdraw");
 		const { RESERVE_COV_HASH: _absent, ...short } = INSTANCE;
 		const result = await deriveCovenantAddress(manifest, {
-			compile: () => ({ address: "ex1p", scriptPubKeyHex: "51" }),
+			compile: () => ({
+				address: "ex1p",
+				cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+				scriptPubKeyHex: "51",
+				tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+			}),
 			covenantParamTypes: () => DECLARED,
 			contractSources: { "./vault.simf": SOURCE },
 			declaredTypes: declaredParamTypes(manifest, action!),

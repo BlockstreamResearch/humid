@@ -129,8 +129,14 @@ function smplxSubstitute(log: Journal) {
 		address() {
 			return "tex1p_derived";
 		}
+		commitmentMerkleRoot() {
+			return "cc".repeat(32);
+		}
 		scriptPubKeyHex() {
 			return COVENANT_SCRIPT;
+		}
+		tapleafHash() {
+			return "1e".repeat(32);
 		}
 		free() {
 			log.freed.push("covenant");

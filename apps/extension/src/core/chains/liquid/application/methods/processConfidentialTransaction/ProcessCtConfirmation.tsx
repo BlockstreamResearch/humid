@@ -65,6 +65,8 @@ export function isProcessCtConfirmationData(value: unknown): value is ProcessCtC
 			(row) =>
 				isRecord(row) &&
 				provenancedString(row.address) &&
+				provenancedString(row.cmr) &&
+				provenancedString(row.tapleafHash) &&
 				provenancedString(row.utxoType) &&
 				provenancedBoolean(row.verified),
 		) &&
@@ -239,6 +241,13 @@ export function ProcessCtConfirmation({
 						<span className="text-muted-foreground text-xs">
 							{describeOrigin(covenant.utxoType.origin)}
 						</span>
+						{/* The address says where the funds sit and moves with the arguments and the
+						    network. These say what the contract is, so a person who has seen this
+						    contract before has something that does not change to recognise it by. */}
+						<span className="text-muted-foreground text-xs">Contract hash</span>
+						<span className="font-mono text-xs break-all">{covenant.cmr.value}</span>
+						<span className="text-muted-foreground text-xs">Leaf it is spent from</span>
+						<span className="font-mono text-xs break-all">{covenant.tapleafHash.value}</span>
 					</div>
 				))}
 

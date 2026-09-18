@@ -25,6 +25,17 @@ export type PublishedAmount = {
 
 export type CovenantRow = {
 	address: Provenanced<string>;
+	/**
+	 * What the contract is, as against where its funds sit.
+	 *
+	 * The address moves with the arguments a contract was compiled against and with the network it
+	 * was compiled for, so two deployments of the same contract share no part of it. The Commitment
+	 * Merkle Root is the contract itself, and the tapleaf hash is the leaf a spend commits to, so
+	 * between them a person comparing this against a contract they already trust has something to
+	 * compare.
+	 */
+	cmr: Provenanced<string>;
+	tapleafHash: Provenanced<string>;
 	utxoType: Provenanced<string>;
 	verified: Provenanced<boolean>;
 };
@@ -58,6 +69,8 @@ export function confirmationModel(
 		covenants: review.covenants.map((found) => ({
 			address:
 				found.verified === "matches-chain" ? verified(found.address) : computed(found.address),
+			cmr: computed(found.cmr),
+			tapleafHash: computed(found.tapleafHash),
 			utxoType: fromDapp(found.utxoType),
 			verified: computed(found.verified === "matches-chain"),
 		})),

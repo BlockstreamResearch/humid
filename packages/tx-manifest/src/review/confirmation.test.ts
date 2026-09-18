@@ -24,7 +24,12 @@ const COVENANT_HOLDS = "50000";
 
 const deps = {
 	accountLabel: ACCOUNT,
-	compile: () => ({ address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT }),
+	compile: () => ({
+		address: DERIVED,
+		cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		scriptPubKeyHex: DERIVED_SCRIPT,
+		tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+	}),
 	fundingUtxos: [
 		{ amount: "1000000", spendable: true, txOut: "00", txid: "c".repeat(64), vout: 0 },
 	],
@@ -344,5 +349,31 @@ describe("the model as it crosses to a surface", () => {
 		expect(crossed.feeSats.origin).toBe("computed");
 		expect(crossed.netEffect[0]?.sats.origin).toBe("computed");
 		expect(crossed.protocol.origin).toBe("dapp");
+	});
+});
+
+// A person recognising a contract needs something that does not move. The address moves with the
+// arguments and the network; the Commitment Merkle Root and the tapleaf hash do not.
+describe("what the confirmation says a contract is", () => {
+	test("carries the contract's own hashes beside the address its funds sit at", async () => {
+		const result = await reviewed();
+
+		expect(result.confirmation.covenants).not.toHaveLength(0);
+
+		for (const row of result.confirmation.covenants) {
+			expect(row.cmr.value).toHaveLength(64);
+			expect(row.tapleafHash.value).toHaveLength(64);
+			expect(row.cmr.value).not.toBe(row.tapleafHash.value);
+			expect(row.cmr.value).not.toBe(row.address.value);
+		}
+	});
+
+	test("and says both were worked out here rather than taken from the dapp", async () => {
+		const result = await reviewed();
+
+		for (const row of result.confirmation.covenants) {
+			expect(row.cmr.origin).toBe("computed");
+			expect(row.tapleafHash.origin).toBe("computed");
+		}
 	});
 });

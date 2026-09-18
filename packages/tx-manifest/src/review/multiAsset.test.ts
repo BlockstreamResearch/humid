@@ -27,7 +27,12 @@ const COVENANT_TXOUT = `01${"aa".repeat(32)}01000000000000c350000022${"00".repea
 
 const deps = {
 	accountLabel: "liquid:testnet account 0",
-	compile: () => ({ address: "tex1p_derived", scriptPubKeyHex: DERIVED_SCRIPT }),
+	compile: () => ({
+		address: "tex1p_derived",
+		cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		scriptPubKeyHex: DERIVED_SCRIPT,
+		tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+	}),
 	network: "liquid",
 	policyAsset: POLICY_ASSET,
 	readFeeRate: async () => 1000,

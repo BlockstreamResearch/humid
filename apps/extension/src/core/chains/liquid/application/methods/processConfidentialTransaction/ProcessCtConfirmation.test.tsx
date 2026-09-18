@@ -21,6 +21,8 @@ const MODEL: ShownConfirmation = {
 	covenants: [
 		{
 			address: verified("tex1p_derived"),
+			cmr: computed("cc".repeat(32)),
+			tapleafHash: computed("1e".repeat(32)),
 			utxoType: fromDapp("p2pk_output"),
 			verified: computed(true),
 		},
@@ -278,6 +280,8 @@ describe("what the screen says", () => {
 			covenants: [
 				{
 					address: computed("tex1p_derived"),
+					cmr: computed("cc".repeat(32)),
+					tapleafHash: computed("1e".repeat(32)),
 					utxoType: fromDapp("p2pk_output"),
 					verified: computed(false),
 				},

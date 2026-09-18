@@ -21,7 +21,12 @@ const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 
 const deps = {
 	accountLabel: "liquid:testnet account 0",
-	compile: () => ({ address: DERIVED, scriptPubKeyHex: DERIVED_SCRIPT }),
+	compile: () => ({
+		address: DERIVED,
+		cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		scriptPubKeyHex: DERIVED_SCRIPT,
+		tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+	}),
 	fundingUtxos: [
 		{ amount: "1000000", spendable: true, txOut: "00", txid: "c".repeat(64), vout: 0 },
 	],

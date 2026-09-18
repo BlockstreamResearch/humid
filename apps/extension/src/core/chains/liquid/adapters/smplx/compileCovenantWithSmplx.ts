@@ -21,7 +21,9 @@ export function createSmplxCovenantCompiler(
 		try {
 			return {
 				address: covenant.address(network),
+				cmr: covenant.commitmentMerkleRoot(),
 				scriptPubKeyHex: covenant.scriptPubKeyHex(network),
+				tapleafHash: covenant.tapleafHash(),
 			};
 		} finally {
 			covenant.free();
