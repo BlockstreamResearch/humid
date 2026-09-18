@@ -9,7 +9,7 @@ describe("the order the format resolves blinding in", () => {
 			decidedBy: "output",
 		});
 		expect(resolveBlinding({ declared: true, documentDefault: false })).toEqual({
-			blinding: "hidden",
+			blinding: "blinded",
 			decidedBy: "output",
 		});
 	});
@@ -21,8 +21,8 @@ describe("the order the format resolves blinding in", () => {
 		});
 	});
 
-	test("and silence means hidden, because that is this network's own default", () => {
-		expect(resolveBlinding({})).toEqual({ blinding: "hidden", decidedBy: "chain" });
+	test("and silence means blinded, because that is this network's own default", () => {
+		expect(resolveBlinding({})).toEqual({ blinding: "blinded", decidedBy: "chain" });
 	});
 
 	test("a covenant output and an OP_RETURN are open whatever anything says", () => {
@@ -38,7 +38,7 @@ describe("the order the format resolves blinding in", () => {
 });
 
 describe("what this wallet does with a contract action's own change", () => {
-	test("publishes it, over the network's default that would have hidden it", () => {
+	test("publishes it, over the network's default that would have blinded it", () => {
 		expect(resolveBlinding({ change: true })).toEqual({
 			blinding: "open",
 			decidedBy: "spendable-change",
@@ -70,9 +70,9 @@ describe("what this wallet does with a contract action's own change", () => {
 	});
 
 	test("and reaches nothing that is not change", () => {
-		expect(resolveBlinding({})).toEqual({ blinding: "hidden", decidedBy: "chain" });
+		expect(resolveBlinding({})).toEqual({ blinding: "blinded", decidedBy: "chain" });
 		expect(resolveBlinding({ declared: true })).toEqual({
-			blinding: "hidden",
+			blinding: "blinded",
 			decidedBy: "output",
 		});
 	});

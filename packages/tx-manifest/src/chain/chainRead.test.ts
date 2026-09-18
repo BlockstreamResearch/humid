@@ -24,7 +24,7 @@ function explicit(sats: bigint, scriptHex: string, assetId = POLICY_ASSET): stri
 	return `${assetField(assetId)}${value}00${length}${scriptHex}`;
 }
 
-function hidden(scriptHex: string): string {
+function blinded(scriptHex: string): string {
 	const length = (scriptHex.length / 2).toString(16).padStart(2, "0");
 
 	return `0a${"33".repeat(32)}08${"44".repeat(32)}02${"55".repeat(32)}${length}${scriptHex}`;
@@ -77,13 +77,13 @@ describe("reading one output out of a transaction's own bytes", () => {
 		expect(found.ok && found.txOut.amountSats).toBe("7");
 	});
 
-	test("reports a hidden output as hiding rather than as holding nothing", () => {
-		const confidential = transaction([hidden(FIRST_SCRIPT), explicit(500n, "")]);
+	test("reports a blinded output as blinding rather than as holding nothing", () => {
+		const confidential = transaction([blinded(FIRST_SCRIPT), explicit(500n, "")]);
 		const found = txOutAt(confidential, 0);
 
 		expect(found.ok && found.txOut.amountSats).toBeUndefined();
 		expect(found.ok && found.txOut.rawAssetId).toBeUndefined();
-		expect(found.ok && found.txOut.txOutHex).toBe(hidden(FIRST_SCRIPT));
+		expect(found.ok && found.txOut.txOutHex).toBe(blinded(FIRST_SCRIPT));
 	});
 
 	test("refuses an index the transaction has no output at", () => {

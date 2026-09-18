@@ -13,7 +13,7 @@ export type NetEffect = {
 	sats: Provenanced<bigint>;
 };
 
-export type HiddenAmount = {
+export type BlindedAmount = {
 	decidedBy: Provenanced<string>;
 	id: Provenanced<string>;
 };
@@ -46,7 +46,7 @@ export type ConfirmationModel = {
 	covenants: CovenantRow[];
 	feeAsset: Provenanced<string>;
 	feeSats: Provenanced<bigint>;
-	hiddenAmounts: HiddenAmount[];
+	blindedAmounts: BlindedAmount[];
 	netEffect: NetEffect[];
 	protocol: Provenanced<string>;
 	publishedAmounts: PublishedAmount[];
@@ -76,7 +76,7 @@ export function confirmationModel(
 		})),
 		feeAsset: computed(input.policyAsset.trim().toLowerCase()),
 		feeSats: computed(review.estimatedFeeSats),
-		hiddenAmounts: hiddenAmounts(review),
+		blindedAmounts: blindedAmounts(review),
 		netEffect: review.movements.map((movement) => ({
 			asset: computed(movement.asset),
 			sats: computed(movement.sats),
@@ -87,7 +87,7 @@ export function confirmationModel(
 	};
 }
 
-function hiddenAmounts(review: ReviewedPlan): HiddenAmount[] {
+function blindedAmounts(review: ReviewedPlan): BlindedAmount[] {
 	return review.outputs
 		.filter((output) => output.blinded)
 		.map((output) => ({
@@ -116,7 +116,7 @@ function publishedAmounts(review: ReviewedPlan): PublishedAmount[] {
 }
 
 function word(decidedBy: BlindingDecision["decidedBy"] | undefined): string {
-	return describeBlinding({ blinding: "hidden", decidedBy: decidedBy ?? "chain" });
+	return describeBlinding({ blinding: "blinded", decidedBy: decidedBy ?? "chain" });
 }
 
 export function describeOrigin(origin: Origin): string {

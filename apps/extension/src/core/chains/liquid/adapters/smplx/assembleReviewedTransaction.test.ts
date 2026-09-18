@@ -277,7 +277,7 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 			covenants: [],
 			feeAsset: computed(ASSET),
 			feeSats: computed(344n),
-			hiddenAmounts: [],
+			blindedAmounts: [],
 			netEffect: [{ asset: computed(ASSET), sats: computed(-50_344n) }],
 			protocol: fromDapp("p2pk-simplicity"),
 			publishedAmounts: [],
@@ -881,7 +881,7 @@ describe("assembleReviewedTransaction", () => {
 
 	describe("blinding", () => {
 		const BLINDING_KEY = `02${"55".repeat(32)}`;
-		const hiddenAndOpen = {
+		const blindedAndOpen = {
 			outputs: [
 				{
 					asset: ASSET,
@@ -902,8 +902,8 @@ describe("assembleReviewedTransaction", () => {
 			],
 		};
 
-		test("passes the key only to the outputs the review says are hidden", async () => {
-			const { assemble, recorded } = subject(hiddenAndOpen, () => SIGNED, {
+		test("passes the key only to the outputs the review says are blinded", async () => {
+			const { assemble, recorded } = subject(blindedAndOpen, () => SIGNED, {
 				blindingPublicKeyHex: BLINDING_KEY,
 			});
 
@@ -925,7 +925,7 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.changes).toEqual([{ blindingKey: undefined, script: CHANGE_SCRIPT }]);
 		});
 
-		test("and passes it for change the review says must be hidden", async () => {
+		test("and passes it for change the review says must be blinded", async () => {
 			const { assemble, recorded } = subject({ changeBlinded: true }, () => SIGNED, {
 				blindingPublicKeyHex: BLINDING_KEY,
 			});
@@ -935,8 +935,8 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.changes).toEqual([{ blindingKey: BLINDING_KEY, script: CHANGE_SCRIPT }]);
 		});
 
-		test("refuses a hidden output it was given no key for, building nothing", async () => {
-			const { assemble, recorded } = subject(hiddenAndOpen);
+		test("refuses a blinded output it was given no key for, building nothing", async () => {
+			const { assemble, recorded } = subject(blindedAndOpen);
 
 			const result = await assemble();
 
@@ -949,7 +949,7 @@ describe("assembleReviewedTransaction", () => {
 			}
 		});
 
-		test("and refuses hidden change it was given no key for", async () => {
+		test("and refuses blinded change it was given no key for", async () => {
 			expect(await subject({ changeBlinded: true }).assemble()).toMatchObject({ ok: false });
 		});
 	});

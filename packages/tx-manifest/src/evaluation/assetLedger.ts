@@ -211,7 +211,7 @@ export function assetLedger(
 				};
 			}
 
-			entry.change = { blinded: output.blinding.blinding === "hidden", id };
+			entry.change = { blinded: output.blinding.blinding === "blinded", id };
 
 			continue;
 		}

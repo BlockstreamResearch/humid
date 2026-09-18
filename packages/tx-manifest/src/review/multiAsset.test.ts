@@ -556,7 +556,7 @@ describe("what each output does with the value it carries", () => {
 		});
 	});
 
-	test("and silence means hidden, which a wallet output can be and a covenant's cannot", async () => {
+	test("and silence means blinded, which a wallet output can be and a covenant's cannot", async () => {
 		const result = await documentSaying((document) => {
 			delete outputsOf(document)[0]!.confidential;
 		});

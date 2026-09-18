@@ -71,7 +71,7 @@ export function isProcessCtConfirmationData(value: unknown): value is ProcessCtC
 				provenancedBoolean(row.verified),
 		) &&
 		everyRow(
-			shown.hiddenAmounts,
+			shown.blindedAmounts,
 			(row) => isRecord(row) && provenancedString(row.id) && provenancedString(row.decidedBy),
 		) &&
 		everyRow(
@@ -196,18 +196,18 @@ export function ProcessCtConfirmation({
 				/>
 				<Shown label="Acting account" value={shown.account} />
 
-				{shown.hiddenAmounts.map((hidden) => (
-					<div className="flex flex-col gap-1" key={hidden.id.value}>
+				{shown.blindedAmounts.map((blinded) => (
+					<div className="flex flex-col gap-1" key={blinded.id.value}>
 						<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-							Amount hidden onchain
+							Amount blinded onchain
 						</span>
-						<span className="text-sm font-medium break-all">{hidden.id.value}</span>
+						<span className="text-sm font-medium break-all">{blinded.id.value}</span>
 						<span className="text-muted-foreground text-xs">
-							{describeOrigin(hidden.id.origin)}
+							{describeOrigin(blinded.id.origin)}
 						</span>
-						<span className="text-sm">{hidden.decidedBy.value}</span>
+						<span className="text-sm">{blinded.decidedBy.value}</span>
 						<span className="text-muted-foreground text-xs">
-							{describeOrigin(hidden.decidedBy.origin)}
+							{describeOrigin(blinded.decidedBy.origin)}
 						</span>
 					</div>
 				))}

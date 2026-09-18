@@ -29,9 +29,9 @@ const MODEL: ShownConfirmation = {
 	],
 	feeAsset: computed(FEE_ASSET),
 	feeSats: computed("344"),
-	hiddenAmounts: [
+	blindedAmounts: [
 		{
-			decidedBy: computed("this protocol asks for it to be hidden"),
+			decidedBy: computed("this protocol asks for it to be blinded"),
 			id: fromDapp("received_out"),
 		},
 	],
@@ -41,7 +41,7 @@ const MODEL: ShownConfirmation = {
 		{
 			id: computed("change"),
 			reason: computed(
-				"nothing says otherwise and this network hides an output by default, and this " +
+				"nothing says otherwise and this network blinds an output by default, and this " +
 					"wallet publishes it anyway so your next action can spend it",
 			),
 		},
@@ -125,7 +125,7 @@ describe("the payload this surface accepts", () => {
 			isProcessCtConfirmationData(payload(spoiled("netEffect", [{ asset: computed(TOKEN) }]))),
 		).toBe(false);
 		expect(
-			isProcessCtConfirmationData(payload(spoiled("hiddenAmounts", [{ id: fromDapp("out") }]))),
+			isProcessCtConfirmationData(payload(spoiled("blindedAmounts", [{ id: fromDapp("out") }]))),
 		).toBe(false);
 		expect(
 			isProcessCtConfirmationData(
@@ -304,10 +304,10 @@ describe("what the screen says", () => {
 		expect(attribution - utxoType).toBeLessThan(200);
 	});
 
-	test("attributes a hidden amount's name separately from the word that hid it", () => {
+	test("attributes a blinded amount's name separately from the word that blinded it", () => {
 		const html = markup();
 		const name = html.indexOf("received_out");
-		const decision = html.indexOf("this protocol asks for it to be hidden");
+		const decision = html.indexOf("this protocol asks for it to be blinded");
 		const between = html.slice(name, decision);
 
 		expect(name).toBeGreaterThan(-1);
@@ -332,7 +332,7 @@ describe("what the screen says", () => {
 			publishedAmounts: [
 				{
 					id: fromDapp("token_change"),
-					reason: computed("this protocol asks for it to be hidden"),
+					reason: computed("this protocol asks for it to be blinded"),
 				},
 			],
 		});
@@ -340,16 +340,16 @@ describe("what the screen says", () => {
 
 		expect(name).toBeGreaterThan(-1);
 		expect(
-			html.slice(name, html.indexOf("this protocol asks for it to be hidden", name)),
+			html.slice(name, html.indexOf("this protocol asks for it to be blinded", name)),
 		).toContain("claimed by the dapp");
 	});
 
-	test("names every amount it hides and whose word decided that", () => {
+	test("names every amount it blinds and whose word decided that", () => {
 		const html = markup();
 
-		expect(html).toContain("Amount hidden onchain");
+		expect(html).toContain("Amount blinded onchain");
 		expect(html).toContain("received_out");
-		expect(html).toContain("this protocol asks for it to be hidden");
+		expect(html).toContain("this protocol asks for it to be blinded");
 	});
 
 	test("and every amount it publishes over the format, with the word it set aside", () => {
