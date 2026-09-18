@@ -1043,4 +1043,68 @@ describe("a document that names one surplus twice", () => {
 			);
 		}
 	});
+
+	// token_change names its asset through params.token and change_out writes "lbtc": two
+	// spellings that only meet once params.token turns out to be the network's own asset.
+	type PolicyPositions = { change_out?: number; token_change?: number };
+
+	function policyChanges(options: { positions?: PolicyPositions; withoutTokenChange?: true } = {}) {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const actions = document.actions as Record<string, Record<string, unknown>>;
+		const payToken = actions.PayToken as Record<string, unknown>;
+		const outputs = (payToken.outputs as Record<string, unknown>[]).filter(
+			(output) => !(options.withoutTokenChange && output.id === "token_change"),
+		);
+
+		for (const output of outputs) {
+			const stated = options.positions?.[output.id as keyof PolicyPositions];
+
+			if (stated !== undefined) {
+				output.required_index = stated;
+			}
+		}
+
+		payToken.outputs = outputs;
+
+		return reviewManifestAction(
+			request({ manifest: document, params: { ...request().params, token: POLICY_ASSET } }),
+			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID)], holdingsOf: () => [] },
+		);
+	}
+
+	test("in the network's own asset, leaves the one change output to the builder", async () => {
+		const single = await policyChanges({ withoutTokenChange: true });
+		const result = await policyChanges();
+
+		expect(isRefusal(result)).toBe(false);
+		expect(isRefusal(single)).toBe(false);
+
+		if (!isRefusal(result) && !isRefusal(single)) {
+			expect(result.outputs.map((output) => [output.id, output.asset, output.sats])).toEqual([
+				["token_out", POLICY_ASSET, 1000n],
+				["p2pk_out", POLICY_ASSET, 700n],
+			]);
+			expect(result.outputs).toEqual(single.outputs);
+		}
+	});
+
+	test.each([
+		["the first", { token_change: -2 }],
+		["the second", { change_out: -1 }],
+	])(
+		"in the network's own asset, is still refused when %s of them states a position",
+		async (_which, positions) => {
+			const result = await policyChanges({ positions });
+
+			expect(isRefusal(result)).toBe(true);
+
+			if (isRefusal(result)) {
+				expect(result.reject).toBe("document-fault");
+				expect(result.reason).toBe(
+					`PayToken declares change for ${POLICY_ASSET} twice, at token_change and change_out. ` +
+						"One surplus cannot go to two places, and this wallet will not choose between them.",
+				);
+			}
+		},
+	);
 });
