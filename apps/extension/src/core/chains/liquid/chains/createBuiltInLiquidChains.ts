@@ -14,13 +14,6 @@ import {
 	type LiquidNetworkKind,
 } from "./LiquidChainRecord";
 
-// Default blockchain backend per built-in chain. Testnet uses the public Waterfalls server (run by
-// the LWK author): with `waterfalls: true` a whole-wallet scan is ONE server-side request, instead of
-// the dozens of per-address history queries a plain esplora scan fans out — which tripped
-// blockstream's free-tier rate limit (HTTP 429). Trade-off: waterfalls sends the descriptor to that
-// server, which is fine for testnet dev but a privacy choice on mainnet — so mainnet stays on
-// blockstream esplora for now (revisit with a Blockstream API key, a self-hosted node, or the
-// encrypted-descriptor waterfalls mode).
 const LIQUID_DEFAULT_BACKENDS = {
 	[LIQUID_MAINNET_CHAIN_ID]: { url: "https://blockstream.info/liquid/api" },
 	[LIQUID_TESTNET_CHAIN_ID]: {
@@ -92,7 +85,6 @@ function createDefaultLiquidChainBackend(chainId: LiquidChainId): LiquidChainBac
 	return { ...backend };
 }
 
-/** Create a fresh custom (regtest) Liquid chain with a generated id, for the add-chain form. */
 export function createCustomLiquidChainRecord(name: string): LiquidChainRecord {
 	return {
 		chainGroupId: LIQUID_CHAIN_GROUP_ID,
@@ -105,10 +97,6 @@ export function createCustomLiquidChainRecord(name: string): LiquidChainRecord {
 	};
 }
 
-// Custom chains can't derive a real genesis-based id (LWK's WASM Network fixes the
-// regtest genesis), so mint a unique id in the CAIP-2 bip122 shape instead. Exported so the
-// dapp-facing wallet_addChain path mints the wallet's OWN id rather than trusting a dapp-supplied
-// one (which could collide with / spoof a built-in genesis hash).
 export function generateCustomLiquidChainId(): LiquidChainId {
 	const bytes = crypto.getRandomValues(new Uint8Array(16));
 	const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");

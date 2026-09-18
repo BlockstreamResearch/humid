@@ -18,8 +18,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Home tab active. */
 export const Home: Story = { args: { active: "home" } };
 
-/** Settings tab active. */
 export const Settings: Story = { args: { active: "settings" } };

@@ -35,10 +35,6 @@ export type CreateInternalRpcHandlersInput = {
 	sendTransfer: (input: SendTransferInput) => Promise<SendTransferResult>;
 };
 
-/**
- * Builds the popup/internal handler map. This surface is never reachable from a
- * dapp: the transport dispatches injected senders to a separate registry.
- */
 export function createInternalRpcHandlers({
 	chainGroups,
 	confirmations,

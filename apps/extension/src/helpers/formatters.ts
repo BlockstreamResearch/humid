@@ -8,8 +8,6 @@ export function setDayjsLocale(locale: string) {
 export function handleTimestamp(timestamp: number) {
 	const nowMs = dayjs().valueOf();
 
-	// The value can arrive either in seconds or milliseconds — pick whichever
-	// interpretation lands closer to "now".
 	if (Math.abs(nowMs - timestamp) > Math.abs(nowMs - timestamp * 1000)) {
 		return dayjs.unix(timestamp);
 	}
@@ -21,11 +19,6 @@ export function formatDateDMYT(date: Date | number) {
 	return dayjs(date).format("DD.MM.YYYY HH:mm");
 }
 
-/**
- * Formats a past timestamp (ms) as a short "time ago" freshness label — "just now", "5m ago",
- * "2h ago", "3d ago". `now` is injectable so callers can tick it on an interval (and tests can
- * pin it). Sub-minute gaps read as "just now"; anything in between rounds down but never to "0m".
- */
 export function formatTimeAgo(timestamp: number, now: number = Date.now()): string {
 	const seconds = Math.max(0, Math.floor((now - timestamp) / 1000));
 
@@ -56,22 +49,12 @@ export function formatByteLength(length: number) {
 	return `${currentLength.toFixed(2)} ${units[unitIndex]}`;
 }
 
-/**
- * Truncates the middle of a long identifier (address, hash) for display, keeping
- * the first `lead` and last `tail` characters. Short values pass through.
- */
 export function truncateMiddle(value: string, lead = 6, tail = 4) {
 	if (value.length <= lead + tail + 1) return value;
 
 	return `${value.slice(0, lead)}…${value.slice(-tail)}`;
 }
 
-/**
- * Formats an integer base-unit amount (e.g. satoshis) as a decimal string with
- * `decimals` fractional places, trimming trailing fractional zeros. BigInt-based, so
- * no floating-point rounding. Accepts the raw bigint or an integer string; non-numeric
- * input formats as "0".
- */
 export function formatUnits(amount: bigint | string, decimals: number) {
 	const text = typeof amount === "bigint" ? amount.toString() : amount;
 	const negative = text.startsWith("-");
@@ -87,7 +70,6 @@ export function formatUnits(amount: bigint | string, decimals: number) {
 	return fraction ? `${sign}${whole}.${fraction}` : `${sign}${whole}`;
 }
 
-/** Parse a base-unit integer string (as it crosses the RPC boundary) to bigint; junk yields 0n. */
 export function parseBaseUnits(value: string): bigint {
 	try {
 		return BigInt(value);
@@ -96,12 +78,6 @@ export function parseBaseUnits(value: string): bigint {
 	}
 }
 
-/**
- * The inverse of `formatUnits`: parse a human decimal amount (e.g. "1.5") into an integer base-unit
- * string (e.g. "150000000" at 8 decimals) at the input boundary. BigInt-based, so no floating-point
- * rounding. Returns null for anything that isn't a well-formed non-negative decimal, or when the
- * fractional part has more than `decimals` places (more precision than the asset can represent).
- */
 export function parseUnits(value: string, decimals: number): string | null {
 	const trimmed = value.trim();
 
@@ -113,6 +89,5 @@ export function parseUnits(value: string, decimals: number): string | null {
 
 	const digits = `${whole}${fraction.padEnd(decimals, "0")}`;
 
-	// Strip leading zeros so the result is a canonical integer string ("0" stays "0").
 	return digits.replace(/^0+(?=\d)/u, "");
 }

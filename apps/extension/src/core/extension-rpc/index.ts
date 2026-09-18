@@ -19,13 +19,6 @@ type BackgroundMessageBus = ReturnType<typeof definePegasusMessageBus<PegasusMsg
 
 let messageBus: BackgroundMessageBus | null = null;
 
-/**
- * Lazily bind the pegasus message bus + response listener on first use. Binding at module-eval
- * time would require `initPegasusTransport()` to have already run in the current context, but ES
- * imports evaluate before an entry's body (where transport is initialized) — so importing this
- * module must stay side-effect-free. By the first `requestBackground` call (an effect or user
- * action) the entry has initialized transport.
- */
 function getMessageBus(): BackgroundMessageBus {
 	if (messageBus) return messageBus;
 

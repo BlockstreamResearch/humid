@@ -16,5 +16,4 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Theme settings with the system appearance selected. */
 export const Default: Story = {};

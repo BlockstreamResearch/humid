@@ -5,27 +5,19 @@ import { deriveDataStatus, type DataStatus } from "./status";
 
 export const HUMID_IDENTITY_QUERY_KEY = ["humid", "identity"] as const;
 
-/** The identity a dapp derives to personalize itself for the connected wallet (identity-first). */
 export const DEFAULT_IDENTITY = "ssh://humid@localhost";
 
 export type HumidIdentity = {
 	publicKey: string;
-	/** Short human-readable name derived from the identity URI (falls back to a key fingerprint). */
 	label: string;
 };
 
 export type HumidIdentityState = {
 	identity: HumidIdentity | null;
 	status: DataStatus;
-	/** Derive now regardless of policy (prompts when the method is not silent). */
 	refresh: () => void;
 };
 
-/**
- * The wallet's SLIP-0013 identity public key for {@link DEFAULT_IDENTITY}, used to personalize the
- * dapp. Same policy-aware gating as the balance: auto-derives only when connected and
- * `getIdentityPublicKey` is silent, otherwise `needs-approval` until `refresh` is called.
- */
 export function useHumidIdentity(args: {
 	wallet: WalletClient;
 	chainId: string;
@@ -60,7 +52,6 @@ export function useHumidIdentity(args: {
 	};
 }
 
-/** `ssh://humid@localhost` → `humid@localhost`; falls back to a short public-key fingerprint. */
 function deriveIdentityLabel(identity: string, publicKey: string): string {
 	const withoutScheme = identity.replace(/^[a-z0-9+.-]+:\/\//i, "").replace(/\/+$/, "");
 	if (withoutScheme) return withoutScheme;

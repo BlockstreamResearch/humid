@@ -1,11 +1,3 @@
-// Storybook stub for `webextension-polyfill`.
-//
-// The real module throws "This script should only be loaded in a browser
-// extension" at import time outside an extension, which crashes any story that
-// transitively imports it (the vault client via pegasus/extension-rpc, the auth
-// store via @webext-pegasus/store-zustand, background helpers, etc.). This stub
-// provides an inert `browser` so those modules import cleanly in Storybook.
-
 const noopListener = {
 	addListener() {},
 	removeListener() {},

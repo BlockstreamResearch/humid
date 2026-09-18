@@ -85,7 +85,6 @@ export function ConnectionCard() {
 							variant="outline"
 							onClick={() =>
 								call(async () => {
-									// Match the old Disconnect: drop the session, then the AppKit connection.
 									await revokeSession().catch(() => undefined);
 									await disconnect().catch(() => undefined);
 								})

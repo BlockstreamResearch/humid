@@ -6,7 +6,6 @@ import { useChainActions } from "@/routes/App/pages/Settings/hooks/useChainActio
 import { ChainAddForm } from "../../components/ChainAddForm";
 import { Route } from "./route";
 
-/** Add chain (container): resolves the target chain group from the URL and persists the draft. */
 export function ChainAddPage() {
 	const { group: groupId } = Route.useSearch();
 	const navigate = useNavigate();
@@ -14,7 +13,6 @@ export function ChainAddPage() {
 
 	const groupUi = groupId ? chainGroupUis[groupId] : undefined;
 
-	// An add link always carries a known chain group; bail to the list otherwise.
 	if (!groupUi) return <Navigate replace to="/app/settings/chains" />;
 
 	return (

@@ -3,9 +3,6 @@ import { expect, fn, userEvent, within } from "storybook/test";
 
 import { DappConnectConfirmation } from "./DappConnectConfirmation";
 
-// The session's whole authorized surface, as the background hands it to the modal: every method
-// here is callable once connected. Only the reads the modal knows about become checkboxes; the
-// signing/sending ones are offered but always confirm, so they get no checkbox.
 const methods = [
 	"getBalance",
 	"getUTXOs",
@@ -41,10 +38,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Every permission starts unticked: the user opts in to what may run without asking. */
 export const Default: Story = {};
 
-/** Locked wallet: the connect request opens on an unlock step before the account list. */
 export const Locked: Story = {
 	args: {
 		data: {
@@ -58,7 +53,6 @@ export const Locked: Story = {
 	},
 };
 
-/** Connecting without ticking anything pre-approves nothing — every call will confirm. */
 export const GrantNothing: Story = {
 	play: async ({ args, canvasElement }) => {
 		const canvas = within(canvasElement);
@@ -71,10 +65,6 @@ export const GrantNothing: Story = {
 	},
 };
 
-/**
- * Ticking "View balance" pre-approves exactly that method. The session also offers signPset, but
- * an always-confirm method has no checkbox, so it can never reach the granted set.
- */
 export const GrantSubset: Story = {
 	play: async ({ args, canvasElement }) => {
 		const canvas = within(canvasElement);

@@ -22,11 +22,6 @@ type ConnectedDappItemViewProps = {
 	settingMethod: string | null;
 };
 
-/**
- * Per-dapp policy shell: breadcrumb + identity + Disconnect, then the per-method policy. An injected
- * dapp's reads can be flipped to run without a prompt; its writes are locked to "Always asks", the
- * safety invariant. A WalletConnect dapp has no configurable policy and confirms every call.
- */
 export function ConnectedDappItemView({
 	accountGroupId,
 	accountName,
@@ -83,7 +78,6 @@ export function ConnectedDappItemView({
 	);
 }
 
-/** The injected dapp's method surface: reads as run-without-asking toggles, writes locked to "Always asks". */
 function MethodPolicy({
 	dapp,
 	onToggleMethod,
@@ -169,7 +163,6 @@ function MethodPolicy({
 	);
 }
 
-/** WalletConnect has no per-method policy — every call is confirmed, so there is nothing to toggle. */
 function WalletConnectPolicyNote() {
 	return (
 		<div className="border-border/60 bg-muted/30 rounded-lg border p-3">

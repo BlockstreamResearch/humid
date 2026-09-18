@@ -38,34 +38,14 @@ function readAccountsState(model: AccountModelState): AccountsState {
 }
 
 export type AccountsRuntimeDeps = {
-	// Read one page of an asset's activity for the selected account on the selected
-	// chain. Chain-specific; wired by the background composition root.
 	getActivity: (input: GetActivityInput) => Promise<ActivityPage>;
-	// Materialize + sync the selected account on the selected chain, then read its
-	// balances and fiat rate. Chain-specific; wired by the background root.
 	getPortfolio: () => Promise<PortfolioSnapshot>;
-	// Materialize + derive the receive address for the selected account on the
-	// selected chain. Chain-specific; wired by the background composition root.
 	getReceiveAddress: () => Promise<ReceiveAddress>;
-	// Preview a send from the selected account+chain (validate recipient, resolve asset,
-	// report ELIP-1 confidentiality) WITHOUT signing/broadcasting. Wired by the root.
 	inspectTransfer: (input: SendTransferInput) => Promise<TransferReview>;
-	// Estimate the max sendable amount (+ assumed L-BTC fee) for an asset on the selected
-	// account+chain. Syncs the wallet first (the native drain fee depends on real UTXOs). Wired by root.
 	estimateMaxSend: (input: EstimateMaxSendInput) => Promise<EstimateMaxSendResult>;
-	// Force an immediate re-sync of the selected account's portfolio (bypasses the
-	// engine throttle, single-flighted) and return the fresh snapshot. Wired by the root.
 	refreshPortfolio: () => Promise<PortfolioSnapshot>;
-	// Build, sign, and broadcast a send from the selected account+chain; resolves with the
-	// broadcast txid. The popup UI is the review+confirm — no dapp confirm round-trip. Wired by root.
 	sendTransfer: (input: SendTransferInput) => Promise<SendTransferResult>;
-	// Garbage-collect a removed account's persisted portfolio (session-storage
-	// snapshots + cached scan target). Best-effort; wired by the background root.
 	purgeAccountPortfolio: (accountGroupId: string) => Promise<void>;
-	// Resolve + disconnect the WalletConnect sessions tied to removed accounts BEFORE the model mutation
-	// deletes the chain accounts WC session→account resolution matches on. Policy: disconnect only a
-	// session whose SOLE authorized account group is removed; a multi-account session is left intact (v1
-	// has no per-account WC pruning). Best-effort; wired by the background root.
 	purgeAccountWalletConnectSessions: (accountGroupIds: readonly string[]) => Promise<void>;
 };
 
@@ -86,12 +66,7 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 				accountModel: { ...current.accountModel, selectedAccountGroupId: accountGroupId },
 			}));
 
-			// The active account changed in the wallet. Notify connected dapps; injected dapps re-query
-			// their origin-scoped session so their primary account follows the wallet's selection when
-			// it is within their authorized set (Model B).
 			emitWalletEvent("accountsChanged");
-			// The connected account's descriptor set / account id / policy asset changed too (ELIP-1) — a
-			// dapp re-queries getWalletDescriptor for its own view.
 			emitWalletEvent(LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT);
 
 			return readAccountsState(next.accountModel);
@@ -145,8 +120,6 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 				};
 			});
 
-			// A new account was created and selected: the connected account changed, and so did its
-			// descriptor (new account id / descriptor set / policy asset — ELIP-1).
 			emitWalletEvent("accountsChanged");
 			emitWalletEvent(LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT);
 
@@ -164,8 +137,6 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 				addImportedSeedToKeyManagerState(current, { name, seedMaterial }),
 			);
 
-			// The imported account becomes selected: notify connected dapps of the account change and its
-			// descriptor change (new account id / descriptor set / policy asset — ELIP-1).
 			emitWalletEvent("accountsChanged");
 			emitWalletEvent(LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT);
 
@@ -175,12 +146,8 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 			const { accountGroupId } = message.data as RemoveAccountInput;
 			const accountRegistry = createAccountRegistry();
 
-			// Resolve + disconnect any WalletConnect session solely tied to this account BEFORE the model
-			// mutation below deletes its chain accounts (WC session→account resolution matches on those).
 			await deps.purgeAccountWalletConnectSessions([accountGroupId]);
 
-			// Injected sessions authorizing only this account are deleted inside `removeAccountGroup`; a
-			// drop in the session count means one was fully removed, so its dapp lost authorization.
 			const sessionsBefore = Object.keys(
 				walletVaultBackground.keyManager.getState().accountModel.dappSessions,
 			).length;
@@ -194,18 +161,10 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 				return { ...current, accountModel };
 			});
 
-			// Removal committed (a guarded removal — e.g. the wallet's only account — throws inside
-			// `removeAccountGroup` above, short-circuiting before this). GC the removed account's
-			// persisted portfolio; best-effort (the stores swallow their own storage errors), so a
-			// storage failure can never undo a removal that already succeeded.
 			await deps.purgeAccountPortfolio(accountGroupId);
 
-			// Removal reassigned the selected account group: the connected account changed, and so did its
-			// descriptor (new account id / descriptor set / policy asset — ELIP-1).
 			emitWalletEvent("accountsChanged");
 			emitWalletEvent(LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT);
-			// A dapp session was pruned to empty and deleted → that dapp lost its authorization entirely;
-			// mirror the wallet_sessionChanged the popup revoke path emits so the dapp re-queries.
 			if (Object.keys(next.accountModel.dappSessions).length < sessionsBefore) {
 				emitWalletEvent("wallet_sessionChanged");
 			}
@@ -215,9 +174,6 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 		[accountsRpc.methods.removeWallet]: async (message) => {
 			const { walletId } = message.data as RemoveWalletInput;
 
-			// Capture the wallet's account groups BEFORE the state update: the op deletes the wallet
-			// record, so afterwards there is nothing left to tell us which groups to GC. Reject an
-			// unknown id here (before any change) rather than deep inside the op.
 			const stateBefore = walletVaultBackground.keyManager.getState();
 			const wallet = stateBefore.accountModel.wallets[walletId];
 
@@ -227,32 +183,20 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 
 			const removedAccountGroupIds = wallet.accountGroupIds;
 
-			// Resolve + disconnect the WalletConnect sessions tied to any removed account BEFORE the model
-			// mutation deletes the chain accounts WC session→account resolution matches on.
 			await deps.purgeAccountWalletConnectSessions(removedAccountGroupIds);
 
-			// Injected sessions authorizing only removed accounts are deleted inside `removeWallet`; a
-			// drop in the session count means at least one was fully removed.
 			const sessionsBefore = Object.keys(stateBefore.accountModel.dappSessions).length;
 
 			const next = await walletVaultBackground.keyManager.updateState((current) =>
 				removeWalletFromKeyManagerState(current, { walletId }),
 			);
 
-			// Removal committed (the last-wallet guard throws inside `removeWallet` above, short-circuiting
-			// before this — so nothing is written and no seed is purged on a rejected forget). GC every
-			// removed account group's persisted portfolio; best-effort (the stores swallow their own
-			// storage errors), so a storage failure can never undo a removal that already succeeded.
 			await Promise.all(
 				removedAccountGroupIds.map((accountGroupId) => deps.purgeAccountPortfolio(accountGroupId)),
 			);
 
-			// Forgetting the wallet reassigned the selected account group: notify connected dapps of the
-			// account change and its descriptor change (new account id / descriptor set / policy — ELIP-1).
 			emitWalletEvent("accountsChanged");
 			emitWalletEvent(LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT);
-			// One or more injected dapp sessions were deleted → those dapps lost authorization entirely;
-			// mirror the wallet_sessionChanged the popup revoke path emits so they re-query.
 			if (Object.keys(next.accountModel.dappSessions).length < sessionsBefore) {
 				emitWalletEvent("wallet_sessionChanged");
 			}
@@ -269,7 +213,6 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 			const wallet = state.accountModel.wallets[group.walletId];
 			const secret = wallet ? state.secretMaterials[wallet.keySourceId] : undefined;
 
-			// The local-root seed stores the BIP-39 mnemonic as its value.
 			if (!secret || (secret.kind !== "seed" && secret.kind !== "mnemonic")) {
 				throw new Error("This account has no revealable recovery phrase.");
 			}
@@ -281,9 +224,6 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 		[accountsRpc.methods.refreshPortfolio]: () => deps.refreshPortfolio(),
 		[accountsRpc.methods.getActivity]: (message) =>
 			deps.getActivity(message.data as GetActivityInput),
-		// Preview + execute the in-extension send. Both resolve the selected account via the same
-		// runtime as getReceiveAddress and call the backend directly (no dapp confirmation popup): the
-		// popup's own review screen is the confirmation.
 		[accountsRpc.methods.inspectTransfer]: (message) =>
 			deps.inspectTransfer(message.data as SendTransferInput),
 		[accountsRpc.methods.estimateMaxSend]: (message) =>

@@ -10,10 +10,6 @@ import { authStore } from "@/store/auth";
 import type { RequestHandlerMap } from "../transport";
 import { emitWalletEvent } from "../wallet-events";
 
-/**
- * Mirrors the wallet-vault status into the shared auth store. Exported so the
- * background can also sync the initial status on startup.
- */
 export function syncWalletVaultAuthStore(status: WalletVaultStatus): WalletVaultStatus {
 	authStore.useAuthStore.getState().setVaultStatus({
 		hasVault: status.hasVault,
@@ -36,7 +32,6 @@ export const walletVaultInternalHandlers: RequestHandlerMap = {
 			message.data as Parameters<typeof walletVaultBackground.unlock>[0],
 		);
 
-		// Accounts are reachable again — dapps re-query and see their authorized set restored.
 		emitWalletEvent("accountsChanged");
 
 		return syncWalletVaultAuthStore(status);
@@ -44,7 +39,6 @@ export const walletVaultInternalHandlers: RequestHandlerMap = {
 	[walletVaultRpc.methods.lock]: async () => {
 		const status = await walletVaultBackground.lock();
 
-		// Locked: dapps re-query and get an empty set (no session reachable while locked).
 		emitWalletEvent("accountsChanged");
 
 		return syncWalletVaultAuthStore(status);

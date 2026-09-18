@@ -31,7 +31,6 @@ type HomeAction = {
 	render: (props: OverlayProps) => ReactNode;
 };
 
-// Reads first (View coins / addresses), then the transfer and signing/identity actions.
 const actions: HomeAction[] = [
 	{
 		id: "coins",
@@ -83,7 +82,6 @@ const actions: HomeAction[] = [
 	},
 ];
 
-/** The row of primary actions under the hero; each opens its overlay (Sheet or Dialog). */
 export function HomeActions() {
 	const [openId, setOpenId] = useState<string | null>(null);
 

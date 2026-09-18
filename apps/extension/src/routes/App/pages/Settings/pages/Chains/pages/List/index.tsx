@@ -5,7 +5,6 @@ import { UiSpinner } from "@/ui/UiSpinner";
 
 import { ChainListView } from "./components/ChainListView";
 
-/** Chain list (container): the chains grouped by chain group, each drilling into settings. */
 export function ChainListPage() {
 	const { chains, isLoading } = useChains();
 

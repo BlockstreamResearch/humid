@@ -13,12 +13,6 @@ type Props = {
 	onDecline: () => void;
 };
 
-/**
- * The add-chain approval. A dapp proposed a new network (wallet_addChain); the wallet mints its OWN
- * id and, ONLY after this explicit approval, persists the chain. The backend URL is surfaced
- * prominently because approving means the wallet will connect to (and trust) that Esplora endpoint —
- * an unvetted URL is the security-sensitive part of the request.
- */
 export function DappAddChainConfirmation({ data, onConfirm, onDecline }: Props) {
 	return (
 		<div className="bg-background text-foreground flex size-full flex-col">
@@ -68,7 +62,6 @@ function DetailRow({ label, mono, value }: { label: string; mono?: boolean; valu
 	);
 }
 
-/** Plugs the add-chain confirmation into the generic confirmation host (see ConfirmProvider). */
 export const dappAddChainConfirmationRenderer: ConfirmationRenderer = {
 	kind: DAPP_ADD_CHAIN_CONFIRMATION_KIND,
 	render: ({ onConfirm, onDecline, request }) =>

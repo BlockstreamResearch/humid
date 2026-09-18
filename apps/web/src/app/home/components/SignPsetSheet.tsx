@@ -24,7 +24,6 @@ type OverlayProps = { open: boolean; onOpenChange: (open: boolean) => void };
 
 const DEFAULT_SIGN_INPUTS = "[]";
 
-/** Sign the listed inputs of a PSET, optionally broadcasting the finalized transaction. */
 export function SignPsetSheet({ open, onOpenChange }: OverlayProps) {
 	const { wallet } = useHumidContext();
 	const broadcastId = useId();
@@ -45,7 +44,6 @@ export function SignPsetSheet({ open, onOpenChange }: OverlayProps) {
 
 	const handleOpenChange = (next: boolean) => {
 		onOpenChange(next);
-		// Reset after the close animation so the form doesn't flash mid-exit.
 		if (!next) window.setTimeout(resetForm, 250);
 	};
 

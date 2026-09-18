@@ -7,11 +7,6 @@ export type ConfirmationRequest = {
 	data?: unknown;
 };
 
-/**
- * The popup's answer to a confirmation. `approved` is the accept/reject decision;
- * `result` carries optional structured data a richer confirmation collects (e.g. the
- * permissions the user selected on the dapp-connect modal).
- */
 export type ConfirmationDecision<TResult = unknown> = {
 	approved: boolean;
 	result?: TResult;
@@ -99,8 +94,6 @@ export function initNotificationManagement(onUnexpectedClose?: () => void): void
 
 		if (!isClosingNotificationByUserAction) {
 			console.warn("Notification closed unexpectedly. Clean up pending operations.");
-			// The user dismissed the prompt — cancel the awaiting confirmation so the dapp request
-			// behind it returns now instead of blocking until the timeout.
 			onUnexpectedClose?.();
 		}
 

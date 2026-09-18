@@ -30,21 +30,17 @@ import { useHumidSession } from "./useHumidSession";
 import { useWalletEvents } from "./useWalletEvents";
 
 type HumidContextValue = {
-	// provider presence (window.humid detected yet)
 	hasProvider: boolean;
 
-	// reown
 	isConnected: boolean;
 	address: string;
 	connect: () => Promise<void>;
 	disconnect: () => Promise<void>;
 
-	// network (dapp-side active scope)
 	chainId: string;
 	supportedChains: typeof liquidNetworks;
 	switchNetwork: (chainId: string) => void;
 
-	// session + policy
 	session: Caip25Scopes | null;
 	policy: MethodPolicy;
 	isSilent: (method: string) => boolean;
@@ -52,21 +48,17 @@ type HumidContextValue = {
 	revokeSession: () => Promise<void>;
 	refreshSession: () => void;
 
-	// identity personalization (identity-first)
 	identity: HumidIdentity | null;
 	identityStatus: DataStatus;
 	refreshIdentity: () => void;
 
-	// native L-BTC balance
 	balance: bigint;
 	balanceStatus: DataStatus;
 	refreshBalance: () => void;
 
-	// typed actions (bound to provider + active chainId)
 	wallet: WalletClient;
 };
 
-/** A provider whose calls reject cleanly — used before window.humid exists so `wallet` is always defined. */
 const NULL_PROVIDER: CaipRpcProvider = {
 	request: () => Promise.reject(new Error("HUMID wallet provider was not found on the page.")),
 };
@@ -110,7 +102,6 @@ const humidContext = createContext<HumidContextValue>({
 
 export const useHumidContext = () => useContext(humidContext);
 
-/** All Liquid networks authorized with the full method surface — the scopes passed to createSession. */
 function buildAllScopes(): Caip25Scopes {
 	return Object.fromEntries(
 		liquidNetworks.map((network) => [
@@ -123,7 +114,6 @@ function buildAllScopes(): Caip25Scopes {
 	);
 }
 
-/** The injected provider appears a tick after load; retry briefly so the UI recovers on its own. */
 function useHumidProvider(): CaipRpcProvider | null {
 	const [provider, setProvider] = useState<CaipRpcProvider | null>(
 		() => (window.humid as CaipRpcProvider | undefined) ?? null,
@@ -150,12 +140,6 @@ function useHumidProvider(): CaipRpcProvider | null {
 	return provider;
 }
 
-/**
- * Per-namespace (bip122) sub-context: bridges reown/AppKit connection state, the dapp-side active
- * chain, the CAIP-25 session + method policy, and the policy-aware balance / identity reads into one
- * value. The typed `wallet` client is bound to the live provider and active chain; the composed hooks
- * own the react-query data, this provider just wires them together and exposes the actions.
- */
 export const HumidProvider = ({ children }: PropsWithChildren) => {
 	const { connectAsync } = useWeb3Context();
 	const { disconnect } = useDisconnect();
@@ -164,7 +148,6 @@ export const HumidProvider = ({ children }: PropsWithChildren) => {
 	const provider = useHumidProvider();
 	const [chainId, setChainId] = useState<string>(LIQUID_TESTNET_CHAIN_ID);
 
-	// The client is always defined: a null provider rejects cleanly until window.humid is present.
 	const wallet = useMemo(
 		() => createWalletClient(provider ?? NULL_PROVIDER, chainId),
 		[provider, chainId],
@@ -190,7 +173,6 @@ export const HumidProvider = ({ children }: PropsWithChildren) => {
 		silent: isSilent("getIdentityPublicKey"),
 	});
 
-	// Re-read session / balance / identity reactively on any wallet-side change, not just on poll.
 	useWalletEvents(provider);
 
 	const value: HumidContextValue = {

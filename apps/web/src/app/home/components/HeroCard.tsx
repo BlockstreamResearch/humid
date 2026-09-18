@@ -25,7 +25,6 @@ import { formatLbtc, truncateMiddle } from "@/lib/liquid";
 import { IdentityAvatar } from "./IdentityAvatar";
 import { useAsyncAction } from "./useAsyncAction";
 
-/** The emotional center of Home: identity + balance, plus the edge states (no provider / connect). */
 export function HeroCard() {
 	const { hasProvider, isConnected } = useHumidContext();
 

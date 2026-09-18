@@ -13,11 +13,6 @@ import {
 	UiDropdownMenuTrigger,
 } from "@/ui/UiDropdownMenu";
 
-/**
- * Account switcher — the trigger opens the list of account groups. Selecting one
- * re-resolves the chain account for the current chain; "Rename account" edits the
- * selected group's display name. No chain-specific logic.
- */
 export function AccountSwitcher() {
 	const { accountGroup, accountGroups, renameAccount, selectAccount } = useHome();
 	const [renameOpen, setRenameOpen] = useState(false);

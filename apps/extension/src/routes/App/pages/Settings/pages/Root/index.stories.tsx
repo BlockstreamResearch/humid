@@ -53,5 +53,4 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Settings landing with a few mock accounts (the first is selected). */
 export const Default: Story = {};

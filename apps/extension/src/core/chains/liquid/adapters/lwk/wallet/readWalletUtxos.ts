@@ -3,34 +3,32 @@ import {
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
 
-import type { LiquidUtxoSnapshot } from "../../../application/backends/LiquidWalletBackend";
+import type {
+	LiquidBlindingSecrets,
+	LiquidUtxoSnapshot,
+} from "../../../application/backends/LiquidWalletBackend";
 import type { LwkWasmModule } from "../loadLwkWasm";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
+
+type LwkTxOutSecrets = {
+	asset: () => { toString: () => string };
+	assetBlindingFactor: () => { toString: () => string };
+	value: () => bigint;
+	valueBlindingFactor: () => { toString: () => string };
+};
 
 type LwkTxOutView = {
 	isPartiallyBlinded: () => boolean;
 	toString: () => string;
 };
 
-/**
- * Every wallet UTXO as a raw snapshot entry (all assets, unfiltered), in base units. This is the
- * SINGLE source of truth for the getUTXOs field mapping: both the dapp `getUTXOs` RPC
- * (`getUTXOs/index.ts`, which filters by asset and adds the CAIP `assetId`) and the portfolio
- * snapshot scan (`liquidScanCore.scanAndRead`) read UTXOs through here, so the two never drift.
- *
- * Each entry pairs the wollet's unspent output with the raw previous `TxOut` looked up from the
- * wallet's own transaction history — the confidential flag and serialized `txOut` come from there.
- * A UTXO with no locatable prev-output is a wallet-state integrity failure (effectively unreachable,
- * since a wallet UTXO's creating tx is always wallet-relevant), surfaced as a resource error.
- *
- * Worker-safe: depends only on the lwk wasm types and the dependency-free wallet-rpc error module,
- * so it imports cleanly into both the sync worker bundle and the service-worker context.
- */
 export function readWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[] {
 	const txOutByOutpoint = createTxOutLookup(wollet);
 
-	return wollet.utxos().map((utxo) => {
+	const snapshots: LiquidUtxoSnapshot[] = [];
+
+	for (const utxo of wollet.utxos()) {
 		const unblinded = utxo.unblinded();
 		const outpoint = utxo.outpoint();
 		const txid = outpoint.txid().toString();
@@ -45,30 +43,39 @@ export function readWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[] {
 			);
 		}
 
-		// ELIP-1 `spendable` = "whether the wallet considers the UTXO spendable under wallet policy".
-		// LWK's `WalletTxOut` exposes no explicit spendable/maturity flag, so the only real per-UTXO
-		// policy signal is confirmation status: `height()` is the block height, or `undefined` while
-		// the output is still unconfirmed ("Return the height of the block containing this output if
-		// it's confirmed."). This wallet is a plain BIP-84 wpkh singlesig descriptor — no timelocks or
-		// custom scripts, and Liquid has no coinbase maturity for user wallets — so confirmation is the
-		// only meaningful policy dimension. We take the conservative, dapp-safe reading: an owned,
-		// confirmed UTXO is spendable; an unconfirmed (mempool, still RBF-replaceable) one is not. The
-		// permissive self-send/RBF reading — treating one's own unconfirmed change as spendable (a
-		// constant `true`) — is the defensible alternative.
 		const spendable = utxo.height() !== undefined;
+		const confidential = rawTxOut.isPartiallyBlinded();
 
-		return {
+		const snapshot: LiquidUtxoSnapshot = {
 			address: utxo.address().toString(),
 			amountSats: unblinded.value().toString(),
-			confidential: rawTxOut.isPartiallyBlinded(),
+			confidential,
+			derivationPath: `${utxo.extInt()}/${utxo.wildcardIndex()}`,
 			rawAssetId: unblinded.asset().toString(),
 			scriptPubKey: utxo.scriptPubkey().toString(),
 			spendable,
 			txid,
 			txOut: rawTxOut.toString(),
 			vout,
-		} satisfies LiquidUtxoSnapshot;
-	});
+		};
+
+		if (confidential) {
+			snapshot.blindingSecrets = secretsOf(unblinded);
+		}
+
+		snapshots.push(snapshot);
+	}
+
+	return snapshots;
+}
+
+function secretsOf(unblinded: LwkTxOutSecrets): LiquidBlindingSecrets {
+	return {
+		asset: unblinded.asset().toString(),
+		assetBlindingFactor: unblinded.assetBlindingFactor().toString(),
+		value: Number(unblinded.value()),
+		valueBlindingFactor: unblinded.valueBlindingFactor().toString(),
+	};
 }
 
 function createTxOutLookup(wollet: LwkWollet): Map<string, LwkTxOutView> {

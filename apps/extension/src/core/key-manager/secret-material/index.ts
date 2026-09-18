@@ -3,7 +3,6 @@ import { wordlist } from "@scure/bip39/wordlists/english";
 
 const GENERATED_SEED_MATERIAL_BYTES = 32;
 
-/** 128 bits of entropy → a standard 12-word BIP-39 mnemonic. */
 export const MNEMONIC_STRENGTH_BITS = 128;
 export const MNEMONIC_WORD_COUNT = 12;
 
@@ -18,12 +17,10 @@ function generateSeedMaterial(): string {
 	return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
-/** Generate a fresh BIP-39 mnemonic (English wordlist), accepted by the LWK backend. */
 function generateMnemonicPhrase(): string {
 	return generateMnemonic(wordlist, MNEMONIC_STRENGTH_BITS);
 }
 
-/** Lowercase, single-space-separated, trimmed — the canonical mnemonic form. */
 function normalizeMnemonic(mnemonic: string): string {
 	return mnemonic.trim().replace(/\s+/g, " ").toLowerCase();
 }

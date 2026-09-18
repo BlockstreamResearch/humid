@@ -15,12 +15,6 @@ export type CreateNextAccountGroupResult = {
 	accountModel: AccountModelState;
 };
 
-/**
- * Adds a new account group ("Account N") under an existing wallet at the next
- * `groupIndex` (derive branch — same seed, next index). The group starts empty; chain
- * accounts materialize on demand, and the chain adapter uses `groupIndex` to derive a
- * distinct account. Chain-agnostic — no signing or chain-specific logic here.
- */
 export function createNextAccountGroup(
 	input: CreateNextAccountGroupInput,
 ): CreateNextAccountGroupResult {

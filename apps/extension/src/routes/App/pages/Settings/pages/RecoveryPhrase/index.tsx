@@ -8,11 +8,6 @@ import { UiSpinner } from "@/ui/UiSpinner";
 import { RecoveryPhraseView } from "./components/RecoveryPhraseView";
 import { Route } from "./route";
 
-/**
- * Reveal recovery phrase (container): validates the account from the route param, then
- * fetches its mnemonic on demand. The result is not cached (gcTime 0) so the secret
- * does not linger in the query cache after the screen closes.
- */
 export function SettingsRecoveryPhrasePage() {
 	const { accountGroupId } = Route.useParams();
 	const accounts = useSelectedAccount();

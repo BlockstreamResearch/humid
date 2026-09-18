@@ -8,11 +8,6 @@ export type DappSessionScope = {
 	chainAccountIds: ChainAccountId[];
 	chains: ChainId[];
 	events: string[];
-	/**
-	 * The session's authorized method surface. Keys are every method the session may call —
-	 * this is what the CAIP-25 response advertises. `true` runs the method without asking;
-	 * `false` confirms it with the user on every call.
-	 */
 	methods: Record<string, boolean>;
 };
 

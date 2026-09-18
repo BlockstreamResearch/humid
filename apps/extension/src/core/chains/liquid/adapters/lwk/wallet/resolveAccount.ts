@@ -28,9 +28,6 @@ export async function createLwkLiquidAccount(
 
 	try {
 		const masterSigner = new lwk.Signer(masterMnemonic, network);
-		// Each account group derives a distinct wallet from the one seed: group 0 is the
-		// master seed's account; groups N>=1 use a BIP-85 child mnemonic at index N, so the
-		// whole derivation stays inside LWK (no hand-rolled key math).
 		const accountGroupIndex = input.accountGroupIndex ?? 0;
 		const signer =
 			accountGroupIndex === 0
@@ -66,10 +63,10 @@ export async function createLwkLiquidAccount(
 		}
 
 		return {
-			// Threaded through so dapp read methods can key the persisted portfolio snapshot; may be
-			// undefined for internal callers that resolve the default account without a group.
 			accountGroupId: input.accountGroupId,
+			accountGroupIndex,
 			accountIdentifier,
+			...(input.keySourceId === undefined ? {} : { keySourceId: input.keySourceId }),
 			chain: input.chain,
 			chainId: input.chain.id,
 			descriptor: descriptor.toString(),

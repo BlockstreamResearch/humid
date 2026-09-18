@@ -3,7 +3,6 @@ import { Toaster as Sonner, type ToasterProps } from "sonner";
 
 import { useTheme } from "@/components/theme-provider";
 
-/** App-wide toast host, themed from the shadcn tokens and the active light/dark theme. */
 function Toaster({ ...props }: ToasterProps) {
 	const { theme } = useTheme();
 

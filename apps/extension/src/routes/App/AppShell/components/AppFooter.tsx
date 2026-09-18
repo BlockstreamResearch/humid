@@ -11,7 +11,6 @@ const TABS = [
 	{ icon: Settings01Icon, label: "Settings", tab: "settings", to: "/app/settings" },
 ] as const;
 
-/** Shared bottom navigation. Presentational — the active tab is resolved by the shell. */
 export function AppFooter({ active }: { active: AppTab }) {
 	return (
 		<nav className="border-border/60 flex h-15 border-t">

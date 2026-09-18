@@ -8,11 +8,6 @@ import type { PortfolioViewAsset } from "@/core/chains/application/PortfolioView
 import { chainGroupUis } from "@/routes/App/chainGroupUis";
 import { UiDrawer, UiDrawerContent, UiDrawerHeader, UiDrawerTitle } from "@/ui/UiDrawer";
 
-/**
- * Asset header: back to Overview, the asset glyph and name, and an info button that opens the chain
- * group's "About" panel in a drawer. The About content is chain-specific (looked up via
- * `chainGroupUis`), so this generic route header only decides whether to offer the trigger.
- */
 export function AssetHeader({ chain, token }: { chain: ChainRecord; token: PortfolioViewAsset }) {
 	const [aboutOpen, setAboutOpen] = useState(false);
 	const AssetAbout = chainGroupUis[chain.chainGroupId]?.AssetAbout;

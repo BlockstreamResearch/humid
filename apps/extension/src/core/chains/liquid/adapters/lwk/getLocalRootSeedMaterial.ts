@@ -22,10 +22,6 @@ export function getLocalRootSeedMaterial(state: KeyManagerState): string {
 	return secretMaterial.value;
 }
 
-/**
- * The seed material (mnemonic) for a specific key source — the selected account's
- * wallet, so imported wallets derive from their own seed rather than the local root.
- */
 export function getSeedMaterialForKeySource(
 	state: KeyManagerState,
 	keySourceId: KeySourceId,

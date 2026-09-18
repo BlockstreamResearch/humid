@@ -47,10 +47,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Empty form — Continue stays disabled until a recipient and a positive amount are entered. */
 export const Default: Story = {};
 
-/** A filled-in transfer, ready to preview. */
 export const Filled: Story = {
 	args: {
 		amount: "0.5",
@@ -59,7 +57,6 @@ export const Filled: Story = {
 	},
 };
 
-/** Single held asset — the picker collapses to a static row (the L-BTC-only case). */
 export const SingleAsset: Story = {
 	args: {
 		assets: [LBTC],

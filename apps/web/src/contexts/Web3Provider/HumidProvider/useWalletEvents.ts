@@ -9,9 +9,6 @@ import { HUMID_BALANCE_QUERY_KEY } from "./useHumidBalance";
 import { HUMID_IDENTITY_QUERY_KEY } from "./useHumidIdentity";
 import { HUMID_SESSION_QUERY_KEY } from "./useHumidSession";
 
-// The wallet-side changes that make our cached reads stale: account / chain switch, lock-unlock or
-// revoke (session), and a descriptor change. Each pushes an event on window.humid; we invalidate the
-// dependent queries so they re-read instead of waiting for the next poll.
 const WALLET_EVENTS = [
 	"accountsChanged",
 	"chainChanged",
@@ -19,11 +16,6 @@ const WALLET_EVENTS = [
 	"wallet_sessionChanged",
 ] as const;
 
-/**
- * Bridge window.humid events into react-query cache invalidation. On any wallet-side change, mark the
- * session, balance, and identity queries stale so they refetch reactively (subject to their own policy
- * gating) rather than only on their poll interval.
- */
 export function useWalletEvents(provider: CaipRpcProvider | null): void {
 	const queryClient = useQueryClient();
 

@@ -1,6 +1,5 @@
 import { cn } from "@/lib/utils";
 
-/** FNV-1a hash of the seed → a stable 32-bit number the avatar derives its colors and angle from. */
 function hashSeed(seed: string): number {
 	let hash = 2166136261;
 	for (let index = 0; index < seed.length; index += 1) {
@@ -10,10 +9,6 @@ function hashSeed(seed: string): number {
 	return hash >>> 0;
 }
 
-/**
- * Deterministic gradient avatar seeded by a string (identity public key, else address). No dependency:
- * the same wallet always renders the same "signed in as" mark, so identity feels personal and stable.
- */
 export function IdentityAvatar({ seed, className }: { seed: string; className?: string }) {
 	const hash = hashSeed(seed || "humid");
 	const hueA = hash % 360;

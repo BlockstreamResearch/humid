@@ -47,10 +47,6 @@ export const getLiquidUTXOs = createWalletMethod<
 	execute: async ({ context, review }) => {
 		const { account, requestedAsset } = review;
 
-		// Snapshot-first: when a persisted portfolio snapshot exists for this account+chain, serve the
-		// UTXOs from it with no scan, via the SAME mapping the live scan path uses (so the two can't
-		// drift). A miss (cold cache, or a non-selected account that has no snapshot) falls through to
-		// the live scan below; reads never trigger a sync.
 		if (context.readPortfolioSnapshot && account.accountGroupId) {
 			const snapshot = await context.readPortfolioSnapshot(account.accountGroupId, account.chainId);
 

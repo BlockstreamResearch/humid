@@ -9,7 +9,6 @@ import { AccountAvatar } from "@/routes/App/components/AccountAvatar";
 import { connectedDappKey, DappIdentity } from "@/routes/App/components/ConnectedDapps";
 import { UiScrollArea } from "@/ui/UiScrollArea";
 
-/** Per-account connected-dapps screen: breadcrumb back to the account + navigable per-dapp rows. */
 export function ConnectedDappsListView({
 	accountGroupId,
 	accountName,
@@ -57,7 +56,6 @@ function pluralize(count: number, noun: string): string {
 	return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-/** The ordered waterfall (loading → error → empty → data); each dapp opens its per-method policy. */
 function DappRows({
 	accountGroupId,
 	dapps,
