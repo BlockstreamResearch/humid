@@ -612,17 +612,22 @@ export async function reviewManifestAction(
 	const outputs: ReviewedOutput[] = [];
 	const outputAt = new Map<string, number>();
 	const returned = new Map<string, bigint>();
+	const changePaid = new Set<string>();
 
 	for (const [at, planned] of plan.plan.outputs.entries()) {
 		const asset = ledger.outputs[at] ?? policyAsset;
 
 		if (planned.target.kind === "change") {
-			const surplus = asset === policyAsset ? 0n : (fundedFor.get(asset)?.changeSats ?? 0n);
+			const surplus =
+				asset === policyAsset || changePaid.has(asset)
+					? 0n
+					: (fundedFor.get(asset)?.changeSats ?? 0n);
 
 			if (surplus <= 0n) {
 				continue;
 			}
 
+			changePaid.add(asset);
 			outputAt.set(planned.id, outputs.length);
 			outputs.push({
 				asset,

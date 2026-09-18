@@ -982,30 +982,65 @@ describe("an action that pins an input to one address", () => {
 });
 
 describe("a document that names one surplus twice", () => {
-	test("is refused rather than resolved in the wallet's favour", async () => {
+	function twoTokenChanges(positions: { again?: number; first?: number } = {}) {
 		const document = structuredClone(MANIFEST) as Record<string, unknown>;
 		const actions = document.actions as Record<string, Record<string, unknown>>;
 		const outputs = actions.PayToken?.outputs as Record<string, unknown>[];
+		const first = outputs.find((output) => output.id === "token_change");
+
+		if (first && positions.first !== undefined) {
+			first.required_index = positions.first;
+		}
 
 		outputs.push({
 			asset: "params.token",
 			confidential: true,
 			destination: "change",
 			id: "token_change_again",
+			...(positions.again === undefined ? {} : { required_index: positions.again }),
 		});
 
-		const result = await reviewManifestAction(request({ manifest: document }), {
+		return reviewManifestAction(request({ manifest: document }), {
 			...deps,
 			fundingUtxos: [utxo("1000000", MONEY_TXID)],
 			holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),
 		});
+	}
+
+	test("pays that surplus once, into the one change output, and moves nothing else", async () => {
+		const single = await pay();
+		const result = await twoTokenChanges();
+
+		expect(isRefusal(result)).toBe(false);
+		expect(isRefusal(single)).toBe(false);
+
+		if (!isRefusal(result) && !isRefusal(single)) {
+			expect(
+				result.outputs
+					.filter((output) => output.asset === TOKEN && output.scriptPubKeyHex === WALLET_SCRIPT)
+					.map((output) => [output.id, output.sats]),
+			).toEqual([
+				["token_out", 1000n],
+				["token_change", 3000n],
+			]);
+			expect(result.outputs).toEqual(single.outputs);
+		}
+	});
+
+	test.each([
+		["the first", { first: -2 }],
+		["the second", { again: -1 }],
+	])("is still refused when %s of them states a position", async (_which, positions) => {
+		const result = await twoTokenChanges(positions);
 
 		expect(isRefusal(result)).toBe(true);
 
 		if (isRefusal(result)) {
 			expect(result.reject).toBe("document-fault");
-			expect(result.reason).toContain("token_change");
-			expect(result.reason).toContain("token_change_again");
+			expect(result.reason).toBe(
+				`PayToken declares change for ${TOKEN} twice, at token_change and token_change_again. ` +
+					"One surplus cannot go to two places, and this wallet will not choose between them.",
+			);
 		}
 	});
 });
