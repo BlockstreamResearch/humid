@@ -97,8 +97,8 @@ describe("selectCoins", () => {
 		}
 	});
 
-	describe("what it will not spend", () => {
-		test("never selects a confidential output, however much it holds", () => {
+	describe("what it will spend", () => {
+		test("takes the largest output whether it is blinded or open", () => {
 			const result = selectCoins(
 				[
 					{
@@ -117,11 +117,11 @@ describe("selectCoins", () => {
 
 			expect(result.ok).toBe(true);
 			expect(result.ok ? result.selected.map((chosen) => chosen.txid) : []).toEqual([
-				"b".repeat(64),
+				"a".repeat(64),
 			]);
 		});
 
-		test("and refuses when the balance only covers it with them, saying so", () => {
+		test("and counts a blinded output towards what the account holds", () => {
 			const result = selectCoins(
 				[
 					{
@@ -138,23 +138,19 @@ describe("selectCoins", () => {
 				0n,
 			);
 
-			expect(result.ok).toBe(false);
-
-			if (!result.ok) {
-				expect(result.reason).toContain("1000000");
-				expect(result.reason).toContain("confidential outputs");
-				expect(result.reason).toContain("unblinded address");
-			}
+			expect(result.ok).toBe(true);
+			expect(result.ok ? result.totalSats : 0n).toBe(1_000_000n);
 		});
 
-		test("but says nothing about confidential outputs when there are none", () => {
+		test("and still refuses when everything it holds is short", () => {
 			const result = selectCoins(
 				[{ amount: "500", spendable: true, txOut: "00", txid: "b".repeat(64), vout: 0 }],
 				4000n,
 				0n,
 			);
 
-			expect(result.ok ? "" : result.reason).not.toContain("confidential");
+			expect(result.ok).toBe(false);
+			expect(result.ok ? "" : result.reason).toContain("500");
 		});
 
 		test("takes an outpoint once, however many objects describe it", () => {

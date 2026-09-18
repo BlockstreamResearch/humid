@@ -92,6 +92,9 @@ describe("what the wallet established for itself", () => {
 		expect(result.estimatedFeeSats).toBe(
 			estimateFeeSats(
 				{
+					blindedOutputs:
+						result.outputs.filter((output) => output.blinded).length +
+						(result.changeBlinded ? 1 : 0),
 					covenantInputs: 1,
 					issuingInputs: 0,
 					outputs: result.outputs.length,

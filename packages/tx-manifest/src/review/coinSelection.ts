@@ -2,7 +2,16 @@ import { byOutpoint } from "../chain/outpoint";
 
 export type SelectableUtxo = {
 	amount: string;
+	/**
+	 * What the wallet unblinded of a blinded output, as the signing module wants it.
+	 *
+	 * Opaque here on purpose: this package does not model blinding, it carries what the wallet
+	 * read so the module that does can be told.
+	 */
+	blindingSecretsJson?: string;
 	confidential?: boolean;
+	/** Relative to the account. The key that signs this input, where it is not the first. */
+	derivationPath?: string;
 	scriptPubKeyHex?: string;
 	spendable: boolean;
 	txOut: string;
@@ -24,9 +33,7 @@ export function selectCoins(
 	}
 
 	const needed = targetSats + headroomSats;
-	const distinct = byOutpoint(available.filter((utxo) => utxo.spendable));
-	const spendable = distinct.filter((utxo) => !utxo.confidential).toSorted(byLargestFirst);
-	const withheldFrom = distinct.filter((utxo) => utxo.confidential);
+	const spendable = byOutpoint(available.filter((utxo) => utxo.spendable)).toSorted(byLargestFirst);
 
 	const selected: SelectableUtxo[] = [];
 	let totalSats = 0n;
@@ -43,21 +50,11 @@ export function selectCoins(
 	if (totalSats < needed) {
 		return {
 			ok: false,
-			reason:
-				`This account holds ${totalSats} of the ${needed} needed to perform the action and pay its fee.` +
-				withheldSentence(withheldFrom),
+			reason: `This account holds ${totalSats} of the ${needed} needed to perform the action and pay its fee.`,
 		};
 	}
 
 	return { ok: true, selected, totalSats };
-}
-
-export function withheldSentence(confidential: SelectableUtxo[]): string {
-	const withheld = confidential.reduce((sum, utxo) => sum + toSats(utxo.amount), 0n);
-
-	return withheld > 0n
-		? ` A further ${withheld} is in confidential outputs, which a contract action cannot spend — send it to this account's unblinded address to use it.`
-		: "";
 }
 
 function byLargestFirst(a: SelectableUtxo, b: SelectableUtxo): number {

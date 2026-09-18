@@ -221,7 +221,19 @@ export async function assembleReviewedTransaction(
 			const { utxo } = planned;
 
 			if (!issuance) {
-				builder.addWalletInput(utxo.txid, utxo.vout, utxo.txOut);
+				const unsignable = refuseUnsignable(utxo);
+
+				if (unsignable) {
+					return unsignable;
+				}
+
+				builder.addWalletInput(
+					utxo.txid,
+					utxo.vout,
+					utxo.txOut,
+					utxo.blindingSecretsJson,
+					utxo.derivationPath,
+				);
 
 				continue;
 			}
@@ -276,6 +288,43 @@ export async function assembleReviewedTransaction(
 	} finally {
 		builder.free();
 	}
+}
+
+/**
+ * Refuses a blinded output this module could not spend correctly rather than spending it wrongly.
+ *
+ * A blinded output needs two things an open one does not: the wallet's reading of it, because the
+ * builder holds no blinding key, and which key signs it, because blinded outputs land on rotating
+ * indices while the signer's default is the first. Either missing is a wallet that did not say
+ * enough, and signing anyway makes a transaction the network rejects.
+ *
+ * An open output is left as it was. Those arrive at the pinned signing index, which is the
+ * signer's default, and a stale snapshot carrying no path still spends correctly.
+ */
+function refuseUnsignable(utxo: ManifestReview["selected"][number]): AssembleResult | undefined {
+	const at = `${utxo.txid}:${utxo.vout}`;
+
+	if (!utxo.confidential) {
+		return undefined;
+	}
+
+	if (utxo.blindingSecretsJson === undefined) {
+		return {
+			ok: false,
+			reason: `This wallet holds ${at} blinded but did not say what it unblinds to, so it cannot be spent.`,
+			reject: "built-something-else",
+		};
+	}
+
+	if (utxo.derivationPath === undefined) {
+		return {
+			ok: false,
+			reason: `This wallet did not say which key spends ${at}, so it cannot be signed.`,
+			reject: "built-something-else",
+		};
+	}
+
+	return undefined;
 }
 
 function witnessValuesJson(values: StaticWitness[] | undefined): string | undefined {

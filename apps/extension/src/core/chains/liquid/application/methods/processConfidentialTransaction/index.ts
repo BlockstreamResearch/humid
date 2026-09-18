@@ -9,6 +9,7 @@ import {
 	type ReadFeeRate,
 	type ReadTxOut,
 	reviewManifestAction,
+	type SelectableUtxo,
 	toShownConfirmation,
 } from "@humid/tx-manifest";
 
@@ -26,7 +27,7 @@ import {
 import { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
-import type { LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
+import type { LiquidFundingUtxo, LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../../dappAccountScope";
 import type { LiquidRpcMethodContext } from "../../LiquidRpcContext";
 import { PROCESS_CT_CONFIRMATION_KIND } from "./ProcessCtConfirmation";
@@ -172,14 +173,8 @@ export const createProcessLiquidConfidentialTransaction = (
 				compile: createSmplxCovenantCompiler(smplx),
 				compilerVersion: SMPLX_COMPILER_VERSION,
 				covenantParamTypes: createSmplxCovenantParamTypes(smplx),
-				fundingUtxos: [
-					...context.walletBackend.getExplicitUtxos(account, account.rawPolicyAssetId),
-					...context.walletBackend.getUtxos(account, account.rawPolicyAssetId),
-				],
-				holdingsOf: (asset) => [
-					...context.walletBackend.getExplicitUtxos(account, asset),
-					...context.walletBackend.getUtxos(account, asset),
-				],
+				fundingUtxos: fundable(context, account, account.rawPolicyAssetId),
+				holdingsOf: (asset) => fundable(context, account, asset),
 				network,
 				policyAsset: account.rawPolicyAssetId,
 				readChainTip: async () => context.walletBackend.getTipHeight(account),
@@ -217,6 +212,42 @@ function parseRequest(params: unknown): ParsedLiquidProcessCtParams {
 	}
 
 	return parsed.request;
+}
+
+/**
+ * The wallet's own outputs in one asset, as the review selects from.
+ *
+ * `getFundingUtxos` answers about every output including the blinded ones, and carries what only
+ * this wallet knows: what a blinded output unblinds to, and which key signs it. None of that is
+ * ever answered to a dapp, which is why it does not travel on the shape `getUTXOs` returns.
+ */
+function fundable(
+	context: LiquidProcessCtContext,
+	account: LiquidWalletAccount,
+	rawAssetId: string,
+): SelectableUtxo[] {
+	const held: LiquidFundingUtxo[] = [
+		...context.walletBackend.getExplicitUtxos(account, rawAssetId),
+		...context.walletBackend.getFundingUtxos(account, rawAssetId),
+	];
+
+	const selectable: SelectableUtxo[] = [];
+
+	for (const { blindingSecrets, derivationPath, ...utxo } of held) {
+		const candidate: SelectableUtxo = utxo;
+
+		if (blindingSecrets) {
+			candidate.blindingSecretsJson = JSON.stringify(blindingSecrets);
+		}
+
+		if (derivationPath) {
+			candidate.derivationPath = derivationPath;
+		}
+
+		selectable.push(candidate);
+	}
+
+	return selectable;
 }
 
 function accountLabelOf(context: LiquidProcessCtContext, account: LiquidWalletAccount): string {

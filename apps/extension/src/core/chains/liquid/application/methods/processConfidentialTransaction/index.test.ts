@@ -227,6 +227,7 @@ function walletBackend(log: Journal, overrides: Record<string, unknown> = {}) {
 	return {
 		getExplicitUtxos: (_account: unknown, asset: string) =>
 			asset === POLICY_ASSET ? [explicitUtxo] : [],
+		getFundingUtxos: () => [],
 		getSigningAddress: () => ({
 			address: "tex1q_signing",
 			index: 0,

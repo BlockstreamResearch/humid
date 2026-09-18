@@ -21,6 +21,8 @@ export type { RejectToken } from "./document/refuse";
 export { type ShownConfirmation, describeOrigin, toShownConfirmation } from "./confirmation";
 export { type Provenanced, computed, fromDapp, verified } from "./confirmation/provenance";
 
+export type { SelectableUtxo } from "./review/coinSelection";
+
 export {
 	type InspectManifestOptions,
 	type InspectManifestResult,

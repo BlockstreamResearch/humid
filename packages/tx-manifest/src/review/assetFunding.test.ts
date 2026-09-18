@@ -101,13 +101,12 @@ describe("when one asset cannot be funded", () => {
 		expect(result.ok ? "" : result.reason).not.toContain("fee");
 	});
 
-	test("a confidential holding is named as held back rather than counted", () => {
+	test("a confidential holding is funded from like any other", () => {
 		const result = fund([entry(TOKEN, 1000n)], {
-			[TOKEN]: [utxo("5000", { confidential: true })],
+			[TOKEN]: [utxo("1000", { confidential: true })],
 		});
 
-		expect(result.ok ? "" : result.reason).toContain("5000");
-		expect(result.ok ? "" : result.reason).toContain("unblinded address");
+		expect(result.ok).toBe(true);
 	});
 
 	test("a surplus the document declares no change output for is refused", () => {
