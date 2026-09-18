@@ -15,6 +15,7 @@ import {
 	type CreatedInstance,
 	createsInstance,
 	resolveCreatedInstance,
+	statedCreatedFields,
 } from "../covenants/instance";
 import { asArray, asRecord } from "../document/json";
 import {
@@ -229,9 +230,14 @@ export async function reviewManifestAction(
 
 	const inputs: Record<string, Record<string, unknown>> = {};
 	const chainHeld: HeldValue[] = [];
+	// A spent covenant can be compiled from a field the created deployment states, such as the
+	// issuing-UTXO count an offer's issuance factory is compiled from.
+	const statedFields = createsInstance(action)
+		? statedCreatedFields(action, { instance: deployment.instance.fields, params }, notes)
+		: {};
 	let scope: ReferenceScope = {
 		inputs,
-		instance: deployment.instance.fields,
+		instance: { ...deployment.instance.fields, ...statedFields },
 		params,
 	};
 

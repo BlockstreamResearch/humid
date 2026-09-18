@@ -28,6 +28,37 @@ function computeKind(node: Record<string, unknown>): string | undefined {
 	return undefined;
 }
 
+/**
+ * The string-valued fields of the deployment this action creates, resolved ahead of the rest.
+ *
+ * A covenant the action spends can be compiled from one of them, and spent covenants are derived
+ * before `resolveCreatedInstance` runs, because the computed fields are covenant hashes that may
+ * name a covenant this action creates. A field that does not resolve yet is skipped rather than
+ * refused; `resolveCreatedInstance` still reports it.
+ */
+export function statedCreatedFields(
+	action: NormalisedAction,
+	scope: ReferenceScope,
+	notes?: NormalisationNote[],
+): Record<string, string> {
+	const declared = asRecord(asRecord(action.node.create_instance)?.fields);
+	const stated: Record<string, string> = {};
+
+	for (const [name, value] of Object.entries(declared ?? {})) {
+		if (typeof value !== "string") {
+			continue;
+		}
+
+		const resolved = resolveFieldReference(name, value, scope, notes);
+
+		if (resolved.ok) {
+			stated[name] = resolved.value;
+		}
+	}
+
+	return stated;
+}
+
 export function resolveCreatedInstance(
 	action: NormalisedAction,
 	input: {
