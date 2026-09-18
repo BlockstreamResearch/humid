@@ -4,5 +4,5 @@
 	branch = humid/esplora-backend-config
 [submodule "smplx"]
 	path = smplx
-	url = https://github.com/lukachi/smplx.git
+	url = https://github.com/BlockstreamResearch/smplx.git
 	branch = dev
