@@ -88,12 +88,16 @@ export function confirmationModel(
 }
 
 function blindedAmounts(review: ReviewedPlan): BlindedAmount[] {
-	return review.outputs
+	const blinded = review.outputs
 		.filter((output) => output.blinded)
 		.map((output) => ({
 			decidedBy: computed(word(output.decidedBy)),
 			id: fromDapp(output.id),
 		}));
+
+	return review.changeBlindedBy === undefined
+		? blinded
+		: [...blinded, { decidedBy: computed(word(review.changeBlindedBy)), id: computed("change") }];
 }
 
 function publishedAmounts(review: ReviewedPlan): PublishedAmount[] {

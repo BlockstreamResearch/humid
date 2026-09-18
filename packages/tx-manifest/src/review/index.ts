@@ -29,7 +29,11 @@ import type { ReferenceScope } from "../document/references";
 import { type RejectToken, refuseUnsupported } from "../document/refuse";
 import { covenantSites } from "../document/sites";
 import { assetLedger, type HeldValue, resolveAsset } from "../evaluation/assetLedger";
-import type { BlindingWord } from "../evaluation/blinding";
+import {
+	type BlindingDecision,
+	type BlindingWord,
+	resolveChangeBlinding,
+} from "../evaluation/blinding";
 import {
 	actionHook,
 	inputHook,
@@ -97,6 +101,7 @@ export type AssetMovement = {
 export type ManifestReview = {
 	action: string;
 	changeBlinded: boolean;
+	changeBlindedBy?: BlindingWord;
 	changeOverrode?: BlindingWord;
 	boundTo?: string;
 	confirmation: ConfirmationModel;
@@ -491,9 +496,11 @@ export async function reviewManifestAction(
 	const networkChange = plan.plan.outputs.filter(
 		(planned, at) => planned.target.kind === "change" && ledger.outputs[at] === policyAsset,
 	);
-	const changeBlinded = networkChange[0]?.blinding.blinding === "blinded";
-	const changeOverrode: BlindingWord | undefined =
-		networkChange.length === 0 ? "chain" : networkChange[0]?.blinding.overrode;
+	const plannedChange: BlindingDecision = networkChange[0]?.blinding ?? {
+		blinding: "open",
+		decidedBy: "spendable-change",
+		overrode: "chain",
+	};
 
 	const foreign = plan.plan.outputs.find(
 		(planned) =>
@@ -823,6 +830,10 @@ export async function reviewManifestAction(
 	}
 
 	const selected = fundedOrder.flatMap((asset) => fundedFor.get(asset)?.selected ?? []);
+	const change = resolveChangeBlinding(
+		plannedChange,
+		selected.some((utxo) => utxo.confidential === true),
+	);
 
 	const estimatedFeeSats = estimateFeeSats(
 		{
@@ -851,8 +862,12 @@ export async function reviewManifestAction(
 	const reviewed: ReviewedPlan = {
 		action: request.action,
 		...(action.boundTo === undefined ? {} : { boundTo: action.boundTo }),
-		changeBlinded,
-		...(changeOverrode === undefined ? {} : { changeOverrode }),
+		changeBlinded: change.blinding === "blinded",
+		...(change.blinding === "blinded"
+			? { changeBlindedBy: change.decidedBy }
+			: change.overrode === undefined
+				? {}
+				: { changeOverrode: change.overrode }),
 		covenantInputs,
 		covenants,
 		...(created === undefined ? {} : { createdInstance: created.instance }),

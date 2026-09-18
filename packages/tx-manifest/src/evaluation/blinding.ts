@@ -1,6 +1,12 @@
 export type Blinding = "blinded" | "open";
 
-export type BlindingWord = "chain" | "document" | "output" | "spendable-change" | "unblindable";
+export type BlindingWord =
+	| "chain"
+	| "confidential-input"
+	| "document"
+	| "output"
+	| "spendable-change"
+	| "unblindable";
 
 export type BlindingDecision = {
 	blinding: Blinding;
@@ -29,6 +35,22 @@ export function resolveBlinding(input: {
 	return format;
 }
 
+/**
+ * Liquid cannot balance the blinding factors of a transaction that spends a blinded input and
+ * blinds no output, so change the wallet would publish is blinded instead. Only coin selection
+ * knows whether such an input is spent, which is why this is decided after it.
+ */
+export function resolveChangeBlinding(
+	planned: BlindingDecision,
+	spendsConfidentialInput: boolean,
+): BlindingDecision {
+	if (!spendsConfidentialInput || planned.blinding === "blinded") {
+		return planned;
+	}
+
+	return { blinding: "blinded", decidedBy: "confidential-input", overrode: planned.decidedBy };
+}
+
 function byPrecedence(input: { declared?: unknown; documentDefault?: unknown }): BlindingDecision {
 	if (typeof input.declared === "boolean") {
 		return { blinding: input.declared ? "blinded" : "open", decidedBy: "output" };
@@ -53,6 +75,10 @@ export function describePublishedChange(overrode?: BlindingWord): string {
 
 function sentenceFor(word: BlindingWord): string {
 	switch (word) {
+		case "confidential-input": {
+			return "this action spends a blinded amount, and the network accepts that only if something it pays out is blinded too";
+		}
+
 		case "document": {
 			return "this protocol blinds its outputs by default";
 		}

@@ -644,6 +644,67 @@ describe("what each output does with the value it carries", () => {
 	});
 });
 
+describe("change when the wallet funds an action from a blinded output", () => {
+	async function mintFundedFrom(confidential: boolean) {
+		const result = await reviewManifestAction(
+			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
+			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID, { confidential })] },
+		);
+
+		if (isRefusal(result)) {
+			throw new Error(result.reason);
+		}
+
+		return {
+			blindedAmounts: result.confirmation.blindedAmounts.map((row) => ({
+				decidedBy: row.decidedBy.value,
+				id: row.id.value,
+			})),
+			changeBlinded: result.changeBlinded,
+			changeBlindedBy: result.changeBlindedBy,
+			changeOverrode: result.changeOverrode,
+			publishedAmounts: result.confirmation.publishedAmounts.map((row) => ({
+				id: row.id.value,
+				reason: row.reason.value,
+			})),
+		};
+	}
+
+	test("blinds the change, because the network refuses a blinded input with no blinded output", async () => {
+		expect(await mintFundedFrom(true)).toEqual({
+			blindedAmounts: [
+				{
+					decidedBy:
+						"this action spends a blinded amount, and the network accepts that only if " +
+						"something it pays out is blinded too",
+					id: "change",
+				},
+			],
+			changeBlinded: true,
+			changeBlindedBy: "confidential-input",
+			changeOverrode: undefined,
+			publishedAmounts: [],
+		});
+	});
+
+	test("and publishes it for the next action when every input is open", async () => {
+		expect(await mintFundedFrom(false)).toEqual({
+			blindedAmounts: [],
+			changeBlinded: false,
+			changeBlindedBy: undefined,
+			changeOverrode: "chain",
+			publishedAmounts: [
+				{
+					id: "change",
+					reason:
+						"nothing says otherwise and this network blinds an output by default, and this " +
+						"wallet publishes it anyway so your next action can spend it",
+				},
+			],
+		});
+	});
+});
+
 describe("a covenant that does not state what it holds", () => {
 	function spendReading(
 		txOut: { amountSats?: string; rawAssetId?: string },
