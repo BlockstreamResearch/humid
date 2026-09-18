@@ -239,7 +239,7 @@ describe("the constructor of the same class", () => {
 
 		expect(reviewed.createdInstance?.fields.OWNER_PUB_KEY).toBe(KEY);
 		expect(reviewed.createdInstance?.fields.RESERVE_COV_HASH).toHaveLength(64);
-		expect(reviewed.createdInstance?.rounds).toBe(3);
+		expect(reviewed.createdInstance?.rounds).toBe(2);
 	});
 
 	test("works out a field the document computes rather than recording its text", async () => {
