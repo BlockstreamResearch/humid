@@ -15,6 +15,7 @@ import {
 	type CreatedInstance,
 	createsInstance,
 	resolveCreatedInstance,
+	statedCreatedFields,
 } from "../covenants/instance";
 import { asArray, asRecord } from "../document/json";
 import {
@@ -28,7 +29,11 @@ import type { ReferenceScope } from "../document/references";
 import { type RejectToken, refuseUnsupported } from "../document/refuse";
 import { covenantSites } from "../document/sites";
 import { assetLedger, type HeldValue, resolveAsset } from "../evaluation/assetLedger";
-import type { BlindingWord } from "../evaluation/blinding";
+import {
+	type BlindingDecision,
+	type BlindingWord,
+	resolveChangeBlinding,
+} from "../evaluation/blinding";
 import {
 	actionHook,
 	inputHook,
@@ -96,6 +101,7 @@ export type AssetMovement = {
 export type ManifestReview = {
 	action: string;
 	changeBlinded: boolean;
+	changeBlindedBy?: BlindingWord;
 	changeOverrode?: BlindingWord;
 	boundTo?: string;
 	confirmation: ConfirmationModel;
@@ -229,9 +235,14 @@ export async function reviewManifestAction(
 
 	const inputs: Record<string, Record<string, unknown>> = {};
 	const chainHeld: HeldValue[] = [];
+	// A spent covenant can be compiled from a field the created deployment states, such as the
+	// issuing-UTXO count an offer's issuance factory is compiled from.
+	const statedFields = createsInstance(action)
+		? statedCreatedFields(action, { instance: deployment.instance.fields, params }, notes)
+		: {};
 	let scope: ReferenceScope = {
 		inputs,
-		instance: deployment.instance.fields,
+		instance: { ...deployment.instance.fields, ...statedFields },
 		params,
 	};
 
@@ -485,9 +496,11 @@ export async function reviewManifestAction(
 	const networkChange = plan.plan.outputs.filter(
 		(planned, at) => planned.target.kind === "change" && ledger.outputs[at] === policyAsset,
 	);
-	const changeBlinded = networkChange[0]?.blinding.blinding === "blinded";
-	const changeOverrode: BlindingWord | undefined =
-		networkChange.length === 0 ? "chain" : networkChange[0]?.blinding.overrode;
+	const plannedChange: BlindingDecision = networkChange[0]?.blinding ?? {
+		blinding: "open",
+		decidedBy: "spendable-change",
+		overrode: "chain",
+	};
 
 	const foreign = plan.plan.outputs.find(
 		(planned) =>
@@ -612,17 +625,22 @@ export async function reviewManifestAction(
 	const outputs: ReviewedOutput[] = [];
 	const outputAt = new Map<string, number>();
 	const returned = new Map<string, bigint>();
+	const changePaid = new Set<string>();
 
 	for (const [at, planned] of plan.plan.outputs.entries()) {
 		const asset = ledger.outputs[at] ?? policyAsset;
 
 		if (planned.target.kind === "change") {
-			const surplus = asset === policyAsset ? 0n : (fundedFor.get(asset)?.changeSats ?? 0n);
+			const surplus =
+				asset === policyAsset || changePaid.has(asset)
+					? 0n
+					: (fundedFor.get(asset)?.changeSats ?? 0n);
 
 			if (surplus <= 0n) {
 				continue;
 			}
 
+			changePaid.add(asset);
 			outputAt.set(planned.id, outputs.length);
 			outputs.push({
 				asset,
@@ -812,6 +830,10 @@ export async function reviewManifestAction(
 	}
 
 	const selected = fundedOrder.flatMap((asset) => fundedFor.get(asset)?.selected ?? []);
+	const change = resolveChangeBlinding(
+		plannedChange,
+		selected.some((utxo) => utxo.confidential === true),
+	);
 
 	const estimatedFeeSats = estimateFeeSats(
 		{
@@ -840,8 +862,12 @@ export async function reviewManifestAction(
 	const reviewed: ReviewedPlan = {
 		action: request.action,
 		...(action.boundTo === undefined ? {} : { boundTo: action.boundTo }),
-		changeBlinded,
-		...(changeOverrode === undefined ? {} : { changeOverrode }),
+		changeBlinded: change.blinding === "blinded",
+		...(change.blinding === "blinded"
+			? { changeBlindedBy: change.decidedBy }
+			: change.overrode === undefined
+				? {}
+				: { changeOverrode: change.overrode }),
 		covenantInputs,
 		covenants,
 		...(created === undefined ? {} : { createdInstance: created.instance }),

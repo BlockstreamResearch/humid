@@ -1,8 +1,9 @@
 import { asArray, asRecord } from "../document/json";
 import type { NormalisationNote, NormalisedAction } from "../document/normalise";
-import type { ReferenceScope } from "../document/references";
+import { type ReferenceScope, resolveReference } from "../document/references";
 import { type BlindingDecision, resolveBlinding } from "./blinding";
 import { evaluateExpression } from "./evaluate";
+import { encodeMetadataParts } from "./metadataParts";
 
 export type PlannedOutput = {
 	blinding: BlindingDecision;
@@ -39,14 +40,13 @@ export function planAction(
 		}
 
 		const id = typeof output.id === "string" ? output.id : "";
-		const target = resolveTarget(output.destination, output.data);
+		const resolved = resolveTarget(output.destination, output.data, scope);
 
-		if (!target) {
-			return {
-				ok: false,
-				reason: `Output ${id || "(unnamed)"} pays somewhere this runtime does not resolve yet.`,
-			};
+		if (!resolved.ok) {
+			return { ok: false, reason: `Output ${id || "(unnamed)"} ${resolved.reason}` };
 		}
+
+		const target = resolved.target;
 
 		const blinding = resolveBlinding({
 			declared: output.confidential,
@@ -92,25 +92,63 @@ export function planAction(
 	return { ok: true, plan: { fundingSats, outputs } };
 }
 
-function resolveTarget(destination: unknown, data: unknown): PlannedOutput["target"] | undefined {
+function resolveTarget(
+	destination: unknown,
+	data: unknown,
+	scope: ReferenceScope,
+): { ok: false; reason: string } | { ok: true; target: PlannedOutput["target"] } {
 	if (destination === "change") {
-		return { kind: "change" };
+		return { ok: true, target: { kind: "change" } };
 	}
 
 	if (destination === "wallet") {
-		return { kind: "wallet" };
+		return { ok: true, target: { kind: "wallet" } };
 	}
 
 	const record = asRecord(destination);
 	const utxoType = record?.utxo_type;
 
 	if (typeof utxoType === "string") {
-		return { kind: "covenant", utxoType };
+		return { ok: true, target: { kind: "covenant", utxoType } };
 	}
 
-	return record?.type === "op_return" && data === undefined
-		? { hex: "6a", kind: "data" }
-		: undefined;
+	if (record?.type !== "op_return") {
+		return { ok: false, reason: "pays somewhere this runtime does not resolve yet." };
+	}
+
+	if (data === undefined) {
+		return { ok: true, target: { hex: "6a", kind: "data" } };
+	}
+
+	const encoded = encodeMetadataParts(data, (reference) => {
+		const found = resolveReference(reference, "expression", scope);
+
+		return found.ok ? { ok: true, value: found.value } : { ok: false, reason: found.reason };
+	});
+
+	if (!encoded.ok) {
+		return { ok: false, reason: `carries data this runtime cannot encode: ${encoded.reason}` };
+	}
+
+	if (encoded.hex.length / 2 > 0xff) {
+		return {
+			ok: false,
+			reason: "carries more than 255 bytes of data, which this runtime does not push.",
+		};
+	}
+
+	return { ok: true, target: { hex: opReturnScript(encoded.hex), kind: "data" } };
+}
+
+/** `6a` then a direct push below 76 bytes, or `4c` and a length byte up to 255. */
+function opReturnScript(payloadHex: string): string {
+	const length = payloadHex.length / 2;
+
+	if (length < 0x4c) {
+		return `6a${length.toString(16).padStart(2, "0")}${payloadHex}`;
+	}
+
+	return `6a4c${length.toString(16).padStart(2, "0")}${payloadHex}`;
 }
 
 function resolveAmount(

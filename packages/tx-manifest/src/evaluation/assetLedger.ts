@@ -130,6 +130,7 @@ export function assetLedger(
 
 	const walletInputs: { asset: string; id: string }[] = [];
 	const outputs: string[] = [];
+	const positionedChange = new Set<string>();
 	const heldById = new Map(
 		context.held.filter((value) => value.created !== true).map((value) => [value.id, value]),
 	);
@@ -200,7 +201,13 @@ export function assetLedger(
 		outputs.push(resolved.id);
 
 		if (output.target.kind === "change") {
+			// Every change output pays the same wallet change address, so two in one asset are one
+			// output. A stated position cannot be kept once its output is folded into another.
 			if (entry.change) {
+				if (declared.required_index === undefined && !positionedChange.has(resolved.id)) {
+					continue;
+				}
+
 				return {
 					ok: false,
 					reason:
@@ -212,6 +219,10 @@ export function assetLedger(
 			}
 
 			entry.change = { blinded: output.blinding.blinding === "blinded", id };
+
+			if (declared.required_index !== undefined) {
+				positionedChange.add(resolved.id);
+			}
 
 			continue;
 		}

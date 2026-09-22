@@ -644,6 +644,67 @@ describe("what each output does with the value it carries", () => {
 	});
 });
 
+describe("change when the wallet funds an action from a blinded output", () => {
+	async function mintFundedFrom(confidential: boolean) {
+		const result = await reviewManifestAction(
+			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
+			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID, { confidential })] },
+		);
+
+		if (isRefusal(result)) {
+			throw new Error(result.reason);
+		}
+
+		return {
+			blindedAmounts: result.confirmation.blindedAmounts.map((row) => ({
+				decidedBy: row.decidedBy.value,
+				id: row.id.value,
+			})),
+			changeBlinded: result.changeBlinded,
+			changeBlindedBy: result.changeBlindedBy,
+			changeOverrode: result.changeOverrode,
+			publishedAmounts: result.confirmation.publishedAmounts.map((row) => ({
+				id: row.id.value,
+				reason: row.reason.value,
+			})),
+		};
+	}
+
+	test("blinds the change, because the network refuses a blinded input with no blinded output", async () => {
+		expect(await mintFundedFrom(true)).toEqual({
+			blindedAmounts: [
+				{
+					decidedBy:
+						"this action spends a blinded amount, and the network accepts that only if " +
+						"something it pays out is blinded too",
+					id: "change",
+				},
+			],
+			changeBlinded: true,
+			changeBlindedBy: "confidential-input",
+			changeOverrode: undefined,
+			publishedAmounts: [],
+		});
+	});
+
+	test("and publishes it for the next action when every input is open", async () => {
+		expect(await mintFundedFrom(false)).toEqual({
+			blindedAmounts: [],
+			changeBlinded: false,
+			changeBlindedBy: undefined,
+			changeOverrode: "chain",
+			publishedAmounts: [
+				{
+					id: "change",
+					reason:
+						"nothing says otherwise and this network blinds an output by default, and this " +
+						"wallet publishes it anyway so your next action can spend it",
+				},
+			],
+		});
+	});
+});
+
 describe("a covenant that does not state what it holds", () => {
 	function spendReading(
 		txOut: { amountSats?: string; rawAssetId?: string },
@@ -982,30 +1043,129 @@ describe("an action that pins an input to one address", () => {
 });
 
 describe("a document that names one surplus twice", () => {
-	test("is refused rather than resolved in the wallet's favour", async () => {
+	function twoTokenChanges(positions: { again?: number; first?: number } = {}) {
 		const document = structuredClone(MANIFEST) as Record<string, unknown>;
 		const actions = document.actions as Record<string, Record<string, unknown>>;
 		const outputs = actions.PayToken?.outputs as Record<string, unknown>[];
+		const first = outputs.find((output) => output.id === "token_change");
+
+		if (first && positions.first !== undefined) {
+			first.required_index = positions.first;
+		}
 
 		outputs.push({
 			asset: "params.token",
 			confidential: true,
 			destination: "change",
 			id: "token_change_again",
+			...(positions.again === undefined ? {} : { required_index: positions.again }),
 		});
 
-		const result = await reviewManifestAction(request({ manifest: document }), {
+		return reviewManifestAction(request({ manifest: document }), {
 			...deps,
 			fundingUtxos: [utxo("1000000", MONEY_TXID)],
 			holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),
 		});
+	}
+
+	test("pays that surplus once, into the one change output, and moves nothing else", async () => {
+		const single = await pay();
+		const result = await twoTokenChanges();
+
+		expect(isRefusal(result)).toBe(false);
+		expect(isRefusal(single)).toBe(false);
+
+		if (!isRefusal(result) && !isRefusal(single)) {
+			expect(
+				result.outputs
+					.filter((output) => output.asset === TOKEN && output.scriptPubKeyHex === WALLET_SCRIPT)
+					.map((output) => [output.id, output.sats]),
+			).toEqual([
+				["token_out", 1000n],
+				["token_change", 3000n],
+			]);
+			expect(result.outputs).toEqual(single.outputs);
+		}
+	});
+
+	test.each([
+		["the first", { first: -2 }],
+		["the second", { again: -1 }],
+	])("is still refused when %s of them states a position", async (_which, positions) => {
+		const result = await twoTokenChanges(positions);
 
 		expect(isRefusal(result)).toBe(true);
 
 		if (isRefusal(result)) {
 			expect(result.reject).toBe("document-fault");
-			expect(result.reason).toContain("token_change");
-			expect(result.reason).toContain("token_change_again");
+			expect(result.reason).toBe(
+				`PayToken declares change for ${TOKEN} twice, at token_change and token_change_again. ` +
+					"One surplus cannot go to two places, and this wallet will not choose between them.",
+			);
 		}
 	});
+
+	// token_change names its asset through params.token and change_out writes "lbtc": two
+	// spellings that only meet once params.token turns out to be the network's own asset.
+	type PolicyPositions = { change_out?: number; token_change?: number };
+
+	function policyChanges(options: { positions?: PolicyPositions; withoutTokenChange?: true } = {}) {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const actions = document.actions as Record<string, Record<string, unknown>>;
+		const payToken = actions.PayToken as Record<string, unknown>;
+		const outputs = (payToken.outputs as Record<string, unknown>[]).filter(
+			(output) => !(options.withoutTokenChange && output.id === "token_change"),
+		);
+
+		for (const output of outputs) {
+			const stated = options.positions?.[output.id as keyof PolicyPositions];
+
+			if (stated !== undefined) {
+				output.required_index = stated;
+			}
+		}
+
+		payToken.outputs = outputs;
+
+		return reviewManifestAction(
+			request({ manifest: document, params: { ...request().params, token: POLICY_ASSET } }),
+			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID)], holdingsOf: () => [] },
+		);
+	}
+
+	test("in the network's own asset, leaves the one change output to the builder", async () => {
+		const single = await policyChanges({ withoutTokenChange: true });
+		const result = await policyChanges();
+
+		expect(isRefusal(result)).toBe(false);
+		expect(isRefusal(single)).toBe(false);
+
+		if (!isRefusal(result) && !isRefusal(single)) {
+			expect(result.outputs.map((output) => [output.id, output.asset, output.sats])).toEqual([
+				["token_out", POLICY_ASSET, 1000n],
+				["p2pk_out", POLICY_ASSET, 700n],
+			]);
+			expect(result.outputs).toEqual(single.outputs);
+		}
+	});
+
+	test.each([
+		["the first", { token_change: -2 }],
+		["the second", { change_out: -1 }],
+	])(
+		"in the network's own asset, is still refused when %s of them states a position",
+		async (_which, positions) => {
+			const result = await policyChanges({ positions });
+
+			expect(isRefusal(result)).toBe(true);
+
+			if (isRefusal(result)) {
+				expect(result.reject).toBe("document-fault");
+				expect(result.reason).toBe(
+					`PayToken declares change for ${POLICY_ASSET} twice, at token_change and change_out. ` +
+						"One surplus cannot go to two places, and this wallet will not choose between them.",
+				);
+			}
+		},
+	);
 });
