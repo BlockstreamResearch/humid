@@ -140,7 +140,6 @@ function resolveTarget(
 	return { ok: true, target: { hex: opReturnScript(encoded.hex), kind: "data" } };
 }
 
-/** `6a` then a direct push below 76 bytes, or `4c` and a length byte up to 255. */
 function opReturnScript(payloadHex: string): string {
 	const length = payloadHex.length / 2;
 

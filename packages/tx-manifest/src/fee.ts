@@ -8,15 +8,6 @@ const PER_COVENANT_INPUT = 87n;
 
 const PER_ISSUING_INPUT = 74n;
 
-/**
- * The shape a fee is worked out from.
- *
- * Blinding is deliberately absent. A blinded output carries a rangeproof over its amount and a
- * surjection proof over its asset, both far larger than the output itself, and it would be natural
- * to charge for them. Elements does not: the weight a fee is taken on discounts confidential proofs
- * away, so a blinded output weighs exactly what an open one weighs. `feeEstimate.test.ts` measures
- * that against the signing module rather than leaving it stated here.
- */
 export type TransactionShape = {
 	covenantInputs: number;
 	issuingInputs: number;

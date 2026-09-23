@@ -2,15 +2,8 @@ import { byOutpoint } from "../chain/outpoint";
 
 export type SelectableUtxo = {
 	amount: string;
-	/**
-	 * What the wallet unblinded of a blinded output, as the signing module wants it.
-	 *
-	 * Opaque here on purpose: this package does not model blinding, it carries what the wallet
-	 * read so the module that does can be told.
-	 */
 	blindingSecretsJson?: string;
 	confidential?: boolean;
-	/** Relative to the account. The key that signs this input, where it is not the first. */
 	derivationPath?: string;
 	scriptPubKeyHex?: string;
 	spendable: boolean;

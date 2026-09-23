@@ -352,8 +352,6 @@ describe("the model as it crosses to a surface", () => {
 	});
 });
 
-// A person recognising a contract needs something that does not move. The address moves with the
-// arguments and the network; the Commitment Merkle Root and the tapleaf hash do not.
 describe("what the confirmation says a contract is", () => {
 	test("carries the contract's own hashes beside the address its funds sit at", async () => {
 		const result = await reviewed();

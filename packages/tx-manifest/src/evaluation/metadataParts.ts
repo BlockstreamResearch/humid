@@ -4,7 +4,6 @@ import { parseReference } from "../document/references";
 export type EncodedBytes = { hex: string; ok: true } | { ok: false; reason: string };
 
 type PartType = {
-	/** The exact width a value of this type occupies, for the types that fix one. */
 	bytes?: number;
 	encoding: "bytes" | "integer" | "reversedBytes";
 	shape: string;
@@ -25,25 +24,12 @@ const PART_TYPES: Record<string, PartType> = {
 
 const BYTE_ORDERS: Record<string, "be" | "le"> = { be: "be", le: "le" };
 
-/** Modifiers of the state-leaf vocabulary that this encoder does not implement. */
 const UNSUPPORTED_MODIFIERS = ["align", "pad_to"];
 
-/** Resolves a part value that is a reference; the caller knows what the reference may name. */
 export type PartResolver = (
 	reference: string,
 ) => { ok: true; value: unknown } | { ok: false; reason: string };
 
-/**
- * Encodes an output's object-form `data`: `{parts: [{type, value}, …]}`, concatenated in order.
- *
- * The vocabulary is closed. Bytes in the wrong order still make a valid output, and what is lost
- * is only that the protocol's reader can no longer match the record, so a type or modifier that
- * has not been measured against a deployed reader is refused rather than approximated.
- *
- * Integers are little-endian by default because the deployed lending reader decodes them that
- * way. An asset id is reversed because the reader writes it from its internal byte array, which
- * is the reverse of the form documents and requests state it in.
- */
 export function encodeMetadataParts(
 	data: unknown,
 	resolve: PartResolver = (reference) => ({ ok: true, value: reference }),
@@ -112,9 +98,6 @@ function encodePart(
 		return order;
 	}
 
-	// The format's reference grammar decides: a value it parses as a name is looked up, anything
-	// else is a literal. A literal that also parses as a name (`a9b4ade7`) is therefore refused as
-	// an unresolved reference rather than written; a `0x` prefix makes it unambiguous.
 	const named =
 		typeof part.value === "string" && parseReference(part.value) !== undefined
 			? part.value
@@ -138,7 +121,6 @@ function encodePart(
 		: encodeBytes(declared, resolved.value, wrong);
 }
 
-/** `endian` is accepted only on integers; an asset id's reversal is already part of its type. */
 function byteOrder(
 	part: Record<string, unknown>,
 	position: number,

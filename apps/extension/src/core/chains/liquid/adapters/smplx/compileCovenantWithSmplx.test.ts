@@ -59,10 +59,6 @@ function recording(
 	};
 }
 
-// The address says where a contract's funds sit, and it moves with the arguments the contract was
-// compiled against and with the network it was compiled for. Two deployments of the same contract
-// share no part of it. What does not move is the Commitment Merkle Root, which is the program, and
-// the tapleaf hash, which is the leaf a spend commits to.
 describe("what a compiled covenant is reported as", () => {
 	async function compiled() {
 		const { module } = recording();

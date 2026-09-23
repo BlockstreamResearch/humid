@@ -8,7 +8,6 @@ const { manifest } = normaliseManifest(manifestJson as unknown as Record<string,
 
 const CURRENT_DEBT = "1000";
 
-// Only what the two collateral types wire, which is all this is deriving.
 const INSTANCE: Record<string, string> = {
 	BORROWER_NFT_ASSET_ID: `b0${"00".repeat(30)}0b`,
 	COLLATERAL_AMOUNT: "100000",
@@ -26,7 +25,6 @@ const INSTANCE: Record<string, string> = {
 	PROTOCOL_FEE_VAULT_COV_HASH: "f3".repeat(32),
 };
 
-// The types the manifest declares for the names the collateral's compile params are wired to.
 const DECLARED: Record<string, string> = {
 	BORROWER_NFT_ASSET_ID: "liquid.asset_id",
 	COLLATERAL_AMOUNT: "u64",
@@ -69,10 +67,6 @@ async function leavesOf(utxoType: string, instance: Record<string, string> = INS
 	return { result, seen };
 }
 
-// This fixture is the reason state exists: the collateral sits at an address that commits to how
-// much is still owed, so the debt is not a number written beside the contract but part of where its
-// funds are. The two types differ by one byte of one leaf, which is the whole difference between a
-// loan that has been taken up and one that has not.
 describe("a contract whose address commits to its state", () => {
 	test("encodes the state it declares rather than refusing to derive at all", async () => {
 		const { result } = await leavesOf("lending_collateral");
@@ -92,7 +86,6 @@ describe("a contract whose address commits to its state", () => {
 		const { seen } = await leavesOf("lending_collateral");
 		const leaves = JSON.parse(seen[0] ?? "[]") as string[];
 
-		// 1000 as eight big-endian bytes, sitting at the right-hand end of the leaf.
 		expect(leaves[1]).toBe(`${"00".repeat(24)}00000000000003e8`);
 	});
 
@@ -103,7 +96,6 @@ describe("a contract whose address commits to its state", () => {
 		expect(leaves[1]).toBe(`${"00".repeat(24)}0000000000000258`);
 	});
 
-	// The discriminator is the one byte that says a loan has been taken up.
 	test("and the taken-up type differs from the offered one in exactly that byte", async () => {
 		const offered = JSON.parse((await leavesOf("lending_collateral")).seen[0] ?? "[]") as string[];
 		const active = JSON.parse(

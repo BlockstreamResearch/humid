@@ -201,8 +201,6 @@ export function assetLedger(
 		outputs.push(resolved.id);
 
 		if (output.target.kind === "change") {
-			// Every change output pays the same wallet change address, so two in one asset are one
-			// output. A stated position cannot be kept once its output is folded into another.
 			if (entry.change) {
 				if (declared.required_index === undefined && !positionedChange.has(resolved.id)) {
 					continue;

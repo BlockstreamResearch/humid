@@ -2,12 +2,6 @@ import type { LiquidAssetId } from "../../domain/LiquidAsset";
 import type { LiquidFundingUtxo, LiquidUtxoSnapshot } from "./LiquidWalletBackend";
 import { mapLiquidUtxosForAsset } from "./mapLiquidUtxosForAsset";
 
-/**
- * The wallet's own outputs, carrying what only the wallet knows about them.
- *
- * Kept apart from `mapLiquidUtxosForAsset` on purpose. That one answers a dapp, and a dapp
- * handed blinding secrets could unblind every amount this wallet ever hid.
- */
 export function mapLiquidFundingUtxosForAsset(
 	utxos: readonly LiquidUtxoSnapshot[],
 	requestedAsset: { assetId: LiquidAssetId; rawAssetId: string },

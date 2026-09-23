@@ -235,8 +235,6 @@ export async function reviewManifestAction(
 
 	const inputs: Record<string, Record<string, unknown>> = {};
 	const chainHeld: HeldValue[] = [];
-	// A spent covenant can be compiled from a field the created deployment states, such as the
-	// issuing-UTXO count an offer's issuance factory is compiled from.
 	const statedFields = createsInstance(action)
 		? statedCreatedFields(action, { instance: deployment.instance.fields, params }, notes)
 		: {};

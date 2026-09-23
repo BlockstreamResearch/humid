@@ -1105,8 +1105,6 @@ describe("a document that names one surplus twice", () => {
 		}
 	});
 
-	// token_change names its asset through params.token and change_out writes "lbtc": two
-	// spellings that only meet once params.token turns out to be the network's own asset.
 	type PolicyPositions = { change_out?: number; token_change?: number };
 
 	function policyChanges(options: { positions?: PolicyPositions; withoutTokenChange?: true } = {}) {
