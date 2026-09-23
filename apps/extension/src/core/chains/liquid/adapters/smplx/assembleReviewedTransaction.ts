@@ -29,6 +29,7 @@ export type AssemblingBuilder = Pick<
 		signatureWitness?: string,
 		extraLeavesJson?: string,
 		includeDebugSymbols?: boolean,
+		derivationPath?: string,
 	) => void;
 	addCovenantIssuanceInput: (
 		txid: string,
@@ -43,6 +44,7 @@ export type AssemblingBuilder = Pick<
 		issuerContractHex: string | undefined,
 		extraLeavesJson?: string,
 		includeDebugSymbols?: boolean,
+		derivationPath?: string,
 	) => AssembledIssuanceReport;
 	setLocktimeHeight: (height: number) => void;
 	setSequence: (sequence: number) => void;
@@ -53,6 +55,8 @@ export type AssemblingBuilder = Pick<
 		assetAmountSats: bigint,
 		inflationAmountSats: bigint,
 		issuerContractHex?: string,
+		blindingSecretsJson?: string,
+		derivationPath?: string,
 	) => AssembledIssuanceReport;
 };
 
@@ -71,6 +75,7 @@ export async function assembleReviewedTransaction(
 		blindingPublicKeyHex?: string;
 		changeScriptPubKeyHex: string;
 		finalize: FinalizeTransaction;
+		signingDerivationPath: string;
 		smplx: { TransactionBuilder: new () => AssemblingBuilder };
 	},
 ): Promise<AssembleResult> {
@@ -193,6 +198,7 @@ export async function assembleReviewedTransaction(
 						covenant.signatureWitness,
 						covenant.extraLeavesJson,
 						covenant.includeDebugSymbols,
+						input.signingDerivationPath,
 					);
 
 					continue;
@@ -212,6 +218,7 @@ export async function assembleReviewedTransaction(
 						undefined,
 						covenant.extraLeavesJson,
 						covenant.includeDebugSymbols,
+						input.signingDerivationPath,
 					)
 					.free();
 
@@ -219,14 +226,13 @@ export async function assembleReviewedTransaction(
 			}
 
 			const { utxo } = planned;
+			const unsignable = refuseUnsignable(utxo);
+
+			if (unsignable) {
+				return unsignable;
+			}
 
 			if (!issuance) {
-				const unsignable = refuseUnsignable(utxo);
-
-				if (unsignable) {
-					return unsignable;
-				}
-
 				builder.addWalletInput(
 					utxo.txid,
 					utxo.vout,
@@ -246,6 +252,8 @@ export async function assembleReviewedTransaction(
 					issuance.assetAmountSats,
 					issuance.inflationAmountSats,
 					undefined,
+					utxo.blindingSecretsJson,
+					utxo.derivationPath,
 				)
 				.free();
 		}

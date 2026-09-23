@@ -42,6 +42,8 @@ export type LiquidProcessCtResult = {
 	txid: string;
 };
 
+const EXTERNAL_CHAIN = 0;
+
 const SMPLX_NETWORKS: Record<string, string> = {
 	mainnet: "liquid",
 	regtest: "elements-regtest",
@@ -127,6 +129,7 @@ export const createProcessLiquidConfidentialTransaction = (
 									result.free();
 								}
 							},
+							signingDerivationPath: signingDerivationPathOf(context, account),
 							smplx,
 						});
 					} finally {
@@ -252,6 +255,13 @@ function fundable(
 
 function accountLabelOf(context: LiquidProcessCtContext, account: LiquidWalletAccount): string {
 	return `${account.chain?.id ?? context.chain.id} account ${account.accountGroupIndex ?? 0}`;
+}
+
+function signingDerivationPathOf(
+	context: LiquidProcessCtContext,
+	account: LiquidWalletAccount,
+): string {
+	return `${EXTERNAL_CHAIN}/${context.walletBackend.getSigningAddress(account).index}`;
 }
 
 function requireNetwork(context: LiquidProcessCtContext): string {
