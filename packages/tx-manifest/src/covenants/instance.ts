@@ -28,14 +28,6 @@ function computeKind(node: Record<string, unknown>): string | undefined {
 	return undefined;
 }
 
-/**
- * The string-valued fields of the deployment this action creates, resolved ahead of the rest.
- *
- * A covenant the action spends can be compiled from one of them, and spent covenants are derived
- * before `resolveCreatedInstance` runs, because the computed fields are covenant hashes that may
- * name a covenant this action creates. A field that does not resolve yet is skipped rather than
- * refused; `resolveCreatedInstance` still reports it.
- */
 export function statedCreatedFields(
 	action: NormalisedAction,
 	scope: ReferenceScope,
@@ -141,9 +133,6 @@ export function resolveCreatedInstance(
 
 	for (let round = 1; round <= ITERATION_BOUND; round += 1) {
 		const next: Record<string, string> = {};
-		// A field computed earlier this round is already the value a later one should read. Taking
-		// it now is what lets one round settle a whole chain, where reading only the round before
-		// carries a field's answer forward one step at a time.
 		const settled: Record<string, string> = { ...values };
 
 		for (const { name, node, source } of ordered) {
@@ -217,19 +206,6 @@ type ComputedField = { name: string; node: Record<string, unknown>; source: stri
 
 const NAME_IN_TEXT = /[A-Za-z_][A-Za-z0-9_]*/g;
 
-/**
- * Orders computed fields so each one is reached after whatever it reads.
- *
- * Every field is a covenant hash, and a field wired to another field's value cannot be hashed
- * until that other value is known. Left in the order they were declared, a chain of them advances
- * by one field per round and takes as many rounds as it is long, recompiling every field each
- * time. Reached in dependency order the whole chain settles in the first round.
- *
- * This only decides the order work is attempted in. Whether the values agree with themselves is
- * still settled by rounds running until nothing changes, so a dependency this misses costs a round
- * rather than an answer, and fields that reference each other in a circle are left where they were
- * for those rounds to reject.
- */
 function inDependencyOrder(computed: ComputedField[]): ComputedField[] {
 	const names = new Set(computed.map(({ name }) => name));
 	const waitingOn = new Map<string, Set<string>>();
@@ -265,11 +241,9 @@ function inDependencyOrder(computed: ComputedField[]): ComputedField[] {
 		}
 	}
 
-	// Whatever is left reads something that reads it back. Declaration order is as good as any.
 	return [...ordered, ...computed.filter(({ name }) => !placed.has(name))];
 }
 
-/** Which other computed fields a field's wiring names, read conservatively from its text. */
 function dependenciesOf(field: ComputedField, names: Set<string>): Set<string> {
 	const wiring = tapleafWiring(field.node);
 	const found = new Set<string>();

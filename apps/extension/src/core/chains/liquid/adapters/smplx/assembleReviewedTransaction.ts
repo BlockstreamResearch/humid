@@ -29,6 +29,7 @@ export type AssemblingBuilder = Pick<
 		signatureWitness?: string,
 		extraLeavesJson?: string,
 		includeDebugSymbols?: boolean,
+		derivationPath?: string,
 	) => void;
 	addCovenantIssuanceInput: (
 		txid: string,
@@ -43,6 +44,7 @@ export type AssemblingBuilder = Pick<
 		issuerContractHex: string | undefined,
 		extraLeavesJson?: string,
 		includeDebugSymbols?: boolean,
+		derivationPath?: string,
 	) => AssembledIssuanceReport;
 	setLocktimeHeight: (height: number) => void;
 	setSequence: (sequence: number) => void;
@@ -53,6 +55,8 @@ export type AssemblingBuilder = Pick<
 		assetAmountSats: bigint,
 		inflationAmountSats: bigint,
 		issuerContractHex?: string,
+		blindingSecretsJson?: string,
+		derivationPath?: string,
 	) => AssembledIssuanceReport;
 };
 
@@ -71,6 +75,7 @@ export async function assembleReviewedTransaction(
 		blindingPublicKeyHex?: string;
 		changeScriptPubKeyHex: string;
 		finalize: FinalizeTransaction;
+		signingDerivationPath: string;
 		smplx: { TransactionBuilder: new () => AssemblingBuilder };
 	},
 ): Promise<AssembleResult> {
@@ -193,6 +198,7 @@ export async function assembleReviewedTransaction(
 						covenant.signatureWitness,
 						covenant.extraLeavesJson,
 						covenant.includeDebugSymbols,
+						input.signingDerivationPath,
 					);
 
 					continue;
@@ -212,6 +218,7 @@ export async function assembleReviewedTransaction(
 						undefined,
 						covenant.extraLeavesJson,
 						covenant.includeDebugSymbols,
+						input.signingDerivationPath,
 					)
 					.free();
 
@@ -219,14 +226,13 @@ export async function assembleReviewedTransaction(
 			}
 
 			const { utxo } = planned;
+			const unsignable = refuseUnsignable(utxo);
+
+			if (unsignable) {
+				return unsignable;
+			}
 
 			if (!issuance) {
-				const unsignable = refuseUnsignable(utxo);
-
-				if (unsignable) {
-					return unsignable;
-				}
-
 				builder.addWalletInput(
 					utxo.txid,
 					utxo.vout,
@@ -246,6 +252,8 @@ export async function assembleReviewedTransaction(
 					issuance.assetAmountSats,
 					issuance.inflationAmountSats,
 					undefined,
+					utxo.blindingSecretsJson,
+					utxo.derivationPath,
 				)
 				.free();
 		}
@@ -290,17 +298,6 @@ export async function assembleReviewedTransaction(
 	}
 }
 
-/**
- * Refuses a blinded output this module could not spend correctly rather than spending it wrongly.
- *
- * A blinded output needs two things an open one does not: the wallet's reading of it, because the
- * builder holds no blinding key, and which key signs it, because blinded outputs land on rotating
- * indices while the signer's default is the first. Either missing is a wallet that did not say
- * enough, and signing anyway makes a transaction the network rejects.
- *
- * An open output is left as it was. Those arrive at the pinned signing index, which is the
- * signer's default, and a stale snapshot carrying no path still spends correctly.
- */
 function refuseUnsignable(utxo: ManifestReview["selected"][number]): AssembleResult | undefined {
 	const at = `${utxo.txid}:${utxo.vout}`;
 

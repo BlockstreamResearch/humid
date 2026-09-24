@@ -7,22 +7,8 @@ import { encodeStateLeaves } from "./stateLeaves";
 
 export type CompiledCovenant = {
 	address: string;
-	/**
-	 * The Commitment Merkle Root, identifying the program itself.
-	 *
-	 * The address answers where the funds sit, and moves with the arguments the contract was
-	 * compiled against and with the network it was compiled for. This answers what the contract is,
-	 * and does not.
-	 */
 	cmr: string;
 	scriptPubKeyHex: string;
-	/**
-	 * The tapleaf hash, identifying the leaf the program sits in.
-	 *
-	 * This is what a taproot spend commits to and what a signature over the input covers, so it is
-	 * the half of a contract's identity that says where it is being spent from rather than what it
-	 * is.
-	 */
 	tapleafHash: string;
 };
 

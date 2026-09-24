@@ -12,7 +12,6 @@ function part(declared: Record<string, unknown>, resolve?: PartResolver): string
 	return result.ok ? result.hex : result.reason;
 }
 
-/** Distinct bytes, so that a reversal that did not happen is visible. */
 const STATED_ASSET = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
 const PUBLISHED_ASSET = "201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a090807060504030201";
 

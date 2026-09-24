@@ -314,6 +314,56 @@ describe("the assignments an action runs before anything is built", () => {
 	});
 });
 
+describe("state an output covenant commits to", () => {
+	async function leavesPaid(debt: string) {
+		const seen: string[] = [];
+		const manifest = payDocument((pay) => {
+			pay.on_pre_broadcast = { set: { "params.debt": debt } };
+		});
+		const types = manifest.utxo_types as Record<string, { script: Record<string, unknown> }>;
+
+		(types.p2pk_output ?? { script: {} }).script.extra_leaves = [
+			{
+				payload: [{ align: "right", endian: "be", pad_to: 32, type: "u64", value: "params.debt" }],
+				type: "tapdata",
+			},
+		];
+
+		const result = await reviewManifestAction(
+			{
+				action: "Pay",
+				broadcast: false,
+				contractSources: { [SOURCE_PATH]: SOURCE },
+				manifest,
+				params: { amount_sat: 1000, pubkey: PUBKEY },
+			} satisfies ParsedLiquidProcessCtParams,
+			{
+				...deps,
+				compile: (asked: { extraLeavesJson: string }) => {
+					seen.push(asked.extraLeavesJson);
+
+					return deps.compile();
+				},
+			},
+		);
+
+		return { leaves: seen.map((json) => JSON.parse(json) as string[]), result };
+	}
+
+	test("can be set by a hook, and the created covenant commits to what it set", async () => {
+		const { leaves, result } = await leavesPaid("params.amount_sat * 2");
+
+		expect(isRefusal(result)).toBe(false);
+		expect(leaves).toEqual([[`${"00".repeat(24)}00000000000007d0`]]);
+	});
+
+	test("so a hook that sets a different value moves the covenant's state with it", async () => {
+		const { leaves } = await leavesPaid("params.amount_sat * 3");
+
+		expect(leaves).toEqual([[`${"00".repeat(24)}0000000000000bb8`]]);
+	});
+});
+
 describe("a position the document states for a piece of the transaction", () => {
 	test("is met where the wallet would have put it there anyway", async () => {
 		const result = await reviewPay(

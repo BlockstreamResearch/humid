@@ -23,8 +23,6 @@ function account(): LiquidWalletAccount {
 	}
 }
 
-// The Unconfidential tab draws itself from this, so what it answers with is what a person is told
-// to be paid at. It is the wallet's own address rather than a second one derived beside it.
 describe("the signing address the contract flow is funded from", () => {
 	test("is fixed at the first index, where the receive address moves along", () => {
 		expect(getWalletSigningAddress(account()).index).toBe(0);
@@ -52,8 +50,6 @@ describe("the signing address the contract flow is funded from", () => {
 		expect(unconfidential).not.toBe(address);
 	});
 
-	// A wallet with no history has nothing to move along yet, so on a fresh one this is also what
-	// the receive address answers. What is pinned is the index, not the difference between them.
 	test("and it is the first index whatever the receive address is doing", () => {
 		const shared = account();
 		const pinned = getWalletSigningAddress(shared);

@@ -21,8 +21,6 @@ async function argumentsCompiledFor(source: string): Promise<Record<string, unkn
 			action: "CreateOffer",
 			broadcast: false,
 			contractSources,
-			// The deployment the dapp holds before the offer exists: it does not carry
-			// ISSUING_UTXOS_COUNT, which CreateOffer states in its own create_instance.
 			instance: { instance: { fields: { FACTORY_ASSET_ID: "fa".repeat(32) } } },
 			manifest,
 			params: {

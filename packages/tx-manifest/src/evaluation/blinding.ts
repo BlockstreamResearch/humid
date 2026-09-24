@@ -35,11 +35,6 @@ export function resolveBlinding(input: {
 	return format;
 }
 
-/**
- * Liquid cannot balance the blinding factors of a transaction that spends a blinded input and
- * blinds no output, so change the wallet would publish is blinded instead. Only coin selection
- * knows whether such an input is spent, which is why this is decided after it.
- */
 export function resolveChangeBlinding(
 	planned: BlindingDecision,
 	spendsConfidentialInput: boolean,

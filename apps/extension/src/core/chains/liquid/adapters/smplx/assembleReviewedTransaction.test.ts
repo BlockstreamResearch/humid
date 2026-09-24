@@ -62,6 +62,7 @@ const COVENANT_OUT = outputBytes(COVENANT_SCRIPT, { sats: 50_000n });
 const CHANGE_OUT = outputBytes(CHANGE_SCRIPT, { sats: 900n });
 const RECEIVED_OUT = outputBytes(WALLET_SCRIPT, { sats: 50_000n });
 const COVENANT_TXID = "e".repeat(64);
+const SIGNING_PATH = "0/0";
 
 function signedHex(spends: Parameters<typeof txIn>[0][], outs: string[]): string {
 	const inputCount = spends.length.toString(16).padStart(2, "0");
@@ -84,6 +85,7 @@ type Recorded = {
 	changes: { blindingKey: string | null | undefined; script: string }[];
 	covenants: {
 		argumentsJson: string | undefined;
+		derivationPath: string | undefined;
 		extraLeavesJson: string | undefined;
 		includeDebugSymbols: boolean | undefined;
 		issued?: { assetAmountSats: bigint; inflationAmountSats: bigint };
@@ -98,6 +100,8 @@ type Recorded = {
 	freedReports: number;
 	issues: {
 		assetAmountSats: bigint;
+		blindingSecretsJson: string | undefined;
+		derivationPath: string | undefined;
 		inflationAmountSats: bigint;
 		issuerContractHex: string | undefined;
 		txOut: string;
@@ -153,9 +157,13 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 				assetAmountSats: bigint,
 				inflationAmountSats: bigint,
 				issuerContractHex?: string,
+				blindingSecretsJson?: string,
+				derivationPath?: string,
 			) {
 				recorded.issues.push({
 					assetAmountSats,
+					blindingSecretsJson,
+					derivationPath,
 					inflationAmountSats,
 					issuerContractHex,
 					txOut,
@@ -182,9 +190,11 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 				signatureWitness?: string,
 				extraLeavesJson?: string,
 				includeDebugSymbols?: boolean,
+				derivationPath?: string,
 			) {
 				recorded.covenants.push({
 					argumentsJson,
+					derivationPath,
 					extraLeavesJson,
 					includeDebugSymbols,
 					signatureWitness,
@@ -208,9 +218,11 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 				_issuerContractHex: string | undefined,
 				extraLeavesJson?: string,
 				includeDebugSymbols?: boolean,
+				derivationPath?: string,
 			) {
 				recorded.covenants.push({
 					argumentsJson,
+					derivationPath,
 					extraLeavesJson,
 					includeDebugSymbols,
 					issued: { assetAmountSats, inflationAmountSats },
@@ -343,6 +355,7 @@ function subject(
 					: { blindingPublicKeyHex: extra.blindingPublicKeyHex }),
 				changeScriptPubKeyHex: CHANGE_SCRIPT,
 				finalize,
+				signingDerivationPath: SIGNING_PATH,
 				smplx: substitute(recorded, extra.reports),
 			}),
 		recorded,
@@ -468,6 +481,7 @@ describe("assembleReviewedTransaction", () => {
 			const result = await assembleReviewedTransaction(review(), {
 				changeScriptPubKeyHex: CHANGE_SCRIPT,
 				finalize: () => SIGNED,
+				signingDerivationPath: SIGNING_PATH,
 				smplx,
 			});
 
@@ -501,6 +515,7 @@ describe("assembleReviewedTransaction", () => {
 
 					return SIGNED;
 				},
+				signingDerivationPath: SIGNING_PATH,
 				smplx,
 			});
 
@@ -564,6 +579,7 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.covenants).toEqual([
 				{
 					argumentsJson: COVENANT_BUILD.argumentsJson,
+					derivationPath: SIGNING_PATH,
 					extraLeavesJson: "[]",
 					includeDebugSymbols: false,
 					signatureWitness: "SIGNATURE",
@@ -595,6 +611,13 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.covenants[0]?.witnessJson).toBe(
 				JSON.stringify({ BRANCH: { type: "Either<(), ()>", value: "Left(())" } }),
 			);
+		});
+
+		test("signs the covenant with the wallet's signing key, not the signer's default", async () => {
+			const { assemble, recorded } = subject(spendingPlan(), spent);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.covenants.map((covenant) => covenant.derivationPath)).toEqual([SIGNING_PATH]);
 		});
 
 		test("asks for no signature where the document declares none", async () => {
@@ -699,6 +722,7 @@ describe("assembleReviewedTransaction", () => {
 
 			expect(await assemble()).toMatchObject({ ok: true });
 			expect(recorded.covenants).toHaveLength(1);
+			expect(recorded.covenants[0]?.derivationPath).toBe(SIGNING_PATH);
 			expect(recorded.covenants[0]?.issued).toEqual({
 				assetAmountSats: 1000n,
 				inflationAmountSats: 0n,
@@ -763,6 +787,8 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.issues).toEqual([
 				{
 					assetAmountSats: 1000n,
+					blindingSecretsJson: undefined,
+					derivationPath: undefined,
 					inflationAmountSats: 0n,
 					issuerContractHex: undefined,
 					txOut: TXOUT_HEX,
@@ -770,6 +796,37 @@ describe("assembleReviewedTransaction", () => {
 					vout: 0,
 				},
 			]);
+		});
+
+		test("spends a blinded output with what it unblinds to and the key that signs it", async () => {
+			const secrets = '{"asset":"00","value":1000000}';
+			const { assemble, recorded } = subject({
+				...issuing,
+				selected: [
+					{
+						...WALLET_UTXO,
+						blindingSecretsJson: secrets,
+						confidential: true,
+						derivationPath: "0/7",
+					},
+				],
+			});
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.issues[0]).toMatchObject({
+				blindingSecretsJson: secrets,
+				derivationPath: "0/7",
+			});
+		});
+
+		test("refuses a blinded output it was not told the signing key of", async () => {
+			const { assemble, recorded } = subject({
+				...issuing,
+				selected: [{ ...WALLET_UTXO, blindingSecretsJson: '{"value":1}', confidential: true }],
+			});
+
+			expect(await assemble()).toMatchObject({ ok: false, reject: "built-something-else" });
+			expect(recorded.issues).toEqual([]);
 		});
 
 		test("and is not also added as an ordinary wallet input", async () => {

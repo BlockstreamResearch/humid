@@ -3,22 +3,10 @@ import type { NormalisationNote } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { computedValue, computesValue } from "../evaluation/computedValue";
 
-/**
- * A contract's state, encoded into the leaves its address commits to.
- *
- * Simplicity keeps no state anywhere. A stateful contract's taproot tree carries its program in one
- * leaf and each state value in a hidden leaf beside it, so the address a contract's funds sit at is
- * decided by the state as much as by the program. Change a value and the funds are somewhere else.
- *
- * That is why this cannot be approximated. Encoding a value a byte differently from the way the
- * contract reads it derives an address that looks entirely valid and that nobody can spend from, so
- * everything here either encodes exactly what was stated or refuses.
- */
 export type EncodeStateLeavesResult =
 	| { leaves: string[]; ok: true }
 	| { ok: false; reason: string };
 
-/** A leaf is exactly this wide. The contracts read one with a single 32-byte hash step. */
 const LEAF_BYTES = 32;
 
 type Width = { bytes: number; reads: "decimal" | "hex" };

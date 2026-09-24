@@ -75,10 +75,6 @@ function open(params: Record<string, unknown> = PARAMS) {
 	};
 }
 
-// Every field here is a covenant hash wired to the one before it, and they are declared backwards
-// so that reading only the round before would advance the chain one link per round and recompile
-// every link each time. What that costs grows with the square of the chain; reaching them in
-// dependency order costs one compile each, twice.
 describe("a chain of fields that each read the one before", () => {
 	const LINKS = 5;
 
@@ -200,9 +196,6 @@ describe("the deployment a constructor creates", () => {
 		expect(result.ok ? result.instance.fields.GUARD_COV_HASH : "").toHaveLength(64);
 	});
 
-	// Two is the fewest any deployment can take: one round to compute the fields and one to find
-	// they did not move. A chain reached in dependency order settles in that minimum however long
-	// it is, where reading only the round before would take one round per link.
 	test("settles a hash that depends on another hash in the fewest rounds there are", () => {
 		const { result } = open();
 
@@ -499,9 +492,6 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 	});
 });
 
-// A contract's address commits to its state, so these leaves are as load bearing as the program.
-// What makes one encodable is that the document said enough: the width, the byte order, and which
-// end of the padding the value sits at.
 describe("the state a contract's address commits to", () => {
 	function hashOf(extraLeaves: unknown[]) {
 		const { calls, hashCovenant } = recordingCompiler();
