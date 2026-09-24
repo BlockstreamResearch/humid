@@ -76,7 +76,7 @@ async function resolveMessageSigningPath(
 	const implementation = getLwkImplementation(account);
 
 	try {
-		const address = lwk.Address.parse(params.address, implementation.network);
+		const address = new lwk.Address(params.address);
 		const path = implementation.wollet.addressFullPathFor(address, SIGN_MESSAGE_ADDRESS_SCAN_LIMIT);
 
 		return {
