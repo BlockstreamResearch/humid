@@ -7,7 +7,7 @@ const PROBE_CMR = "43041b02608dc3ba245a2e3dc7aa5bc991fcf6c097c6a165a18e97a486461
 
 describe("smplx wasm module", () => {
 	test("reports the SDK version compiled into it", () => {
-		expect(smplx.sdkVersion()).toBe("0.0.11");
+		expect(smplx.sdkVersion()).toBe("0.0.12");
 	});
 
 	test("compiles a covenant to the same CMR as a native build", () => {
