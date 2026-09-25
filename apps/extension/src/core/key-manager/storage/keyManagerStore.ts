@@ -43,10 +43,6 @@ function getCachedState(): KeyManagerState | null {
 	return unlockedKeyManagerState;
 }
 
-// Serialize writes: each update runs only after the previous one settles, so `update()` always sees
-// the latest persisted state instead of a stale snapshot. Concurrent callers (e.g. materializing
-// accounts across chains during a dapp connect) otherwise race this read-modify-write — both read the
-// same state and the second `set()` clobbers the first, silently losing an update.
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 async function updateUnlockedState(
@@ -70,8 +66,6 @@ async function updateUnlockedState(
 		return updatedState;
 	});
 
-	// Keep the queue alive if this update throws (a failure must not wedge later writes) while still
-	// surfacing the rejection to this caller.
 	writeQueue = run.catch(() => undefined);
 
 	return run;

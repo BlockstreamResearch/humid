@@ -6,18 +6,10 @@ import type { PortfolioViewAsset } from "@/core/chains/application/PortfolioView
 import { chainGroupUis } from "@/routes/App/chainGroupUis";
 import { useHome } from "@/routes/App/pages/Home/HomeContext";
 
-/**
- * Asset rows. Each row links to its asset page (`/app/asset/$assetId`); the row content itself is
- * rendered by the selected chain group's `TokenRow`, so each chain decides how its assets look. A
- * chain-neutral amber dot is overlaid here (not in the chain's row) on any asset with an optimistic
- * pending transfer, so the Overview signals in-flight sends the same way the asset page does.
- */
 export function TokenList({ tokens }: { tokens: PortfolioViewAsset[] }) {
 	const { accountGroup, chain } = useHome();
 	const TokenRow = chainGroupUis[chain.chainGroupId]?.TokenRow;
 
-	// The optimistic pending set for this account+chain — the asset ids with a just-broadcast send that
-	// no scan has caught yet. Reading it here keeps the indicator generic across chain groups.
 	const pending = usePendingTransfers(accountGroup.id, chain.id);
 	const pendingAssetIds = useMemo(
 		() => new Set(pending.entries.map((entry) => entry.rawAssetId)),

@@ -23,12 +23,6 @@ export type ImportSeedWalletResult = {
 	walletId: WalletId;
 };
 
-/**
- * Adds an imported-seed wallet (its own key source + wallet + first account group at
- * `groupIndex 0`) to an existing account model, leaving the current wallets untouched.
- * The seed's secret value is stored separately by the key manager, which attaches it to
- * the returned `keySourceId`. Chain-agnostic — no signing or chain-specific logic here.
- */
 export function importSeedWallet(input: ImportSeedWalletInput): ImportSeedWalletResult {
 	const now = input.createdAt ?? Date.now();
 	const keySourceId = input.keySourceId ?? createKeySourceId();

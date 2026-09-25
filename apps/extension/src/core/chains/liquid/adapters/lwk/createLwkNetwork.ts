@@ -5,11 +5,6 @@ import type { LwkWasmModule } from "./loadLwkWasm";
 
 export type LwkNetwork = ReturnType<LwkWasmModule["Network"]["mainnet"]>;
 
-/**
- * Build the LWK `Network` a chain targets from its settings. `regtest` is any custom
- * Elements network: its `policyAsset` defines the L-BTC asset id (without one we use
- * LWK's default regtest params). Address parameters follow from the network kind.
- */
 export function createLwkNetwork(lwk: LwkWasmModule, chain: LiquidChainRecord): LwkNetwork {
 	const { network, policyAsset } = chain.settings;
 

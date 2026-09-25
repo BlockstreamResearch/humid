@@ -31,11 +31,6 @@ export type LiquidChainCreateProps = {
 	onChange: (chain: LiquidChainRecord) => void;
 };
 
-/**
- * Liquid's add-chain body: pick the network kind (a chain's fixed identity, chosen once
- * at creation), then the standard chain settings. Editing an existing chain uses
- * LiquidChainSettings directly, without the network picker.
- */
 export function LiquidChainCreate({ chain, onChange }: LiquidChainCreateProps) {
 	const setNetwork = (network: LiquidNetworkKind) => {
 		onChange({
@@ -43,7 +38,6 @@ export function LiquidChainCreate({ chain, onChange }: LiquidChainCreateProps) {
 			settings: {
 				...chain.settings,
 				network,
-				// The policy asset only applies to a custom (regtest) network; drop it otherwise.
 				policyAsset:
 					network === LIQUID_NETWORK_KINDS.REGTEST ? chain.settings.policyAsset : undefined,
 			},

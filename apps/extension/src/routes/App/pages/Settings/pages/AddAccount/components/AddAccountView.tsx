@@ -19,10 +19,6 @@ type AddAccountViewProps = {
 	onImport: (input: { mnemonic: string; name?: string }) => void;
 };
 
-/**
- * Add account: pick create (derive on the current seed) or import (a new recovery
- * phrase). The chain account type is auto-selected while only one exists (see TODO).
- */
 export function AddAccountView({
 	accountTypeLabel,
 	error,
@@ -69,8 +65,6 @@ export function AddAccountView({
 
 			<UiScrollArea className="min-h-0 flex-1">
 				<form className="flex flex-col gap-4 px-5 py-4" onSubmit={handleSubmit}>
-					{/* TODO: only one chain account type exists, so it is auto-selected. Replace
-					    this static row with a real picker once more account types are registered. */}
 					<div className="flex items-center justify-between rounded-lg border px-3 py-2">
 						<span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
 							Account type

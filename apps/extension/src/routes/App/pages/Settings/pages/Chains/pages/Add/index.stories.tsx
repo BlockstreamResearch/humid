@@ -5,7 +5,6 @@ import { chainGroupUis } from "@/routes/App/chainGroupUis";
 
 import { ChainAddForm } from "../../components/ChainAddForm";
 
-/** Add chain: the common form with the Liquid group's Create body (network kind + settings). */
 function AddChainStory() {
 	const groupUi = chainGroupUis[LIQUID_CHAIN_GROUP_ID];
 

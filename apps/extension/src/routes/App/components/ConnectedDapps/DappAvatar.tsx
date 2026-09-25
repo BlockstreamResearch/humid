@@ -11,14 +11,6 @@ function hueFromSeed(seed: string) {
 	return Math.abs(hash) % 360;
 }
 
-/**
- * Deterministic gradient avatar for a connected dapp, seeded by its origin / url. A placeholder
- * identicon (no remote image) that stays stable per dapp — mirrors AccountAvatar.
- *
- * TODO(nice-to-have): render the dapp's real icon with this gradient as the fallback — the
- * WalletConnect peer icon (ConnectedDappView.iconUrl) when present, and the injected origin's
- * favicon (e.g. `https://<host>/favicon.ico`).
- */
 export function DappAvatar({ className, seed }: { className?: string; seed: string }) {
 	const hue = hueFromSeed(seed);
 

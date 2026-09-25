@@ -5,7 +5,6 @@ import { chainsClient } from "@/core/chains/application/chains-rpc/client";
 
 export const CHAINS_QUERY_KEY = ["chains"] as const;
 
-/** The chain axis: the available chains, the selected one, and a switch mutation. */
 export function useChains() {
 	const queryClient = useQueryClient();
 	const query = useQuery({ queryFn: () => chainsClient.getState(), queryKey: CHAINS_QUERY_KEY });

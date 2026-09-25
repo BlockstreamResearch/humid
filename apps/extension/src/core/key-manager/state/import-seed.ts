@@ -8,12 +8,6 @@ export type AddImportedSeedInput = {
 	seedMaterial: string;
 };
 
-/**
- * Adds an imported-seed wallet to an already-unlocked key-manager state: a new key
- * source + wallet + first account group (via the account registry) plus the seed's
- * secret material, then selects the new account. Mirrors `createLocalRootKeyManagerState`
- * but additive — the existing wallets and secrets are left untouched.
- */
 export function addImportedSeedToKeyManagerState(
 	state: KeyManagerState,
 	input: AddImportedSeedInput,

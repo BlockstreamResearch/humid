@@ -20,15 +20,8 @@ import { LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT } from "@/core/chains/liquid/dom
 import type { RequestHandlerMap } from "../transport";
 import { emitWalletEvent } from "../wallet-events";
 
-// Only the fields the handlers read — sidesteps the ChainGroup dispatcher's
-// generic variance so a concrete LiquidChainGroup assigns cleanly.
 type ChainGroupSource = Pick<ChainGroup, "chains" | "id">;
 
-/**
- * The chain axis the popup reads: every group's built-in chains, overridden by any
- * stored custom chains, plus the selected chain id (defaulting to the first group's
- * first chain when nothing is stored yet).
- */
 async function readChainsState(chainGroups: readonly ChainGroupSource[]): Promise<ChainsState> {
 	const store = await getUnlockedChainStoreState();
 	const byId = new Map<ChainId, ChainRecord>();
@@ -59,10 +52,7 @@ export function createChainsInternalHandlers(
 
 			await setUnlockedSelectedChainId(chain.chainGroupId, chainId);
 
-			// The wallet's active chain changed — notify connected dapps (MetaMask-style chainChanged).
 			emitWalletEvent("chainChanged", { chainId });
-			// The selected chain determines the descriptor's policy asset, so the connected account's
-			// descriptor changed too (ELIP-1) — a dapp re-queries getWalletDescriptor for its own view.
 			emitWalletEvent(LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT, { chainId });
 
 			return readChainsState(chainGroups);
@@ -85,7 +75,6 @@ export function createChainsInternalHandlers(
 		[chainsRpc.methods.addChain]: async (message) => {
 			const { chain } = message.data as AddChainInput;
 
-			// Same guards the dapp-facing wallet_addChain reuses: known group + non-duplicate id.
 			await addUnlockedChainRecord(chain, chainGroups);
 
 			return readChainsState(chainGroups);
@@ -93,7 +82,6 @@ export function createChainsInternalHandlers(
 		[chainsRpc.methods.removeChain]: async (message) => {
 			const { chainId } = message.data as RemoveChainInput;
 
-			// Built-in chains live in a group's static list — they cannot be removed.
 			const isBuiltIn = chainGroups.some((group) =>
 				group.chains.some((candidate) => candidate.id === chainId),
 			);
@@ -107,7 +95,6 @@ export function createChainsInternalHandlers(
 
 			await removeUnlockedChainRecord(chainId);
 
-			// If the removed chain was selected for its group, fall back to a built-in.
 			if (store.selectedChainIds[removed.chainGroupId] === chainId) {
 				const group = chainGroups.find((candidate) => candidate.id === removed.chainGroupId);
 				if (group) await setUnlockedSelectedChainId(group.id, group.chains[0].id);

@@ -11,7 +11,6 @@ const TRANSPORT_LABEL: Record<ConnectedDappView["transport"], string> = {
 	walletconnect: "WalletConnect",
 };
 
-/** A dapp's identity as a row: gradient avatar, label, transport badge, and an optional secondary line. */
 export function DappIdentity({
 	className,
 	dapp,

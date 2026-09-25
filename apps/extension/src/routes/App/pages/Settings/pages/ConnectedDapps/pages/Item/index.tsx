@@ -7,12 +7,6 @@ import { UiSpinner } from "@/ui/UiSpinner";
 import { ConnectedDappItemView } from "./components/ConnectedDappItemView";
 import { Route } from "./route";
 
-/**
- * Per-dapp policy (container): resolves the dapp from the route key against this account's
- * connections, then edits its per-method policy. Disconnecting drops the dapp from this account —
- * once it leaves the list the key no longer resolves, so the view falls back to the list. An unknown
- * key falls back the same way.
- */
 export function ConnectedDappItemPage() {
 	const { accountGroupId, dappKey } = Route.useParams();
 	const accounts = useSelectedAccount();

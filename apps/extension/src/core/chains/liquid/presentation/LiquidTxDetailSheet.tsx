@@ -19,15 +19,8 @@ import { UiDrawer, UiDrawerContent, UiDrawerHeader, UiDrawerTitle } from "@/ui/U
 import { liquidExplorerTxUrl } from "./liquidExplorerTxUrl";
 import { LiquidTxStatusBadge } from "./LiquidTxStatus";
 
-/** L-BTC (the network fee asset) is always 8 decimals; the fee is denominated in it, not the token. */
 const L_BTC_DECIMALS = 8;
 
-/**
- * A bottom-sheet detail view for one Liquid transaction, opened by tapping an activity row. Shows the
- * direction, signed amount, status, date, network fee, the full txid (copyable), and a link out to
- * the explorer. Controlled by `item`: non-null opens it; the last item is retained through the close
- * animation so the content doesn't blank out as it slides away.
- */
 export function LiquidTxDetailSheet({
 	chain,
 	decimals,
@@ -125,7 +118,6 @@ export function LiquidTxDetailSheet({
 	);
 }
 
-/** One label/value line in the detail list: a muted label left, the value right (mono where it fits). */
 function DetailRow({ children, label }: { children: ReactNode; label: string }) {
 	return (
 		<div className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">

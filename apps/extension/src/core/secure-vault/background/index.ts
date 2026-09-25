@@ -41,9 +41,6 @@ let unlockedMetaRecord: SecureVaultMetaRecord | null = null;
 let failedUnlockAttempts = 0;
 let unlockPausedUntil = 0;
 
-// The raw AES data key is cached in `chrome.storage.session` while unlocked. Session storage is
-// in-memory (never on disk), reachable only from trusted contexts, and cleared when the browser
-// closes — so the vault survives MV3 service-worker restarts yet still locks on full browser exit.
 const SESSION_DATA_KEY_STORAGE_KEY = "secure-vault:session-data-key";
 
 type SessionStorageArea = {
@@ -52,7 +49,6 @@ type SessionStorageArea = {
 	remove: (key: string) => Promise<void>;
 };
 
-/** `chrome.storage.session`, or undefined on browsers that don't expose it (then: no persistence). */
 function getSessionStorage(): SessionStorageArea | undefined {
 	return (browser.storage as unknown as { session?: SessionStorageArea }).session;
 }
@@ -76,16 +72,12 @@ async function clearSessionDataKey(): Promise<void> {
 	await getSessionStorage()?.remove(SESSION_DATA_KEY_STORAGE_KEY);
 }
 
-// Last time the user actively used the wallet, cached alongside the key so the idle auto-lock
-// timer survives service-worker restarts (and resets on browser close).
 const SESSION_LAST_ACTIVITY_KEY = "secure-vault:last-activity";
 
-/** Record wallet activity now — resets the idle auto-lock countdown. */
 export async function touchVaultActivity(): Promise<void> {
 	await getSessionStorage()?.set({ [SESSION_LAST_ACTIVITY_KEY]: Date.now() });
 }
 
-/** The last recorded activity timestamp, or null when unknown / unsupported. */
 export async function getVaultLastActivityAt(): Promise<number | null> {
 	const session = getSessionStorage();
 
@@ -251,7 +243,6 @@ function applyUnlockedSecureVault(record: SecureVaultMetaRecord, dataKey: Crypto
 	});
 }
 
-/** Re-derive the in-memory unlocked vault from the session-cached data key after a SW restart. */
 async function restoreUnlockedSecureVault(): Promise<void> {
 	const rawDataKey = await readSessionDataKey();
 

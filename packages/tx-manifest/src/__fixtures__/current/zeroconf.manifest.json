@@ -1,0 +1,9 @@
+{
+    "$schema": "../../schema/txmanifest.schema.json",
+    "manifest_version": "0.1.0",
+    "protocol": "zeroconf",
+    "description": "Example zeroconf",
+    "chain": "liquid",
+    "utxo_types": {},
+    "actions": {}
+}

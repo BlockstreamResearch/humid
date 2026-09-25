@@ -11,11 +11,6 @@ import { AssetHeader } from "./components/AssetHeader";
 import { Route } from "./route";
 import { useActivity } from "./useActivity";
 
-/**
- * Asset tab: an asset opened from the Overview token list. Generic chrome — the back/name header
- * and the account actions — wraps the selected chain group's `AssetView`, which renders the
- * balance and transaction history however that chain needs. Unknown ids fall back to Overview.
- */
 export function AssetPage() {
 	const { assetId } = Route.useParams();
 	const { accountGroup, chain, portfolio } = useHome();
@@ -33,10 +28,6 @@ export function AssetPage() {
 	);
 }
 
-/**
- * The resolved-asset body. Split out so activity — an on-demand, paginated query keyed by the
- * asset — is fetched with hooks called unconditionally, after the unknown-asset guard above.
- */
 function AssetContent({
 	accountGroupId,
 	chain,

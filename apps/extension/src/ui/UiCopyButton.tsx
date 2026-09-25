@@ -8,18 +8,9 @@ type UiCopyButtonProps = {
 	value: string;
 	label?: string;
 	className?: string;
-	/**
-	 * Trigger content. Pass a node to render it verbatim, or a function to receive the transient
-	 * `copied` state (so call sites can swap their own icon/label). When omitted, a default
-	 * copy icon + `label` is rendered and swaps to a checkmark + "Copied" on click.
-	 */
 	children?: ReactNode | ((copied: boolean) => ReactNode);
 };
 
-/**
- * Shared copy-to-clipboard trigger. Centralises the `navigator.clipboard.writeText` call plus the
- * transient "copied" acknowledgement (~1.5s) so call sites keep their own visuals via `children`.
- */
 export function UiCopyButton({ value, label = "Copy", className, children }: UiCopyButtonProps) {
 	const [copied, setCopied] = useState(false);
 	const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

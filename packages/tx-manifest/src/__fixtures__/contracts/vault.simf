@@ -1,0 +1,20 @@
+// The vault. Funds sit here until the owner spends them, and the address commits to the
+// reserve covenant's script hash — so the reserve behind a vault cannot be changed without
+// moving the vault first.
+//
+// SLOT_COUNT and WITH_BURN are the two parameters the document wires a bare value into. The
+// document says nothing about what they are; the type checker below is the only thing that
+// does, which is what makes them unencodable without asking the compiler.
+fn main() {
+    let owner: Pubkey = param::OWNER_PUB_KEY;
+    let asset: u256 = param::VAULT_ASSET_ID;
+    let reserve: u256 = param::RESERVE_COV_HASH;
+    let slots: u8 = param::SLOT_COUNT;
+    let burn: bool = param::WITH_BURN;
+
+    jet::verify(jet::eq_256(jet::input_amount(0).1, asset));
+    jet::verify(jet::eq_256(jet::input_script_hash(0), reserve));
+    jet::verify(jet::eq_8(slots, 2));
+    jet::verify(jet::not(burn));
+    jet::bip_0340_verify((owner, jet::sig_all_hash()), witness::SIGNATURE);
+}

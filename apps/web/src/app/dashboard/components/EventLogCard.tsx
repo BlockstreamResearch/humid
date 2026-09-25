@@ -14,13 +14,9 @@ type WalletEventLogEntry = {
 	id: number;
 	name: string;
 	payload: unknown;
-	// For account/session events, the accounts resolved by re-reading wallet_getSession. The broadcast
-	// payload is only a trigger — CAIP-25 accounts are per-origin, so the dapp reads its own session
-	// scope rather than receiving them in a shared broadcast.
 	resolvedAccounts?: string[];
 };
 
-// Every wallet provider event the extension can broadcast to window.humid (hybrid EIP-1193 + CAIP).
 const WALLET_EVENT_NAMES = [
 	"accountsChanged",
 	"chainChanged",
@@ -30,8 +26,6 @@ const WALLET_EVENT_NAMES = [
 	LIQUID_DESCRIPTOR_CHANGED_EVENT,
 ];
 
-// Events that change the account set. For these the card re-reads wallet_getSession and shows the
-// resolved accounts in the log — the broadcast payload itself is only a trigger.
 const ACCOUNT_RELEVANT_EVENTS = new Set([
 	"accountsChanged",
 	"connect",
@@ -39,12 +33,6 @@ const ACCOUNT_RELEVANT_EVENTS = new Set([
 	LIQUID_DESCRIPTOR_CHANGED_EVENT,
 ]);
 
-/**
- * Debug-only: subscribe directly to every wallet provider event on window.humid and keep a bounded,
- * newest-first log so the dashboard can show that events actually fire. This is the one place that
- * still reaches for window.humid — the context's own event bridge invalidates its queries but does not
- * expose an inspectable event feed, and this card exists purely to visualize that feed.
- */
 function useDebugWalletEvents(): { clear: () => void; log: WalletEventLogEntry[] } {
 	const [log, setLog] = useState<WalletEventLogEntry[]>([]);
 	const counterRef = useRef(0);
@@ -69,8 +57,6 @@ function useDebugWalletEvents(): { clear: () => void; log: WalletEventLogEntry[]
 					};
 					setLog((prev) => [entry, ...prev].slice(0, 50));
 
-					// The account/session events are triggers; resolve this dapp's accounts via getSession
-					// and attach them to the entry, so the log shows what the event actually leads to.
 					if (ACCOUNT_RELEVANT_EVENTS.has(name)) {
 						getSession(provider)
 							.then((result) => {

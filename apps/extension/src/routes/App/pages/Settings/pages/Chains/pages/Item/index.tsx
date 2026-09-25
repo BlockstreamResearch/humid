@@ -11,11 +11,6 @@ import { UiSpinner } from "@/ui/UiSpinner";
 import { ChainItemView } from "./components/ChainItemView";
 import { Route } from "./route";
 
-/**
- * Per-chain settings (container): resolves the chain from the route param, renders the
- * chain group's own settings component against a draft, persists it on save, and (for
- * custom chains) removes it.
- */
 export function ChainItemPage() {
 	const { chainId } = Route.useParams();
 	const { chains, isLoading } = useChains();

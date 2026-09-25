@@ -1,19 +1,9 @@
-// Storybook stub for "@/core/extension-rpc".
-//
-// The real module calls definePegasusMessageBus() at import time, which throws
-// "Messaging API wasn't set" outside a browser extension — crashing any story that
-// transitively imports a client (chainsClient, etc.). Stories drive the UI with
-// mock data (MockHomeProvider), so requestBackground should never run — with one
-// exception: the asset screen fetches its activity through the real client, so we
-// answer that one method with canned data and reject everything else loudly.
-
 import { accountsRpc } from "@/core/accounts/application/accounts-rpc/model/rpc";
 import type {
 	ActivityPage,
 	GetActivityInput,
 } from "@/core/accounts/application/accounts-rpc/model/types";
 
-// Canned per-asset activity for the Asset story (the real background is absent here).
 const MOCK_ACTIVITY: Record<string, ActivityPage> = {
 	lbtc: {
 		items: [

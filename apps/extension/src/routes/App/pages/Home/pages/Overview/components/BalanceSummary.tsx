@@ -2,11 +2,6 @@ import { chainGroupUis } from "@/routes/App/chainGroupUis";
 import { useHome } from "@/routes/App/pages/Home/HomeContext";
 import { UiSpinner } from "@/ui/UiSpinner";
 
-/**
- * Portfolio headline. The empty / syncing / error states are generic (sync-level); when there's a
- * balance, the selected chain group's `BalanceHeadline` renders it, so each chain owns how its
- * native balance looks.
- */
 export function BalanceSummary({
 	error,
 	isSyncing,

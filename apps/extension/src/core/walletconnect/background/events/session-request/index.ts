@@ -26,7 +26,6 @@ export async function handleSessionRequest(
 		setLastError(getErrorMessage(error));
 		await walletKit.respondSessionRequest({
 			response: {
-				// WalletConnect types narrow error.data to string, but JSON-RPC permits structured data.
 				error: toJsonRpcError(error) as { code: number; data?: string; message: string },
 				id: event.id,
 				jsonrpc: "2.0",

@@ -2,6 +2,7 @@ import browser from "webextension-polyfill";
 
 import type {
 	BroadcastInput,
+	BroadcastTxInput,
 	ReadActivityInput,
 	ScanInput,
 	SyncWorkerClient,
@@ -21,7 +22,6 @@ type ChromeOffscreenApi = {
 	hasDocument: () => Promise<boolean>;
 };
 
-/** The Chrome-only offscreen API if this context exposes it (undefined on Firefox / old Chrome). */
 export function getChromeOffscreen(): ChromeOffscreenApi | undefined {
 	return (globalThis as { chrome?: { offscreen?: ChromeOffscreenApi } }).chrome?.offscreen;
 }
@@ -30,11 +30,9 @@ const OFFSCREEN_DOCUMENT_URL = "src/offscreen.html";
 
 let creatingDocument: Promise<void> | null = null;
 
-/** Ensure the single offscreen document exists, de-duping concurrent creation attempts. */
 async function ensureOffscreenDocument(offscreen: ChromeOffscreenApi): Promise<void> {
 	if (await offscreen.hasDocument()) return;
 
-	// createDocument rejects if a document already exists or is mid-creation, so share one promise.
 	creatingDocument ??= offscreen
 		.createDocument({
 			justification:
@@ -49,9 +47,9 @@ async function ensureOffscreenDocument(offscreen: ChromeOffscreenApi): Promise<v
 	await creatingDocument;
 }
 
-/** A scan/read/broadcast request payload for the offscreen document (the target is added on send). */
 type OffscreenRequestPayload =
 	| { input: BroadcastInput; op: "broadcast" }
+	| { input: BroadcastTxInput; op: "broadcastTransaction" }
 	| { input: ScanInput; op: "scan" | "scanAndRead" }
 	| { input: ReadActivityInput; op: "readActivity" };
 
@@ -68,13 +66,19 @@ async function requestScan(payload: OffscreenRequestPayload): Promise<OffscreenS
 	})) as OffscreenScanResponse;
 }
 
-/**
- * Client used by Chrome's MV3 service worker: delegate scans to the offscreen document (which can
- * spawn a worker) over runtime messaging and await the result. The heavy scan runs fully off the
- * service worker thread — the whole reason this path exists.
- */
 export function createOffscreenScanClient(): SyncWorkerClient {
 	return {
+		async broadcastTransaction(input) {
+			const response = await requestScan({ input, op: "broadcastTransaction" });
+
+			if (!response.ok) throw new Error(response.error);
+
+			if (response.op !== "broadcastTransaction") {
+				throw new Error("Unexpected offscreen scan response.");
+			}
+
+			return { txid: response.txid };
+		},
 		async broadcast(input) {
 			const response = await requestScan({ input, op: "broadcast" });
 

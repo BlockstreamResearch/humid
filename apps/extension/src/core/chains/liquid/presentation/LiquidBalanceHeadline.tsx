@@ -1,7 +1,6 @@
 import { formatUnits } from "@/helpers/formatters";
 import { UiSpinner } from "@/ui/UiSpinner";
 
-/** Liquid balance headline: the native L-BTC glyph, the amount, and a sync hint. */
 export function LiquidBalanceHeadline({
 	isSyncing,
 	native,

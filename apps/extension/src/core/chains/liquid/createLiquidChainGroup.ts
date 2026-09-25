@@ -7,7 +7,6 @@ import { createBuiltInLiquidChains } from "./chains/createBuiltInLiquidChains";
 import { LIQUID_CHAIN_GROUP_ID } from "./chains/LiquidChainRecord";
 import type { LiquidChainGroup } from "./contract";
 
-/** How many activity entries one on-demand `getActivity` page returns. */
 const ACTIVITY_PAGE_SIZE = 25;
 
 export function createLiquidChainGroup(): LiquidChainGroup {
@@ -23,8 +22,6 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 			async estimateMaxSend(input, estimate) {
 				const account = await walletBackend.resolveAccount(input);
 				const rawAssetId = estimate.rawAssetId ?? account.rawPolicyAssetId;
-				// Estimate MUST sync (inspectTransfer deliberately skips it): the drain selects real UTXOs
-				// and the LWK fee depends on them, and the issued-asset max is read off the synced balance.
 				await walletBackend.syncAccount(account);
 
 				return walletBackend.estimateMaxSend(account, estimate, rawAssetId);
@@ -43,12 +40,13 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 			async getReceiveAddress(input) {
 				const account = await walletBackend.resolveAccount(input);
 
-				return walletBackend.getReceiveAddress(account);
+				return {
+					...walletBackend.getReceiveAddress(account),
+					unconfidential: walletBackend.getSigningAddress(account).unconfidential,
+				};
 			},
 			async inspectTransfer(input, transfer) {
 				const account = await walletBackend.resolveAccount(input);
-				// No `assetId` means the native policy asset (L-BTC). Preview only — no sync needed, since
-				// `inspectTransfer` just validates the recipient and resolves the asset (no UTXO selection).
 				const rawAssetId = transfer.rawAssetId ?? account.rawPolicyAssetId;
 
 				return walletBackend.inspectTransfer(account, transfer, rawAssetId);
@@ -74,9 +72,6 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 			async sendTransfer(input, transfer) {
 				const account = await walletBackend.resolveAccount(input);
 				const rawAssetId = transfer.rawAssetId ?? account.rawPolicyAssetId;
-				// Each resolve derives a fresh (unsynced) wallet, so sync it before building — the same
-				// order the dapp path uses (review syncs, then execute builds/signs/broadcasts). The
-				// signing + offscreen broadcast inside `sendTransfer` are unchanged.
 				await walletBackend.syncAccount(account);
 
 				return walletBackend.sendTransfer(account, transfer, rawAssetId);

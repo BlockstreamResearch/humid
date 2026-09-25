@@ -5,7 +5,6 @@ import type { LwkWasmModule } from "../loadLwkWasm";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
 
-/** One asset's confirmed balance (in sats) from a wollet's `Balance` (its `entries()` is `any`). */
 export function readWalletBalanceForAsset(
 	wollet: LwkWollet,
 	chainId: LiquidChainId,
@@ -36,12 +35,6 @@ export function readWalletBalanceForAsset(
 	return "0";
 }
 
-/**
- * A wollet's transaction history for one asset, newest first (unconfirmed on top).
- * Direction and amount come from each transaction's net balance for that asset
- * (negative = sent). Confidential Liquid has no visible counterparty, so callers key
- * display off the txid.
- */
 export function readWalletActivityForAsset(
 	wollet: LwkWollet,
 	rawAssetId: string,
@@ -69,12 +62,10 @@ export function readWalletActivityForAsset(
 	);
 }
 
-/** Every asset balance the wollet holds, raw as (asset id hex → base-unit amount). */
 export function readWalletAssetBalances(wollet: LwkWollet): Map<string, bigint> {
 	return normalizeBalanceMap(wollet.balance().entries());
 }
 
-/** Normalize LWK's `Balance.entries()` (documented as a Map; defended against variants). */
 function normalizeBalanceMap(entries: unknown): Map<string, bigint> {
 	const result = new Map<string, bigint>();
 

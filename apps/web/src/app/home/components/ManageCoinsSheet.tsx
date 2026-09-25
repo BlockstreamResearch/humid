@@ -31,11 +31,6 @@ const DEFAULT_FEE = "1000";
 
 const utxoKey = (utxo: Utxo) => `${utxo.txid}:${utxo.vout}`;
 
-/**
- * Coin control: merge several coins into one, or split one coin into several — each a real end-to-end
- * exercise of signPset. The dapp builds the unblinded PSET (`lib/pset.ts`); the wallet blinds, signs
- * and broadcasts it. Both flows spend back to the wallet's own address (address reuse is fine here).
- */
 export function ManageCoinsSheet({ open, onOpenChange }: OverlayProps) {
 	const { chainId, supportedChains, wallet } = useHumidContext();
 	const ticker =
@@ -71,7 +66,6 @@ export function ManageCoinsSheet({ open, onOpenChange }: OverlayProps) {
 		if (!result.ok) toast.error("Couldn't load coins", { description: result.error });
 	};
 
-	// Fetch once when the sheet opens.
 	useEffect(() => {
 		if (open && load.status === "idle") void fetchCoins();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,7 +73,6 @@ export function ManageCoinsSheet({ open, onOpenChange }: OverlayProps) {
 
 	const loaded = load.status === "success" ? load.data : undefined;
 	const policyAssetId = loaded?.policyAssetId;
-	// Only native, spendable coins participate (a single asset keeps the balance math trivial).
 	const coins = useMemo(
 		() => (loaded?.utxos ?? []).filter((utxo) => utxo.assetId === policyAssetId && utxo.spendable),
 		[loaded, policyAssetId],
@@ -92,7 +85,6 @@ export function ManageCoinsSheet({ open, onOpenChange }: OverlayProps) {
 			if (next.has(key)) {
 				next.delete(key);
 			} else {
-				// Split spends exactly one coin; selecting another replaces the selection.
 				if (mode === "split") next.clear();
 				next.add(key);
 			}
@@ -102,7 +94,6 @@ export function ManageCoinsSheet({ open, onOpenChange }: OverlayProps) {
 
 	const switchMode = (next: Mode) => {
 		setMode(next);
-		// Split allows a single input; drop all but the first if we came from merge.
 		if (next === "split") {
 			setSelected((previous) => new Set([...previous].slice(0, 1)));
 		}
@@ -114,7 +105,6 @@ export function ManageCoinsSheet({ open, onOpenChange }: OverlayProps) {
 		[coins, selected],
 	);
 
-	// Everything below is derived, in bigint base units, from the current selection.
 	const plan = useMemo((): Plan => {
 		const feeSats = /^\d+$/.test(fee.trim()) ? BigInt(fee.trim()) : null;
 		const partCount = Number.parseInt(parts, 10);

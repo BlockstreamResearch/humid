@@ -19,19 +19,13 @@ export type CreateWalletMethodInput<
 	TReview,
 	TResult,
 > = {
-	/** What the user is shown when this method runs without a standing permission. */
 	confirmation: ConfirmationPolicy<TParams, TContext, TReview>;
 	execute: (input: WalletMethodInput<TParams, TContext, TReview>) => Promise<TResult> | TResult;
-	/** RPC method name. Doubles as the permission id and the registry's dispatch key. */
 	id: string;
 	parse: (params: unknown) => TParams;
 	review: (input: { context: TContext; params: TParams }) => Promise<TReview> | TReview;
 };
 
-/**
- * A wallet RPC method handler with its id attached, so a chain-agnostic registry can key
- * dispatch straight off the method fns.
- */
 export type WalletMethod<TContext extends WalletRpcBaseContext, TResult> = ((
 	params: unknown,
 	context: TContext,
@@ -56,8 +50,6 @@ export function createWalletMethod<
 
 		const reviewed = await review({ context, params: parsedParams });
 
-		// One homogeneous permission gate: a standing permission means "run without asking",
-		// its absence means the user confirms this call. Nothing is denied outright.
 		if (!context.authorization.isGranted(id)) {
 			if (!context.confirm) {
 				throw new WalletRpcResourceUnavailableError(

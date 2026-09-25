@@ -91,7 +91,6 @@ export async function unwrapVaultDataKey(input: {
 	};
 }
 
-/** Import a raw AES-GCM data key (e.g. one restored from session storage) as non-extractable. */
 export async function importVaultDataKey(rawDataKey: Uint8Array): Promise<CryptoKey> {
 	return crypto.subtle.importKey("raw", toArrayBuffer(rawDataKey), { name: "AES-GCM" }, false, [
 		"encrypt",
@@ -99,7 +98,6 @@ export async function importVaultDataKey(rawDataKey: Uint8Array): Promise<Crypto
 	]);
 }
 
-/** Export a data key's raw bytes (the generated data key is extractable). */
 export async function exportVaultDataKey(dataKey: CryptoKey): Promise<Uint8Array> {
 	return new Uint8Array(await crypto.subtle.exportKey("raw", dataKey));
 }

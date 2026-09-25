@@ -62,12 +62,6 @@ export function ensureChainAccount<TContext extends object, TMetadata extends Ch
 	});
 
 	if (conflictingChainAccount) {
-		// This (group, chain, type) already has a chain account, but with a different identifier than
-		// the one we just materialized. For a deterministic account type (a descriptor wallet, whose
-		// identifier is a pure function of group + chain + seed), a mismatch means the stored record is
-		// stale — e.g. persisted under the wrong group by an earlier bug. The freshly materialized
-		// identity is authoritative, so reconcile the record in place (keeping its id + createdAt)
-		// instead of failing: this self-heals corrupted state rather than wedging every future call.
 		const reconciledAt = input.createdAt ?? Date.now();
 		const reconciledChainAccount: ChainAccountRecord<TMetadata> = {
 			...conflictingChainAccount,

@@ -23,7 +23,6 @@ import { useAsyncAction } from "./useAsyncAction";
 
 type OverlayProps = { open: boolean; onOpenChange: (open: boolean) => void };
 
-/** Build a wallet transfer: form → review → confirm, then a success (txid) or error state in-sheet. */
 export function TransferSheet({ open, onOpenChange }: OverlayProps) {
 	const { chainId, supportedChains, wallet } = useHumidContext();
 	const network = supportedChains.find((chain) => chain.caipNetworkId === chainId);
@@ -51,7 +50,6 @@ export function TransferSheet({ open, onOpenChange }: OverlayProps) {
 
 	const handleOpenChange = (next: boolean) => {
 		onOpenChange(next);
-		// Reset after the close animation so the form doesn't flash mid-exit.
 		if (!next) window.setTimeout(resetForm, 250);
 	};
 

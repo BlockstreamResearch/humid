@@ -6,19 +6,11 @@ import { deriveDataStatus, type DataStatus } from "./status";
 export const HUMID_BALANCE_QUERY_KEY = ["humid", "balance"] as const;
 
 export type HumidBalance = {
-	/** Native L-BTC (policy asset) balance in base units. */
 	balance: bigint;
 	status: DataStatus;
-	/** Fetch now regardless of policy (prompts when the method is not silent). */
 	refresh: () => void;
 };
 
-/**
- * Native L-BTC balance for the active chain. `getBalance()` with no asset id resolves the policy
- * asset, so `result.balance` is the L-BTC base-unit amount. Policy-aware: the query auto-runs only
- * when connected and the wallet marks `getBalance` silent — otherwise the status is `needs-approval`
- * and the value loads only when `refresh` is called explicitly.
- */
 export function useHumidBalance(args: {
 	wallet: WalletClient;
 	chainId: string;

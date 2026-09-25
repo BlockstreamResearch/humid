@@ -17,11 +17,6 @@ export type HomeValueInput = {
 	selectChain: (chainId: ChainId) => void;
 };
 
-/**
- * Assembles the home context value from the resolved account and chain axes plus the
- * portfolio axis — all backend-backed. Portfolio is keyed by the selected account and
- * chain so it re-reads on a switch. Storybook bypasses this via MockHomeProvider.
- */
 export function useHomeValue(input: HomeValueInput) {
 	const portfolio = usePortfolio({
 		accountGroupId: input.accountGroup.id,

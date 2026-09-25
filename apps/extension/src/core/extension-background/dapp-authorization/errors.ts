@@ -1,7 +1,3 @@
-/**
- * Errors surfaced to dapps over the injected CAIP-25/27 surface. Codes follow
- * EIP-1193 provider errors where applicable and CAIP-25 (5xxx) for scope issues.
- */
 export const DAPP_AUTHORIZATION_ERROR_CODES = {
 	INVALID_PARAMS: -32602,
 	UNAUTHORIZED: 4100, // no / expired session for the requested method

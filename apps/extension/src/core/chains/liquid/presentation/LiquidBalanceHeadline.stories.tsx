@@ -20,10 +20,8 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The settled balance headline. */
 export const Amount: Story = {};
 
-/** While the open popup re-syncs the portfolio, a subtle "Syncing…" hint appears under the amount. */
 export const Syncing: Story = {
 	args: { isSyncing: true },
 };

@@ -10,11 +10,6 @@ import {
 	UiDropdownMenuTrigger,
 } from "@/ui/UiDropdownMenu";
 
-/**
- * Header trigger (next to the account switcher) opening the dapps connected to the selected account,
- * MetaMask-style. Disconnecting drops just this account from the dapp's grant. The badge counts the
- * selected account's connections.
- */
 export function ConnectedDappsMenu() {
 	const { accountGroup } = useHome();
 	const { dapps, isError, isLoading, revoke, revokingKey } = useConnectedDapps(accountGroup?.id);

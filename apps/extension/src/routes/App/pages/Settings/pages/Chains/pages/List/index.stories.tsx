@@ -31,5 +31,4 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** The chains list: chain groups with their chains. */
 export const Default: Story = {};

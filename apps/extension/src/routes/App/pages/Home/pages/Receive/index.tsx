@@ -4,10 +4,6 @@ import { useHome } from "../../HomeContext";
 import { ReceiveView } from "./components/ReceiveView";
 import { useReceiveAddress } from "./useReceiveAddress";
 
-/**
- * Receive tab: derives the account's receive address for the selected chain (LWK, on
- * demand) and shows it as a QR + copyable string. Reached from the Receive action.
- */
 export function ReceivePage() {
 	const { accountGroup, chain } = useHome();
 	const query = useReceiveAddress({ accountGroupId: accountGroup.id, chainId: chain.id });
@@ -36,6 +32,7 @@ export function ReceivePage() {
 			address={query.data.address}
 			accountName={accountGroup.name}
 			chainName={chain.name}
+			unconfidential={query.data.unconfidential}
 		/>
 	);
 }

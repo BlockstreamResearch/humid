@@ -16,12 +16,6 @@ export const LIQUID_WALLET_RPC_METHODS = {
 
 export const LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT = "bip122_walletDescriptorChanged";
 
-/**
- * CAIP-25 events advertised in a Liquid session's scope (both transports). The dapp subscribes to
- * these and the wallet emits each on the matching state change. Hybrid naming: `accountsChanged` /
- * `chainChanged` are the EIP-1193 core (MetaMask parity + what reown AppKit's adapter listens for);
- * `bip122_walletDescriptorChanged` is the ELIP-1 chain-scoped notification.
- */
 export const LIQUID_WALLETCONNECT_EVENTS = [
 	"accountsChanged",
 	"chainChanged",
@@ -69,20 +63,13 @@ export type LiquidSendTransferParams = {
 	assetId?: LiquidAssetId;
 	memo?: string;
 	recipientAddress: string;
-	/**
-	 * Set only by the in-extension native L-BTC "Max" flow: DRAIN every L-BTC input to the recipient
-	 * (ignoring `amount`) so the broadcast pays the LWK-computed fee off the current UTXO set, immune to
-	 * fee drift between the estimate and the re-sync inside the send. The dapp path never sets it.
-	 */
 	sendAll?: boolean;
 };
 
-/** Params for a max-send estimate: the recipient the native drain PSET is built against. */
 export type LiquidEstimateMaxSendParams = {
 	recipientAddress: string;
 };
 
-/** The max sendable amount (base-unit string) plus the L-BTC fee the estimate assumes ("0" if issued). */
 export type LiquidEstimateMaxSendResult = {
 	feeSats: string;
 	maxAmount: string;

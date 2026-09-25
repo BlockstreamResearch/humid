@@ -60,17 +60,12 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** An injected dapp and a WalletConnect dapp connected to the account. */
 export const Populated: Story = {};
 
-/** No dapps connected yet. */
 export const Empty: Story = { args: { dapps: [] } };
 
-/** Initial load. */
 export const Loading: Story = { args: { isLoading: true } };
 
-/** The backend read failed. */
 export const Failed: Story = { args: { isError: true } };
 
-/** The injected dapp mid-disconnect. */
 export const Revoking: Story = { args: { revokingKey: "dapp-session:1" } };

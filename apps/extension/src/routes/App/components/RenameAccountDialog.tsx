@@ -10,11 +10,6 @@ import {
 } from "@/ui/UiDialog";
 import { UiInput } from "@/ui/UiInput/base";
 
-/**
- * Controlled dialog for renaming an account. Presentational: the caller owns the
- * mutation and passes `onSubmit`; the dialog only validates a trimmed, non-empty name.
- * Pass a `key` tied to the account so the input resets when the target changes.
- */
 export function RenameAccountDialog({
 	currentName,
 	onOpenChange,

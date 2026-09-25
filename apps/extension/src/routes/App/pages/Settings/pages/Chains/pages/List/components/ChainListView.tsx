@@ -11,10 +11,6 @@ type ChainGroupView = {
 	name: string;
 };
 
-/**
- * Chains list: chain groups with their chains; each chain opens its settings, and each
- * group has its own "Add chain" (a chain is added within — and by — its chain group).
- */
 export function ChainListView({ groups }: { groups: ChainGroupView[] }) {
 	return (
 		<div className="flex size-full min-h-0 flex-col">
