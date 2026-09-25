@@ -31,7 +31,7 @@ png() { # png <svg> <size> <out>
 
 mkdir -p "$EXT" "$WEB"
 
-# Extension: 16/32 come from the bubble-less optical variant, the rest from the full icon.
+# Extension: 16/32 come from the optical variant, the rest from the full icon.
 png "$ICON_SMALL" 16 "$EXT/16.png"
 png "$ICON_SMALL" 32 "$EXT/32.png"
 for size in 48 96 128; do

@@ -1,5 +1,5 @@
-<!-- Optical variant for 16px/32px. The three bubbles land under half a pixel there and only add
-     noise, so they are dropped and the bowl is scaled up to ~80% of the tile instead. -->
+<!-- Optical variant for 16px/32px. The bowl is scaled up to ~80% of the tile, and the three bubbles
+     are redrawn larger than in humid-icon.svg so each stays a distinct dot at 32px. -->
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
 <rect width="512" height="512" rx="66" fill="#090F19"/>
 <g transform="translate(-117.72 -144.63) scale(1.49489)">
@@ -9,6 +9,9 @@
 <path d="M117.664 310.422C108.275 285.5 157 231.5 262.5 302.5C312 335.813 351.664 330.422 386.253 290.124C375.186 355.82 318.036 405.867 249.194 405.867C186.164 404.422 140.664 367.922 120.164 317.422C119.261 315.197 119.164 314.922 117.664 310.422Z" fill="url(#humid_wave_bottom)"/>
 </g>
 </g>
+<circle cx="300" cy="152" r="30" fill="url(#humid_bubble)"/>
+<circle cx="236" cy="90" r="24" fill="url(#humid_bubble)"/>
+<circle cx="280" cy="34" r="19" fill="url(#humid_bubble)"/>
 <defs>
 <mask id="humid_mark_bowl" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="113" y="131" width="274" height="274">
 <circle cx="250" cy="268" r="137" fill="#D9D9D9"/>
@@ -26,5 +29,9 @@
 <stop stop-color="#00A0D5"/>
 <stop offset="0.836538" stop-color="#002A80"/>
 </linearGradient>
+<radialGradient id="humid_bubble" cx="0" cy="0" r="1" gradientUnits="objectBoundingBox" gradientTransform="translate(0.5 0.5) scale(0.5)">
+<stop stop-color="#4EFFF5"/>
+<stop offset="1" stop-color="#00F3E5"/>
+</radialGradient>
 </defs>
 </svg>
