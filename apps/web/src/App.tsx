@@ -4,7 +4,7 @@ import { useState } from "react";
 import Dashboard from "@/app/dashboard";
 import FormatSupport from "@/app/format";
 import Home from "@/app/home";
-import ManifestInspector from "@/app/manifest";
+import ManifestRunner from "@/app/manifest";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -22,7 +22,7 @@ export function App() {
 						<Home
 							onOpenDeveloper={() => setView("developer")}
 							onOpenFormatSupport={() => setView("format")}
-							onOpenManifestInspector={() => setView("manifest")}
+							onOpenManifestRunner={() => setView("manifest")}
 						/>
 					);
 				}
@@ -44,7 +44,7 @@ export function App() {
 								return <FormatSupport />;
 							}
 
-							return <ManifestInspector />;
+							return <ManifestRunner />;
 						})()}
 					</div>
 				);
