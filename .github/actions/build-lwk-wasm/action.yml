@@ -3,8 +3,8 @@ description: >-
   Build the lwk_wasm WASM package from the vendored `lwk` git submodule so the
   `file:lwk/lwk_wasm/pkg` dependency resolves. `lwk_wasm/pkg` is a wasm-pack build
   artifact that is not committed, so it must be produced in CI. The output is cached by
-  the pinned submodule commit, so the Rust/wasm-pack build only runs when the submodule
-  bumps. Requires the repo to be checked out with `submodules: recursive`.
+  the pinned submodule commit, build profile and simplicity feature. Requires the repo
+  to be checked out with `submodules: recursive`.
 
 inputs:
   profile:
@@ -24,7 +24,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: lwk/lwk_wasm/pkg
-        key: lwk-wasm-${{ runner.os }}-${{ steps.lwk.outputs.sha }}-${{ inputs.profile }}
+        key: lwk-wasm-${{ runner.os }}-${{ steps.lwk.outputs.sha }}-${{ inputs.profile }}-simplicity
 
     - name: Install Rust toolchain (1.85.0 + wasm32)
       if: steps.pkg-cache.outputs.cache-hit != 'true'
@@ -54,4 +54,4 @@ runs:
       if: steps.pkg-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: lwk/lwk_wasm
-      run: wasm-pack build --${{ inputs.profile }}
+      run: wasm-pack build --${{ inputs.profile }} --features simplicity

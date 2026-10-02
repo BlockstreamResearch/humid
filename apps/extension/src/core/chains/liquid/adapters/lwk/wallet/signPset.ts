@@ -1,4 +1,6 @@
-import type { Pset, PsetDetails, Wollet } from "lwk_wasm";
+import { Buffer } from "buffer";
+
+import type { Pset, Wollet } from "lwk_wasm";
 
 import {
 	WALLET_RPC_ERROR_REASONS,
@@ -12,6 +14,7 @@ import type {
 import type { LiquidSignPsetReview } from "../../../domain/pset/types";
 import { loadLwkWasm } from "../loadLwkWasm";
 import { getSyncWorkerClient } from "../sync-worker/createSyncWorkerClient";
+import { blindPset, PsetReader } from "./blindPset";
 import { getLwkImplementation } from "./getLwkImplementation";
 
 export async function blindAndInspectPset(
@@ -23,10 +26,10 @@ export async function blindAndInspectPset(
 	const pset = new lwk.Pset(psetBase64);
 	let blindedPset: Pset | undefined;
 	try {
-		blindedPset = wollet.blind(pset);
+		blindedPset = blindPset(lwk, wollet, pset);
 		return inspectPset(wollet, blindedPset);
 	} finally {
-		blindedPset?.free();
+		if (blindedPset !== pset) blindedPset?.free();
 		pset.free();
 	}
 }
@@ -54,7 +57,10 @@ function inspectPset(wollet: Wollet, pset: Pset): LiquidSignPsetReview {
 		outputs.forEach(own);
 		return {
 			pset: pset.toString(),
-			inputs: inputs.map((input, index) => ({ index, sighashType: input.sighash() })),
+			inputs: inputs.map((input, index) => ({
+				index,
+				sighashType: input.sighash(),
+			})),
 			fees: Array.from(fees.entries() as Map<string, bigint>, ([asset, amount]) => ({
 				asset,
 				amount: amount.toString(),
@@ -107,24 +113,23 @@ export async function signPset(
 		}
 
 		const requestedIndexes = new Set(params.signInputs.map((requested) => requested.index));
-		const signaturesBefore = countSignaturesPerInput(implementation.wollet.psetDetails(pset));
+		const signaturesBefore = readInputSignatures(pset);
 
 		// sign and finalize consume their input, including when they throw.
 		const signingPset = pset;
 		pset = undefined;
 		pset = implementation.signer.sign(signingPset);
 
-		const overSignedIndex = countSignaturesPerInput(
-			implementation.wollet.psetDetails(pset),
-		).findIndex(
-			(count, index) => count > (signaturesBefore[index] ?? 0) && !requestedIndexes.has(index),
+		const overSignedInputIndex = readInputSignatures(pset).findIndex(
+			(signatures, index) =>
+				!requestedIndexes.has(index) &&
+				[...signatures].some(([key, value]) => !signaturesBefore[index].get(key)?.equals(value)),
 		);
-
-		if (overSignedIndex !== -1) {
+		if (overSignedInputIndex !== -1) {
 			throw new WalletRpcResourceUnavailableError(
 				"Refusing to sign a Liquid PSET input the request did not list.",
 				{
-					overSignedInputIndex: overSignedIndex,
+					overSignedInputIndex,
 					requestedInputIndexes: [...requestedIndexes],
 				},
 				WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST,
@@ -171,18 +176,20 @@ export async function signPset(
 	}
 }
 
-function countSignaturesPerInput(details: PsetDetails): number[] {
+function readInputSignatures(pset: Pset) {
+	const reader = new PsetReader(Buffer.from(pset.toString(), "base64"));
+	reader.map();
+	const inputs = pset.inputs();
 	try {
-		const inputs = details.signatures();
-		try {
-			return inputs.map((inputSignatures) => {
-				const signatures: unknown = inputSignatures.hasSignature();
-				return Array.isArray(signatures) ? signatures.length : 0;
-			});
-		} finally {
-			for (const input of inputs) input.free();
-		}
+		return inputs.map(
+			() =>
+				new Map(
+					[...reader.map().entries()].filter(([key]) =>
+						["02", "13", "14"].includes(key.slice(0, 2)),
+					),
+				),
+		);
 	} finally {
-		details.free();
+		for (const input of inputs) input.free();
 	}
 }

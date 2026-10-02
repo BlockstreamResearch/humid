@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { getWalletUtxosForAsset } from "./getUTXOs";
 import { readExplicitWalletUtxos } from "./readExplicitWalletUtxos";
 
 type OutputSpec = {
@@ -21,10 +22,13 @@ function walletTx(
 		extInt: () => spec.chain ?? 0,
 		height: () => spec.height,
 		wildcardIndex: () => spec.index ?? 0,
-		outpoint: () => ({ txid: () => ({ toString: () => txid }), vout: () => spec.vout }),
+		outpoint: () => ({
+			txid: () => ({ toString: () => txid }),
+			vout: () => spec.vout,
+		}),
 		scriptPubkey: () => ({ toString: () => `script:${spec.vout}` }),
 		unblinded: () => ({
-			asset: () => ({ toString: () => "asset" }),
+			asset: () => ({ toString: () => "cc".repeat(32) }),
 			value: () => ({ toString: () => spec.amount }),
 		}),
 	});
@@ -50,12 +54,54 @@ function walletTx(
 	};
 }
 
-const wollet = (txs: unknown[]) => ({ transactions: () => txs }) as never;
+const signingAddress = (index: number) => {
+	expect(index).toBe(0);
+	return {
+		address: () => ({ toString: () => "confidential-signing-address" }),
+	};
+};
+
+const wollet = (txs: unknown[]) =>
+	({
+		address: signingAddress,
+		transactions: () => txs,
+	}) as never;
 
 const A = "aa".repeat(32);
 const B = "bb".repeat(32);
 
 describe("the wallet's own outputs that hide nothing", () => {
+	test("the public UTXO response includes an explicit redemption reserve", () => {
+		const account = {
+			chainId: "bip122:" + "11".repeat(16),
+			implementation: {
+				wollet: {
+					address: signingAddress,
+					utxos: () => [],
+					transactions: () => [
+						walletTx(A, [
+							{ amount: "10000", blinded: true, height: 12, vout: 0 },
+							{ amount: "1", blinded: true, height: 12, vout: 1 },
+							{ amount: "2000", blinded: false, height: 12, vout: 2 },
+						]),
+					],
+				},
+			},
+		} as never;
+
+		expect(getWalletUtxosForAsset(account, "cc".repeat(32))).toMatchObject([
+			{
+				address: "confidential-signing-address",
+				amount: "2000",
+				assetId: `bip122:${"11".repeat(16)}/elip144:${"cc".repeat(32)}`,
+				confidential: false,
+				spendable: true,
+				txid: A,
+				vout: 2,
+			},
+		]);
+	});
+
 	test("an unspent explicit output is reported", () => {
 		const utxos = readExplicitWalletUtxos(
 			wollet([walletTx(A, [{ amount: "30000", blinded: false, height: 12, vout: 0 }])]),
@@ -63,6 +109,7 @@ describe("the wallet's own outputs that hide nothing", () => {
 
 		expect(utxos).toHaveLength(1);
 		expect(utxos[0]).toMatchObject({
+			address: "confidential-signing-address",
 			amountSats: "30000",
 			confidential: false,
 			spendable: true,
@@ -153,7 +200,10 @@ describe("the wallet's own outputs that hide nothing", () => {
 
 	test("an input the wallet did not own does not remove anything", () => {
 		const tx = walletTx(A, [{ amount: "30000", blinded: false, height: 1, vout: 0 }]);
-		const withForeignInput = { ...tx, inputs: () => [{ get: () => undefined }] };
+		const withForeignInput = {
+			...tx,
+			inputs: () => [{ get: () => undefined }],
+		};
 
 		expect(readExplicitWalletUtxos(wollet([withForeignInput]))).toHaveLength(1);
 	});
