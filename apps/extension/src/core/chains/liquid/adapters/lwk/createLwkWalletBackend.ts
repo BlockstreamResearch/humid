@@ -8,6 +8,7 @@ import {
 	getWalletUtxosForAsset,
 } from "./wallet/getUTXOs";
 import { getWalletDescriptorEntries } from "./wallet/getWalletDescriptor";
+import { preparePsetSigning } from "./wallet/preparePsetSigning";
 import { readChainTipHeight } from "./wallet/readChainTipHeight";
 import { createLwkLiquidAccount } from "./wallet/resolveAccount";
 import { estimateMaxSend, inspectTransfer, sendTransfer } from "./wallet/sendTransfer";
@@ -28,6 +29,7 @@ export function createLwkWalletBackend(): LiquidWalletBackend {
 		getTipHeight: readChainTipHeight,
 		getUtxos: getWalletUtxosForAsset,
 		inspectMessageSigning,
+		preparePsetSigning,
 		inspectTransfer,
 		resolveAccount: createLwkLiquidAccount,
 		sendTransfer,

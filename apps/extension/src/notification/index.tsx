@@ -11,7 +11,9 @@ import type { PegasusMsgProtocolMap } from "@/background";
 import { ConfirmProvider } from "@/common/Confirmation";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
+import { liquidSigningConfirmationRenderers } from "@/core/chains/liquid/application/methods/LiquidSigningConfirmation";
 import { processCtConfirmationRenderer } from "@/core/chains/liquid/application/methods/processConfidentialTransaction/ProcessCtConfirmation";
+import { walletUnlockConfirmationRenderer } from "@/core/extension-background/confirmations/WalletUnlockConfirmation";
 import { dappAddChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappAddChainConfirmation";
 import { dappConnectConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappConnectConfirmation";
 import { dappSwitchChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappSwitchChainConfirmation";
@@ -30,10 +32,12 @@ if (!rootElement) {
 }
 
 const confirmationRenderers = [
+	walletUnlockConfirmationRenderer,
 	dappConnectConfirmationRenderer,
 	dappAddChainConfirmationRenderer,
 	dappSwitchChainConfirmationRenderer,
 	processCtConfirmationRenderer,
+	...liquidSigningConfirmationRenderers,
 ];
 
 createRoot(rootElement).render(

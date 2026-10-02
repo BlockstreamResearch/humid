@@ -6,7 +6,7 @@ let walletKitPromise: Promise<WalletKitClient> | null = null;
 let relayStatus: WalletConnectRelayStatus = "unknown";
 let lastError: string | null = null;
 let listenersBound = false;
-let backgroundOptions: WalletConnectBackgroundOptions = {};
+let backgroundOptions: WalletConnectBackgroundOptions;
 
 export function setBackgroundOptions(options: WalletConnectBackgroundOptions): void {
 	backgroundOptions = options;

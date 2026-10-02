@@ -10,4 +10,5 @@ export type WalletKitClient = Awaited<ReturnType<typeof WalletKit.init>>;
 export type WalletConnectBackgroundOptions = {
 	confirm?: WalletConnectConfirmationHandler;
 	readPortfolioSnapshot?: WalletConnectReadPortfolioSnapshot;
+	requestUnlock: (origin: string) => Promise<void>;
 };

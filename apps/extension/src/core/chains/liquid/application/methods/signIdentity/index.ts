@@ -29,6 +29,7 @@ export const signLiquidIdentity = createWalletMethod<
 	confirmation: ({ context, params }) => ({
 		data: {
 			chainId: context.chain.id,
+			challenge: params.challenge,
 			challengeFingerprint: fingerprintChallenge(params.challenge),
 			curve: params.curve,
 			identity: params.identity,

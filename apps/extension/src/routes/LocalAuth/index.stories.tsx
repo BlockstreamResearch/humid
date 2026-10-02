@@ -53,6 +53,27 @@ export const UnlockError: Story = {
 		await userEvent.type(canvas.getByPlaceholderText("Enter passphrase"), "wrong-pass");
 		await userEvent.click(canvas.getByRole("button", { name: /^unlock$/i }));
 		await waitFor(() => expect(canvas.getByText(UNLOCK_ERROR)).toBeInTheDocument());
+		const password = canvas.getByLabelText<HTMLInputElement>("Password");
+		await waitFor(() => expect(password).toHaveFocus());
+		await expect(password.selectionStart).toBe(0);
+		await expect(password.selectionEnd).toBe(password.value.length);
+		await userEvent.type(password, "replacement");
+		await expect(canvas.queryByText(UNLOCK_ERROR)).not.toBeInTheDocument();
+	},
+};
+
+export const StillLocked: Story = {
+	parameters: {
+		vault: { behavior: "success", status: { hasVault: true, isUnlocked: false } },
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.type(canvas.getByLabelText("Password"), "password");
+		await userEvent.click(canvas.getByRole("button", { name: /^unlock$/i }));
+		await expect(await canvas.findByRole("alert")).toHaveTextContent(
+			"Could not unlock the wallet.",
+		);
+		await expect(canvas.getByRole("heading", { name: "Unlock Humid" })).toBeInTheDocument();
 	},
 };
 
@@ -64,7 +85,7 @@ export const ResetCancelled: Story = {
 		const canvas = within(canvasElement);
 		const documentBody = within(canvasElement.ownerDocument.body);
 
-		await userEvent.click(canvas.getByRole("button", { name: /reset local wallet/i }));
+		await userEvent.click(canvas.getByRole("button", { name: /^reset wallet$/i }));
 		await userEvent.click(documentBody.getByRole("button", { name: /^decline$/i }));
 		await waitFor(() =>
 			expect(

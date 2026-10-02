@@ -1,9 +1,14 @@
 import { definePegasusMessageBus } from "@webext-pegasus/transport";
+import { z } from "zod";
 
 import type { PegasusMsgProtocolMap } from "@/background";
 import { MsgProtocolRequestMethods, MsgProtocolResponseMethods } from "@/helpers/background";
 
 const REQUEST_TIMEOUT_MS = 60_000;
+const backgroundErrorSchema = z.union([
+	z.string().min(1),
+	z.object({ message: z.string().min(1) }),
+]);
 
 let requestId = 0;
 
@@ -37,7 +42,13 @@ function getMessageBus(): BackgroundMessageBus {
 		clearTimeout(pendingRequest.timeoutId);
 
 		if (response.error) {
-			pendingRequest.reject(new Error(String(response.error)));
+			const parsed = backgroundErrorSchema.safeParse(response.error);
+			const errorMessage = parsed.success
+				? typeof parsed.data === "string"
+					? parsed.data
+					: parsed.data.message
+				: "The wallet request failed. Try again.";
+			pendingRequest.reject(new Error(errorMessage));
 			return;
 		}
 

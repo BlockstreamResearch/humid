@@ -25,6 +25,27 @@ Here are the core goals the Humid wallet pursues:
 - Display exactly what transcations are doing via [Simplicity Clear Signing ELIP](https://github.com/ElementsProject/ELIPs/pull/40).
 - Wallet Connect infrastructure for establishing a dApp <> wallet connection.
 
+## dApp approvals
+
+Connection requests select the requested read-only permissions by default. You can
+uncheck them to require approval each time. Signing and spending remain subject to
+approval; connecting does not pre-approve those actions.
+
+Requests that need the encrypted wallet prompt for its password when it is locked,
+then recheck access before continuing. Cancelling the unlock rejects the pending
+request. Reading the current session while locked returns no account access.
+The app, connection approval, and pending-request screens share the same password
+unlock form and existing vault API; unlocking alone does not grant dApp access.
+
+Signing approvals show the requesting app/origin, method, and signing contents:
+messages, identity challenges, or transaction inputs, outputs, fees, and wallet net
+changes. PSET approvals also distinguish signing-only from signing and broadcasting.
+Transaction amounts are displayed in base units with their asset identifiers.
+PSET review uses the wallet's existing input reconstruction and blinding operation.
+The exact prepared transaction shown in the review is signed without reblinding.
+Each input's effective sighash is shown separately from the requested allowance
+list, with a warning when they disagree.
+
 ## Contributing
 
 We are open to any contributions that drive these goals forward! Please take a look at our [contributing guidelines](CONTRIBUTING.md) to get involved.

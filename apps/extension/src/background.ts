@@ -31,6 +31,7 @@ import { createLiquidChainGroup } from "@/core/chains/liquid/createLiquidChainGr
 import { LIQUID_WALLETCONNECT_EVENTS } from "@/core/chains/liquid/domain/LiquidRpc";
 import { parseLiquidChainId } from "@/core/chains/liquid/domain/validation";
 import { createConfirmationResponder } from "@/core/extension-background/confirmations";
+import { createWalletUnlockRequester } from "@/core/extension-background/confirmations/unlock";
 import {
 	createDappAuthorization,
 	createDappConnectInternalHandlers,
@@ -122,6 +123,10 @@ const init = async () => {
 	syncWalletVaultAuthStore(await walletVaultBackground.initializeStorage());
 
 	const confirmations = createConfirmationResponder(messageBus);
+	const requestUnlock = createWalletUnlockRequester({
+		confirm: confirmations.confirm,
+		isUnlocked: () => getAccountModel() !== null,
+	});
 	const confirmApproved = (request: ConfirmationRequest): Promise<boolean> =>
 		confirmations.confirm(request).then((decision) => decision.approved);
 	const liquidChainGroup = createLiquidChainGroup();
@@ -190,6 +195,7 @@ const init = async () => {
 		chainId,
 		grantedMethods,
 		method,
+		origin,
 		params,
 	}) => {
 		const liquidChainId = parseLiquidChainId(chainId);
@@ -209,6 +215,7 @@ const init = async () => {
 				confirm: confirmApproved,
 				keyManagerState,
 				readPortfolioSnapshot,
+				requester: { origin },
 				updateKeyManagerState: walletVaultBackground.keyManager.updateState,
 			},
 		);
@@ -478,6 +485,7 @@ const init = async () => {
 		confirm: confirmations.confirm,
 		dispatch: dispatchInjectedLiquidRequest,
 		getAccountModel,
+		requestUnlock,
 		prepareChainAddition: prepareLiquidChainAddition,
 		registry: accountRegistry,
 		resolveConnectedAccountIds,
@@ -492,6 +500,7 @@ const init = async () => {
 	await walletConnect.initializeWalletConnectBackground({
 		confirm: confirmApproved,
 		readPortfolioSnapshot,
+		requestUnlock,
 	});
 
 	registerBackgroundRpc(messageBus, {

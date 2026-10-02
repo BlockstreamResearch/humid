@@ -1,7 +1,6 @@
+import type { ConfirmationDecision, ConfirmationRequest } from "@/helpers/background";
 import {
 	closeNotification,
-	ConfirmationDecision,
-	ConfirmationRequest,
 	MsgProtocolRequestMethods,
 	MsgProtocolResponseMethods,
 	openNotification,
@@ -23,57 +22,75 @@ export type ConfirmationResponder = {
 export function createConfirmationResponder(
 	messageBus: BackgroundMessageBus,
 ): ConfirmationResponder {
-	let active: { cancel: () => void } | null = null;
+	let active: { cancel: (reason: "closed" | "superseded") => void } | null = null;
 
-	const confirm = async <TResult = unknown>(
+	const confirm = <TResult = unknown>(
 		request: ConfirmationRequest,
 	): Promise<ConfirmationDecision<TResult>> => {
-		active?.cancel();
+		active?.cancel("superseded");
 
+		const { promise, resolve, reject } = Promise.withResolvers<ConfirmationDecision<TResult>>();
 		const id = Math.floor(Math.random() * 1_000_000);
-		const windowId = await openNotification();
+		let settled = false;
+		let windowId: number | undefined;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		let removeResponseListener: (() => void) | undefined;
 
-		await sleep(NOTIFICATION_SETTLE_MS);
+		const cleanup = () => {
+			clearTimeout(timeout);
+			removeResponseListener?.();
+			if (active === entry) active = null;
+		};
 
-		messageBus.sendMessage(
-			MsgProtocolRequestMethods.RequestConfirmation,
-			{ id, data: request },
-			"popup",
-		);
+		const settle = (decision: ConfirmationDecision<TResult>, closeWindow: boolean) => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			if (closeWindow && windowId !== undefined) void closeNotification(windowId);
+			resolve(decision);
+		};
 
-		return new Promise((resolve) => {
-			let settled = false;
+		const entry = {
+			cancel: (reason: "closed" | "superseded") => settle({ approved: false, reason }, false),
+		};
+		active = entry;
 
-			const settle = (decision: ConfirmationDecision<TResult>, closeWindow: boolean) => {
-				if (settled) return;
-				settled = true;
+		const sendRequest = async () => {
+			windowId = await openNotification();
+			if (settled) return;
+			await sleep(NOTIFICATION_SETTLE_MS);
+			if (settled) return;
 
-				clearTimeout(timeout);
-				removeResponseListener();
-				if (active === entry) active = null;
-				if (closeWindow) void closeNotification(windowId);
-
-				resolve(decision);
-			};
-
-			const timeout = setTimeout(() => settle({ approved: false }, true), CONFIRMATION_TIMEOUT_MS);
-
-			const removeResponseListener = messageBus.onMessage(
+			timeout = setTimeout(
+				() => settle({ approved: false, reason: "timeout" }, true),
+				CONFIRMATION_TIMEOUT_MS,
+			);
+			removeResponseListener = messageBus.onMessage(
 				MsgProtocolResponseMethods.ConfirmResponse,
 				({ data: response }) => {
 					if (response.id !== id) return;
-
 					settle((response.data ?? { approved: false }) as ConfirmationDecision<TResult>, true);
 				},
 			);
+			await messageBus.sendMessage(
+				MsgProtocolRequestMethods.RequestConfirmation,
+				{ id, data: request },
+				"popup",
+			);
+		};
 
-			const entry = { cancel: () => settle({ approved: false }, false) };
-			active = entry;
+		void sendRequest().catch((error: unknown) => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			if (windowId !== undefined) void closeNotification(windowId);
+			reject(error);
 		});
+		return promise;
 	};
 
 	return {
-		cancelActive: () => active?.cancel(),
+		cancelActive: () => active?.cancel("closed"),
 		confirm,
 	};
 }

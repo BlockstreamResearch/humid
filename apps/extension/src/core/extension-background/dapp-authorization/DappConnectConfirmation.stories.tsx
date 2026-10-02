@@ -53,9 +53,45 @@ export const Locked: Story = {
 	},
 };
 
+export const UnlockToApproval: Story = {
+	args: {
+		data: { ...meta.args.data, requiresUnlock: true },
+	},
+	parameters: { vault: { behavior: "success", status: { hasVault: true, isUnlocked: true } } },
+	play: async ({ args, canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.type(canvas.getByLabelText("Password"), "correct-password");
+		await userEvent.click(canvas.getByRole("button", { name: /^unlock$/i }));
+		await expect(
+			await canvas.findByRole("heading", { name: "Connect this dapp?" }),
+		).toBeInTheDocument();
+		await expect(args.onConfirm).not.toHaveBeenCalled();
+		await userEvent.click(canvas.getByRole("button", { name: /^connect$/i }));
+		await expect(args.onConfirm).toHaveBeenCalledWith(
+			expect.objectContaining({
+				grantedAccountGroupIds: ["account-group:1", "account-group:2"],
+			}),
+		);
+	},
+};
+
+export const DeclineLocked: Story = {
+	args: Locked.args,
+	play: async ({ args, canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole("button", { name: /^decline$/i }));
+		await expect(args.onDecline).toHaveBeenCalledOnce();
+		await expect(args.onConfirm).not.toHaveBeenCalled();
+	},
+};
+
 export const GrantNothing: Story = {
 	play: async ({ args, canvasElement }) => {
 		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view balance/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view coins/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view addresses/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view identity key/i }));
 
 		await userEvent.click(canvas.getByRole("button", { name: /^connect$/i }));
 
@@ -71,7 +107,9 @@ export const GrantSubset: Story = {
 
 		expect(canvas.queryByRole("checkbox", { name: /sign/i })).not.toBeInTheDocument();
 
-		await userEvent.click(canvas.getByRole("checkbox", { name: /view balance/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view coins/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view addresses/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view identity key/i }));
 		await userEvent.click(canvas.getByRole("button", { name: /^connect$/i }));
 
 		await expect(args.onConfirm).toHaveBeenCalledWith(

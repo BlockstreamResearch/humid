@@ -1,6 +1,8 @@
 export type WalletRpcConfirmationRequest = {
 	data?: unknown;
 	message?: string;
+	method?: string;
+	requester?: { name?: string; origin: string };
 	title: string;
 };
 
@@ -17,6 +19,7 @@ export const DENY_ALL_AUTHORIZATION: WalletRpcAuthorization = { isGranted: () =>
 export type WalletRpcBaseContext = {
 	authorization: WalletRpcAuthorization;
 	confirm?: WalletRpcConfirmationHandler;
+	requester?: { name?: string; origin: string };
 };
 
 export type WalletRpcRequest = {

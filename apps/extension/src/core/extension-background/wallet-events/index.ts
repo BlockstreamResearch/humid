@@ -3,7 +3,7 @@ import type {
 	PegasusEventProtocolMap,
 	WalletProviderEventPayload,
 } from "@/core/extension-background/transport";
-import { EventProtocolListeners } from "@/helpers/background";
+import type { EventProtocolListeners } from "@/helpers/background";
 
 export type WalletBroadcastEventName = Exclude<
 	keyof PegasusEventProtocolMap,

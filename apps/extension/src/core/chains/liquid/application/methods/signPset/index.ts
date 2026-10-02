@@ -4,7 +4,11 @@ import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
-import type { LiquidSignPsetResult, ParsedLiquidSignPsetParams } from "../../../domain/pset/types";
+import type {
+	LiquidSignPsetResult,
+	LiquidSignPsetReview,
+	ParsedLiquidSignPsetParams,
+} from "../../../domain/pset/types";
 import { parseLiquidSignPsetParams } from "../../../domain/pset/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../../dappAccountScope";
@@ -16,14 +20,15 @@ export type LiquidSignPsetContext = WalletRpcBaseContext & {
 	walletBackend: LiquidWalletBackend;
 };
 
-type LiquidSignPsetReview = {
+type LiquidSignPsetMethodReview = {
 	account: LiquidWalletAccount;
+	transaction: LiquidSignPsetReview;
 };
 
 export const signLiquidPset = createWalletMethod<
 	ParsedLiquidSignPsetParams,
 	LiquidSignPsetContext,
-	LiquidSignPsetReview,
+	LiquidSignPsetMethodReview,
 	LiquidSignPsetResult
 >({
 	confirmation: ({ params, review }) => ({
@@ -37,17 +42,25 @@ export const signLiquidPset = createWalletMethod<
 				index: input.index,
 				sighashTypes: input.sighashTypes,
 			})),
-			temporaryNonSelectiveSigning: true,
+			transaction: review.transaction,
 		},
 		message: "A dapp wants to sign a Liquid PSET.",
 		title: "Sign Liquid PSET?",
 	}),
-	execute: ({ context, params, review }) => context.walletBackend.signPset(review.account, params),
+	execute: ({ context, params, review }) =>
+		context.walletBackend.signPset(review.account, {
+			broadcast: params.broadcast,
+			preparedPset: review.transaction.pset,
+			signInputs: params.signInputs,
+		}),
 	id: LIQUID_WALLET_RPC_METHODS.SIGN_PSET,
 	parse: parseLiquidSignPsetParams,
-	review: async ({ context }) => {
+	review: async ({ context, params }) => {
 		const account = await resolveDappAccount(context);
 		await context.walletBackend.syncAccount(account);
-		return { account };
+		return {
+			account,
+			transaction: await context.walletBackend.preparePsetSigning(account, params),
+		};
 	},
 });

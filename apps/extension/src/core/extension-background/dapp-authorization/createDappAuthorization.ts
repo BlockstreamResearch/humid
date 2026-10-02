@@ -55,6 +55,7 @@ export type DappRequestDispatch = (request: {
 	chainId: string;
 	grantedMethods: Record<string, boolean>;
 	method: string;
+	origin: string;
 	params: unknown;
 }) => Promise<unknown>;
 
@@ -64,6 +65,7 @@ export type DappAuthorizationDependencies = {
 	) => Promise<ConfirmationDecision<TResult>>;
 	dispatch: DappRequestDispatch;
 	getAccountModel: () => AccountModelState | null;
+	requestUnlock: (origin: string) => Promise<void>;
 	prepareChainAddition?: (params: unknown) => PreparedChainAddition;
 	registry: AccountRegistry;
 	resolveKnownChain?: (chainId: string) => Promise<{ name: string } | null>;
@@ -100,6 +102,7 @@ export function createDappAuthorization(
 		confirm,
 		dispatch,
 		getAccountModel,
+		requestUnlock,
 		prepareChainAddition,
 		registry,
 		resolveConnectedAccountIds,
@@ -109,6 +112,11 @@ export function createDappAuthorization(
 		now = () => Date.now(),
 		sessionTtlMs = null,
 	} = dependencies;
+
+	const unlockAccountModel = async (origin: string): Promise<AccountModelState> => {
+		if (!getAccountModel()) await requestUnlock(origin);
+		return requireUnlocked(getAccountModel());
+	};
 
 	const runCreateSession = async ({
 		origin,
@@ -253,7 +261,7 @@ export function createDappAuthorization(
 	}): Promise<unknown> => {
 		const invocation = parseInvokeParams(params);
 		const requestingOrigin = requireOrigin(origin);
-		const accountModel = requireUnlocked(getAccountModel());
+		const accountModel = await unlockAccountModel(requestingOrigin);
 
 		const session = registry.findDappSession(accountModel, {
 			now: now(),
@@ -273,11 +281,18 @@ export function createDappAuthorization(
 			);
 		}
 
+		if (!Object.hasOwn(session.scope.methods, invocation.request.method)) {
+			throw dappAuthorizationErrors.unauthorized(
+				`Method "${invocation.request.method}" is not authorized for this session.`,
+			);
+		}
+
 		return dispatch({
 			accountGroupIds: session.scope.accountGroupIds,
 			chainId: invocation.scope,
 			grantedMethods: session.scope.methods,
 			method: invocation.request.method,
+			origin: requestingOrigin,
 			params: invocation.request.params,
 		});
 	};
@@ -327,6 +342,8 @@ export function createDappAuthorization(
 			);
 		}
 
+		await unlockAccountModel(requestingOrigin);
+
 		const data: DappAddChainConfirmationData = {
 			backendUrl: prepared.backendUrl,
 			kind: DAPP_ADD_CHAIN_CONFIRMATION_KIND,
@@ -341,6 +358,8 @@ export function createDappAuthorization(
 			throw dappAuthorizationErrors.userRejected("User rejected the add-chain request.");
 		}
 
+		requireUnlocked(getAccountModel());
+
 		return { chainId: await prepared.commit() };
 	};
 
@@ -354,7 +373,7 @@ export function createDappAuthorization(
 	}): Promise<{ chainId: string }> => {
 		const requestingOrigin = requireOrigin(origin);
 		const chainId = parseSwitchChainParams(params);
-		const accountModel = requireUnlocked(getAccountModel());
+		const accountModel = await unlockAccountModel(requestingOrigin);
 
 		const session = registry.findDappSession(accountModel, {
 			now: now(),
@@ -400,10 +419,23 @@ export function createDappAuthorization(
 			await resolveConnectedAccountIds(chainId, session.scope.accountGroupIds).catch(() => []);
 		}
 
+		requireUnlocked(getAccountModel());
+
 		await updateAccountModel((model) => {
 			const current = model.dappSessions[session.id];
 
-			if (!current) return model;
+			if (
+				!current ||
+				registry.findDappSession(model, {
+					now: now(),
+					origin: requestingOrigin,
+					transport: INJECTED_TRANSPORT,
+				})?.id !== session.id
+			) {
+				throw dappAuthorizationErrors.unauthorized(
+					"The session ended before the network change was approved.",
+				);
+			}
 
 			return {
 				...model,

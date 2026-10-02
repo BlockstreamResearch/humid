@@ -22,7 +22,12 @@ import type {
 	LiquidSignMessageReview,
 	ParsedLiquidSignMessageParams,
 } from "../../domain/message/types";
-import type { LiquidSignPsetResult, ParsedLiquidSignPsetParams } from "../../domain/pset/types";
+import type {
+	LiquidSignPsetResult,
+	LiquidSignPsetReview,
+	ParsedLiquidSignPsetParams,
+	PreparedLiquidSignPsetParams,
+} from "../../domain/pset/types";
 
 export type LiquidWalletAccount = {
 	accountGroupId?: AccountGroupId;
@@ -137,6 +142,10 @@ export type LiquidWalletBackend = {
 		account: LiquidWalletAccount,
 		params: ParsedLiquidSignMessageParams,
 	) => Promise<LiquidSignMessageReview>;
+	preparePsetSigning: (
+		account: LiquidWalletAccount,
+		params: ParsedLiquidSignPsetParams,
+	) => Promise<LiquidSignPsetReview>;
 	resolveAccount: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidWalletAccount>;
 	sendTransfer: (
 		account: LiquidWalletAccount,
@@ -149,7 +158,7 @@ export type LiquidWalletBackend = {
 	) => Promise<LiquidSignMessageResult>;
 	signPset: (
 		account: LiquidWalletAccount,
-		params: ParsedLiquidSignPsetParams,
+		params: PreparedLiquidSignPsetParams,
 	) => Promise<LiquidSignPsetResult>;
 	syncAccount: (account: LiquidWalletAccount) => Promise<void>;
 };

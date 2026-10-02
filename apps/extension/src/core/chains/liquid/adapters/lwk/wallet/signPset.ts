@@ -1,3 +1,5 @@
+import type { Pset, PsetDetails } from "lwk_wasm";
+
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
@@ -19,63 +21,70 @@ export async function signPset(
 
 	try {
 		const lwk = await loadLwkWasm();
-		const pset = new lwk.Pset(params.pset);
-		const inputCount = pset.inputs().length;
+		let pset: Pset | undefined = new lwk.Pset(params.preparedPset);
+		try {
+			const inputs = pset.inputs();
+			const inputCount = inputs.length;
+			for (const input of inputs) input.free();
 
-		for (const input of params.signInputs) {
-			if (input.index >= inputCount) {
-				throw new WalletRpcResourceUnavailableError(
-					"Requested PSET input index is out of range.",
-					{
-						inputCount,
-						requestedIndex: input.index,
-					},
-					WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST,
-				);
+			for (const input of params.signInputs) {
+				if (input.index >= inputCount) {
+					throw new WalletRpcResourceUnavailableError(
+						"Requested PSET input index is out of range.",
+						{ inputCount, requestedIndex: input.index },
+						WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST,
+					);
+				}
 			}
+
+			const requestedIndexes = new Set(params.signInputs.map((requested) => requested.index));
+			const signaturesBefore = countSignaturesPerInput(implementation.wollet.psetDetails(pset));
+			const signingPset = pset;
+			// signer.sign consumes the input PSET, including on failure.
+			pset = undefined;
+			let signedPset: Pset | undefined = implementation.signer.sign(signingPset);
+
+			try {
+				const overSignedIndex = countSignaturesPerInput(
+					implementation.wollet.psetDetails(signedPset),
+				).findIndex(
+					(count, index) => count > (signaturesBefore[index] ?? 0) && !requestedIndexes.has(index),
+				);
+
+				if (overSignedIndex !== -1) {
+					throw new WalletRpcResourceUnavailableError(
+						"Refusing to sign a Liquid PSET input the request did not list.",
+						{
+							overSignedInputIndex: overSignedIndex,
+							requestedInputIndexes: [...requestedIndexes],
+						},
+						WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST,
+					);
+				}
+
+				if (params.broadcast) {
+					const finalizingPset = signedPset;
+					// wollet.finalize also transfers ownership to WASM.
+					signedPset = undefined;
+					const finalizedPset = implementation.wollet.finalize(finalizingPset);
+					try {
+						const broadcast = await getSyncWorkerClient().broadcast({
+							chain: account.chain,
+							psetBase64: finalizedPset.toString(),
+						});
+						return { pset: finalizedPset.toString(), txid: broadcast.txid };
+					} finally {
+						finalizedPset.free();
+					}
+				}
+
+				return { pset: signedPset.toString() };
+			} finally {
+				signedPset?.free();
+			}
+		} finally {
+			pset?.free();
 		}
-
-		const blindedPset = implementation.wollet.blind(pset);
-
-		const requestedIndexes = new Set(params.signInputs.map((requested) => requested.index));
-		const signaturesBefore = countSignaturesPerInput(
-			implementation.wollet.psetDetails(blindedPset),
-		);
-
-		let signedPset = implementation.signer.sign(blindedPset);
-
-		const overSignedIndex = countSignaturesPerInput(
-			implementation.wollet.psetDetails(signedPset),
-		).findIndex(
-			(count, index) => count > (signaturesBefore[index] ?? 0) && !requestedIndexes.has(index),
-		);
-
-		if (overSignedIndex !== -1) {
-			throw new WalletRpcResourceUnavailableError(
-				"Refusing to sign a Liquid PSET input the request did not list.",
-				{
-					overSignedInputIndex: overSignedIndex,
-					requestedInputIndexes: [...requestedIndexes],
-				},
-				WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST,
-			);
-		}
-
-		let txid: string | undefined;
-
-		if (params.broadcast) {
-			signedPset = implementation.wollet.finalize(signedPset);
-			const broadcast = await getSyncWorkerClient().broadcast({
-				chain: account.chain,
-				psetBase64: signedPset.toString(),
-			});
-			txid = broadcast.txid;
-		}
-
-		return {
-			pset: signedPset.toString(),
-			txid,
-		};
 	} catch (error) {
 		if (error instanceof WalletRpcResourceUnavailableError) {
 			throw error;
@@ -97,12 +106,18 @@ export async function signPset(
 	}
 }
 
-function countSignaturesPerInput(details: {
-	signatures: () => Array<{ hasSignature: () => unknown }>;
-}): number[] {
-	return details.signatures().map((inputSignatures) => {
-		const signatures = inputSignatures.hasSignature();
-
-		return Array.isArray(signatures) ? signatures.length : 0;
-	});
+function countSignaturesPerInput(details: PsetDetails): number[] {
+	try {
+		const inputs = details.signatures();
+		try {
+			return inputs.map((inputSignatures) => {
+				const signatures: unknown = inputSignatures.hasSignature();
+				return Array.isArray(signatures) ? signatures.length : 0;
+			});
+		} finally {
+			for (const input of inputs) input.free();
+		}
+	} finally {
+		details.free();
+	}
 }

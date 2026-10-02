@@ -1,6 +1,8 @@
 import { describeOrigin, type Provenanced, type ShownConfirmation } from "@humid/tx-manifest";
 
 import type { ConfirmationRenderer } from "@/common/Confirmation";
+import { ConfirmationRequestDetails } from "@/common/Confirmation/ConfirmationRequestDetails";
+import type { ConfirmationRequest } from "@/helpers/background";
 import { UiButton } from "@/ui/UiButton/base";
 
 export const PROCESS_CT_CONFIRMATION_KIND = "liquid.processConfidentialTransaction";
@@ -149,10 +151,12 @@ export function ProcessCtConfirmation({
 	data,
 	onConfirm,
 	onDecline,
+	request,
 }: {
 	data: ProcessCtConfirmationData;
 	onConfirm: () => void;
 	onDecline: () => void;
+	request?: ConfirmationRequest;
 }) {
 	const { shown } = data;
 
@@ -168,6 +172,7 @@ export function ProcessCtConfirmation({
 			</header>
 
 			<div className="flex-1 space-y-5 overflow-y-auto px-4">
+				{request && <ConfirmationRequestDetails request={request} />}
 				{shown.netEffect.map((effect) => {
 					const line = netEffectLine(
 						{ asset: effect.asset.value, sats: effect.sats.value },
@@ -280,7 +285,12 @@ export const processCtConfirmationRenderer: ConfirmationRenderer = {
 		}
 
 		return isProcessCtConfirmationData(data) ? (
-			<ProcessCtConfirmation data={data} onConfirm={() => onConfirm()} onDecline={onDecline} />
+			<ProcessCtConfirmation
+				data={data}
+				request={request}
+				onConfirm={() => onConfirm()}
+				onDecline={onDecline}
+			/>
 		) : (
 			<ProcessCtUnreadable onDecline={onDecline} />
 		);

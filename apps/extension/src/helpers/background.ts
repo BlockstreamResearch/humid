@@ -5,11 +5,14 @@ export type ConfirmationRequest = {
 	title: string;
 	message?: string;
 	data?: unknown;
+	method?: string;
+	requester?: { name?: string; origin: string };
 };
 
 export type ConfirmationDecision<TResult = unknown> = {
 	approved: boolean;
 	result?: TResult;
+	reason?: "closed" | "superseded" | "timeout";
 };
 
 export interface ExtensionMessage<T = unknown> {
@@ -22,13 +25,23 @@ export interface ExtensionMessage<T = unknown> {
 
 let notificationWindowId: number | undefined;
 let isClosingNotificationByUserAction = false;
+let openingNotification: Promise<number> | undefined;
 
 const NOTIFICATION_CONTENT_WIDTH = 400;
 const NOTIFICATION_CONTENT_HEIGHT = 600;
 const NOTIFICATION_WINDOW_FRAME_WIDTH_OFFSET = 32;
 const NOTIFICATION_WINDOW_FRAME_HEIGHT_OFFSET = 80;
 
-export async function openNotification(url = ""): Promise<number> {
+export function openNotification(url = ""): Promise<number> {
+	if (!openingNotification) {
+		openingNotification = createOrFocusNotification(url).finally(() => {
+			openingNotification = undefined;
+		});
+	}
+	return openingNotification;
+}
+
+async function createOrFocusNotification(url: string): Promise<number> {
 	const windowOptions = await getNotificationWindowOptions();
 	const notificationWindow = await getNotification();
 
