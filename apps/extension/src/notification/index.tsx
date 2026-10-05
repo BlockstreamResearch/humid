@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { definePegasusMessageBus } from "@webext-pegasus/transport";
 import { initPegasusTransport } from "@webext-pegasus/transport/popup";
 import React from "react";
@@ -11,13 +12,12 @@ import type { PegasusMsgProtocolMap } from "@/background";
 import { ConfirmProvider } from "@/common/Confirmation";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
-import { liquidSigningConfirmationRenderers } from "@/core/chains/liquid/application/methods/LiquidSigningConfirmation";
 import { processCtConfirmationRenderer } from "@/core/chains/liquid/application/methods/processConfidentialTransaction/ProcessCtConfirmation";
-import { walletUnlockConfirmationRenderer } from "@/core/extension-background/confirmations/WalletUnlockConfirmation";
 import { dappAddChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappAddChainConfirmation";
 import { dappConnectConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappConnectConfirmation";
 import { dappSwitchChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappSwitchChainConfirmation";
 import { initGlobalErrorReporting } from "@/core/report";
+import { unlockConfirmationRenderer } from "@/routes/LocalAuth/unlockConfirmationRenderer";
 
 import ActionsHandler from "./ActionsHandler";
 
@@ -25,6 +25,7 @@ initPegasusTransport();
 initGlobalErrorReporting();
 
 const messageBus = definePegasusMessageBus<PegasusMsgProtocolMap>();
+const queryClient = new QueryClient();
 const rootElement = document.getElementById("root");
 
 if (!rootElement) {
@@ -32,21 +33,22 @@ if (!rootElement) {
 }
 
 const confirmationRenderers = [
-	walletUnlockConfirmationRenderer,
 	dappConnectConfirmationRenderer,
 	dappAddChainConfirmationRenderer,
 	dappSwitchChainConfirmationRenderer,
 	processCtConfirmationRenderer,
-	...liquidSigningConfirmationRenderers,
+	unlockConfirmationRenderer,
 ];
 
 createRoot(rootElement).render(
 	<React.StrictMode>
 		<AppErrorBoundary>
 			<ThemeProvider>
-				<ConfirmProvider renderers={confirmationRenderers}>
-					<ActionsHandler messageBus={messageBus} />
-				</ConfirmProvider>
+				<QueryClientProvider client={queryClient}>
+					<ConfirmProvider renderers={confirmationRenderers}>
+						<ActionsHandler messageBus={messageBus} />
+					</ConfirmProvider>
+				</QueryClientProvider>
 			</ThemeProvider>
 		</AppErrorBoundary>
 	</React.StrictMode>,

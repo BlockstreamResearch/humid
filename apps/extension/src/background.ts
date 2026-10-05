@@ -31,7 +31,6 @@ import { createLiquidChainGroup } from "@/core/chains/liquid/createLiquidChainGr
 import { LIQUID_WALLETCONNECT_EVENTS } from "@/core/chains/liquid/domain/LiquidRpc";
 import { parseLiquidChainId } from "@/core/chains/liquid/domain/validation";
 import { createConfirmationResponder } from "@/core/extension-background/confirmations";
-import { createWalletUnlockRequester } from "@/core/extension-background/confirmations/unlock";
 import {
 	createDappAuthorization,
 	createDappConnectInternalHandlers,
@@ -122,10 +121,9 @@ const init = async () => {
 
 	syncWalletVaultAuthStore(await walletVaultBackground.initializeStorage());
 
-	const confirmations = createConfirmationResponder(messageBus);
-	const requestUnlock = createWalletUnlockRequester({
-		confirm: confirmations.confirm,
-		isUnlocked: () => getAccountModel() !== null,
+	const confirmations = createConfirmationResponder(messageBus, {
+		isUnlocked: async () => (await walletVaultBackground.getStatus()).isUnlocked,
+		onUnlocked: walletVaultBackground.onUnlocked,
 	});
 	const confirmApproved = (request: ConfirmationRequest): Promise<boolean> =>
 		confirmations.confirm(request).then((decision) => decision.approved);
@@ -485,7 +483,6 @@ const init = async () => {
 		confirm: confirmations.confirm,
 		dispatch: dispatchInjectedLiquidRequest,
 		getAccountModel,
-		requestUnlock,
 		prepareChainAddition: prepareLiquidChainAddition,
 		registry: accountRegistry,
 		resolveConnectedAccountIds,
@@ -493,6 +490,7 @@ const init = async () => {
 		resolveSupportedScope: resolveSupportedLiquidScope,
 		sessionTtlMs: DEFAULT_INJECTED_SESSION_TTL_MS,
 		updateAccountModel,
+		waitForUnlock: confirmations.waitForUnlock,
 	});
 
 	walletConnect.registerWalletConnectNamespaceAdapter(liquidChainGroup.walletConnectAdapter);
@@ -500,7 +498,7 @@ const init = async () => {
 	await walletConnect.initializeWalletConnectBackground({
 		confirm: confirmApproved,
 		readPortfolioSnapshot,
-		requestUnlock,
+		waitForUnlock: confirmations.waitForUnlock,
 	});
 
 	registerBackgroundRpc(messageBus, {
@@ -532,7 +530,7 @@ const init = async () => {
 	});
 
 	updateBadgeOnStorageChange();
-	initNotificationManagement(() => confirmations.cancelActive());
+	initNotificationManagement(() => confirmations.cancelAll());
 
 	if (!(await browser.alarms.get(PORTFOLIO_REFRESH_ALARM))) {
 		await browser.alarms.create(PORTFOLIO_REFRESH_ALARM, {

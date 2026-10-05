@@ -121,6 +121,7 @@
       "version": "1.1.0",
       "dependencies": {
         "@paper-design/shaders-react": "^0.0.77",
+        "@tanstack/pacer": "0.23.0",
         "@tanstack/react-virtual": "^3.14.5",
       },
     },
@@ -1066,7 +1067,11 @@
 
     "@tailwindcss/vite": ["@tailwindcss/vite@4.0.13", "", { "dependencies": { "@tailwindcss/node": "4.0.13", "@tailwindcss/oxide": "4.0.13", "lightningcss": "1.29.2", "tailwindcss": "4.0.13" }, "peerDependencies": { "vite": "5.4.14" } }, "sha512-0XTd/NoVUAktIDaA4MdXhve0QWYh7WlZg20EHCuBFR80F8FhbVkRX+AY5cjbUP/IO2itHzt0iHc0iSE5kBUMhQ=="],
 
+    "@tanstack/devtools-event-client": ["@tanstack/devtools-event-client@0.5.0", "", { "bin": { "intent": "./bin/intent.js" } }, "sha512-H+OH3zC6Vhu/K0NaVfQKknEKawc/+2PT+D3SB3Ox0V8SiMlTo0abbmH2rH0721R2aNYbjdMXA1oENOd8E2UVoA=="],
+
     "@tanstack/history": ["@tanstack/history@1.162.0", "", {}, "sha512-79pf/RkhteYZTRgcR4F9kbk84P2N8rugQJswxfIqovlbRiT3yI7eBE+5QorIrZaOKktsgzRlXh1l/du/xpl4iA=="],
+
+    "@tanstack/pacer": ["@tanstack/pacer@0.23.0", "", { "dependencies": { "@tanstack/devtools-event-client": "^0.5.0", "@tanstack/store": "^0.11.1" } }, "sha512-sUA+uAebh8qeXNiaoPLsS6pawnX5zknhrWMkXNuqx18AOJeDPo5gzx3VlpABl80BiARleUEQeVpWZjElbmkrdw=="],
 
     "@tanstack/query-core": ["@tanstack/query-core@5.101.1", "", {}, "sha512-Y6Y92dkXtNqx67m2pMSxUsA3zOCwv862JexZRP8/EPwvKXMPu9m8rv43spiXWzOUIggQ3SQApttALStzhA8B4g=="],
 
@@ -1082,7 +1087,7 @@
 
     "@tanstack/router-core": ["@tanstack/router-core@1.171.13", "", { "dependencies": { "@tanstack/history": "1.162.0", "cookie-es": "^3.0.0", "seroval": "^1.5.4", "seroval-plugins": "^1.5.4" } }, "sha512-+NOwEj1kO/6IGmpHRIZHasYxYWpyBQGNIZAST9aNrk9Q3YlU9SgqVnl1pbLa9qAKfeNdXQIRve0RQb/0kyDeDA=="],
 
-    "@tanstack/store": ["@tanstack/store@0.9.3", "", {}, "sha512-8reSzl/qGWGGVKhBoxXPMWzATSbZLZFWhwBAFO9NAyp0TxzfBP0mIrGb8CP8KrQTmvzXlR/vFPPUrHTLBGyFyw=="],
+    "@tanstack/store": ["@tanstack/store@0.11.2", "", {}, "sha512-sJ4mjol8uQsHV0gOJzzjwXfh2Fwm+Sz0+8deqiTm4jGbMdjzNSW+xZCFm0kUa870uhd8yi+DpKnZb5Kc4apa0Q=="],
 
     "@tanstack/table-core": ["@tanstack/table-core@8.21.3", "", {}, "sha512-ldZXEhOBb8Is7xLs01fR3YEc3DERiz5silj8tnGkFZytt1abEvl/GhUmCE0PMLaMPTa3Jk4HbKmRlHmu+gCftg=="],
 
@@ -3605,6 +3610,8 @@
     "@tailwindcss/vite/lightningcss": ["lightningcss@1.29.2", "", { "dependencies": { "detect-libc": "2.0.3" }, "optionalDependencies": { "lightningcss-darwin-arm64": "1.29.2", "lightningcss-darwin-x64": "1.29.2", "lightningcss-freebsd-x64": "1.29.2", "lightningcss-linux-arm-gnueabihf": "1.29.2", "lightningcss-linux-arm64-gnu": "1.29.2", "lightningcss-linux-arm64-musl": "1.29.2", "lightningcss-linux-x64-gnu": "1.29.2", "lightningcss-linux-x64-musl": "1.29.2", "lightningcss-win32-arm64-msvc": "1.29.2", "lightningcss-win32-x64-msvc": "1.29.2" } }, "sha512-6b6gd/RUXKaw5keVdSEtqFVdzWnU5jMxTUjA2bVcMNPLwSQ08Sv/UodBVtETLCn7k4S1Ibxwh7k68IwLZPgKaA=="],
 
     "@tailwindcss/vite/tailwindcss": ["tailwindcss@4.0.13", "", {}, "sha512-gbvFrB0fOsTv/OugXWi2PtflJ4S6/ctu6Mmn3bCftmLY/6xRsQVEJPgIIpABwpZ52DpONkCA3bEj5b54MHxF2Q=="],
+
+    "@tanstack/react-store/@tanstack/store": ["@tanstack/store@0.9.3", "", {}, "sha512-8reSzl/qGWGGVKhBoxXPMWzATSbZLZFWhwBAFO9NAyp0TxzfBP0mIrGb8CP8KrQTmvzXlR/vFPPUrHTLBGyFyw=="],
 
     "@testing-library/dom/aria-query": ["aria-query@5.3.0", "", { "dependencies": { "dequal": "^2.0.3" } }, "sha512-b0P0sZPKtyu8HkeRAfCq0IfURZK+SuwMjY1UXGBU27wpAiTwQAIlq56IbIO+ytk/JjS1fMR14ee5WBBfKi5J6A=="],
 

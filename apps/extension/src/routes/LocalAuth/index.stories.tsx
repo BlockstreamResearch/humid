@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, waitFor, within } from "storybook/test";
+import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 
 import { ConfirmProvider } from "@/common/Confirmation";
 
@@ -10,6 +10,7 @@ const UNLOCK_ERROR = "Incorrect password. Please try again.";
 const meta = {
 	title: "Pages/LocalAuth",
 	component: LocalAuthPage,
+	args: { onReset: fn(), onUnlocked: fn() },
 	decorators: [
 		(Story) => (
 			<ConfirmProvider>

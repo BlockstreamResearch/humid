@@ -13,27 +13,25 @@ export async function resolveSessionRequest(
 	walletKit: WalletKitClient,
 	event: WalletKitTypes.SessionRequest,
 ): Promise<unknown> {
+	const options = getBackgroundOptions();
+
+	await options.waitForUnlock?.();
+
+	if (!(await walletVaultBackground.getStatus()).isUnlocked) {
+		throw dappAuthorizationErrors.walletLocked(
+			"Wallet is locked. Open Humid and unlock it, then retry.",
+		);
+	}
+
 	const adapter = getWalletConnectNamespaceAdapter(event.params.chainId);
 
 	if (!adapter?.handleSessionRequest) {
 		throw new WalletConnectRequestError("UNSUPPORTED_METHODS", event.params.request.method);
 	}
 
-	const options = getBackgroundOptions();
-	resolveApprovedScope(walletKit, event, adapter.namespace);
 	const peer = walletKit.getActiveSessions()[event.topic]?.peer.metadata;
 
-	if (!(await walletVaultBackground.getStatus()).isUnlocked) {
-		await options.requestUnlock(peer?.url ?? peer?.name ?? "WalletConnect dapp");
-	}
-
-	// Unlocking is not authorization: the session can expire or be revoked while the UI is open.
 	const approvedScope = resolveApprovedScope(walletKit, event, adapter.namespace);
-	if (!(await walletVaultBackground.getStatus()).isUnlocked) {
-		throw dappAuthorizationErrors.walletLocked(
-			"The wallet was locked before the request could resume.",
-		);
-	}
 	const keyManagerState = walletVaultBackground.keyManager.getState();
 
 	return adapter.handleSessionRequest(event, {

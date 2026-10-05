@@ -22,10 +22,8 @@ export type ParsedLiquidSignPsetParams = {
 	signInputs: ParsedLiquidSignPsetInput[];
 };
 
-export type PreparedLiquidSignPsetParams = {
-	broadcast: boolean;
-	preparedPset: string;
-	signInputs: ParsedLiquidSignPsetInput[];
+export type ReviewedLiquidSignPsetParams = Omit<ParsedLiquidSignPsetParams, "pset"> & {
+	reviewedPset: string;
 };
 
 export type LiquidSignPsetResult = {
@@ -34,7 +32,7 @@ export type LiquidSignPsetResult = {
 };
 
 export type LiquidSignPsetReview = {
-	/** Serialized after wallet enrichment and blinding; this exact PSET is reviewed and signed. */
+	/** Blinded PSET inspected for approval; signing uses this exact serialization. */
 	pset: string;
 	inputs: { index: number; sighashType: number }[];
 	fees: { asset: string; amount: string }[];

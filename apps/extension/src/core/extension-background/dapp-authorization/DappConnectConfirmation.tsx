@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 
 import type { ConfirmationRenderer } from "@/common/Confirmation";
 import { requestBackground } from "@/core/extension-rpc";
-import { WalletUnlockForm } from "@/core/secure-vault/application/wallet-vault/WalletUnlockForm";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiCheckbox } from "@/ui/UiCheckbox";
 
@@ -25,47 +24,6 @@ type Props = {
 };
 
 export function DappConnectConfirmation({ data, onConfirm, onDecline }: Props) {
-	const [unlocked, setUnlocked] = useState(!data.requiresUnlock);
-
-	if (!unlocked) {
-		return (
-			<UnlockStep origin={data.origin} onDecline={onDecline} onUnlocked={() => setUnlocked(true)} />
-		);
-	}
-
-	return <ConnectApproval data={data} onConfirm={onConfirm} onDecline={onDecline} />;
-}
-
-function UnlockStep({
-	onDecline,
-	onUnlocked,
-	origin,
-}: {
-	onDecline: () => void;
-	onUnlocked: () => void;
-	origin: string;
-}) {
-	return (
-		<div className="bg-background text-foreground flex size-full flex-col">
-			<header className="p-4 pb-3 text-center">
-				<h2 className="cn-font-heading text-xl font-bold">Unlock to connect</h2>
-				<p className="text-muted-foreground mt-1 text-sm break-all">{origin}</p>
-			</header>
-			<div className="flex flex-1 flex-col px-4">
-				<WalletUnlockForm
-					onUnlocked={onUnlocked}
-					secondaryAction={{ label: "Decline", onClick: onDecline }}
-				>
-					<p className="text-muted-foreground text-sm">
-						Your wallet is locked. Enter your password to continue connecting this dapp.
-					</p>
-				</WalletUnlockForm>
-			</div>
-		</div>
-	);
-}
-
-function ConnectApproval({ data, onConfirm, onDecline }: Props) {
 	const preApprovable = PRE_APPROVABLE_METHODS.filter((method) => data.methods.includes(method.id));
 	const [accounts, setAccounts] = useState<DappConnectAccount[]>(data.accounts);
 	const [accountsError, setAccountsError] = useState<string | null>(null);

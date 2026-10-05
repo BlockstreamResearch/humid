@@ -11,21 +11,17 @@ import { getRequestedNamespaces } from "./getRequestedNamespaces";
 export async function resolveSupportedNamespaces(
 	proposal: WalletKitTypes.SessionProposal["params"],
 ): Promise<WalletConnectSupportedNamespaces> {
-	const requestedNamespaces = getRequestedNamespaces(proposal);
-	if (!requestedNamespaces.some((namespace) => getWalletConnectNamespaceAdapter(namespace))) {
-		return {};
-	}
-
 	const options = getBackgroundOptions();
-	if (!(await walletVaultBackground.getStatus()).isUnlocked) {
-		const peer = proposal.proposer.metadata;
-		await options.requestUnlock(peer.url || peer.name || "WalletConnect dapp");
-	}
+
+	await options.waitForUnlock?.();
+
 	if (!(await walletVaultBackground.getStatus()).isUnlocked) {
 		throw dappAuthorizationErrors.walletLocked(
-			"The wallet was locked before the connection could resume.",
+			"Wallet is locked. Open Humid and unlock it, then retry.",
 		);
 	}
+
+	const requestedNamespaces = getRequestedNamespaces(proposal);
 	const keyManagerState = walletVaultBackground.keyManager.getState();
 	const supportedNamespaceEntries = await Promise.all(
 		requestedNamespaces.map(async (namespace) => {

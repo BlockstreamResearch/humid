@@ -31,7 +31,7 @@ export function getRegisteredWalletConnectNamespaces(): string[] {
 }
 
 export async function initializeWalletConnectBackground(
-	options: WalletConnectBackgroundOptions,
+	options: WalletConnectBackgroundOptions = {},
 ): Promise<WalletConnectStatus> {
 	setBackgroundOptions(options);
 

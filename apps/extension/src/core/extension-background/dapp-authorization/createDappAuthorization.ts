@@ -65,7 +65,6 @@ export type DappAuthorizationDependencies = {
 	) => Promise<ConfirmationDecision<TResult>>;
 	dispatch: DappRequestDispatch;
 	getAccountModel: () => AccountModelState | null;
-	requestUnlock: (origin: string) => Promise<void>;
 	prepareChainAddition?: (params: unknown) => PreparedChainAddition;
 	registry: AccountRegistry;
 	resolveKnownChain?: (chainId: string) => Promise<{ name: string } | null>;
@@ -81,6 +80,8 @@ export type DappAuthorizationDependencies = {
 	) => Promise<AccountModelState>;
 	now?: () => number;
 	sessionTtlMs?: number | null;
+	/** Resolves once the wallet is unlocked or the unlock prompt is dismissed. */
+	waitForUnlock: () => Promise<void>;
 };
 
 export type DappAuthorization = {
@@ -102,7 +103,6 @@ export function createDappAuthorization(
 		confirm,
 		dispatch,
 		getAccountModel,
-		requestUnlock,
 		prepareChainAddition,
 		registry,
 		resolveConnectedAccountIds,
@@ -111,10 +111,12 @@ export function createDappAuthorization(
 		updateAccountModel,
 		now = () => Date.now(),
 		sessionTtlMs = null,
+		waitForUnlock,
 	} = dependencies;
 
-	const unlockAccountModel = async (origin: string): Promise<AccountModelState> => {
-		if (!getAccountModel()) await requestUnlock(origin);
+	const unlockedAccountModel = async (): Promise<AccountModelState> => {
+		await waitForUnlock();
+
 		return requireUnlocked(getAccountModel());
 	};
 
@@ -126,6 +128,7 @@ export function createDappAuthorization(
 		params: unknown;
 	}): Promise<Caip25CreateSessionResult> => {
 		const requestingOrigin = requireOrigin(origin);
+		const initialModel = await unlockedAccountModel();
 
 		const requested = mergeRequestedScopes(asCreateSessionParams(params));
 		const supported = await resolveSupportedScope(requested);
@@ -137,19 +140,17 @@ export function createDappAuthorization(
 			);
 		}
 
-		const initialModel = getAccountModel();
-		const connectedAccountGroupIds = initialModel
-			? connectedAccountGroupIdsForOrigin(registry, initialModel, requestingOrigin)
-			: [];
+		const connectedAccountGroupIds = connectedAccountGroupIdsForOrigin(
+			registry,
+			initialModel,
+			requestingOrigin,
+		);
 		const connectData: DappConnectConfirmationData = {
-			accounts: initialModel
-				? buildDappConnectAccounts(initialModel, registry, connectedAccountGroupIds)
-				: [],
+			accounts: buildDappConnectAccounts(initialModel, registry, connectedAccountGroupIds),
 			chains: supported.chains,
 			kind: DAPP_CONNECT_CONFIRMATION_KIND,
 			methods: supported.methods,
 			origin: requestingOrigin,
-			requiresUnlock: initialModel === null,
 		};
 
 		const decision = await confirm<DappConnectConfirmationResult>({
@@ -261,7 +262,7 @@ export function createDappAuthorization(
 	}): Promise<unknown> => {
 		const invocation = parseInvokeParams(params);
 		const requestingOrigin = requireOrigin(origin);
-		const accountModel = await unlockAccountModel(requestingOrigin);
+		const accountModel = await unlockedAccountModel();
 
 		const session = registry.findDappSession(accountModel, {
 			now: now(),
@@ -325,6 +326,7 @@ export function createDappAuthorization(
 		params: unknown;
 	}): Promise<{ chainId: string }> => {
 		const requestingOrigin = requireOrigin(origin);
+		await unlockedAccountModel();
 
 		if (!prepareChainAddition) {
 			throw dappAuthorizationErrors.invalidParams("Adding chains is not supported.");
@@ -341,8 +343,6 @@ export function createDappAuthorization(
 				error instanceof Error ? error.message : "Invalid wallet_addChain parameters.",
 			);
 		}
-
-		await unlockAccountModel(requestingOrigin);
 
 		const data: DappAddChainConfirmationData = {
 			backendUrl: prepared.backendUrl,
@@ -373,7 +373,7 @@ export function createDappAuthorization(
 	}): Promise<{ chainId: string }> => {
 		const requestingOrigin = requireOrigin(origin);
 		const chainId = parseSwitchChainParams(params);
-		const accountModel = await unlockAccountModel(requestingOrigin);
+		const accountModel = await unlockedAccountModel();
 
 		const session = registry.findDappSession(accountModel, {
 			now: now(),
@@ -491,7 +491,9 @@ function requireOrigin(origin: string | null): string {
 
 function requireUnlocked(accountModel: AccountModelState | null): AccountModelState {
 	if (!accountModel) {
-		throw dappAuthorizationErrors.walletLocked("Unlock the wallet to continue.");
+		throw dappAuthorizationErrors.walletLocked(
+			"Wallet is locked. Open Humid and unlock it, then retry.",
+		);
 	}
 
 	return accountModel;

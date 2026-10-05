@@ -4,15 +4,16 @@ import browser from "webextension-polyfill";
 export type ConfirmationRequest = {
 	title: string;
 	message?: string;
+	confirmLabel?: string;
 	data?: unknown;
 	method?: string;
 	requester?: { name?: string; origin: string };
+	timeoutMs?: number;
 };
 
 export type ConfirmationDecision<TResult = unknown> = {
 	approved: boolean;
 	result?: TResult;
-	reason?: "closed" | "superseded" | "timeout";
 };
 
 export interface ExtensionMessage<T = unknown> {

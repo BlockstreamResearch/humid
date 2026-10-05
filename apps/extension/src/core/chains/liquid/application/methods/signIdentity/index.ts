@@ -27,6 +27,7 @@ export const signLiquidIdentity = createWalletMethod<
 	LiquidSignIdentityResult
 >({
 	confirmation: ({ context, params }) => ({
+		confirmLabel: "Sign",
 		data: {
 			chainId: context.chain.id,
 			challenge: params.challenge,
@@ -36,7 +37,15 @@ export const signLiquidIdentity = createWalletMethod<
 			index: params.index,
 			kind: "liquid.signIdentity",
 		},
-		message: "A dapp wants to sign an identity challenge.",
+		message: [
+			"A dapp wants to sign an identity challenge to authenticate or prove control of this identity.",
+			`Network: ${context.chain.id}\nIdentity: ${params.identity}\nIdentity index: ${params.index}\nCurve: ${params.curve}`,
+			`Challenge (hex): ${params.challenge}`,
+			readableChallenge(params.challenge),
+			`Challenge fingerprint (SHA-256 prefix): ${fingerprintChallenge(params.challenge)}`,
+		]
+			.filter(Boolean)
+			.join("\n\n"),
 		title: "Sign Liquid identity challenge?",
 	}),
 	execute: ({ context, params }) =>
@@ -51,4 +60,17 @@ export const signLiquidIdentity = createWalletMethod<
 
 function fingerprintChallenge(challengeHex: string): string {
 	return bytesToHex(sha256(hexToBytes(challengeHex))).slice(0, 32);
+}
+
+function readableChallenge(challenge: string): string {
+	try {
+		const text = new TextDecoder("utf-8", { fatal: true }).decode(hexToBytes(challenge));
+		for (const character of text) {
+			const code = character.charCodeAt(0);
+			if ((code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127) return "";
+		}
+		return `Challenge (UTF-8):\n${text}`;
+	} catch {
+		return "";
+	}
 }

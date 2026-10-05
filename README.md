@@ -27,24 +27,11 @@ Here are the core goals the Humid wallet pursues:
 
 ## dApp approvals
 
-Connection requests select the requested read-only permissions by default. You can
-uncheck them to require approval each time. Signing and spending remain subject to
-approval; connecting does not pre-approve those actions.
-
-Requests that need the encrypted wallet prompt for its password when it is locked,
-then recheck access before continuing. Cancelling the unlock rejects the pending
-request. Reading the current session while locked returns no account access.
-The app, connection approval, and pending-request screens share the same password
-unlock form and existing vault API; unlocking alone does not grant dApp access.
-
-Signing approvals show the requesting app/origin, method, and signing contents:
-messages, identity challenges, or transaction inputs, outputs, fees, and wallet net
-changes. PSET approvals also distinguish signing-only from signing and broadcasting.
-Transaction amounts are displayed in base units with their asset identifiers.
-PSET review uses the wallet's existing input reconstruction and blinding operation.
-The exact prepared transaction shown in the review is signed without reblinding.
-Each input's effective sighash is shown separately from the requested allowance
-list, with a warning when they disagree.
+- Requested read-only permissions start selected; signing and spending still require approval.
+- Confirmations are queued and shown one at a time in the same notification window. Requests that need the wallet while it is locked wait behind a single unlock prompt, which goes ahead of queued confirmations; once unlocked, each request continues to its own confirmation. Dismissing the prompt (closing the window or its five-minute timeout) rejects them with `4900` "Wallet is locked". Unlocking from the popup also releases them.
+- Generic signing approvals show the requester, method and signing contents. Their amounts use base units and include asset identifiers. Contract actions retain their separate manifest-based review.
+- PSET review blinds the transaction once, then inspects fees, wallet balance changes, outputs and effective sighashes. After approval, signing uses the exact reviewed PSET without blinding again. Effective sighashes are separate from requested allowances, with a mismatch warning.
+- Each method's confirmation policy can set `timeoutMs`: five minutes for `processConfidentialTransaction`, otherwise the existing 30-second default. The unlock prompt defines its own five minutes in `unlockConfirmation.ts`.
 
 ## Contributing
 

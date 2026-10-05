@@ -25,8 +25,7 @@ import type {
 import type {
 	LiquidSignPsetResult,
 	LiquidSignPsetReview,
-	ParsedLiquidSignPsetParams,
-	PreparedLiquidSignPsetParams,
+	ReviewedLiquidSignPsetParams,
 } from "../../domain/pset/types";
 
 export type LiquidWalletAccount = {
@@ -142,10 +141,6 @@ export type LiquidWalletBackend = {
 		account: LiquidWalletAccount,
 		params: ParsedLiquidSignMessageParams,
 	) => Promise<LiquidSignMessageReview>;
-	preparePsetSigning: (
-		account: LiquidWalletAccount,
-		params: ParsedLiquidSignPsetParams,
-	) => Promise<LiquidSignPsetReview>;
 	resolveAccount: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidWalletAccount>;
 	sendTransfer: (
 		account: LiquidWalletAccount,
@@ -156,9 +151,13 @@ export type LiquidWalletBackend = {
 		account: LiquidWalletAccount,
 		params: ParsedLiquidSignMessageParams,
 	) => Promise<LiquidSignMessageResult>;
+	blindAndInspectPset: (
+		account: LiquidWalletAccount,
+		psetBase64: string,
+	) => Promise<LiquidSignPsetReview>;
 	signPset: (
 		account: LiquidWalletAccount,
-		params: PreparedLiquidSignPsetParams,
+		params: ReviewedLiquidSignPsetParams,
 	) => Promise<LiquidSignPsetResult>;
 	syncAccount: (account: LiquidWalletAccount) => Promise<void>;
 };

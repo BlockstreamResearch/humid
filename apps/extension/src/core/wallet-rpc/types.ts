@@ -1,9 +1,11 @@
 export type WalletRpcConfirmationRequest = {
 	data?: unknown;
 	message?: string;
+	confirmLabel?: string;
 	method?: string;
 	requester?: { name?: string; origin: string };
 	title: string;
+	timeoutMs?: number;
 };
 
 export type WalletRpcConfirmationHandler = (
