@@ -28,8 +28,24 @@ function getErrorMessage(error: unknown): string | null {
 	return error instanceof Error ? error.message : String(error);
 }
 
-export function LocalAuthPage() {
+type LocalAuthPageProps = {
+	onUnlocked?: () => void;
+	/** Omitted where resetting the wallet is not offered, such as the unlock confirmation. */
+	onReset?: () => void;
+};
+
+export function LocalAuthRoutePage() {
 	const navigate = useNavigate();
+
+	return (
+		<LocalAuthPage
+			onReset={() => void navigate({ to: "/auth/intro" })}
+			onUnlocked={() => void navigate({ to: "/app" })}
+		/>
+	);
+}
+
+export function LocalAuthPage({ onReset, onUnlocked }: LocalAuthPageProps) {
 	const confirm = useConfirm();
 	const passphraseInputRef = useRef<HTMLInputElement | null>(null);
 	const [resetNotice, setResetNotice] = useState<string | null>(null);
@@ -51,20 +67,24 @@ export function LocalAuthPage() {
 			passphraseInputRef.current?.focus();
 			passphraseInputRef.current?.select();
 		},
-		onSuccess: () => {
+		onSuccess: (status) => {
+			if (!status.isUnlocked) return;
 			reset(DEFAULT_FORM_VALUES);
-			void navigate({ to: "/app" });
+			onUnlocked?.();
 		},
 	});
 	const resetVaultMutation = useMutation({
 		mutationFn: walletVaultClient.reset,
 		onSuccess: (status) => {
 			if (!status.hasVault) {
-				void navigate({ to: "/auth/intro" });
+				onReset?.();
 			}
 		},
 	});
-	const unlockErrorMessage = getErrorMessage(unlockVaultMutation.error);
+	const unlockErrorMessage =
+		unlockVaultMutation.isSuccess && !unlockVaultMutation.data.isUnlocked
+			? "Could not unlock the wallet."
+			: getErrorMessage(unlockVaultMutation.error);
 	const resetErrorMessage = getErrorMessage(resetVaultMutation.error);
 	const isMutating = unlockVaultMutation.isPending || resetVaultMutation.isPending;
 	const canSubmit = isValid && !isMutating;
@@ -165,9 +185,11 @@ export function LocalAuthPage() {
 					</UiButton>
 				</form>
 
-				<UiButton type="button" variant="outline" disabled={isMutating} onClick={handleReset}>
-					{resetVaultMutation.isPending ? "Resetting..." : "Reset wallet"}
-				</UiButton>
+				{onReset && (
+					<UiButton type="button" variant="outline" disabled={isMutating} onClick={handleReset}>
+						{resetVaultMutation.isPending ? "Resetting..." : "Reset wallet"}
+					</UiButton>
+				)}
 			</main>
 		</UiPageBackgroundWrp>
 	);

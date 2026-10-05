@@ -95,6 +95,7 @@ export const createProcessLiquidConfidentialTransaction = (
 			},
 			message: `A dapp wants to perform "${review.action}" on the ${review.protocol} protocol.`,
 			title: "Perform a contract action?",
+			timeoutMs: 5 * 60_000,
 		}),
 		execute: async ({ context, params, review }) => {
 			const network = requireNetwork(context);

@@ -1,19 +1,18 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { ConfirmationRenderer } from "@/common/Confirmation";
 import { requestBackground } from "@/core/extension-rpc";
-import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/client";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiCheckbox } from "@/ui/UiCheckbox";
-import { UiField, UiFieldError, UiFieldLabel } from "@/ui/UiField";
-import { UiInput } from "@/ui/UiInput/base";
 
+import type {
+	DappConnectAccount,
+	DappConnectConfirmationData,
+	DappConnectConfirmationResult,
+} from "./connectConfirmation";
 import {
 	DAPP_CONNECT_CONFIRMATION_KIND,
 	DAPP_CONNECT_LIST_ACCOUNTS_METHOD,
-	type DappConnectAccount,
-	type DappConnectConfirmationData,
-	type DappConnectConfirmationResult,
 	isDappConnectConfirmationData,
 } from "./connectConfirmation";
 import { PRE_APPROVABLE_METHODS } from "./methodPolicyPresentation";
@@ -25,102 +24,6 @@ type Props = {
 };
 
 export function DappConnectConfirmation({ data, onConfirm, onDecline }: Props) {
-	const [unlocked, setUnlocked] = useState(!data.requiresUnlock);
-
-	if (!unlocked) {
-		return (
-			<UnlockStep origin={data.origin} onDecline={onDecline} onUnlocked={() => setUnlocked(true)} />
-		);
-	}
-
-	return <ConnectApproval data={data} onConfirm={onConfirm} onDecline={onDecline} />;
-}
-
-function UnlockStep({
-	onDecline,
-	onUnlocked,
-	origin,
-}: {
-	onDecline: () => void;
-	onUnlocked: () => void;
-	origin: string;
-}) {
-	const [passphrase, setPassphrase] = useState("");
-	const [error, setError] = useState<string | null>(null);
-	const [pending, setPending] = useState(false);
-
-	const handleSubmit = async (event: FormEvent) => {
-		event.preventDefault();
-
-		if (!passphrase || pending) return;
-
-		setPending(true);
-		setError(null);
-
-		try {
-			const status = await walletVaultClient.unlock({ passphrase });
-
-			if (status.isUnlocked) {
-				onUnlocked();
-			} else {
-				setError("Could not unlock the wallet.");
-			}
-		} catch (unlockError) {
-			setError(toErrorMessage(unlockError));
-		} finally {
-			setPending(false);
-		}
-	};
-
-	return (
-		<div className="bg-background text-foreground flex size-full flex-col">
-			<header className="p-4 pb-3 text-center">
-				<h2 className="cn-font-heading text-xl font-bold">Unlock to connect</h2>
-				<p className="text-muted-foreground mt-1 text-sm break-all">{origin}</p>
-			</header>
-
-			<form className="flex flex-1 flex-col gap-4 px-4" onSubmit={handleSubmit}>
-				<p className="text-muted-foreground text-sm">
-					Your wallet is locked. Enter your password to continue connecting this dapp.
-				</p>
-
-				<UiField data-invalid={Boolean(error)}>
-					<UiFieldLabel htmlFor="connect-unlock-password">Password</UiFieldLabel>
-					<UiInput
-						id="connect-unlock-password"
-						type="password"
-						autoComplete="current-password"
-						disabled={pending}
-						placeholder="Enter passphrase"
-						value={passphrase}
-						onChange={(event) => {
-							setPassphrase(event.target.value);
-							setError(null);
-						}}
-					/>
-					<UiFieldError>{error}</UiFieldError>
-				</UiField>
-
-				<div className="mt-auto flex items-center gap-3 py-4">
-					<UiButton
-						type="button"
-						variant="outline"
-						className="flex-1"
-						disabled={pending}
-						onClick={onDecline}
-					>
-						Decline
-					</UiButton>
-					<UiButton type="submit" className="flex-1" disabled={!passphrase || pending}>
-						{pending ? "Unlocking…" : "Unlock"}
-					</UiButton>
-				</div>
-			</form>
-		</div>
-	);
-}
-
-function ConnectApproval({ data, onConfirm, onDecline }: Props) {
 	const preApprovable = PRE_APPROVABLE_METHODS.filter((method) => data.methods.includes(method.id));
 	const [accounts, setAccounts] = useState<DappConnectAccount[]>(data.accounts);
 	const [accountsError, setAccountsError] = useState<string | null>(null);
@@ -128,7 +31,9 @@ function ConnectApproval({ data, onConfirm, onDecline }: Props) {
 	const [grantedAccounts, setGrantedAccounts] = useState<Set<string>>(() =>
 		defaultGrantedAccounts(data.accounts),
 	);
-	const [grantedMethods, setGrantedMethods] = useState<Set<string>>(() => new Set());
+	const [grantedMethods, setGrantedMethods] = useState<Set<string>>(
+		() => new Set(preApprovable.map((method) => method.id)),
+	);
 
 	useEffect(() => {
 		if (data.accounts.length > 0) return;
@@ -223,8 +128,8 @@ function ConnectApproval({ data, onConfirm, onDecline }: Props) {
 						Permissions
 					</h3>
 					<p className="text-muted-foreground mb-3 text-xs">
-						Select what this dapp may do without asking. Anything else it needs will ask for your
-						approval each time.
+						Requested permissions are selected by default. Uncheck any action you want to approve
+						each time. Signing and spending still require your approval.
 					</p>
 					<ul className="space-y-3">
 						{preApprovable.map((method) => (

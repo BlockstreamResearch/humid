@@ -37,7 +37,14 @@ function getMessageBus(): BackgroundMessageBus {
 		clearTimeout(pendingRequest.timeoutId);
 
 		if (response.error) {
-			pendingRequest.reject(new Error(String(response.error)));
+			const error = response.error;
+			const errorMessage =
+				typeof error === "string"
+					? error
+					: typeof error === "object" && "message" in error && typeof error.message === "string"
+						? error.message
+						: "";
+			pendingRequest.reject(new Error(errorMessage || "The wallet request failed. Try again."));
 			return;
 		}
 

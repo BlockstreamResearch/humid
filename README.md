@@ -25,6 +25,14 @@ Here are the core goals the Humid wallet pursues:
 - Display exactly what transcations are doing via [Simplicity Clear Signing ELIP](https://github.com/ElementsProject/ELIPs/pull/40).
 - Wallet Connect infrastructure for establishing a dApp <> wallet connection.
 
+## dApp approvals
+
+- Requested read-only permissions start selected; signing and spending still require approval.
+- Confirmations are queued and shown one at a time in the same notification window. Requests that need the wallet while it is locked wait behind a single unlock prompt, which goes ahead of queued confirmations; once unlocked, each request continues to its own confirmation. Dismissing the prompt (closing the window or its five-minute timeout) rejects them with `4900` "Wallet is locked". Unlocking from the popup also releases them.
+- Generic signing approvals show the requester, method and signing contents. Their amounts use base units and include asset identifiers. Contract actions retain their separate manifest-based review.
+- PSET review blinds the transaction once, then inspects fees, wallet balance changes, outputs and effective sighashes. After approval, signing uses the exact reviewed PSET without blinding again. Effective sighashes are separate from requested allowances, with a mismatch warning.
+- Each method's confirmation policy can set `timeoutMs`: five minutes for `processConfidentialTransaction`, otherwise the existing 30-second default. The unlock prompt defines its own five minutes in `unlockConfirmation.ts`.
+
 ## Contributing
 
 We are open to any contributions that drive these goals forward! Please take a look at our [contributing guidelines](CONTRIBUTING.md) to get involved.

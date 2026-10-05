@@ -52,6 +52,6 @@ export async function handleSessionProposal(
 		setLastError(null);
 	} catch (error) {
 		setLastError(getErrorMessage(error));
-		await rejectSessionProposal(walletKit, proposal.id);
+		await rejectSessionProposal(walletKit, proposal.id, error);
 	}
 }

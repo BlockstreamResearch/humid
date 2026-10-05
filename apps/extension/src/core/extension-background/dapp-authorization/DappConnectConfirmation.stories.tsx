@@ -27,7 +27,6 @@ const meta = {
 			kind: "dappConnect",
 			methods,
 			origin: "https://app.example.org",
-			requiresUnlock: false,
 		},
 		onConfirm: fn(),
 		onDecline: fn(),
@@ -40,22 +39,13 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
-export const Locked: Story = {
-	args: {
-		data: {
-			accounts: [],
-			chains: ["bip122:1466275836220db2944ca059a3a10ef6"],
-			kind: "dappConnect",
-			methods,
-			origin: "https://app.example.org",
-			requiresUnlock: true,
-		},
-	},
-};
-
 export const GrantNothing: Story = {
 	play: async ({ args, canvasElement }) => {
 		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view balance/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view coins/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view addresses/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view identity key/i }));
 
 		await userEvent.click(canvas.getByRole("button", { name: /^connect$/i }));
 
@@ -71,7 +61,9 @@ export const GrantSubset: Story = {
 
 		expect(canvas.queryByRole("checkbox", { name: /sign/i })).not.toBeInTheDocument();
 
-		await userEvent.click(canvas.getByRole("checkbox", { name: /view balance/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view coins/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view addresses/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view identity key/i }));
 		await userEvent.click(canvas.getByRole("button", { name: /^connect$/i }));
 
 		await expect(args.onConfirm).toHaveBeenCalledWith(

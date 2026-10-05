@@ -59,9 +59,11 @@ export function createWalletMethod<
 				);
 			}
 
-			const confirmed = await context.confirm(
-				await confirmation({ context, params: parsedParams, review: reviewed }),
-			);
+			const confirmed = await context.confirm({
+				...(await confirmation({ context, params: parsedParams, review: reviewed })),
+				method: id,
+				requester: context.requester,
+			});
 
 			if (!confirmed) {
 				throw new WalletRpcUserRejectedError();

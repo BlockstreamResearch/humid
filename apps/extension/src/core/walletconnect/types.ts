@@ -31,6 +31,7 @@ export type WalletConnectAdapterContext = {
 	confirm?: WalletConnectConfirmationHandler;
 	keyManagerState: KeyManagerState;
 	readPortfolioSnapshot?: WalletConnectReadPortfolioSnapshot;
+	requester?: { name?: string; origin: string };
 	updateKeyManagerState?: UpdateKeyManagerState;
 };
 

@@ -22,7 +22,11 @@ import type {
 	LiquidSignMessageReview,
 	ParsedLiquidSignMessageParams,
 } from "../../domain/message/types";
-import type { LiquidSignPsetResult, ParsedLiquidSignPsetParams } from "../../domain/pset/types";
+import type {
+	LiquidSignPsetResult,
+	LiquidSignPsetReview,
+	ReviewedLiquidSignPsetParams,
+} from "../../domain/pset/types";
 
 export type LiquidWalletAccount = {
 	accountGroupId?: AccountGroupId;
@@ -147,9 +151,13 @@ export type LiquidWalletBackend = {
 		account: LiquidWalletAccount,
 		params: ParsedLiquidSignMessageParams,
 	) => Promise<LiquidSignMessageResult>;
+	blindAndInspectPset: (
+		account: LiquidWalletAccount,
+		psetBase64: string,
+	) => Promise<LiquidSignPsetReview>;
 	signPset: (
 		account: LiquidWalletAccount,
-		params: ParsedLiquidSignPsetParams,
+		params: ReviewedLiquidSignPsetParams,
 	) => Promise<LiquidSignPsetResult>;
 	syncAccount: (account: LiquidWalletAccount) => Promise<void>;
 };

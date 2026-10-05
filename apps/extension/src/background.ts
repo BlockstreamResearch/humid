@@ -121,7 +121,10 @@ const init = async () => {
 
 	syncWalletVaultAuthStore(await walletVaultBackground.initializeStorage());
 
-	const confirmations = createConfirmationResponder(messageBus);
+	const confirmations = createConfirmationResponder(messageBus, {
+		isUnlocked: async () => (await walletVaultBackground.getStatus()).isUnlocked,
+		onUnlocked: walletVaultBackground.onUnlocked,
+	});
 	const confirmApproved = (request: ConfirmationRequest): Promise<boolean> =>
 		confirmations.confirm(request).then((decision) => decision.approved);
 	const liquidChainGroup = createLiquidChainGroup();
@@ -190,6 +193,7 @@ const init = async () => {
 		chainId,
 		grantedMethods,
 		method,
+		origin,
 		params,
 	}) => {
 		const liquidChainId = parseLiquidChainId(chainId);
@@ -209,6 +213,7 @@ const init = async () => {
 				confirm: confirmApproved,
 				keyManagerState,
 				readPortfolioSnapshot,
+				requester: { origin },
 				updateKeyManagerState: walletVaultBackground.keyManager.updateState,
 			},
 		);
@@ -485,6 +490,7 @@ const init = async () => {
 		resolveSupportedScope: resolveSupportedLiquidScope,
 		sessionTtlMs: DEFAULT_INJECTED_SESSION_TTL_MS,
 		updateAccountModel,
+		waitForUnlock: confirmations.waitForUnlock,
 	});
 
 	walletConnect.registerWalletConnectNamespaceAdapter(liquidChainGroup.walletConnectAdapter);
@@ -492,6 +498,7 @@ const init = async () => {
 	await walletConnect.initializeWalletConnectBackground({
 		confirm: confirmApproved,
 		readPortfolioSnapshot,
+		waitForUnlock: confirmations.waitForUnlock,
 	});
 
 	registerBackgroundRpc(messageBus, {
@@ -523,7 +530,7 @@ const init = async () => {
 	});
 
 	updateBadgeOnStorageChange();
-	initNotificationManagement(() => confirmations.cancelActive());
+	initNotificationManagement(() => confirmations.cancelAll());
 
 	if (!(await browser.alarms.get(PORTFOLIO_REFRESH_ALARM))) {
 		await browser.alarms.create(PORTFOLIO_REFRESH_ALARM, {

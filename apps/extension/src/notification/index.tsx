@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { definePegasusMessageBus } from "@webext-pegasus/transport";
 import { initPegasusTransport } from "@webext-pegasus/transport/popup";
 import React from "react";
@@ -16,6 +17,7 @@ import { dappAddChainConfirmationRenderer } from "@/core/extension-background/da
 import { dappConnectConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappConnectConfirmation";
 import { dappSwitchChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappSwitchChainConfirmation";
 import { initGlobalErrorReporting } from "@/core/report";
+import { unlockConfirmationRenderer } from "@/routes/LocalAuth/unlockConfirmationRenderer";
 
 import ActionsHandler from "./ActionsHandler";
 
@@ -23,6 +25,7 @@ initPegasusTransport();
 initGlobalErrorReporting();
 
 const messageBus = definePegasusMessageBus<PegasusMsgProtocolMap>();
+const queryClient = new QueryClient();
 const rootElement = document.getElementById("root");
 
 if (!rootElement) {
@@ -34,15 +37,18 @@ const confirmationRenderers = [
 	dappAddChainConfirmationRenderer,
 	dappSwitchChainConfirmationRenderer,
 	processCtConfirmationRenderer,
+	unlockConfirmationRenderer,
 ];
 
 createRoot(rootElement).render(
 	<React.StrictMode>
 		<AppErrorBoundary>
 			<ThemeProvider>
-				<ConfirmProvider renderers={confirmationRenderers}>
-					<ActionsHandler messageBus={messageBus} />
-				</ConfirmProvider>
+				<QueryClientProvider client={queryClient}>
+					<ConfirmProvider renderers={confirmationRenderers}>
+						<ActionsHandler messageBus={messageBus} />
+					</ConfirmProvider>
+				</QueryClientProvider>
 			</ThemeProvider>
 		</AppErrorBoundary>
 	</React.StrictMode>,

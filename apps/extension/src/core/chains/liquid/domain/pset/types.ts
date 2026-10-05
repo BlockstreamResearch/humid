@@ -22,7 +22,26 @@ export type ParsedLiquidSignPsetParams = {
 	signInputs: ParsedLiquidSignPsetInput[];
 };
 
+export type ReviewedLiquidSignPsetParams = Omit<ParsedLiquidSignPsetParams, "pset"> & {
+	reviewedPset: string;
+};
+
 export type LiquidSignPsetResult = {
 	pset: string;
 	txid?: string;
+};
+
+export type LiquidSignPsetReview = {
+	/** Blinded PSET inspected for approval; signing uses this exact serialization. */
+	pset: string;
+	inputs: { index: number; sighashType: number }[];
+	fees: { asset: string; amount: string }[];
+	netEffect: { asset: string; amount: string }[];
+	outputs: {
+		address?: string;
+		amount?: string;
+		asset?: string;
+		index: number;
+		script: string;
+	}[];
 };
