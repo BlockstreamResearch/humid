@@ -97,6 +97,102 @@ async function exerciseSigning() {
 		expect(after.map((input) => input.hasSignature().length)).toEqual([1]);
 		expect(own(signedPset.extractTx()).toString()).toBe(own(reviewed.extractTx()).toString());
 		expect(signedPset.inputs().map((input) => own(input).sighash())).toEqual([130]);
+
+		const mixedRequest = buildCoinControlPset({
+			inputs: [coin],
+			outputAmounts: [BigInt(coin.amount) - 3000n, 1000n, 1000n],
+			feeSats: 1000n,
+			destinationAddress: destination,
+			policyAssetHex: rawAssetId,
+		});
+		const mixedPset = liquidjs.Pset.fromBase64(mixedRequest.pset);
+		mixedPset.outputs[2]!.blindingPubkey = undefined;
+		mixedPset.outputs[2]!.blinderIndex = undefined;
+		const mixedParams = parseLiquidSignPsetParams({
+			...mixedRequest,
+			pset: mixedPset.toBase64(),
+		});
+		const mixedReview = await blindAndInspectPset(account, mixedParams.pset);
+		expect(mixedReview.fees).toEqual([{ asset: rawAssetId, amount: "1000" }]);
+		expect(mixedReview.netEffect).toEqual([{ asset: rawAssetId, amount: "-1000" }]);
+		expect(mixedReview.outputs[2]).toMatchObject({
+			amount: "1000",
+			asset: rawAssetId,
+			index: 2,
+		});
+		const mixedSigned = await signPset(account, {
+			broadcast: false,
+			reviewedPset: mixedReview.pset,
+			signInputs: mixedParams.signInputs,
+		});
+		expect(mixedSigned.txid).toBeUndefined();
+		expect(own(own(new lwk.Pset(mixedSigned.pset)).extractTx()).toString()).toBe(
+			own(own(new lwk.Pset(mixedReview.pset)).extractTx()).toString(),
+		);
+		expect((await blindAndInspectPset(account, mixedReview.pset)).pset).toBe(mixedReview.pset);
+		const tampered = Buffer.from(mixedReview.pset, "base64");
+		const amount = Buffer.alloc(8);
+		amount.writeBigUInt64LE(BigInt(coin.amount) - 3000n);
+		const amountOffset = tampered.indexOf(Buffer.concat([Buffer.from([1, 3, 8]), amount]));
+		expect(amountOffset).toBeGreaterThan(4);
+		tampered.writeBigUInt64LE(BigInt(coin.amount) - 3001n, amountOffset + 3);
+		await expect(blindAndInspectPset(account, tampered.toString("base64"))).rejects.toMatchObject({
+			message: expect.stringMatching(/blind proof/i),
+		});
+
+		const tickAsset = "22".repeat(32);
+		const walletScript = Buffer.from(coin.scriptPubKey, "hex");
+		const foreignScript = Buffer.from("0014" + "77".repeat(20), "hex");
+		const legacySource = liquidjs.Creator.newPset({
+			inputs: [0, 1, 2].map((index) => new liquidjs.CreatorInput(String(index + 1).repeat(64), 0)),
+			outputs: [
+				new liquidjs.CreatorOutput(rawAssetId, 50_000, walletScript),
+				new liquidjs.CreatorOutput(tickAsset, 1, Buffer.from("6a", "hex")),
+				new liquidjs.CreatorOutput(rawAssetId, 9_000, walletScript),
+				new liquidjs.CreatorOutput(rawAssetId, 1_000),
+			],
+		});
+		for (const [index, inputAsset, amount, inputScript] of [
+			[0, rawAssetId, 50_000, foreignScript],
+			[1, tickAsset, 1, foreignScript],
+			[2, rawAssetId, 10_000, walletScript],
+		] as const) {
+			const input = legacySource.inputs[index]!;
+			input.witnessUtxo = {
+				script: inputScript,
+				asset: liquidjs.AssetHash.fromHex(inputAsset).bytes,
+				value: liquidjs.ElementsValue.fromNumber(amount).bytes,
+				nonce: Buffer.alloc(1),
+			};
+			input.requiredHeightLocktime = undefined;
+			input.requiredTimeLocktime = undefined;
+		}
+		const legacyPset = own(new lwk.Pset(legacySource.toBase64()));
+		legacyPset.addDetails(wollet);
+		const legacyReview = await blindAndInspectPset(account, legacyPset.toString());
+		expect(legacyReview.pset).toBe(legacyPset.toString());
+		expect(legacyReview.fees).toEqual([{ asset: rawAssetId, amount: "1000" }]);
+		expect(legacyReview.netEffect).toEqual([{ asset: rawAssetId, amount: "49000" }]);
+		const legacySigned = await signPset(account, {
+			broadcast: false,
+			reviewedPset: legacyReview.pset,
+			signInputs: [{ address: coin.address, index: 2, sighashTypes: [1] }],
+		});
+		const legacySignedPset = own(new lwk.Pset(legacySigned.pset));
+		expect(own(legacySignedPset.extractTx()).toString()).toBe(
+			own(legacyPset.extractTx()).toString(),
+		);
+		expect(legacySigned.pset).not.toBe(legacyReview.pset);
+		await expect(
+			signPset(account, {
+				broadcast: false,
+				reviewedPset: legacyReview.pset,
+				signInputs: [{ address: coin.address, index: 0, sighashTypes: [1] }],
+			}),
+		).rejects.toMatchObject({
+			data: { reason: WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST },
+		});
+
 		await expect(signPset(account, { ...signing, signInputs: [] })).rejects.toMatchObject({
 			data: { reason: WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST },
 		});
