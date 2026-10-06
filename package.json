@@ -1,6 +1,6 @@
 {
 	"name": "humid-workspace",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"private": true,
 	"workspaces": [
 		"apps/*",
@@ -10,8 +10,9 @@
 	"scripts": {
 		"dev": "vite",
 		"start": "vite",
-		"build": "bun run check:wasm && tsc && vite build",
-		"build:wasm": "smplx/crates/wasm/build.sh",
+		"build": "bun run check:wasm:lwk && bun run check:wasm:smplx && tsc && vite build",
+		"build:wasm:smplx": "smplx/crates/wasm/build.sh",
+		"build:wasm:lwk": "scripts/buildLwkWasm.sh",
 		"build:watch": "vite build --watch --mode development",
 		"analyze": "vite build --mode analyze",
 		"preview": "vite preview",
@@ -31,7 +32,8 @@
 		"test:watch": "bun test --watch",
 		"typecheck:packages": "tsc -p packages/tsconfig.json --noEmit",
 		"check": "bun run typecheck && bun run typecheck:packages && bun run web:typecheck && bun run lint && bun run format:check && bun run test",
-		"check:wasm": "bun run scripts/checkSmplxWasm.ts"
+		"check:wasm:lwk": "bun run scripts/checkWasm.ts lwk",
+		"check:wasm:smplx": "bun run scripts/checkWasm.ts smplx"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.5.0",
