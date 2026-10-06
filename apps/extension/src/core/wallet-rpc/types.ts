@@ -1,7 +1,11 @@
 export type WalletRpcConfirmationRequest = {
 	data?: unknown;
 	message?: string;
+	confirmLabel?: string;
+	method?: string;
+	requester?: { name?: string; origin: string };
 	title: string;
+	timeoutMs?: number;
 };
 
 export type WalletRpcConfirmationHandler = (
@@ -17,6 +21,7 @@ export const DENY_ALL_AUTHORIZATION: WalletRpcAuthorization = { isGranted: () =>
 export type WalletRpcBaseContext = {
 	authorization: WalletRpcAuthorization;
 	confirm?: WalletRpcConfirmationHandler;
+	requester?: { name?: string; origin: string };
 };
 
 export type WalletRpcRequest = {

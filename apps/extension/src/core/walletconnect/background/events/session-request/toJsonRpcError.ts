@@ -1,3 +1,4 @@
+import { DappAuthorizationError } from "@/core/extension-background/dapp-authorization/errors";
 import {
 	WALLET_RPC_ERROR_CODES,
 	WALLET_RPC_ERROR_REASONS,
@@ -15,7 +16,7 @@ export function toJsonRpcError(error: unknown): { code: number; data?: unknown; 
 		};
 	}
 
-	if (error instanceof WalletRpcError) {
+	if (error instanceof WalletRpcError || error instanceof DappAuthorizationError) {
 		return {
 			code: error.code,
 			data: error.data,

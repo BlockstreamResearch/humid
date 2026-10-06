@@ -7,5 +7,5 @@ export const localAuthRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/local-auth",
 	beforeLoad: requireLockedVault,
-	component: lazyRouteComponent(() => import("./index"), "LocalAuthPage"),
+	component: lazyRouteComponent(() => import("./index"), "LocalAuthRoutePage"),
 });

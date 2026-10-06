@@ -70,6 +70,14 @@ async function create(input: WalletVaultCreateInput): Promise<WalletVaultStatus>
 	return getStatus();
 }
 
+const unlockListeners = new Set<() => void>();
+
+function onUnlocked(listener: () => void): () => void {
+	unlockListeners.add(listener);
+
+	return () => unlockListeners.delete(listener);
+}
+
 async function unlock(input: WalletVaultUnlockInput): Promise<WalletVaultStatus> {
 	await unlockSecureVault({
 		passphrase: input.passphrase,
@@ -86,6 +94,8 @@ async function unlock(input: WalletVaultUnlockInput): Promise<WalletVaultStatus>
 
 		throw error;
 	}
+
+	for (const listener of unlockListeners) listener();
 
 	return getStatus();
 }
@@ -170,6 +180,7 @@ export const walletVaultBackground = {
 		updateState: keyManagerStore.updateUnlockedState,
 	},
 	lock,
+	onUnlocked,
 	reset,
 	unlock,
 };

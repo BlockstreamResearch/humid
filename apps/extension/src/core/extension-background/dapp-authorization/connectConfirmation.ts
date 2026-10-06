@@ -15,7 +15,6 @@ export type DappConnectConfirmationData = {
 	kind: typeof DAPP_CONNECT_CONFIRMATION_KIND;
 	methods: string[];
 	origin: string;
-	requiresUnlock: boolean;
 };
 
 export type DappConnectConfirmationResult = {

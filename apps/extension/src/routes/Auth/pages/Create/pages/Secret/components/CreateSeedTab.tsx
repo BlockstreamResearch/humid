@@ -144,10 +144,7 @@ function VerifyStep({
 					const matched = isMatched(position);
 
 					return (
-						<label
-							key={position}
-							className="bg-muted flex items-center gap-2 rounded-lg px-3 py-1.5"
-						>
+						<label key={position} className="bg-muted flex items-center gap-2 rounded-lg p-3">
 							<span className="text-muted-foreground w-14 shrink-0 font-mono text-sm tabular-nums">
 								Word {position + 1}
 							</span>
@@ -156,7 +153,7 @@ function VerifyStep({
 								autoCapitalize="off"
 								autoComplete="off"
 								autoCorrect="off"
-								className="h-7 border-0 bg-transparent px-0 font-mono focus-visible:ring-0"
+								className="h-8 border-0 bg-transparent px-2 py-1 font-mono focus-visible:ring-0 dark:bg-transparent"
 								spellCheck={false}
 								onChange={(event) =>
 									setAnswers((current) => ({ ...current, [position]: event.target.value }))

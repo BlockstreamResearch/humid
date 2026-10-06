@@ -55,6 +55,7 @@ export type DappRequestDispatch = (request: {
 	chainId: string;
 	grantedMethods: Record<string, boolean>;
 	method: string;
+	origin: string;
 	params: unknown;
 }) => Promise<unknown>;
 
@@ -79,6 +80,8 @@ export type DappAuthorizationDependencies = {
 	) => Promise<AccountModelState>;
 	now?: () => number;
 	sessionTtlMs?: number | null;
+	/** Resolves once the wallet is unlocked or the unlock prompt is dismissed. */
+	waitForUnlock: () => Promise<void>;
 };
 
 export type DappAuthorization = {
@@ -108,7 +111,14 @@ export function createDappAuthorization(
 		updateAccountModel,
 		now = () => Date.now(),
 		sessionTtlMs = null,
+		waitForUnlock,
 	} = dependencies;
+
+	const unlockedAccountModel = async (): Promise<AccountModelState> => {
+		await waitForUnlock();
+
+		return requireUnlocked(getAccountModel());
+	};
 
 	const runCreateSession = async ({
 		origin,
@@ -118,6 +128,7 @@ export function createDappAuthorization(
 		params: unknown;
 	}): Promise<Caip25CreateSessionResult> => {
 		const requestingOrigin = requireOrigin(origin);
+		const initialModel = await unlockedAccountModel();
 
 		const requested = mergeRequestedScopes(asCreateSessionParams(params));
 		const supported = await resolveSupportedScope(requested);
@@ -129,19 +140,17 @@ export function createDappAuthorization(
 			);
 		}
 
-		const initialModel = getAccountModel();
-		const connectedAccountGroupIds = initialModel
-			? connectedAccountGroupIdsForOrigin(registry, initialModel, requestingOrigin)
-			: [];
+		const connectedAccountGroupIds = connectedAccountGroupIdsForOrigin(
+			registry,
+			initialModel,
+			requestingOrigin,
+		);
 		const connectData: DappConnectConfirmationData = {
-			accounts: initialModel
-				? buildDappConnectAccounts(initialModel, registry, connectedAccountGroupIds)
-				: [],
+			accounts: buildDappConnectAccounts(initialModel, registry, connectedAccountGroupIds),
 			chains: supported.chains,
 			kind: DAPP_CONNECT_CONFIRMATION_KIND,
 			methods: supported.methods,
 			origin: requestingOrigin,
-			requiresUnlock: initialModel === null,
 		};
 
 		const decision = await confirm<DappConnectConfirmationResult>({
@@ -253,7 +262,7 @@ export function createDappAuthorization(
 	}): Promise<unknown> => {
 		const invocation = parseInvokeParams(params);
 		const requestingOrigin = requireOrigin(origin);
-		const accountModel = requireUnlocked(getAccountModel());
+		const accountModel = await unlockedAccountModel();
 
 		const session = registry.findDappSession(accountModel, {
 			now: now(),
@@ -273,11 +282,18 @@ export function createDappAuthorization(
 			);
 		}
 
+		if (!Object.hasOwn(session.scope.methods, invocation.request.method)) {
+			throw dappAuthorizationErrors.unauthorized(
+				`Method "${invocation.request.method}" is not authorized for this session.`,
+			);
+		}
+
 		return dispatch({
 			accountGroupIds: session.scope.accountGroupIds,
 			chainId: invocation.scope,
 			grantedMethods: session.scope.methods,
 			method: invocation.request.method,
+			origin: requestingOrigin,
 			params: invocation.request.params,
 		});
 	};
@@ -310,6 +326,7 @@ export function createDappAuthorization(
 		params: unknown;
 	}): Promise<{ chainId: string }> => {
 		const requestingOrigin = requireOrigin(origin);
+		await unlockedAccountModel();
 
 		if (!prepareChainAddition) {
 			throw dappAuthorizationErrors.invalidParams("Adding chains is not supported.");
@@ -341,6 +358,8 @@ export function createDappAuthorization(
 			throw dappAuthorizationErrors.userRejected("User rejected the add-chain request.");
 		}
 
+		requireUnlocked(getAccountModel());
+
 		return { chainId: await prepared.commit() };
 	};
 
@@ -354,7 +373,7 @@ export function createDappAuthorization(
 	}): Promise<{ chainId: string }> => {
 		const requestingOrigin = requireOrigin(origin);
 		const chainId = parseSwitchChainParams(params);
-		const accountModel = requireUnlocked(getAccountModel());
+		const accountModel = await unlockedAccountModel();
 
 		const session = registry.findDappSession(accountModel, {
 			now: now(),
@@ -400,10 +419,23 @@ export function createDappAuthorization(
 			await resolveConnectedAccountIds(chainId, session.scope.accountGroupIds).catch(() => []);
 		}
 
+		requireUnlocked(getAccountModel());
+
 		await updateAccountModel((model) => {
 			const current = model.dappSessions[session.id];
 
-			if (!current) return model;
+			if (
+				!current ||
+				registry.findDappSession(model, {
+					now: now(),
+					origin: requestingOrigin,
+					transport: INJECTED_TRANSPORT,
+				})?.id !== session.id
+			) {
+				throw dappAuthorizationErrors.unauthorized(
+					"The session ended before the network change was approved.",
+				);
+			}
 
 			return {
 				...model,
@@ -459,7 +491,9 @@ function requireOrigin(origin: string | null): string {
 
 function requireUnlocked(accountModel: AccountModelState | null): AccountModelState {
 	if (!accountModel) {
-		throw dappAuthorizationErrors.walletLocked("Unlock the wallet to continue.");
+		throw dappAuthorizationErrors.walletLocked(
+			"Wallet is locked. Open Humid and unlock it, then retry.",
+		);
 	}
 
 	return accountModel;

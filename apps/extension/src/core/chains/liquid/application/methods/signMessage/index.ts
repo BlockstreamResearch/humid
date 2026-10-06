@@ -34,6 +34,7 @@ export const signLiquidMessage = createWalletMethod<
 	LiquidSignMessageResult
 >({
 	confirmation: ({ params, review }) => ({
+		confirmLabel: "Sign",
 		data: {
 			accountIdentifier: review.message.accountIdentifier,
 			address: review.message.address,
@@ -42,7 +43,12 @@ export const signLiquidMessage = createWalletMethod<
 			message: params.message,
 			protocol: review.message.protocol,
 		},
-		message: "A dapp wants to sign a Liquid message.",
+		message: [
+			"A dapp wants to sign a Liquid message.",
+			`Network: ${review.message.chainId}\nAccount: ${review.message.accountIdentifier}`,
+			`Signing address: ${review.message.address}\nSignature protocol: ${review.message.protocol}`,
+			`Message to sign:\n${params.message}`,
+		].join("\n\n"),
 		title: "Sign Liquid message?",
 	}),
 	execute: ({ context, params, review }) =>
@@ -52,10 +58,8 @@ export const signLiquidMessage = createWalletMethod<
 	review: async ({ context, params }) => {
 		const account = await resolveDappAccount(context);
 
-		return {
-			account,
-			message: await context.walletBackend.inspectMessageSigning(account, params),
-		};
+		const message = await context.walletBackend.inspectMessageSigning(account, params);
+		return { account, message };
 	},
 });
 

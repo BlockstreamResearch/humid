@@ -7,11 +7,11 @@ import { HomeActions } from "./components/HomeActions";
 export default function Home({
 	onOpenDeveloper,
 	onOpenFormatSupport,
-	onOpenManifestInspector,
+	onOpenManifestRunner,
 }: {
 	onOpenDeveloper: () => void;
 	onOpenFormatSupport: () => void;
-	onOpenManifestInspector: () => void;
+	onOpenManifestRunner: () => void;
 }) {
 	const { hasProvider, isConnected } = useHumidContext();
 
@@ -38,9 +38,9 @@ export default function Home({
 					variant="ghost"
 					size="sm"
 					className="text-muted-foreground text-xs"
-					onClick={onOpenManifestInspector}
+					onClick={onOpenManifestRunner}
 				>
-					Manifest inspector
+					Process transaction
 				</Button>
 				<Button
 					variant="ghost"

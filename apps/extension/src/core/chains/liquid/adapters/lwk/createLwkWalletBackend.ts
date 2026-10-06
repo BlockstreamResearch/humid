@@ -12,11 +12,12 @@ import { readChainTipHeight } from "./wallet/readChainTipHeight";
 import { createLwkLiquidAccount } from "./wallet/resolveAccount";
 import { estimateMaxSend, inspectTransfer, sendTransfer } from "./wallet/sendTransfer";
 import { inspectMessageSigning, signMessage } from "./wallet/signMessage";
-import { signPset } from "./wallet/signPset";
+import { blindAndInspectPset, signPset } from "./wallet/signPset";
 import { scanAccount } from "./wallet/syncAccount";
 
 export function createLwkWalletBackend(): LiquidWalletBackend {
 	return {
+		blindAndInspectPset,
 		estimateMaxSend,
 		getActivity: getWalletActivityForAsset,
 		getBalance: getWalletBalanceForAsset,

@@ -34,13 +34,23 @@ export const sendLiquidTransfer = createWalletMethod<
 	LiquidSendTransferResult
 >({
 	confirmation: ({ review }) => ({
+		confirmLabel: "Sign and send",
 		data: {
 			...review.transfer,
 			kind: "liquid.sendTransfer",
 		},
-		message: review.transfer.recipientConfidential
-			? "A dapp wants to send a Liquid transfer from this account."
-			: "A dapp wants to send a Liquid transfer to an unconfidential address.",
+		message: [
+			"This transfer will be signed and broadcast.",
+			`Network: ${review.transfer.chainId}\nAccount: ${review.transfer.accountIdentifier}`,
+			`Recipient: ${review.transfer.recipientAddress}`,
+			`Amount (base units): ${review.transfer.amount}\nAsset: ${review.transfer.assetId}`,
+			review.transfer.memo === undefined ? "" : `Memo:\n${review.transfer.memo}`,
+			review.transfer.recipientConfidential
+				? ""
+				: "Warning: this recipient is unconfidential; the amount and asset will be publicly visible.",
+		]
+			.filter(Boolean)
+			.join("\n\n"),
 		title: "Send Liquid transfer?",
 	}),
 	execute: ({ context, params, review }) =>
@@ -53,15 +63,12 @@ export const sendLiquidTransfer = createWalletMethod<
 
 		await context.walletBackend.syncAccount(account);
 
-		return {
+		const transfer = await context.walletBackend.inspectTransfer(
 			account,
-			requestedAsset,
-			transfer: await context.walletBackend.inspectTransfer(
-				account,
-				params,
-				requestedAsset.rawAssetId,
-			),
-		};
+			params,
+			requestedAsset.rawAssetId,
+		);
+		return { account, requestedAsset, transfer };
 	},
 });
 
