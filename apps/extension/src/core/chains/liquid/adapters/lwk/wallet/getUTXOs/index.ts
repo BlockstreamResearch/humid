@@ -22,7 +22,12 @@ export function getWalletUtxosForAsset(
 	const implementation = getLwkImplementation(account);
 
 	try {
-		return mapLiquidUtxosForAsset(readWalletUtxos(implementation.wollet), {
+		const utxos = [
+			...readWalletUtxos(implementation.wollet),
+			...readExplicitWalletUtxos(implementation.wollet),
+		];
+
+		return mapLiquidUtxosForAsset(utxos, {
 			assetId: toLiquidAssetId(account.chainId, rawAssetId),
 			rawAssetId,
 		});

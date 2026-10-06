@@ -62,7 +62,7 @@ export function readExplicitWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[]
 			const unblinded = owned.unblinded();
 
 			candidates.set(outpointKey(txid, vout), {
-				address: owned.address().toString(),
+				address: wollet.address(SIGNING_INDEX).address().toString(),
 				amountSats: unblinded.value().toString(),
 				confidential: false,
 				derivationPath: `${CHAIN_EXTERNAL}/${SIGNING_INDEX}`,
