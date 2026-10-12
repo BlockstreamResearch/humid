@@ -464,7 +464,7 @@ describe("what an action requires of an input beyond where its money comes from"
 		expect(isRefusal(result)).toBe(false);
 	});
 
-	test("but a relative timelock refuses, because one sequence covers every input", async () => {
+	test("but a relative timelock on a wallet input refuses", async () => {
 		const result = await reviewPay(
 			payDocument((pay) => {
 				const inputs = pay.inputs as Record<string, unknown>[];
@@ -477,6 +477,7 @@ describe("what an action requires of an input beyond where its money comes from"
 
 		if (isRefusal(result)) {
 			expect(result.reject).toBe("unimplemented-construct");
+			expect(result.reason).toContain("would inherit that wait");
 		}
 	});
 

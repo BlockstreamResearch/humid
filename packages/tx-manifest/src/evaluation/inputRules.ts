@@ -155,15 +155,40 @@ export function transactionSequence(rules: InputRule[]): TransactionSequenceResu
 		};
 	}
 
-	if (first.sequence < SEQUENCE_TIMELOCK_DISABLED_FROM) {
-		return {
-			ok: false,
-			reason:
-				`Input ${first.id} asks for a relative timelock, and this wallet sets one sequence for ` +
-				"the whole transaction — which would time-lock the outputs funding it as well, against " +
-				"their own age rather than this input's.",
-		};
+	return { ok: true, value: first.sequence };
+}
+
+export type PlacedInputOrigin = { declaredBy?: string };
+
+export function relativeTimelockPlacement(
+	sequence: number | undefined,
+	rules: InputRule[],
+	placed: PlacedInputOrigin[],
+): { ok: false; reason: string } | { ok: true } {
+	if (sequence === undefined || sequence >= SEQUENCE_TIMELOCK_DISABLED_FROM) {
+		return { ok: true };
 	}
 
-	return { ok: true, value: first.sequence };
+	const asking = rules.filter((rule) => rule.sequence === sequence);
+	const asked = new Set(asking.map((rule) => rule.id));
+	const inheriting = placed.filter(
+		(origin) => origin.declaredBy === undefined || !asked.has(origin.declaredBy),
+	);
+
+	if (inheriting.length === 0) {
+		return { ok: true };
+	}
+
+	const named = asking[0]?.id ?? "(unnamed)";
+	const one = inheriting.length === 1;
+
+	return {
+		ok: false,
+		reason:
+			`Input ${named} asks for a relative timelock (sequence ${sequence}), and this wallet sets ` +
+			`one sequence for the whole transaction. ${inheriting.length} other input` +
+			`${one ? "" : "s"} would inherit that wait, measured against ${one ? "its" : "their"} own ` +
+			`age rather than ${named}'s, so nothing would relay the transaction until every one ` +
+			"of them is that old as well.",
+	};
 }
