@@ -101,6 +101,7 @@ export type AssetMovement = {
 export type ManifestReview = {
 	action: string;
 	changeBlinded: boolean;
+	changeDeferred?: boolean;
 	changeBlindedBy?: BlindingWord;
 	changeOverrode?: BlindingWord;
 	boundTo?: string;
@@ -624,6 +625,13 @@ export async function reviewManifestAction(
 	const outputAt = new Map<string, number>();
 	const returned = new Map<string, bigint>();
 	const changePaid = new Set<string>();
+	// Set when a policy-asset "change" output is left out of `outputs` below for the
+	// builder's `addChange()` to handle. Without this, an action whose only output is
+	// such a change output looks like an action with no outputs at all.
+	let changeDeferred = false;
+
+	for (const [at, planned] of plan.plan.outputs.entries()) {
+		const asset = ledger.outputs[at] ?? policyAsset;
 
 	for (const [at, planned] of plan.plan.outputs.entries()) {
 		const asset = ledger.outputs[at] ?? policyAsset;
@@ -635,6 +643,10 @@ export async function reviewManifestAction(
 					: (fundedFor.get(asset)?.changeSats ?? 0n);
 
 			if (surplus <= 0n) {
+				if (asset === policyAsset) {
+					changeDeferred = true;
+				}
+
 				continue;
 			}
 
@@ -861,6 +873,7 @@ export async function reviewManifestAction(
 		action: request.action,
 		...(action.boundTo === undefined ? {} : { boundTo: action.boundTo }),
 		changeBlinded: change.blinding === "blinded",
+		...(changeDeferred ? { changeDeferred: true } : {}),
 		...(change.blinding === "blinded"
 			? { changeBlindedBy: change.decidedBy }
 			: change.overrode === undefined
