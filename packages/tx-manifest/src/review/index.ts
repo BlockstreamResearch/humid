@@ -42,7 +42,11 @@ import {
 	withHookValues,
 } from "../evaluation/hooks";
 import { type PlaceableInput, placeInputs } from "../evaluation/inputOrder";
-import { resolveInputRules, transactionSequence } from "../evaluation/inputRules";
+import {
+       relativeTimelockPlacement,
+       resolveInputRules,
+       transactionSequence,
+} from "../evaluation/inputRules";
 import {
 	declaredIssuance,
 	issuanceAttributes,
@@ -748,6 +752,19 @@ export async function reviewManifestAction(
 	}
 
 	const placement = placeInputs(placeable);
+
+	const carried = relativeTimelockPlacement(
+		sequence.value,
+		inputRules.rules,
+		placement.order.map((planned) =>
+			planned.source === "covenant" ? { declaredBy: planned.covenant.id } : {},
+		),
+	);
+
+	if (!carried.ok) {
+		return { reason: carried.reason, refused: true, reject: "unimplemented-construct" };
+	}
+
 	const landedAt = (id: string): number | undefined => {
 		const own = placement.at.get(id);
 
