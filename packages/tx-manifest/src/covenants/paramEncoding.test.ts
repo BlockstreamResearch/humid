@@ -89,6 +89,31 @@ describe("flags", () => {
 	});
 });
 
+describe("compressed public keys", () => {
+	test.each([
+		["even", `02${KEY}`, "0"],
+		["odd", `03${KEY}`, "1"],
+		["prefixed uppercase", `0X03${KEY.toUpperCase()}`, "1"],
+	])("encodes the %s compressed key as parity and x", (_name, key, parity) => {
+		expect(encode("pubkey33", key)).toEqual({
+			encoded: { type: "(u1, u256)", value: `(${parity}, 0x${KEY})` },
+			ok: true,
+		});
+	});
+
+	test("rejects x-only, uncompressed, malformed and wrong-width keys", () => {
+		for (const value of [
+			KEY,
+			`04${KEY}`,
+			`02${KEY}00`,
+			`02${KEY.slice(2)}`,
+			`03${"zz".repeat(32)}`,
+		]) {
+			expect(encode("pubkey33", value).ok).toBe(false);
+		}
+	});
+});
+
 describe("the types with no encoding", () => {
 	test("are refused by name rather than passed through", () => {
 		for (const type of ["address", "bytes", "string"]) {
