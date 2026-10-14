@@ -1,7 +1,11 @@
 import type { LiquidWalletBackend } from "../../application/backends/LiquidWalletBackend";
 import { getWalletActivityForAsset } from "./wallet/getActivity";
 import { getWalletBalanceForAsset } from "./wallet/getBalance";
-import { getWalletReceiveAddress, getWalletSigningAddress } from "./wallet/getReceiveAddress";
+import {
+	getWalletAddress,
+	getWalletReceiveAddress,
+	getWalletSigningAddress,
+} from "./wallet/getReceiveAddress";
 import {
 	getExplicitWalletUtxosForAsset,
 	getFundingWalletUtxosForAsset,
@@ -20,6 +24,7 @@ export function createLwkWalletBackend(): LiquidWalletBackend {
 		blindAndInspectPset,
 		estimateMaxSend,
 		getActivity: getWalletActivityForAsset,
+		getAddress: getWalletAddress,
 		getBalance: getWalletBalanceForAsset,
 		getReceiveAddress: getWalletReceiveAddress,
 		getSigningAddress: getWalletSigningAddress,

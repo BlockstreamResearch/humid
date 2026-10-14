@@ -9,9 +9,9 @@ export type WalletMethodPresentation = {
 
 export const WALLET_METHOD_PRESENTATION: WalletMethodPresentation[] = [
 	{
-		description: "See this account's first address.",
+		description: "See this account's receive addresses, including confidential ones.",
 		id: LIQUID_WALLET_RPC_METHODS.GET_ADDRESS,
-		label: "View first address",
+		label: "View addresses",
 		preApprovable: true,
 	},
 	{
@@ -27,9 +27,9 @@ export const WALLET_METHOD_PRESENTATION: WalletMethodPresentation[] = [
 		preApprovable: true,
 	},
 	{
-		description: "See this account's public addresses (its wallet descriptor).",
+		description: "See this account's public wallet descriptor (scripts, no blinding keys).",
 		id: LIQUID_WALLET_RPC_METHODS.GET_WALLET_DESCRIPTOR,
-		label: "View addresses",
+		label: "View wallet descriptor",
 		preApprovable: true,
 	},
 	{

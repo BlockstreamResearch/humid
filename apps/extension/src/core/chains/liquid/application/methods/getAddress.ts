@@ -3,7 +3,11 @@ import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
 import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
-import { LIQUID_WALLET_RPC_METHODS, type LiquidGetAddressResult } from "../../domain/LiquidRpc";
+import {
+	LIQUID_WALLET_RPC_METHODS,
+	type LiquidGetAddressParams,
+	type LiquidGetAddressResult,
+} from "../../domain/LiquidRpc";
 import { parseLiquidGetAddressParams } from "../../domain/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../dappAccountScope";
@@ -20,30 +24,32 @@ type LiquidGetAddressReview = {
 };
 
 export const getLiquidAddress = createWalletMethod<
-	undefined,
+	LiquidGetAddressParams,
 	LiquidGetAddressContext,
 	LiquidGetAddressReview,
 	LiquidGetAddressResult
 >({
-	confirmation: ({ review }) => ({
+	confirmation: ({ params, review }) => ({
 		data: {
 			accountIdentifier: review.account.accountIdentifier,
 			chainId: review.account.chainId,
+			confidential: params.confidential,
+			index: params.index,
 			kind: "liquid.getAddress",
 		},
-		message: "A dapp wants to read the first Liquid address of this account.",
+		message: `A dapp wants to read the ${params.confidential ? "confidential" : "unconfidential"} Liquid address #${params.index} of this account.`,
 		title: "Share Liquid address?",
 	}),
-	execute: ({ context, review }) => {
+	execute: ({ context, params, review }) => {
 		const { account } = review;
-		const { address, index, unconfidential } = context.walletBackend.getSigningAddress(account);
+		const { address, unconfidential } = context.walletBackend.getAddress(account, params.index);
 
 		return {
 			accountIdentifier: account.accountIdentifier,
-			address,
+			address: params.confidential ? address : unconfidential,
 			chainId: account.chainId,
-			index,
-			unconfidentialAddress: unconfidential,
+			confidential: params.confidential,
+			index: params.index,
 		};
 	},
 	id: LIQUID_WALLET_RPC_METHODS.GET_ADDRESS,

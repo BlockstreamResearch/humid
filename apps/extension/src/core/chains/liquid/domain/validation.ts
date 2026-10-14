@@ -7,6 +7,7 @@ import type { LiquidChainId } from "./LiquidChain";
 import {
 	LIQUID_DESCRIPTOR_FORMATS,
 	LIQUID_DESCRIPTOR_TYPES,
+	type LiquidGetAddressParams,
 	type LiquidGetBalanceParams,
 	type LiquidGetUTXOsParams,
 	type LiquidGetWalletDescriptorParams,
@@ -15,7 +16,13 @@ import {
 
 const liquidAssetIdSchema = z.string().regex(/^bip122:[0-9a-f]{32}\/elip144:[0-9a-f]{64}$/u);
 
-const liquidGetAddressParamsSchema = z.object({}).strict().optional();
+const liquidGetAddressParamsSchema = z
+	.object({
+		confidential: z.boolean().default(true),
+		index: z.number().int().min(0).max(0x7fffffff).default(0),
+	})
+	.strict()
+	.default({ confidential: true, index: 0 });
 
 const liquidGetBalanceParamsSchema = z
 	.object({
@@ -114,14 +121,14 @@ export function parseLiquidAssetId(
 	};
 }
 
-export function parseLiquidGetAddressParams(value: unknown): undefined {
+export function parseLiquidGetAddressParams(value: unknown): LiquidGetAddressParams {
 	const parsed = liquidGetAddressParamsSchema.safeParse(value);
 
 	if (!parsed.success) {
 		throw new WalletRpcInvalidParamsError("Invalid getAddress parameters.", parsed.error.flatten());
 	}
 
-	return undefined;
+	return parsed.data;
 }
 
 export function parseLiquidGetBalanceParams(value: unknown): LiquidGetBalanceParams {

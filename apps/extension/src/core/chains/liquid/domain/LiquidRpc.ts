@@ -25,12 +25,17 @@ export const LIQUID_WALLETCONNECT_EVENTS = [
 
 export type LiquidWalletConnectEvent = (typeof LIQUID_WALLETCONNECT_EVENTS)[number];
 
+export type LiquidGetAddressParams = {
+	confidential: boolean;
+	index: number;
+};
+
 export type LiquidGetAddressResult = {
 	accountIdentifier: string;
 	address: string;
 	chainId: LiquidChainId;
+	confidential: boolean;
 	index: number;
-	unconfidentialAddress: string;
 };
 
 export type LiquidGetBalanceParams = {
