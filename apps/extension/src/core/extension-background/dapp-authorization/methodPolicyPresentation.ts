@@ -27,9 +27,9 @@ export const WALLET_METHOD_PRESENTATION: WalletMethodPresentation[] = [
 		preApprovable: true,
 	},
 	{
-		description: "See this account's public wallet descriptor (scripts, no blinding keys).",
+		description: "See this account's public wallet descriptor (without blinding keys).",
 		id: LIQUID_WALLET_RPC_METHODS.GET_WALLET_DESCRIPTOR,
-		label: "View wallet descriptor",
+		label: "Read public descriptor",
 		preApprovable: true,
 	},
 	{
