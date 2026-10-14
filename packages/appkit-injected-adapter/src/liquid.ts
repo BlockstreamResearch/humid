@@ -13,6 +13,7 @@ export const LIQUID_TESTNET_CHAIN_ID =
 export const LIQUID_DESCRIPTOR_CHANGED_EVENT = "bip122_walletDescriptorChanged";
 
 export const liquidWalletRpcMethods = [
+	"getAddress",
 	"getBalance",
 	"getUTXOs",
 	"getWalletDescriptor",

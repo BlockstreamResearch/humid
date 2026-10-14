@@ -15,6 +15,8 @@ import {
 
 const liquidAssetIdSchema = z.string().regex(/^bip122:[0-9a-f]{32}\/elip144:[0-9a-f]{64}$/u);
 
+const liquidGetAddressParamsSchema = z.object({}).strict().optional();
+
 const liquidGetBalanceParamsSchema = z
 	.object({
 		assetId: liquidAssetIdSchema.optional(),
@@ -110,6 +112,16 @@ export function parseLiquidAssetId(
 		chainId: liquidChainId,
 		rawAssetId,
 	};
+}
+
+export function parseLiquidGetAddressParams(value: unknown): undefined {
+	const parsed = liquidGetAddressParamsSchema.safeParse(value);
+
+	if (!parsed.success) {
+		throw new WalletRpcInvalidParamsError("Invalid getAddress parameters.", parsed.error.flatten());
+	}
+
+	return undefined;
 }
 
 export function parseLiquidGetBalanceParams(value: unknown): LiquidGetBalanceParams {

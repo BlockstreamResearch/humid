@@ -9,6 +9,12 @@ export type WalletMethodPresentation = {
 
 export const WALLET_METHOD_PRESENTATION: WalletMethodPresentation[] = [
 	{
+		description: "See this account's first address.",
+		id: LIQUID_WALLET_RPC_METHODS.GET_ADDRESS,
+		label: "View first address",
+		preApprovable: true,
+	},
+	{
 		description: "See this account's asset balances.",
 		id: LIQUID_WALLET_RPC_METHODS.GET_BALANCE,
 		label: "View balance",

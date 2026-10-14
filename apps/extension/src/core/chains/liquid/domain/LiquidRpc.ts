@@ -2,6 +2,7 @@ import type { LiquidAssetId } from "./LiquidAsset";
 import type { LiquidChainId } from "./LiquidChain";
 
 export const LIQUID_WALLET_RPC_METHODS = {
+	GET_ADDRESS: "getAddress",
 	GET_BALANCE: "getBalance",
 	GET_IDENTITY_PUBLIC_KEY: "getIdentityPublicKey",
 	GET_IDENTITY_SHARED_KEY: "getIdentitySharedKey",
@@ -23,6 +24,14 @@ export const LIQUID_WALLETCONNECT_EVENTS = [
 ] as const;
 
 export type LiquidWalletConnectEvent = (typeof LIQUID_WALLETCONNECT_EVENTS)[number];
+
+export type LiquidGetAddressResult = {
+	accountIdentifier: string;
+	address: string;
+	chainId: LiquidChainId;
+	index: number;
+	unconfidentialAddress: string;
+};
 
 export type LiquidGetBalanceParams = {
 	assetId?: LiquidAssetId;

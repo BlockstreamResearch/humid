@@ -1,3 +1,11 @@
+export type LiquidGetAddressResult = {
+	accountIdentifier: string;
+	address: string;
+	chainId: string;
+	index: number;
+	unconfidentialAddress: string;
+};
+
 export type LiquidGetBalanceParams = {
 	assetId?: string;
 };
