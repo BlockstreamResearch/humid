@@ -1,7 +1,7 @@
 [submodule "lwk"]
 	path = lwk
-	url = https://github.com/lukachi/lwk.git
-	branch = humid/esplora-backend-config
+	url = https://github.com/lilbonekit/lwk.git
+	branch = feature/shared-humid-fork
 [submodule "smplx"]
 	path = smplx
 	url = https://github.com/BlockstreamResearch/smplx.git

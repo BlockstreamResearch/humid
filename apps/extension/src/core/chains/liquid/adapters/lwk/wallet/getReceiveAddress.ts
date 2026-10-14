@@ -3,6 +3,16 @@ import { getLwkImplementation } from "./getLwkImplementation";
 
 const SIGNING_ADDRESS_INDEX = 0;
 
+export function getWalletAddress(
+	account: LiquidWalletAccount,
+	index: number,
+): { address: string; unconfidential: string } {
+	const result = getLwkImplementation(account).wollet.address(index);
+	const address = result.address();
+
+	return { address: address.toString(), unconfidential: address.toUnconfidential().toString() };
+}
+
 export function getWalletReceiveAddress(account: LiquidWalletAccount): {
 	address: string;
 	index: number;

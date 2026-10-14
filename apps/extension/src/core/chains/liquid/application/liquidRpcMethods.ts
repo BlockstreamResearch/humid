@@ -1,6 +1,7 @@
 import type { AnyWalletMethod } from "@/core/wallet-methods/createWalletMethodRegistry";
 
 import type { LiquidRpcMethodContext } from "./LiquidRpcContext";
+import { getLiquidAddress } from "./methods/getAddress";
 import { getLiquidBalance } from "./methods/getBalance";
 import { getLiquidIdentityPublicKey } from "./methods/getIdentityPublicKey";
 import { getLiquidIdentitySharedKey } from "./methods/getIdentitySharedKey";
@@ -13,6 +14,7 @@ import { signLiquidMessage } from "./methods/signMessage";
 import { signLiquidPset } from "./methods/signPset";
 
 export const LIQUID_RPC_METHODS: ReadonlyArray<AnyWalletMethod<LiquidRpcMethodContext>> = [
+	getLiquidAddress,
 	getLiquidBalance,
 	getLiquidUTXOs,
 	getLiquidWalletDescriptor,

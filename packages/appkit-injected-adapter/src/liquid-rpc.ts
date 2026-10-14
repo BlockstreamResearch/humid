@@ -1,3 +1,16 @@
+export type LiquidGetAddressParams = {
+	confidential?: boolean;
+	index?: number;
+};
+
+export type LiquidGetAddressResult = {
+	accountIdentifier: string;
+	address: string;
+	chainId: string;
+	confidential: boolean;
+	index: number;
+};
+
 export type LiquidGetBalanceParams = {
 	assetId?: string;
 };
