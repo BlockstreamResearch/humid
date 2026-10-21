@@ -117,6 +117,10 @@ export type LiquidWalletBackend = {
 		rawAssetId: string,
 	) => Promise<LiquidEstimateMaxSendResult>;
 	getActivity: (account: LiquidWalletAccount, rawAssetId: string) => LiquidActivityEntry[];
+	getAddress: (
+		account: LiquidWalletAccount,
+		index: number,
+	) => { address: string; unconfidential: string };
 	getBalance: (account: LiquidWalletAccount, rawAssetId: string) => string;
 	getReceiveAddress: (account: LiquidWalletAccount) => { address: string; index: number };
 	getSigningAddress: (account: LiquidWalletAccount) => {

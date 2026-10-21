@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 
 import type { LiquidWalletAccount } from "../../../application/backends/LiquidWalletBackend";
 import { lwk } from "../lwkWasmForTests";
-import { getWalletReceiveAddress, getWalletSigningAddress } from "./getReceiveAddress";
+import {
+	getWalletAddress,
+	getWalletReceiveAddress,
+	getWalletSigningAddress,
+} from "./getReceiveAddress";
 
 const PHRASE =
 	"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -56,5 +60,44 @@ describe("the signing address the contract flow is funded from", () => {
 
 		expect(pinned.index).toBe(0);
 		expect(getWalletReceiveAddress(shared).index).toBe(0);
+	});
+});
+
+describe("an address requested by index", () => {
+	test("at index 0 is the signing address", () => {
+		const shared = account();
+		const signing = getWalletSigningAddress(shared);
+		const requested = getWalletAddress(shared, 0);
+
+		expect(requested.address).toBe(signing.address);
+		expect(requested.unconfidential).toBe(signing.unconfidential);
+	});
+
+	test("at another index is another blinded address", () => {
+		const shared = account();
+		const first = getWalletAddress(shared, 0);
+		const other = getWalletAddress(shared, 3);
+		const blinded = new lwk.Address(other.address);
+
+		try {
+			expect(other.address).not.toBe(first.address);
+			expect(blinded.isBlinded()).toBe(true);
+		} finally {
+			blinded.free();
+		}
+	});
+
+	test("comes with its unblinded form on the same script", () => {
+		const { address, unconfidential } = getWalletAddress(account(), 3);
+		const blinded = new lwk.Address(address);
+		const open = new lwk.Address(unconfidential);
+
+		try {
+			expect(open.isBlinded()).toBe(false);
+			expect(open.scriptPubkey().toString()).toBe(blinded.scriptPubkey().toString());
+		} finally {
+			open.free();
+			blinded.free();
+		}
 	});
 });
