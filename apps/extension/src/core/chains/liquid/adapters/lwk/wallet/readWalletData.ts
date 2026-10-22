@@ -4,6 +4,8 @@ import { toLiquidAssetId } from "../../../domain/validation";
 import type { LwkWasmModule } from "../loadLwkWasm";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
+type LwkWalletTx = ReturnType<LwkWollet["transactions"]>[number];
+type LwkWalletTxOut = ReturnType<ReturnType<LwkWalletTx["outputs"]>[number]["get"]>;
 
 export function readWalletBalanceForAsset(
 	wollet: LwkWollet,
@@ -40,7 +42,8 @@ export function readWalletActivityForAsset(
 	rawAssetId: string,
 ): LiquidActivityEntry[] {
 	const entries = wollet.transactions().flatMap((walletTx) => {
-		const net = readSignedAmount(walletTx.balance(), rawAssetId);
+		const net =
+			readSignedAmount(walletTx.balance(), rawAssetId) + readExplicitNet(walletTx, rawAssetId);
 
 		if (net === 0n) return [];
 
@@ -60,6 +63,21 @@ export function readWalletActivityForAsset(
 	return entries.toSorted(
 		(a, b) => (b.timestamp ?? Number.POSITIVE_INFINITY) - (a.timestamp ?? Number.POSITIVE_INFINITY),
 	);
+}
+
+function readExplicitNet(walletTx: LwkWalletTx, rawAssetId: string): bigint {
+	let net = 0n;
+
+	for (const output of walletTx.outputs()) net += explicitAmount(output.get(), rawAssetId);
+	for (const input of walletTx.inputs()) net -= explicitAmount(input.get(), rawAssetId);
+
+	return net;
+}
+
+function explicitAmount(txOut: LwkWalletTxOut, rawAssetId: string): bigint {
+	const secrets = txOut?.unblinded();
+
+	return secrets?.isExplicit() && secrets.asset().toString() === rawAssetId ? secrets.value() : 0n;
 }
 
 function amountToString(value: unknown): string {
