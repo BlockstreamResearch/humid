@@ -87,7 +87,12 @@ export async function assembleReviewedTransaction(
 		};
 	}
 
-	if (review.outputs.length === 0) {
+	// An empty `outputs` is only a document fault when nothing will be paid at all.
+	// A policy-asset "change" output is deliberately absent from `review.outputs` —
+	// its value is computed by `builder.addChange()` further down — so an action whose
+	// only output is change (e.g. a full withdrawal that sends the whole remaining
+	// balance to the beneficiary) pays perfectly well and must not be refused here.
+	if (review.outputs.length === 0 && !review.changeDeferred) {
 		return {
 			ok: false,
 			reason: `"${review.action}" pays nothing, so there is nothing to build.`,
