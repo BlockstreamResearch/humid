@@ -10,8 +10,6 @@ type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
 
 const CHAIN_EXTERNAL = 0;
 
-const SIGNING_INDEX = 0;
-
 export function readExplicitWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[] {
 	const spent = new Set<string>();
 	const candidates = new Map<string, LiquidUtxoSnapshot>();
@@ -55,17 +53,18 @@ export function readExplicitWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[]
 				continue;
 			}
 
-			if (owned.extInt() !== CHAIN_EXTERNAL || owned.wildcardIndex() !== SIGNING_INDEX) {
-				continue;
-			}
-
+			const chain = owned.extInt();
+			const index = owned.wildcardIndex();
 			const unblinded = owned.unblinded();
 
 			candidates.set(outpointKey(txid, vout), {
-				address: wollet.address(SIGNING_INDEX).address().toString(),
+				address:
+					chain === CHAIN_EXTERNAL
+						? wollet.address(index).address().toString()
+						: owned.address().toString(),
 				amountSats: unblinded.value().toString(),
 				confidential: false,
-				derivationPath: `${CHAIN_EXTERNAL}/${SIGNING_INDEX}`,
+				derivationPath: `${chain}/${index}`,
 				rawAssetId: unblinded.asset().toString(),
 				scriptPubKey: owned.scriptPubkey().toString(),
 				spendable: owned.height() !== undefined,

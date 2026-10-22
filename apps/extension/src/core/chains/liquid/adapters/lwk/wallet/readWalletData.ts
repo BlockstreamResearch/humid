@@ -4,6 +4,8 @@ import { toLiquidAssetId } from "../../../domain/validation";
 import type { LwkWasmModule } from "../loadLwkWasm";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
+type LwkWalletTx = ReturnType<LwkWollet["transactions"]>[number];
+type LwkWalletTxOut = ReturnType<ReturnType<LwkWalletTx["outputs"]>[number]["get"]>;
 
 export function readWalletBalanceForAsset(
 	wollet: LwkWollet,
@@ -40,7 +42,8 @@ export function readWalletActivityForAsset(
 	rawAssetId: string,
 ): LiquidActivityEntry[] {
 	const entries = wollet.transactions().flatMap((walletTx) => {
-		const net = readSignedAmount(walletTx.balance(), rawAssetId);
+		const net =
+			readSignedAmount(walletTx.balance(), rawAssetId) + readExplicitNet(walletTx, rawAssetId);
 
 		if (net === 0n) return [];
 
@@ -62,24 +65,19 @@ export function readWalletActivityForAsset(
 	);
 }
 
-export function readWalletAssetBalances(wollet: LwkWollet): Map<string, bigint> {
-	return normalizeBalanceMap(wollet.balance().entries());
+function readExplicitNet(walletTx: LwkWalletTx, rawAssetId: string): bigint {
+	let net = 0n;
+
+	for (const output of walletTx.outputs()) net += explicitAmount(output.get(), rawAssetId);
+	for (const input of walletTx.inputs()) net -= explicitAmount(input.get(), rawAssetId);
+
+	return net;
 }
 
-function normalizeBalanceMap(entries: unknown): Map<string, bigint> {
-	const result = new Map<string, bigint>();
+function explicitAmount(txOut: LwkWalletTxOut, rawAssetId: string): bigint {
+	const secrets = txOut?.unblinded();
 
-	if (entries instanceof Map) {
-		for (const [key, value] of entries) result.set(String(key), toBigInt(value));
-	} else if (Array.isArray(entries)) {
-		for (const pair of entries) {
-			if (Array.isArray(pair)) result.set(String(pair[0]), toBigInt(pair[1]));
-		}
-	} else if (typeof entries === "object" && entries !== null) {
-		for (const [key, value] of Object.entries(entries)) result.set(key, toBigInt(value));
-	}
-
-	return result;
+	return secrets?.isExplicit() && secrets.asset().toString() === rawAssetId ? secrets.value() : 0n;
 }
 
 function amountToString(value: unknown): string {

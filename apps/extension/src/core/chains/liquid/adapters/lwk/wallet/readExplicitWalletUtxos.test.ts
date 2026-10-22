@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { getWalletUtxosForAsset } from "./getUTXOs";
 import { readExplicitWalletUtxos } from "./readExplicitWalletUtxos";
+import { readOwnedWalletUtxos } from "./readOwnedWalletUtxos";
 
 type OutputSpec = {
 	amount: string;
@@ -54,17 +55,15 @@ function walletTx(
 	};
 }
 
-const signingAddress = (index: number) => {
-	expect(index).toBe(0);
-	return {
-		address: () => ({ toString: () => "confidential-signing-address" }),
-	};
-};
+const walletAddress = (index: number) => ({
+	address: () => ({ toString: () => `confidential-address-${index}` }),
+});
 
 const wollet = (txs: unknown[]) =>
 	({
-		address: signingAddress,
+		address: walletAddress,
 		transactions: () => txs,
+		utxos: () => [],
 	}) as never;
 
 const A = "aa".repeat(32);
@@ -76,7 +75,7 @@ describe("the wallet's own outputs that hide nothing", () => {
 			chainId: "bip122:" + "11".repeat(16),
 			implementation: {
 				wollet: {
-					address: signingAddress,
+					address: walletAddress,
 					utxos: () => [],
 					transactions: () => [
 						walletTx(A, [
@@ -91,7 +90,7 @@ describe("the wallet's own outputs that hide nothing", () => {
 
 		expect(getWalletUtxosForAsset(account, "cc".repeat(32))).toMatchObject([
 			{
-				address: "confidential-signing-address",
+				address: "confidential-address-0",
 				amount: "2000",
 				assetId: `bip122:${"11".repeat(16)}/elip144:${"cc".repeat(32)}`,
 				confidential: false,
@@ -109,7 +108,7 @@ describe("the wallet's own outputs that hide nothing", () => {
 
 		expect(utxos).toHaveLength(1);
 		expect(utxos[0]).toMatchObject({
-			address: "confidential-signing-address",
+			address: "confidential-address-0",
 			amountSats: "30000",
 			confidential: false,
 			spendable: true,
@@ -184,18 +183,64 @@ describe("the wallet's own outputs that hide nothing", () => {
 		expect(utxos[0]?.txOut).toBe(`txout:${A}:0`);
 	});
 
-	test("an explicit output the contract path cannot sign is not offered", () => {
-		const elsewhere = readExplicitWalletUtxos(
+	test("an explicit output at a later receive index is reported under its own key", () => {
+		const utxos = readExplicitWalletUtxos(
 			wollet([walletTx(A, [{ amount: "30000", blinded: false, height: 1, index: 4, vout: 0 }])]),
 		);
 
-		expect(elsewhere).toEqual([]);
+		expect(utxos).toMatchObject([{ address: "confidential-address-4", derivationPath: "0/4" }]);
+	});
 
-		const change = readExplicitWalletUtxos(
+	test("an explicit change output is reported under its own key", () => {
+		const utxos = readExplicitWalletUtxos(
 			wollet([walletTx(A, [{ amount: "30000", blinded: false, chain: 1, height: 1, vout: 0 }])]),
 		);
 
-		expect(change).toEqual([]);
+		expect(utxos).toMatchObject([{ address: `address:${A}:0`, derivationPath: "1/0" }]);
+	});
+
+	test("spent explicit outputs at any key are gone", () => {
+		const utxos = readExplicitWalletUtxos(
+			wollet([
+				walletTx(A, [
+					{ amount: "30000", blinded: false, height: 1, index: 4, vout: 0 },
+					{ amount: "20000", blinded: false, chain: 1, height: 1, vout: 1 },
+					{ amount: "10000", blinded: false, height: 1, vout: 2 },
+				]),
+				walletTx(
+					B,
+					[],
+					[
+						{ txid: A, vout: 0 },
+						{ txid: A, vout: 1 },
+					],
+				),
+			]),
+		);
+
+		expect(utxos.map((utxo) => utxo.derivationPath)).toEqual(["0/0"]);
+	});
+
+	test("the portfolio snapshot and the backend fallback offer the same explicit outputs", () => {
+		const txs = [
+			walletTx(A, [
+				{ amount: "10000", blinded: false, height: 1, vout: 0 },
+				{ amount: "30000", blinded: false, height: 1, index: 4, vout: 1 },
+				{ amount: "20000", blinded: false, chain: 1, height: 1, vout: 2 },
+			]),
+		];
+		const account = {
+			chainId: "bip122:" + "11".repeat(16),
+			implementation: { wollet: wollet(txs) },
+		} as never;
+
+		const snapshot = readOwnedWalletUtxos(wollet(txs));
+		const fallback = getWalletUtxosForAsset(account, "cc".repeat(32));
+
+		expect(snapshot.map((utxo) => utxo.derivationPath)).toEqual(["0/0", "0/4", "1/0"]);
+		expect(fallback.map(({ txid, vout }) => `${txid}:${vout}`)).toEqual(
+			snapshot.map(({ txid, vout }) => `${txid}:${vout}`),
+		);
 	});
 
 	test("an input the wallet did not own does not remove anything", () => {

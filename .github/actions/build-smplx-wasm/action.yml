@@ -53,7 +53,9 @@ runs:
 
     - name: Install wasm-pack
       if: steps.pkg-cache.outputs.cache-hit != 'true'
-      uses: jetli/wasm-pack-action@v0.4.0
+      uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-pack@0.14.0
 
     # Installed rather than exported: the fork's build script already searches for a clang
     # with a WebAssembly backend and fails with a clear message when there is none, so
