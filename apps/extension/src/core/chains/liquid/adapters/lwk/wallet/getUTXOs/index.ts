@@ -13,6 +13,7 @@ import type { LiquidUTXO } from "../../../../domain/LiquidRpc";
 import { toLiquidAssetId } from "../../../../domain/validation";
 import { getLwkImplementation } from "../getLwkImplementation";
 import { readExplicitWalletUtxos } from "../readExplicitWalletUtxos";
+import { readOwnedWalletUtxos } from "../readOwnedWalletUtxos";
 import { readWalletUtxos } from "../readWalletUtxos";
 
 export function getWalletUtxosForAsset(
@@ -22,12 +23,7 @@ export function getWalletUtxosForAsset(
 	const implementation = getLwkImplementation(account);
 
 	try {
-		const utxos = [
-			...readWalletUtxos(implementation.wollet),
-			...readExplicitWalletUtxos(implementation.wollet),
-		];
-
-		return mapLiquidUtxosForAsset(utxos, {
+		return mapLiquidUtxosForAsset(readOwnedWalletUtxos(implementation.wollet), {
 			assetId: toLiquidAssetId(account.chainId, rawAssetId),
 			rawAssetId,
 		});

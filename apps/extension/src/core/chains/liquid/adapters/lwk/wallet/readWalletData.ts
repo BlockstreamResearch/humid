@@ -62,26 +62,6 @@ export function readWalletActivityForAsset(
 	);
 }
 
-export function readWalletAssetBalances(wollet: LwkWollet): Map<string, bigint> {
-	return normalizeBalanceMap(wollet.balance().entries());
-}
-
-function normalizeBalanceMap(entries: unknown): Map<string, bigint> {
-	const result = new Map<string, bigint>();
-
-	if (entries instanceof Map) {
-		for (const [key, value] of entries) result.set(String(key), toBigInt(value));
-	} else if (Array.isArray(entries)) {
-		for (const pair of entries) {
-			if (Array.isArray(pair)) result.set(String(pair[0]), toBigInt(pair[1]));
-		}
-	} else if (typeof entries === "object" && entries !== null) {
-		for (const [key, value] of Object.entries(entries)) result.set(key, toBigInt(value));
-	}
-
-	return result;
-}
-
 function amountToString(value: unknown): string {
 	if (typeof value === "bigint") return value.toString();
 	if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value).toString();

@@ -1,6 +1,7 @@
 import type {
 	LiquidActivityPage,
 	LiquidAssetBalance,
+	LiquidUtxoSnapshot,
 	LiquidWalletSnapshot,
 } from "../../../application/backends/LiquidWalletBackend";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
@@ -8,8 +9,8 @@ import { LIQUID_NATIVE_ASSET } from "../../../domain/LiquidAsset";
 import { createLwkBlockchainClient } from "../createLwkBlockchainClient";
 import { createLwkNetwork, type LwkNetwork } from "../createLwkNetwork";
 import { loadLwkWasm, type LwkWasmModule } from "../loadLwkWasm";
-import { readWalletActivityForAsset, readWalletAssetBalances } from "../wallet/readWalletData";
-import { readWalletUtxos } from "../wallet/readWalletUtxos";
+import { readOwnedWalletUtxos } from "../wallet/readOwnedWalletUtxos";
+import { readWalletActivityForAsset } from "../wallet/readWalletData";
 import { type AssetMetadata, resolveIssuedAssetMetadata } from "../wallet/resolveAssetMetadata";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
@@ -154,16 +155,15 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 	update?.free();
 	client.free();
 
+	const utxos = readOwnedWalletUtxos(wollet);
 	const rawPolicyAssetId = network.policyAsset().toString();
 	const assets = await buildAssetBalances(
 		lwk,
 		network,
 		wollet,
-		readWalletAssetBalances(wollet),
+		sumByAsset(utxos),
 		rawPolicyAssetId,
 	);
-
-	const utxos = readWalletUtxos(wollet);
 
 	console.warn("[liquid-sync] scanAndRead done", {
 		assetCount: assets.length,
@@ -194,6 +194,16 @@ function parseActivityCursor(cursor: string | null): number {
 	const parsed = Number.parseInt(cursor, 10);
 
 	return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function sumByAsset(utxos: LiquidUtxoSnapshot[]): Map<string, bigint> {
+	const balances = new Map<string, bigint>();
+
+	for (const utxo of utxos) {
+		balances.set(utxo.rawAssetId, (balances.get(utxo.rawAssetId) ?? 0n) + BigInt(utxo.amountSats));
+	}
+
+	return balances;
 }
 
 async function buildAssetBalances(
