@@ -48,7 +48,9 @@ runs:
 
     - name: Install wasm-pack
       if: steps.pkg-cache.outputs.cache-hit != 'true'
-      uses: jetli/wasm-pack-action@v0.4.0
+      uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-pack@0.14.0
 
     - name: Build lwk_wasm (wasm-pack, target bundler)
       if: steps.pkg-cache.outputs.cache-hit != 'true'
