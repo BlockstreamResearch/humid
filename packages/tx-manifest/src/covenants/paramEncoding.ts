@@ -1,4 +1,4 @@
-type Encoding = "boolean" | "decimal" | "hex" | "reversedHex";
+type Encoding = "boolean" | "compressedPubkey" | "decimal" | "hex" | "reversedHex";
 
 type ParamType = {
 	bytes?: number;
@@ -27,6 +27,11 @@ const PARAM_TYPES: Record<string, ParamType> = {
 		compiler: "Pubkey",
 		encoding: "hex",
 		shape: "an x-only public key: 32 bytes as 64 hexadecimal characters, no prefix and no address",
+	},
+	pubkey33: {
+		compiler: "(u1, u256)",
+		encoding: "compressedPubkey",
+		shape: "a compressed public key: 33 bytes starting with 02 or 03",
 	},
 	u8: { compiler: "u8", encoding: "decimal", max: 255n, shape: "a whole number from 0 to 255" },
 	u16: {
@@ -101,6 +106,22 @@ export function encodeCompileParam(
 	});
 
 	switch (declared.encoding) {
+		case "compressedPubkey": {
+			const key = withoutHexPrefix(value.trim()).toLowerCase();
+
+			if (!/^0[23][0-9a-f]{64}$/.test(key)) {
+				return wrong(quoted(value));
+			}
+
+			// Simplicity uses parity plus x; encoding does not validate curve membership.
+			return {
+				encoded: {
+					type: declared.compiler,
+					value: `(${key[1] === "3" ? "1" : "0"}, 0x${key.slice(2)})`,
+				},
+				ok: true,
+			};
+		}
 		case "boolean": {
 			const literal = BOOLEANS[value.trim().toLowerCase()];
 
