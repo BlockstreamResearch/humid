@@ -11,14 +11,11 @@ import {
 } from "../../../domain/LiquidRpc";
 import { parseLiquidAssetId, parseLiquidGetUTXOsParams } from "../../../domain/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
-import { mapLiquidUtxosForAsset } from "../../backends/mapLiquidUtxosForAsset";
 import { resolveDappAccount } from "../../dappAccountScope";
-import type { ReadPortfolioSnapshot } from "../../LiquidRpcContext";
 
 export type LiquidGetUTXOsContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
 	keyManagerState: KeyManagerState;
-	readPortfolioSnapshot?: ReadPortfolioSnapshot;
 	updateKeyManagerState?: UpdateKeyManagerState;
 	walletBackend: LiquidWalletBackend;
 };
@@ -46,20 +43,6 @@ export const getLiquidUTXOs = createWalletMethod<
 	}),
 	execute: async ({ context, review }) => {
 		const { account, requestedAsset } = review;
-
-		if (context.readPortfolioSnapshot && account.accountGroupId) {
-			const snapshot = await context.readPortfolioSnapshot(account.accountGroupId, account.chainId);
-
-			if (snapshot) {
-				return {
-					accountIdentifier: account.accountIdentifier,
-					assetId: requestedAsset.assetId,
-					chainId: account.chainId,
-					policyAssetId: account.policyAssetId,
-					utxos: mapLiquidUtxosForAsset(snapshot.data.utxos, requestedAsset),
-				};
-			}
-		}
 
 		await context.walletBackend.syncAccount(account);
 
