@@ -292,3 +292,33 @@ describe("a covenant input that issues an asset", () => {
 		expect(minted?.sats).toBe(1000n);
 	});
 });
+
+describe("an action whose only output is change", () => {
+	const changeOut = {
+		asset: "lbtc",
+		description: "Everything the covenant held, back to your wallet.",
+		destination: "change",
+		id: "fee_change",
+	};
+	const receivedOut = {
+		amount_sat: 40_000,
+		asset: "lbtc",
+		description: "The reclaimed funds, sent to your wallet.",
+		destination: "wallet",
+		id: "received_out",
+	};
+
+	test("leaves the change to the builder", async () => {
+		const review = await reviewed(spendRequest(withReceive(receiveInputs(), [changeOut])));
+
+		expect(review.outputs).toEqual([]);
+		expect(review.changeDeferred).toBe(true);
+	});
+
+	test("defers nothing where the action declares no change", async () => {
+		const review = await reviewed(spendRequest(withReceive(receiveInputs(), [receivedOut])));
+
+		expect(review.outputs.map((output) => output.id)).toEqual(["received_out"]);
+		expect(review.changeDeferred).toBeUndefined();
+	});
+});

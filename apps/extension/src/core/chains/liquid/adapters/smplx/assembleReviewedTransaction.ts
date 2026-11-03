@@ -87,7 +87,8 @@ export async function assembleReviewedTransaction(
 		};
 	}
 
-	if (review.outputs.length === 0) {
+	// Policy-asset change is paid by `builder.addChange()` below, not through `outputs`.
+	if (review.outputs.length === 0 && !review.changeDeferred) {
 		return {
 			ok: false,
 			reason: `"${review.action}" pays nothing, so there is nothing to build.`,

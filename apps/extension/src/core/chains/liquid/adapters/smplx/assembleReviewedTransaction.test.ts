@@ -732,6 +732,14 @@ describe("assembleReviewedTransaction", () => {
 		});
 	});
 
+	test("builds an action whose only output is the change it pays", async () => {
+		const { assemble, recorded } = subject({ changeDeferred: true, outputs: [] });
+
+		expect(await assemble()).toMatchObject({ ok: true });
+		expect(recorded.outputs).toEqual([]);
+		expect(recorded.changes).toEqual([{ blindingKey: undefined, script: CHANGE_SCRIPT }]);
+	});
+
 	describe("what it will not build", () => {
 		test("refuses when nothing of the wallet's funds it", async () => {
 			const { assemble } = subject({ selected: [] });
