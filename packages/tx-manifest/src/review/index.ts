@@ -633,9 +633,6 @@ export async function reviewManifestAction(
 	for (const [at, planned] of plan.plan.outputs.entries()) {
 		const asset = ledger.outputs[at] ?? policyAsset;
 
-	for (const [at, planned] of plan.plan.outputs.entries()) {
-		const asset = ledger.outputs[at] ?? policyAsset;
-
 		if (planned.target.kind === "change") {
 			const surplus =
 				asset === policyAsset || changePaid.has(asset)

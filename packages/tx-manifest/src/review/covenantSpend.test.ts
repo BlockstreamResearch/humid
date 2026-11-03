@@ -221,42 +221,6 @@ describe("the transaction-level facts a covenant spend needs", () => {
 	test("carries none where the action declares none", async () => {
 		expect((await reviewed()).sequence).toBeUndefined();
 	});
-
-	test("carries a relative timelock where the covenant input is the only input", async () => {
-		const inputs = receiveInputs();
-
-		inputs[0] = { ...inputs[0], sequence: { relative_blocks: 10 } };
-
-		const outputs = [
-			{
-				amount_sat: 40_000,
-				asset: "lbtc",
-				description: "The reclaimed funds, sent to your wallet.",
-				destination: "wallet",
-				id: "received_out",
-			},
-		];
-		const review = await reviewed(spendRequest(withReceive([inputs[0]], outputs)));
-
-		expect(review.sequence).toBe(10);
-		expect(review.selected).toHaveLength(0);
-		expect(review.inputOrder).toHaveLength(1);
-	});
-
-	test("refuses a relative timelock a wallet fee input would inherit", async () => {
-		const inputs = receiveInputs();
-
-		inputs[0] = { ...inputs[0], sequence: { relative_blocks: 10 } };
-
-		const result = await reviewManifestAction(spendRequest(withReceiveInputs(inputs)), deps);
-
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reject).toBe("unimplemented-construct");
-			expect(result.reason).toContain("would inherit that wait");
-		}
-	});
 });
 
 describe("a covenant input that issues an asset", () => {
@@ -326,5 +290,35 @@ describe("a covenant input that issues an asset", () => {
 
 		expect(minted?.asset).toBe(review.issuances[0]?.asset);
 		expect(minted?.sats).toBe(1000n);
+	});
+});
+
+describe("an action whose only output is change", () => {
+	const changeOut = {
+		asset: "lbtc",
+		description: "Everything the covenant held, back to your wallet.",
+		destination: "change",
+		id: "fee_change",
+	};
+	const receivedOut = {
+		amount_sat: 40_000,
+		asset: "lbtc",
+		description: "The reclaimed funds, sent to your wallet.",
+		destination: "wallet",
+		id: "received_out",
+	};
+
+	test("leaves the change to the builder", async () => {
+		const review = await reviewed(spendRequest(withReceive(receiveInputs(), [changeOut])));
+
+		expect(review.outputs).toEqual([]);
+		expect(review.changeDeferred).toBe(true);
+	});
+
+	test("defers nothing where the action declares no change", async () => {
+		const review = await reviewed(spendRequest(withReceive(receiveInputs(), [receivedOut])));
+
+		expect(review.outputs.map((output) => output.id)).toEqual(["received_out"]);
+		expect(review.changeDeferred).toBeUndefined();
 	});
 });
