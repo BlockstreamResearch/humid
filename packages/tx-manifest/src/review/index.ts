@@ -43,9 +43,9 @@ import {
 } from "../evaluation/hooks";
 import { type PlaceableInput, placeInputs } from "../evaluation/inputOrder";
 import {
-       relativeTimelockPlacement,
-       resolveInputRules,
-       transactionSequence,
+	relativeTimelockPlacement,
+	resolveInputRules,
+	transactionSequence,
 } from "../evaluation/inputRules";
 import {
 	declaredIssuance,

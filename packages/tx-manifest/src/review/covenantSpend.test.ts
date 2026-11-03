@@ -221,6 +221,42 @@ describe("the transaction-level facts a covenant spend needs", () => {
 	test("carries none where the action declares none", async () => {
 		expect((await reviewed()).sequence).toBeUndefined();
 	});
+
+	test("carries a relative timelock where the covenant input is the only input", async () => {
+		const inputs = receiveInputs();
+
+		inputs[0] = { ...inputs[0], sequence: { relative_blocks: 10 } };
+
+		const outputs = [
+			{
+				amount_sat: 40_000,
+				asset: "lbtc",
+				description: "The reclaimed funds, sent to your wallet.",
+				destination: "wallet",
+				id: "received_out",
+			},
+		];
+		const review = await reviewed(spendRequest(withReceive([inputs[0]], outputs)));
+
+		expect(review.sequence).toBe(10);
+		expect(review.selected).toHaveLength(0);
+		expect(review.inputOrder).toHaveLength(1);
+	});
+
+	test("refuses a relative timelock a wallet fee input would inherit", async () => {
+		const inputs = receiveInputs();
+
+		inputs[0] = { ...inputs[0], sequence: { relative_blocks: 10 } };
+
+		const result = await reviewManifestAction(spendRequest(withReceiveInputs(inputs)), deps);
+
+		expect(isRefusal(result)).toBe(true);
+
+		if (isRefusal(result)) {
+			expect(result.reject).toBe("unimplemented-construct");
+			expect(result.reason).toContain("would inherit that wait");
+		}
+	});
 });
 
 describe("a covenant input that issues an asset", () => {
