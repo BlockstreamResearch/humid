@@ -76,7 +76,10 @@ describe("a deployment's field values", () => {
 			instance: { class: "vaultlet_contract", fields: { TIMEOUT: "900000" } },
 		});
 
-		expect(instance).toEqual({ className: "vaultlet_contract", fields: { TIMEOUT: "900000" } });
+		expect(instance).toMatchObject({
+			className: "vaultlet_contract",
+			fields: { TIMEOUT: "900000" },
+		});
 	});
 
 	test("and from the flat legacy map beside it, recording that it was one", () => {
@@ -106,7 +109,7 @@ describe("a deployment's field values", () => {
 	test("are empty for a file that names its class and writes no fields", () => {
 		const { instance } = normaliseInstance({ instance: { class: "vaultlet_contract" } });
 
-		expect(instance).toEqual({ className: "vaultlet_contract", fields: {} });
+		expect(instance).toMatchObject({ className: "vaultlet_contract", fields: {} });
 	});
 
 	test("and empty for a file in neither accepted shape, rather than read off its top level", () => {

@@ -1,5 +1,9 @@
 import { asRecord } from "../document/json";
-import type { NormalisedAction, NormalisedManifest } from "../document/normalise";
+import {
+	type NormalisedAction,
+	type NormalisedManifest,
+	normaliseInstance,
+} from "../document/normalise";
 import { instanceReferences } from "../document/references";
 import { covenantSites, namedUtxoTypes } from "../document/sites";
 import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./request";
@@ -70,13 +74,16 @@ export function resolveActionRequirements(
 		}
 	}
 
-	if (spendsCovenant(action)) {
+	const pinned = normaliseInstance(request.instance).instance.providedInputs;
+
+	if (covenantSites(action).some((site) => site.role === "spent" && !(site.id in pinned))) {
 		required.push("state");
 
 		if (!request.state) {
 			missing.push({
 				part: "state",
-				reason: "The action spends a covenant UTXO, which is located through the state file.",
+				reason:
+					"The action spends a covenant UTXO that the instance file does not pin, so the state file has to locate one.",
 			});
 		}
 	}
@@ -100,10 +107,6 @@ function referencedContractSources(
 	}
 
 	return [...paths];
-}
-
-function spendsCovenant(action: Record<string, unknown>): boolean {
-	return covenantSites(action).some((site) => site.role === "spent");
 }
 
 function promptedParams(action: Record<string, unknown>): string[] {

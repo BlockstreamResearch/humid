@@ -358,3 +358,65 @@ describe("an action whose only output is change", () => {
 		expect(review.changeDeferred).toBeUndefined();
 	});
 });
+
+describe("which covenant output each input spends", () => {
+	const twoCovenants = () => {
+		const inputs = receiveInputs();
+
+		return withReceiveInputs([inputs[0], { ...inputs[0], id: "p2pk_in_2" }, inputs[1]]);
+	};
+	const listed = (txid: string, asset?: string) => ({
+		txid,
+		utxo_type: "p2pk_output",
+		vout: 0,
+		...(asset === undefined ? {} : { asset }),
+	});
+	const spent = (review: Awaited<ReturnType<typeof reviewed>>) =>
+		review.covenantInputs.map((covenant) => covenant.txid[0]);
+
+	test("gives two inputs of one type two different outputs", async () => {
+		const request = {
+			...spendRequest(twoCovenants()),
+			state: { utxos: [listed(TXID), listed("a".repeat(64))] },
+		};
+
+		expect(spent(await reviewed(request))).toEqual(["b", "a"]);
+	});
+
+	test("refuses where the state lists fewer outputs than the inputs spending them", async () => {
+		const result = await reviewManifestAction(spendRequest(twoCovenants()), deps);
+
+		expect(isRefusal(result) && result.reject).toBe("no-utxo-to-spend");
+	});
+
+	test("prefers an output listed in the asset the input spends", async () => {
+		const request = {
+			...spendRequest(),
+			state: { utxos: [listed("a".repeat(64), "ff".repeat(32)), listed(TXID, POLICY_ASSET)] },
+		};
+
+		expect(spent(await reviewed(request))).toEqual(["b"]);
+	});
+
+	test("spends the output the instance file pins, without a state file", async () => {
+		const request = {
+			...spendRequest(),
+			instance: { provided_inputs: { p2pk_in: { txid: "a".repeat(64), vout: 0 } } },
+		};
+
+		delete request.state;
+
+		expect(spent(await reviewed(request))).toEqual(["a"]);
+	});
+
+	test("refuses two inputs pinned to one output", async () => {
+		const pin = { txid: TXID, vout: 0 };
+		const request = {
+			...spendRequest(twoCovenants()),
+			instance: { provided_inputs: { p2pk_in: pin, p2pk_in_2: pin } },
+		};
+		const result = await reviewManifestAction(request, deps);
+
+		expect(isRefusal(result) && result.reject).toBe("document-fault");
+	});
+});

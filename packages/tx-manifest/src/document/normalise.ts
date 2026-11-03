@@ -123,6 +123,7 @@ export function declaredFields(
 export type NormalisedInstance = {
 	className?: string;
 	fields: Record<string, unknown>;
+	providedInputs: Record<string, unknown>;
 };
 
 export type NormaliseInstanceResult = {
@@ -136,7 +137,7 @@ export function normaliseInstance(
 	const notes: NormalisationNote[] = [];
 
 	if (!raw) {
-		return { instance: { fields: {} }, notes };
+		return { instance: { fields: {}, providedInputs: {} }, notes };
 	}
 
 	const nested = asRecord(raw.instance);
@@ -151,6 +152,7 @@ export function normaliseInstance(
 		instance: {
 			...(asString(nested?.class) === undefined ? {} : { className: asString(nested?.class) }),
 			fields: fields ?? legacy ?? {},
+			providedInputs: asRecord(raw.provided_inputs) ?? {},
 		},
 		notes,
 	};

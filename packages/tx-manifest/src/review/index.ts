@@ -63,6 +63,7 @@ import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { resolveActionRequirements } from "../request/requirements";
 import { type AssetHoldings, fundAssets } from "./assetFunding";
 import { type SelectableUtxo, toSats } from "./coinSelection";
+import { CovenantUtxos } from "./covenantUtxos";
 
 export type CovenantFinding = CovenantDerivation & {
 	role: "created" | "spent";
@@ -249,6 +250,8 @@ export async function reviewManifestAction(
 		params,
 	};
 
+	const utxos = new CovenantUtxos(request.state, deployment.instance.providedInputs);
+
 	for (const site of covenantSites(action.node).filter((declared) => declared.role === "spent")) {
 		// oxlint-disable-next-line no-await-in-loop
 		const derived = await deriveCovenantAddress(manifest, {
@@ -270,15 +273,17 @@ export async function reviewManifestAction(
 			return { reason: derived.reason, refused: true, reject: "document-fault" };
 		}
 
-		const outpoint = stateOutpoint(request, site.utxoType);
+		const asset = resolveAsset(site.asset, `input ${site.id}`, {
+			policyAsset: input.policyAsset,
+			scope,
+		});
+		const claimed = utxos.claim(site.id, site.utxoType, asset.ok ? asset.id : undefined);
 
-		if (!outpoint) {
-			return {
-				reason: `The state file lists no ${site.utxoType} to spend.`,
-				refused: true,
-				reject: "no-utxo-to-spend",
-			};
+		if (!claimed.ok) {
+			return { reason: claimed.reason, refused: true, reject: claimed.reject };
 		}
+
+		const { outpoint } = claimed;
 
 		let onChain;
 
@@ -1055,25 +1060,6 @@ const FEE_TARGET_BLOCKS = 1;
 
 function feeHeadroomSats(feeRateSatsPerKvb: number): bigint {
 	return BigInt(Math.ceil(feeRateSatsPerKvb));
-}
-
-function stateOutpoint(
-	request: ParsedLiquidProcessCtParams,
-	utxoType: string,
-): { txid: string; vout: number } | undefined {
-	for (const entry of asArray(request.state?.utxos)) {
-		const utxo = asRecord(entry);
-
-		if (utxo?.utxo_type !== utxoType) {
-			continue;
-		}
-
-		if (typeof utxo.txid === "string" && typeof utxo.vout === "number") {
-			return { txid: utxo.txid, vout: utxo.vout };
-		}
-	}
-
-	return undefined;
 }
 
 function bySize(left: bigint, right: bigint, smallestFirst: boolean): number {

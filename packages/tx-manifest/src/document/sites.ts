@@ -2,6 +2,7 @@ import { asArray, asRecord } from "./json";
 import type { NormalisedManifest } from "./normalise";
 
 export type CovenantSite = {
+	asset?: unknown;
 	id: string;
 	role: "created" | "spent";
 	signatureWitness?: string;
@@ -20,6 +21,7 @@ export function covenantSites(action: Record<string, unknown>): CovenantSite[] {
 
 			sites.push({
 				...site,
+				asset: asRecord(entry)?.asset,
 				id: identifierOf(entry),
 				role: "spent",
 				...(signatureWitness === undefined ? {} : { signatureWitness }),
