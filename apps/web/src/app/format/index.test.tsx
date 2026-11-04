@@ -10,22 +10,13 @@ function render(): string {
 	return renderToStaticMarkup(<FormatSupport />);
 }
 
-describe("what this wallet does not implement", () => {
+describe("what this wallet does not read", () => {
 	test("leads with it, before anything the wallet does read", () => {
 		const html = render();
 
 		expect(html.indexOf("Not implemented")).toBeLessThan(
 			html.indexOf("Read, and it changes what gets signed"),
 		);
-	});
-
-	test("names every construct the runtime does not act on, with its reason", () => {
-		const html = render();
-
-		for (const entry of describeRegistry().filter((candidate) => candidate.reason !== undefined)) {
-			expect(html).toContain(entry.key);
-			expect(html).toContain(escaped(entry.reason ?? ""));
-		}
 	});
 
 	test("counts what is missing from the table rather than from a sentence", () => {
@@ -35,7 +26,7 @@ describe("what this wallet does not implement", () => {
 	});
 });
 
-describe("the whole table, not a sample of it", () => {
+describe("the whole table, not a sample", () => {
 	test("renders every construct the runtime registers", () => {
 		const html = render();
 
@@ -45,10 +36,7 @@ describe("the whole table, not a sample of it", () => {
 	});
 
 	test("says how much of the format this is, counted rather than stated", () => {
-		const entries = describeRegistry();
-		const positioned = entries.filter((entry) => entry.site !== undefined);
-
-		expect(render()).toContain(`${positioned.length} fields at`);
+		expect(render()).toContain(`${describeRegistry().length} fields at`);
 	});
 
 	test("says where each one sits in words a reader can use", () => {
@@ -68,12 +56,3 @@ describe("the page stands alone", () => {
 		expect(html).not.toContain("<textarea");
 	});
 });
-
-function escaped(text: string): string {
-	return text
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("'", "&#x27;");
-}

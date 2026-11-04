@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
+import { Refusal } from "../refusal";
+import { refusalOf } from "../review/reviewForTests";
 import { parseReference, type ReferenceScope, resolveReference } from "./references";
 
 const SCOPE: ReferenceScope = {
-	args: { seat: "row-4" },
 	instance: { TIMEOUT: "900000" },
 	params: { amount_sat: "1000" },
 };
@@ -12,14 +13,12 @@ describe("the namespaces a reference can name", () => {
 	test("reads the request's parameters", () => {
 		expect(resolveReference("params.amount_sat", "amount", SCOPE)).toEqual({
 			form: "params",
-			ok: true,
 			value: "1000",
 		});
 	});
 
 	test("reads them through the $-prefixed spelling too, which the corpus also writes", () => {
 		expect(resolveReference("$params.amount_sat", "amount", SCOPE)).toMatchObject({
-			ok: true,
 			value: "1000",
 		});
 	});
@@ -27,66 +26,64 @@ describe("the namespaces a reference can name", () => {
 	test("reads this deployment's field values", () => {
 		expect(resolveReference("instance.TIMEOUT", "compileParam", SCOPE)).toEqual({
 			form: "instance",
-			ok: true,
 			value: "900000",
 		});
 	});
 
-	test("reads the request's arguments", () => {
-		expect(resolveReference("args.seat", "compileParam", SCOPE)).toMatchObject({
-			ok: true,
-			value: "row-4",
+	test("reads an action parameter as a field where the deployment has no such field", () => {
+		expect(resolveReference("instance.amount_sat", "amount", SCOPE)).toMatchObject({
+			value: "1000",
 		});
 	});
 
-	test("no longer reads compile_params. as a namespace of its own", () => {
-		const removed = resolveReference("compile_params.TIMEOUT", "compileParam", SCOPE);
+	test("but a field the deployment has wins over a parameter of the same name", () => {
+		const scope = { instance: { TIMEOUT: "900000" }, params: { TIMEOUT: "1" } };
 
-		expect(removed).toEqual({
-			ok: false,
-			reason: '"compile_params.TIMEOUT" cannot be used as a compile parameter.',
+		expect(resolveReference("instance.TIMEOUT", "amount", scope)).toMatchObject({
+			value: "900000",
 		});
 	});
 
-	test("reads a bare name as a parameter first and an argument second", () => {
+	test("reads a bare name as a parameter", () => {
 		expect(resolveReference("amount_sat", "amount", SCOPE)).toMatchObject({ value: "1000" });
-		expect(resolveReference("seat", "compileParam", SCOPE)).toMatchObject({ value: "row-4" });
 	});
 });
 
 describe("what a name must come from", () => {
 	test("a name nothing in scope supplies refuses rather than resolving to nothing", () => {
-		const found = resolveReference("MISSING", "compileParam", SCOPE);
+		const found = refusalOf(() => resolveReference("MISSING", "compileParam", SCOPE));
 
-		expect(found.ok).toBe(false);
-		expect(found.ok ? "" : found.reason).toContain("MISSING");
+		expect(found.reason).toContain("MISSING");
 	});
 
 	test("a namespace the request did not carry says so, rather than saying the name is absent", () => {
-		const found = resolveReference("instance.TIMEOUT", "compileParam", { params: {} });
+		const found = refusalOf(() =>
+			resolveReference("instance.TIMEOUT", "compileParam", { params: {} }),
+		);
 
-		expect(found.ok ? "" : found.reason).toContain("carries no instance");
+		expect(found.reason).toContain("carries no instance");
 	});
 
 	test("an absent value is not a zero", () => {
-		expect(resolveReference("params.amount_sat", "amount", { params: {} }).ok).toBe(false);
+		expect(() => resolveReference("params.amount_sat", "amount", { params: {} })).toThrow(Refusal);
 	});
 });
 
 describe("what a position refuses", () => {
 	test("a destination takes only a parameter, even where another form would resolve", () => {
-		const found = resolveReference("instance.TIMEOUT", "destination", SCOPE);
+		const found = refusalOf(() => resolveReference("instance.TIMEOUT", "destination", SCOPE));
 
-		expect(found.ok).toBe(false);
-		expect(found.ok ? "" : found.reason).toContain("cannot be used as a destination");
+		expect(found.reason).toContain("cannot be used as a destination");
 	});
 
-	test("an attribute of a transaction input is recognised as the lookup it is", () => {
-		expect(parseReference("vault_in.amount_sat")).toEqual({
-			attribute: "amount_sat",
-			form: "input-attribute",
-			name: "vault_in",
-		});
+	test("an attribute of a transaction input is recognised in either spelling", () => {
+		for (const text of ["inputs.vault_in.amount_sat", "vault_in.amount_sat"]) {
+			expect(parseReference(text)).toEqual({
+				attribute: "amount_sat",
+				form: "input-attribute",
+				name: "vault_in",
+			});
+		}
 	});
 
 	test("and resolves against the inputs this action actually resolved", () => {
@@ -95,19 +92,18 @@ describe("what a position refuses", () => {
 			inputs: { vault_in: { amount_sat: 50_000n } },
 		});
 
-		expect(found).toEqual({ form: "input-attribute", ok: true, value: 50_000n });
+		expect(found).toEqual({ form: "input-attribute", value: 50_000n });
 	});
 
 	test("and refuses an input this action never resolved, by name", () => {
-		const found = resolveReference("vault_in.amount_sat", "amount", SCOPE);
+		const found = refusalOf(() => resolveReference("vault_in.amount_sat", "amount", SCOPE));
 
-		expect(found.ok).toBe(false);
-		expect(found.ok ? "" : found.reason).toContain("vault_in");
+		expect(found.reason).toContain("vault_in");
 	});
 
 	test("an expression is not a reference", () => {
 		expect(parseReference("params.amount_sat - fee")).toBeUndefined();
-		expect(resolveReference("params.amount_sat - fee", "amount", SCOPE).ok).toBe(false);
+		expect(() => resolveReference("params.amount_sat - fee", "amount", SCOPE)).toThrow(Refusal);
 	});
 
 	test("a bare value is not a reference either", () => {

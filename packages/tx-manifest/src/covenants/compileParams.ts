@@ -1,12 +1,14 @@
 import { parseReference, type ReferenceScope, resolveReference } from "../document/references";
+import { Refusal } from "../refusal";
 import { type DeclaringContract, encodeContractLiteral } from "./covenantParamTypes";
-import { encodeCompileParam, encodesDeclaredType, unencodableReason } from "./paramEncoding";
+import {
+	encodeCompileParam,
+	type EncodedParam,
+	encodesDeclaredType,
+	unencodableReason,
+} from "./paramEncoding";
 
-export type ContractArguments = Record<string, { type: string; value: string }>;
-
-export type ResolveCompileParamsResult =
-	| { arguments: ContractArguments; ok: true }
-	| { ok: false; reason: string };
+export type ContractArguments = Record<string, EncodedParam>;
 
 export function resolveCompileParams(
 	wiring: Record<string, unknown>,
@@ -14,69 +16,63 @@ export function resolveCompileParams(
 	scope: ReferenceScope,
 	contract?: DeclaringContract,
 	declaredAtUse?: Record<string, string>,
-): ResolveCompileParamsResult {
+): ContractArguments {
 	const resolved: ContractArguments = {};
 
 	for (const [name, reference] of Object.entries(wiring)) {
 		if (typeof reference !== "string") {
-			return { ok: false, reason: `Compile parameter ${name} is not a reference.` };
+			throw new Refusal(`Compile parameter ${name} is not a reference.`);
 		}
 
-		const found = resolveCovenantReference(reference, scope);
+		let found: unknown;
 
-		if (!found.ok) {
-			const literal =
-				asStatedValue(name, reference, found.reason, declaredAtUse?.[name]) ??
-				asContractLiteral(name, reference, found.reason, contract);
-
-			if (!literal.ok) {
-				return { ok: false, reason: `Compile parameter ${name}: ${literal.reason}` };
+		try {
+			found = resolveCovenantReference(reference, scope);
+		} catch (error) {
+			if (!(error instanceof Refusal)) {
+				throw error;
 			}
 
-			resolved[name] = literal.encoded;
+			resolved[name] = Refusal.amend(
+				() =>
+					asStatedValue(name, reference, error.reason, declaredAtUse?.[name]) ??
+					asContractLiteral(name, reference, error.reason, contract),
+				(reason) => `Compile parameter ${name}: ${reason}`,
+			);
 
 			continue;
 		}
 
-		if (typeof found.value !== "string") {
-			return {
-				ok: false,
-				reason: `Compile parameter ${name} resolves to ${reference}, which is not a value this runtime can encode yet.`,
-			};
+		if (typeof found !== "string") {
+			throw new Refusal(
+				`Compile parameter ${name} resolves to ${reference}, which is not a value this runtime can encode yet.`,
+			);
 		}
 
 		const declaredType = declaredAtUse?.[name] ?? declaredTypeOf(reference, declaredTypes);
 
 		if (!encodesDeclaredType(declaredType)) {
-			return { ok: false, reason: `${reference} ${unencodableReason(declaredType)}.` };
+			throw new Refusal(`${reference} ${unencodableReason(declaredType)}.`);
 		}
 
-		const encoded = encodeCompileParam(declaredType ?? "", found.value, name, reference);
-
-		if (!encoded.ok) {
-			return encoded;
-		}
-
-		resolved[name] = encoded.encoded;
+		resolved[name] = encodeCompileParam(declaredType ?? "", found, name, reference);
 	}
 
-	return { arguments: resolved, ok: true };
+	return resolved;
 }
 
-function resolveCovenantReference(
-	reference: string,
-	scope: ReferenceScope,
-): { ok: false; reason: string } | { ok: true; value: unknown } {
-	const found = resolveReference(reference, "compileParam", scope);
-	const parsed = parseReference(reference);
+function resolveCovenantReference(reference: string, scope: ReferenceScope): unknown {
+	try {
+		return resolveReference(reference, "compileParam", scope).value;
+	} catch (error) {
+		const parsed = parseReference(reference);
 
-	if (found.ok || parsed?.form !== "bare") {
-		return found;
+		if (parsed?.form === "bare" && scope.instance && parsed.name in scope.instance) {
+			return scope.instance[parsed.name];
+		}
+
+		throw error;
 	}
-
-	return scope.instance && parsed.name in scope.instance
-		? { ok: true, value: scope.instance[parsed.name] }
-		: found;
 }
 
 function asStatedValue(
@@ -84,25 +80,18 @@ function asStatedValue(
 	text: string,
 	referenceReason: string,
 	declaredType: string | undefined,
-): EncodeLiteralResult | undefined {
+): EncodedParam | undefined {
 	if (declaredType === undefined) {
 		return undefined;
 	}
 
 	if (!encodesDeclaredType(declaredType)) {
-		return { ok: false, reason: `${name} is declared ${unencodableReason(declaredType)}.` };
+		throw new Refusal(`${name} is declared ${unencodableReason(declaredType)}.`);
 	}
 
-	const encoded = encodeCompileParam(declaredType, text, name, "a value");
-
-	if (encoded.ok) {
-		return encoded;
-	}
-
-	return {
-		ok: false,
-		reason: parseReference(text) === undefined ? encoded.reason : referenceReason,
-	};
+	return asLiteral(text, referenceReason, () =>
+		encodeCompileParam(declaredType, text, name, "a value"),
+	);
 }
 
 function asContractLiteral(
@@ -110,26 +99,29 @@ function asContractLiteral(
 	text: string,
 	referenceReason: string,
 	contract: DeclaringContract | undefined,
-): EncodeLiteralResult {
+): EncodedParam {
 	if (!contract || contract.declares[name] === undefined) {
-		return { ok: false, reason: referenceReason };
+		throw new Refusal(referenceReason);
 	}
 
-	const encoded = encodeContractLiteral(name, text, contract);
-
-	if (encoded.ok) {
-		return encoded;
-	}
-
-	return {
-		ok: false,
-		reason: parseReference(text) === undefined ? encoded.reason : referenceReason,
-	};
+	return asLiteral(text, referenceReason, () => encodeContractLiteral(name, text, contract));
 }
 
-type EncodeLiteralResult =
-	| { encoded: { type: string; value: string }; ok: true }
-	| { ok: false; reason: string };
+function asLiteral(
+	text: string,
+	referenceReason: string,
+	encode: () => EncodedParam,
+): EncodedParam {
+	try {
+		return encode();
+	} catch (error) {
+		if (error instanceof Refusal && parseReference(text) !== undefined) {
+			throw new Refusal(referenceReason);
+		}
+
+		throw error;
+	}
+}
 
 function declaredTypeOf(
 	reference: string,

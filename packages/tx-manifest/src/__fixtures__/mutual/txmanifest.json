@@ -1,0 +1,69 @@
+{
+	"manifest_version": "0.3.1",
+	"protocol": "mutual",
+	"chain": "liquid",
+	"requires": [
+		"simplicity"
+	],
+	"utxo_types": {
+		"left": {
+			"script": {
+				"type": "simplicity",
+				"source": "./left.simf",
+				"compile_params": {
+					"OTHER_COV_HASH": "RIGHT_COV_HASH"
+				}
+			},
+			"description": "One half of the pair."
+		}
+	},
+	"contract_templates": {
+		"knot_contract": {
+			"description": "Two covenants whose hashes are built from each other.",
+			"actions": {
+				"Knot": {
+					"description": "Deploy the pair.",
+					"inputs": [
+						{
+							"id": "funding",
+							"utxo_source": "wallet"
+						}
+					],
+					"outputs": [
+						{
+							"id": "left_out",
+							"destination": {
+								"utxo_type": "left"
+							},
+							"amount_sat": "1000"
+						}
+					],
+					"create_instance": {
+						"fields": {
+							"LEFT_COV_HASH": {
+								"type": "tapleaf",
+								"simf": "./left.simf",
+								"params": {
+									"OTHER_COV_HASH": {
+										"type": "bytes32",
+										"value": "RIGHT_COV_HASH"
+									}
+								}
+							},
+							"RIGHT_COV_HASH": {
+								"type": "tapleaf",
+								"simf": "./right.simf",
+								"params": {
+									"OTHER_COV_HASH": {
+										"type": "bytes32",
+										"value": "LEFT_COV_HASH"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

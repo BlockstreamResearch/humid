@@ -1,3 +1,5 @@
+import { Refusal } from "../refusal";
+
 type Encoding = "boolean" | "decimal" | "hex" | "reversedHex";
 
 type ParamType = {
@@ -63,8 +65,6 @@ const UNENCODABLE: Record<string, string> = {
 
 export type EncodedParam = { type: string; value: string };
 
-export type EncodeParamResult = { encoded: EncodedParam; ok: true } | { ok: false; reason: string };
-
 export function encodesDeclaredType(declaredType: string | undefined): boolean {
 	return declaredType !== undefined && declaredType in PARAM_TYPES;
 }
@@ -86,41 +86,44 @@ export function encodeCompileParam(
 	value: string,
 	name: string,
 	reference: string,
-): EncodeParamResult {
+): EncodedParam {
 	const declared = PARAM_TYPES[declaredType];
 
 	if (!declared) {
-		return { ok: false, reason: `${reference} ${unencodableReason(declaredType)}.` };
+		throw new Refusal(`${reference} ${unencodableReason(declaredType)}.`);
 	}
 
-	const wrong = (found: string): EncodeParamResult => ({
-		ok: false,
-		reason:
+	const wrong = (found: string) =>
+		new Refusal(
 			`${name} is wired to ${reference}, declared ${declaredType}, which is ` +
-			`${declared.shape}. Got ${found}.`,
-	});
+				`${declared.shape}. Got ${found}.`,
+		);
 
 	switch (declared.encoding) {
 		case "boolean": {
 			const literal = BOOLEANS[value.trim().toLowerCase()];
 
-			return literal === undefined
-				? wrong(quoted(value))
-				: { encoded: { type: declared.compiler, value: literal }, ok: true };
+			if (literal === undefined) {
+				throw wrong(quoted(value));
+			}
+
+			return { type: declared.compiler, value: literal };
 		}
 
 		case "decimal": {
 			const digits = value.trim();
 
 			if (!/^\d+$/.test(digits)) {
-				return wrong(quoted(value));
+				throw wrong(quoted(value));
 			}
 
 			const number = BigInt(digits);
 
-			return number > (declared.max ?? 0n)
-				? wrong(`${number}`)
-				: { encoded: { type: declared.compiler, value: number.toString(10) }, ok: true };
+			if (number > (declared.max ?? 0n)) {
+				throw wrong(`${number}`);
+			}
+
+			return { type: declared.compiler, value: number.toString(10) };
 		}
 
 		case "hex":
@@ -129,14 +132,14 @@ export function encodeCompileParam(
 			const width = declared.bytes ?? 0;
 
 			if (digits.length !== width * 2 || !/^[0-9a-fA-F]+$/.test(digits)) {
-				return wrong(
+				throw wrong(
 					/^[0-9a-fA-F]*$/.test(digits) ? `${digits.length} hexadecimal characters` : quoted(value),
 				);
 			}
 
 			const ordered = declared.encoding === "reversedHex" ? reverseBytes(digits) : digits;
 
-			return { encoded: { type: declared.compiler, value: `0x${ordered}` }, ok: true };
+			return { type: declared.compiler, value: `0x${ordered}` };
 		}
 	}
 }

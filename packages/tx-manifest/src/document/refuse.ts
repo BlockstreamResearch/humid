@@ -1,166 +1,132 @@
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
+
 import { STATIC_WITNESS } from "../evaluation/witness";
+import { Refusal } from "../refusal";
 import { asArray, asRecord } from "./json";
-import type { NormalisedManifest } from "./normalise";
-import { inspectConstructs, loadBearing } from "./registry";
-import { contractSourcePaths } from "./sites";
+import type { Manifest } from "./manifest";
+import { inspectConstructs } from "./registry";
 
-export type RejectToken =
-	| "foreign-chain"
-	| "unimplemented-construct"
-	| "unrecognised-construct"
-	| "foreign-compiler"
-	| "unreadable-build-mode"
-	| "unproducible-witness"
-	| "foreign-asset"
-	| "unbuildable-utxo-type"
-	| "unbuildable-position"
-	| "incomplete-request"
-	| "no-such-action"
-	| "no-utxo-to-spend"
-	| "chain-read-failed"
-	| "covenant-mismatch"
-	| "no-fee-rate"
-	| "no-funds-at-signing-address"
-	| "shortfall"
-	| "document-fault"
-	| "built-something-else";
-
-export type Refusal = {
-	reason: string;
-	reject: RejectToken;
-};
+const FORMAT_MAJOR = 0;
+const FORMAT_MINOR = 3;
+const CHAINS = new Set(["elements", "liquid"]);
+const CAPABILITIES = new Set(["simplicity"]);
 
 export function refuseUnsupported(
-	manifest: NormalisedManifest,
-	input: {
-		compilerVersion?: string;
-		contractSources: Record<string, string>;
-	},
+	manifest: Manifest,
+	input: { compilerVersion?: string; contractSources: Record<string, string> },
 ): Refusal | undefined {
 	return (
+		refuseForeignFormat(manifest) ??
 		refuseForeignChain(manifest) ??
-		refuseUnrecognisedConstruct(manifest) ??
+		refuseConstructs(manifest) ??
+		refuseCapabilities(manifest) ??
+		refuseUnbuildableUtxoType(manifest) ??
+		refuseSourceMismatch(manifest, input.contractSources) ??
 		refuseForeignCompiler(manifest, input) ??
-		refuseUnproducibleWitness(manifest) ??
-		refuseUnbuildableUtxoType(manifest)
+		refuseUnproducibleWitness(manifest)
 	);
 }
 
-export const DOCUMENT_ONLY_REJECTS = [
-	"foreign-chain",
-	"unimplemented-construct",
-	"unrecognised-construct",
-	"foreign-compiler",
-	"unproducible-witness",
-	"unbuildable-utxo-type",
-	"unreadable-build-mode",
-] as const satisfies readonly RejectToken[];
+function refuseForeignFormat(manifest: Manifest): Refusal | undefined {
+	const declared = manifest.node.manifest_version;
+	const [major, minor] = typeof declared === "string" ? declared.split(".").map(Number) : [];
 
-export const NEEDS_MORE_THAN_THE_DOCUMENT_REJECTS = [
-	"foreign-asset",
-	"incomplete-request",
-	"no-such-action",
-	"no-utxo-to-spend",
-	"chain-read-failed",
-	"covenant-mismatch",
-	"no-fee-rate",
-	"no-funds-at-signing-address",
-	"shortfall",
-	"unbuildable-position",
-	"document-fault",
-	"built-something-else",
-] as const satisfies readonly RejectToken[];
-
-export type PartialCheck = {
-	reject: RejectToken;
-	unread: string[];
-};
-
-export function refuseFromDocumentAlone(
-	manifest: NormalisedManifest,
-	input: {
-		compilerVersion?: string;
-		contractSources?: Record<string, string>;
-	},
-): { partial: PartialCheck[]; refusal: Refusal | undefined; skipped: RejectToken[] } {
-	const skipped: RejectToken[] = [];
-	const partial: PartialCheck[] = [];
-
-	const compiler =
-		input.compilerVersion === undefined
-			? undefined
-			: refuseForeignCompiler(manifest, {
-					compilerVersion: input.compilerVersion,
-					contractSources: input.contractSources ?? {},
-				});
-
-	if (input.compilerVersion === undefined) {
-		skipped.push("foreign-compiler");
-	} else {
-		const supplied = input.contractSources ?? {};
-		const unread = contractSourcePaths(manifest).filter((path) => !(path in supplied));
-
-		if (unread.length > 0) {
-			partial.push({ reject: "foreign-compiler", unread });
-		}
-	}
-
-	return {
-		partial,
-		refusal:
-			refuseForeignChain(manifest) ??
-			refuseUnrecognisedConstruct(manifest) ??
-			compiler ??
-			refuseUnproducibleWitness(manifest) ??
-			refuseUnbuildableUtxoType(manifest) ??
-			refuseUnreadableBuildMode(manifest),
-		skipped,
-	};
-}
-
-function refuseUnreadableBuildMode(manifest: NormalisedManifest): Refusal | undefined {
-	if (manifest.buildMode.ok) {
+	if (major === FORMAT_MAJOR && minor === FORMAT_MINOR) {
 		return undefined;
 	}
 
-	return { reason: manifest.buildMode.reason, reject: "unreadable-build-mode" };
+	return new Refusal(
+		`This document is written in manifest format ${JSON.stringify(declared)}, and this wallet reads ${FORMAT_MAJOR}.${FORMAT_MINOR}.`,
+		"foreign-format",
+	);
 }
 
-function refuseForeignChain(manifest: NormalisedManifest): Refusal | undefined {
+function refuseForeignChain(manifest: Manifest): Refusal | undefined {
 	const declared = manifest.node.chain;
 
-	if (declared === undefined || (typeof declared === "string" && LIQUID_CHAINS.has(declared))) {
+	if (declared === undefined || (typeof declared === "string" && CHAINS.has(declared))) {
 		return undefined;
 	}
 
-	return {
-		reason:
-			`This protocol is for ${JSON.stringify(declared)}, and this wallet builds Liquid ` +
-			"transactions.",
-		reject: "foreign-chain",
-	};
+	return new Refusal(
+		`This protocol is for ${JSON.stringify(declared)}, and this wallet builds Liquid transactions.`,
+		"foreign-chain",
+	);
 }
 
-const LIQUID_CHAINS = new Set(["elements", "elements-regtest", "liquid", "liquid-testnet"]);
-
-function refuseUnrecognisedConstruct(manifest: NormalisedManifest): Refusal | undefined {
-	const found = loadBearing(inspectConstructs(manifest))[0];
+function refuseConstructs(manifest: Manifest): Refusal | undefined {
+	const found = inspectConstructs(manifest)[0];
 
 	if (!found) {
 		return undefined;
 	}
 
-	return {
-		reason:
-			`This protocol uses "${found.key}" at ${found.at}, which this wallet does not ` +
-			`${found.declared ? "implement" : "recognise"}. It will not sign a transaction built ` +
-			"from a document it has only partly read.",
-		reject: found.declared ? "unimplemented-construct" : "unrecognised-construct",
-	};
+	return found.state === "unimplemented"
+		? new Refusal(
+				`This protocol uses "${found.key}" at ${found.at}, which this wallet does not implement yet.`,
+				"unimplemented-construct",
+			)
+		: new Refusal(
+				`The manifest is malformed: the format defines no "${found.key}" at ${found.at}.`,
+				"document-fault",
+			);
+}
+
+function refuseCapabilities(manifest: Manifest): Refusal | undefined {
+	const missing = asArray(manifest.node.requires).find(
+		(capability) => typeof capability !== "string" || !CAPABILITIES.has(capability),
+	);
+
+	return missing === undefined
+		? undefined
+		: new Refusal(
+				`This protocol requires ${JSON.stringify(missing)}, which this wallet does not provide.`,
+				"unimplemented-construct",
+			);
+}
+
+function refuseUnbuildableUtxoType(manifest: Manifest): Refusal | undefined {
+	for (const [name, declared] of Object.entries(manifest.utxoTypes)) {
+		const scriptType = asRecord(asRecord(declared)?.script)?.type;
+
+		if (scriptType !== undefined && scriptType !== "simplicity") {
+			return new Refusal(
+				`The ${name} contract is a ${String(scriptType)} script, and this wallet builds Simplicity covenants.`,
+				"unbuildable-utxo-type",
+			);
+		}
+	}
+
+	return undefined;
+}
+
+function refuseSourceMismatch(
+	manifest: Manifest,
+	contractSources: Record<string, string>,
+): Refusal | undefined {
+	for (const [name, script] of scripts(manifest)) {
+		const path = script.source;
+		const declared = script.source_hash;
+		const source = typeof path === "string" ? contractSources[path] : undefined;
+
+		if (declared === undefined || source === undefined) {
+			continue;
+		}
+
+		if (declared !== `sha256:${bytesToHex(sha256(utf8ToBytes(source)))}`) {
+			return new Refusal(
+				`The contract at ${String(path)} is not the one the ${name} contract pins with ${String(declared)}.`,
+				"source-mismatch",
+			);
+		}
+	}
+
+	return undefined;
 }
 
 function refuseForeignCompiler(
-	manifest: NormalisedManifest,
+	manifest: Manifest,
 	input: { compilerVersion?: string; contractSources: Record<string, string> },
 ): Refusal | undefined {
 	const shipped = input.compilerVersion;
@@ -169,47 +135,41 @@ function refuseForeignCompiler(
 		return undefined;
 	}
 
-	const declared = manifest.node.simplicity_hl_version;
+	const documentRange = asRecord(manifest.node.simplicity_hl)?.version;
 
-	if (typeof declared === "string" && declared !== shipped) {
-		return {
-			reason:
-				`This protocol asks for SimplicityHL ${declared} and this wallet has ${shipped}. A ` +
-				"different compiler derives a different address for the same contract, so there is " +
-				"nothing safe to build.",
-			reject: "foreign-compiler",
-		};
-	}
+	for (const [name, script] of scripts(manifest)) {
+		const range = script.simplicity_hl_version ?? documentRange;
+		const source =
+			typeof script.source === "string" ? input.contractSources[script.source] : undefined;
+		const directive = source === undefined ? undefined : simcDirective(source);
 
-	for (const [path, source] of Object.entries(input.contractSources)) {
-		const range = simcDirective(source);
-
-		if (range !== undefined && !satisfies(shipped, range)) {
-			return {
-				reason:
-					`The contract at ${path} asks for SimplicityHL ${range} and this wallet has ` +
-					`${shipped}.`,
-				reject: "foreign-compiler",
-			};
+		for (const required of [range, directive]) {
+			if (typeof required === "string" && !satisfies(shipped, required)) {
+				return new Refusal(
+					`The ${name} contract asks for SimplicityHL ${required}, and this wallet compiles with ${shipped}.`,
+					"foreign-compiler",
+				);
+			}
 		}
 	}
 
 	return undefined;
 }
 
-function refuseUnproducibleWitness(manifest: NormalisedManifest): Refusal | undefined {
+function refuseUnproducibleWitness(manifest: Manifest): Refusal | undefined {
 	for (const action of manifest.actions) {
 		for (const declared of asArray(action.node.inputs)) {
 			const input = asRecord(declared);
 			const id = typeof input?.id === "string" ? input.id : "(unnamed)";
 
-			for (const [name, entry] of Object.entries(asRecord(input?.witnesses) ?? {})) {
-				const witness = asRecord(entry);
-				const at = `${action.name} / input ${id} / witness ${name}`;
-				const refusal = refuseOneWitness(witness, name, at);
+			for (const [name, witness] of Object.entries(asRecord(input?.witnesses) ?? {})) {
+				const reason = witness === "unused" ? undefined : unproducible(asRecord(witness));
 
-				if (refusal) {
-					return refusal;
+				if (reason) {
+					return new Refusal(
+						`The witness ${name} at ${action.name} / input ${id} ${reason}.`,
+						"unproducible-witness",
+					);
 				}
 			}
 		}
@@ -218,109 +178,100 @@ function refuseUnproducibleWitness(manifest: NormalisedManifest): Refusal | unde
 	return undefined;
 }
 
-function refuseOneWitness(
-	witness: Record<string, unknown> | undefined,
-	name: string,
-	at: string,
-): Refusal | undefined {
+function unproducible(witness: Record<string, unknown> | undefined): string | undefined {
 	if (witness?.type === STATIC_WITNESS) {
-		if (typeof witness.simplicity_type === "string" && typeof witness.value === "string") {
-			return undefined;
-		}
-
-		return {
-			reason:
-				`The witness ${name} at ${at} states a value and ` +
-				(typeof witness.simplicity_type === "string"
-					? "no value to give it."
-					: "no type to give it.") +
-				" This wallet will not hand a contract a value nothing can type-check.",
-			reject: "unproducible-witness",
-		};
+		return typeof witness.simplicity_type === "string" && typeof witness.value === "string"
+			? undefined
+			: "states a value without both a type and a value";
 	}
 
 	if (witness?.type !== "Signature") {
-		return {
-			reason:
-				`The witness ${name} at ${at} is a ${String(witness?.type)}, and this wallet can only ` +
-				"produce a signature.",
-			reject: "unproducible-witness",
-		};
+		return `is a ${String(witness?.type)}, and this wallet only produces signatures and stated values`;
 	}
 
-	const source = asRecord(witness.source)?.type;
-
-	if (source !== "wallet") {
-		return {
-			reason:
-				`The witness ${name} at ${at} is sourced from ${String(source)}, and this wallet can ` +
-				"only sign with a key it holds.",
-			reject: "unproducible-witness",
-		};
+	if (asRecord(witness.source)?.type !== "wallet") {
+		return "is a signature from a key this wallet does not hold";
 	}
 
-	const sigType = witness.sig_type;
-
-	if (sigType !== undefined && sigType !== "sig_hash_all") {
-		return {
-			reason:
-				`The witness ${name} at ${at} asks for ${String(sigType)}, and this wallet signs over ` +
-				"the whole transaction.",
-			reject: "unproducible-witness",
-		};
-	}
-
-	return undefined;
+	return witness.sig_type === undefined || witness.sig_type === "sig_hash_all"
+		? undefined
+		: `asks for ${String(witness.sig_type)}, and this wallet signs over the whole transaction`;
 }
 
-function refuseUnbuildableUtxoType(manifest: NormalisedManifest): Refusal | undefined {
-	for (const [name, declared] of Object.entries(manifest.utxoTypes)) {
-		const utxoType = asRecord(declared);
-		const scriptType = asRecord(utxoType?.script)?.type;
+function scripts(manifest: Manifest): [string, Record<string, unknown>][] {
+	return Object.entries(manifest.utxoTypes).flatMap(([name, declared]) => {
+		const script = asRecord(asRecord(declared)?.script);
 
-		if (scriptType !== undefined && scriptType !== "simplicity") {
-			return {
-				reason:
-					`The ${name} contract is a ${String(scriptType)} script, and this wallet builds ` +
-					"Simplicity covenants.",
-				reject: "unbuildable-utxo-type",
-			};
-		}
-
-		if (utxoType?.confidential === true) {
-			return {
-				reason:
-					`The ${name} covenant is declared confidential. A Simplicity program cannot read a ` +
-					"confidential commitment, so it could never check its own value.",
-				reject: "unbuildable-utxo-type",
-			};
-		}
-	}
-
-	return undefined;
+		return script ? [[name, script] as [string, Record<string, unknown>]] : [];
+	});
 }
 
 function simcDirective(source: string): string | undefined {
 	return /(?:^|\n)\s*simc\s+"(?<range>[^"]+)"/.exec(source)?.groups?.range;
 }
 
-function satisfies(shipped: string, range: string): boolean {
-	const trimmed = range.trim();
-	const lowerBound = /^>=\s*(?<version>[0-9]+(?:\.[0-9]+){0,2})$/.exec(trimmed)?.groups?.version;
+export function satisfies(version: string, requirement: string): boolean {
+	const shipped = parts(version);
 
-	if (lowerBound !== undefined) {
-		return compare(shipped, lowerBound) >= 0;
-	}
+	return requirement.split(",").every((comparator) => {
+		const match = /^\s*(?<op>\^|~|=|>=|>|<=|<)?\s*(?<bound>\d+(?:\.\d+){0,2})\s*$/.exec(comparator);
+		const op = match?.groups?.op ?? "^";
+		const bound = match?.groups?.bound;
 
-	return trimmed === shipped;
+		if (!bound) {
+			return false;
+		}
+
+		const lower = parts(bound);
+		const order = compare(shipped, lower);
+
+		switch (op) {
+			case "=": {
+				return order === 0;
+			}
+			case ">=": {
+				return order >= 0;
+			}
+			case ">": {
+				return order > 0;
+			}
+			case "<=": {
+				return order <= 0;
+			}
+			case "<": {
+				return order < 0;
+			}
+			default: {
+				return order >= 0 && compare(shipped, upperBound(bound, op)) < 0;
+			}
+		}
+	});
 }
 
-function compare(left: string, right: string): number {
-	const one = left.split(".").map(Number);
-	const other = right.split(".").map(Number);
+function upperBound(bound: string, op: string): number[] {
+	const given = bound.split(".").map(Number);
+	const [major = 0, minor = 0, patch = 0] = given;
 
-	for (let at = 0; at < Math.max(one.length, other.length); at += 1) {
-		const difference = (one[at] ?? 0) - (other[at] ?? 0);
+	if (op === "~") {
+		return given.length === 1 ? [major + 1, 0, 0] : [major, minor + 1, 0];
+	}
+
+	if (major > 0 || given.length === 1) {
+		return [major + 1, 0, 0];
+	}
+
+	return minor > 0 || given.length === 2 ? [0, minor + 1, 0] : [0, 0, patch + 1];
+}
+
+function parts(version: string): number[] {
+	const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
+
+	return [major, minor, patch];
+}
+
+function compare(left: number[], right: number[]): number {
+	for (let at = 0; at < 3; at += 1) {
+		const difference = (left[at] ?? 0) - (right[at] ?? 0);
 
 		if (difference !== 0) {
 			return difference;

@@ -1,4 +1,5 @@
 import { byOutpoint } from "../chain/outpoint";
+import { Refusal } from "../refusal";
 
 export type SelectableUtxo = {
 	amount: string;
@@ -12,9 +13,7 @@ export type SelectableUtxo = {
 	vout: number;
 };
 
-export type CoinSelection =
-	| { ok: false; reason: string }
-	| { ok: true; selected: SelectableUtxo[]; totalSats: bigint };
+export type CoinSelection = { selected: SelectableUtxo[]; totalSats: bigint };
 
 export function selectCoins(
 	available: SelectableUtxo[],
@@ -22,7 +21,7 @@ export function selectCoins(
 	headroomSats: bigint,
 ): CoinSelection {
 	if (targetSats <= 0n) {
-		return { ok: false, reason: "Nothing to fund." };
+		throw new Refusal("Nothing to fund.", "shortfall");
 	}
 
 	const needed = targetSats + headroomSats;
@@ -41,13 +40,13 @@ export function selectCoins(
 	}
 
 	if (totalSats < needed) {
-		return {
-			ok: false,
-			reason: `This account holds ${totalSats} of the ${needed} needed to perform the action and pay its fee.`,
-		};
+		throw new Refusal(
+			`This account holds ${totalSats} of the ${needed} needed to perform the action and pay its fee.`,
+			"shortfall",
+		);
 	}
 
-	return { ok: true, selected, totalSats };
+	return { selected, totalSats };
 }
 
 function byLargestFirst(a: SelectableUtxo, b: SelectableUtxo): number {

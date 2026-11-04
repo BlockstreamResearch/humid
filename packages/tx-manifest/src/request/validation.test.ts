@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
+import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
 import { parseLiquidProcessCtParams } from "./validation";
 
 const base = {
@@ -33,7 +33,7 @@ describe("parseLiquidProcessCtParams", () => {
 		expect(parseLiquidProcessCtParams({ ...base, manifest: undefined }).ok).toBe(false);
 	});
 
-	test("and says which field, so the caller can name it", () => {
+	test("and says which field, for the caller to report", () => {
 		const parsed = parseLiquidProcessCtParams({ ...base, manifest: undefined });
 
 		expect(parsed.ok ? [] : Object.keys(parsed.malformed.details.fieldErrors)).toContain(

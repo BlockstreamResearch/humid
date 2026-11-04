@@ -1,4 +1,5 @@
-import { encodeCompileParam, type EncodeParamResult } from "./paramEncoding";
+import { Refusal } from "../refusal";
+import { encodeCompileParam, type EncodedParam } from "./paramEncoding";
 
 export type CovenantParamTypes = Record<string, string>;
 
@@ -27,16 +28,14 @@ export function encodeContractLiteral(
 	name: string,
 	value: string,
 	contract: DeclaringContract,
-): EncodeParamResult {
+): EncodedParam {
 	const declaredType = contract.declares[name];
 
 	if (declaredType === undefined) {
-		return {
-			ok: false,
-			reason:
-				`${name} is written as the value "${value}", and ${contract.source} declares no ` +
-				"compile parameter of that name to take it.",
-		};
+		throw new Refusal(
+			`${name} is written as the value "${value}", and ${contract.source} declares no ` +
+				"compile parameter of that name.",
+		);
 	}
 
 	const entry = CONTRACT_TYPES[declaredType];
@@ -44,31 +43,23 @@ export function encodeContractLiteral(
 	if (entry === undefined) {
 		const known = UNENCODABLE[declaredType];
 
-		return {
-			ok: false,
-			reason:
-				`${name} is written as the value "${value}", and ${contract.source} declares it ` +
+		throw new Refusal(
+			`${name} is written as the value "${value}", and ${contract.source} declares it ` +
 				`${declaredType}, which this runtime does not encode from a value` +
 				`${known === undefined ? "" : `: ${known}`}.`,
-		};
+		);
 	}
 
-	const encoded = encodeCompileParam(entry, value, name, "a value");
+	const encoded = Refusal.amend(
+		() => encodeCompileParam(entry, value, name, "a value"),
+		(reason) => `${reason} That is the type ${contract.source} declares for ${name}.`,
+	);
 
-	if (!encoded.ok) {
-		return {
-			ok: false,
-			reason: `${encoded.reason} That is the type ${contract.source} declares for it.`,
-		};
-	}
-
-	if (encoded.encoded.type !== declaredType) {
-		return {
-			ok: false,
-			reason:
-				`${name} is declared ${declaredType} by ${contract.source}, and this runtime ` +
-				`encoded it as ${encoded.encoded.type}.`,
-		};
+	if (encoded.type !== declaredType) {
+		throw new Refusal(
+			`${name} is declared ${declaredType} by ${contract.source}, and this runtime ` +
+				`encoded it as ${encoded.type}.`,
+		);
 	}
 
 	return encoded;

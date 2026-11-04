@@ -1,258 +1,91 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 
-import currentDex from "./__fixtures__/current/dex.manifest.json";
-import currentLastWill from "./__fixtures__/current/last_will.manifest.json";
-import currentLendingV2 from "./__fixtures__/current/lending_v2.manifest.json";
-import currentLendingV3 from "./__fixtures__/current/lending_v3.manifest.json";
-import currentZeroconf from "./__fixtures__/current/zeroconf.manifest.json";
-import dex from "./__fixtures__/dex.manifest.json";
-import lastWill from "./__fixtures__/last_will.manifest.json";
-import lending from "./__fixtures__/lending.manifest.json";
-import lendingV2 from "./__fixtures__/lending_v2.manifest.json";
-import lendingV3 from "./__fixtures__/lending_v3.manifest.json";
-import p2pkGrouped from "./__fixtures__/p2pk-grouped.manifest.json";
-import p2pk from "./__fixtures__/p2pk.manifest.json";
-import zeroconf from "./__fixtures__/zeroconf.manifest.json";
-import { normaliseManifest } from "./document/normalise";
-import { parseReference } from "./document/references";
-import { refuseUnsupported } from "./document/refuse";
-import { ignored, inspectConstructs, loadBearing } from "./document/registry";
+import { SMPLX_COMPILER_VERSION } from "../../smplx-compiler/src/compilerVersion";
+import { Manifest } from "./document/manifest";
+import { refuseUnsupported, satisfies } from "./document/refuse";
 
-const OLDER = {
-	dex,
-	last_will: lastWill,
-	lending,
-	lending_v2: lendingV2,
-	lending_v3: lendingV3,
-	p2pk,
-	"p2pk-grouped": p2pkGrouped,
-	zeroconf,
-} as unknown as Record<string, Record<string, unknown>>;
+const EXAMPLES = ["dex", "last_will", "lending_v2", "lending_v3", "p2pk"];
 
-const CURRENT = {
-	dex: currentDex,
-	last_will: currentLastWill,
-	lending_v2: currentLendingV2,
-	lending_v3: currentLendingV3,
-	zeroconf: currentZeroconf,
-} as unknown as Record<string, Record<string, unknown>>;
+function example(name: string) {
+	const at = new URL(`./__fixtures__/${name}/`, import.meta.url);
+	const raw = JSON.parse(readFileSync(new URL("txmanifest.json", at), "utf8"));
+	const contractSources: Record<string, string> = {};
 
-const ALL: Record<string, Record<string, unknown>> = {
-	...OLDER,
-	...Object.fromEntries(
-		Object.entries(CURRENT).map(([name, document]) => [`current/${name}`, document]),
-	),
-};
+	for (const declared of Object.values<{ script?: { source?: string } }>(raw.utxo_types)) {
+		const path = declared.script?.source;
 
-function normalised(document: Record<string, unknown>) {
-	return normaliseManifest(document).manifest;
+		if (path && existsSync(new URL(path, at))) {
+			contractSources[path] = readFileSync(new URL(path, at), "utf8");
+		}
+	}
+
+	return { contractSources, manifest: new Manifest(raw), raw };
 }
 
-function refusalOf(document: Record<string, unknown>) {
-	return refuseUnsupported(normalised(document), { compilerVersion: "0.6.0", contractSources: {} });
+function outcome(name: string) {
+	const { contractSources, manifest } = example(name);
+
+	return (
+		refuseUnsupported(manifest, { compilerVersion: SMPLX_COMPILER_VERSION, contractSources })
+			?.reject ?? "read-in-full"
+	);
 }
 
-describe("nothing load-bearing is stepped over in silence", () => {
-	test("every published document is read in full, or refused for something it asks of the wallet", () => {
-		const outcome = Object.fromEntries(
-			Object.entries(ALL).map(([name, document]) => [
-				name,
-				refusalOf(document)?.reject ?? "read-in-full",
-			]),
-		);
-
-		expect(outcome).toEqual({
-			"current/dex": "read-in-full",
-			"current/last_will": "read-in-full",
-			"current/lending_v2": "read-in-full",
-			"current/lending_v3": "read-in-full",
-			"current/zeroconf": "read-in-full",
+describe("the reference examples", () => {
+	test("are read in full, except where they use what this wallet does not implement yet", () => {
+		expect(Object.fromEntries(EXAMPLES.map((name) => [name, outcome(name)]))).toEqual({
 			dex: "read-in-full",
 			last_will: "read-in-full",
-			lending: "unproducible-witness",
-			lending_v2: "read-in-full",
+			lending_v2: "unimplemented-construct",
 			lending_v3: "read-in-full",
 			p2pk: "read-in-full",
-			"p2pk-grouped": "read-in-full",
-			zeroconf: "read-in-full",
 		});
-	});
-
-	test("and no construct in a load-bearing position is left unanswered in any of them", () => {
-		const unanswered = Object.fromEntries(
-			Object.entries(ALL)
-				.map(([name, document]) => [name, unreadIn(document)] as const)
-				.filter(([, keys]) => keys.length > 0),
-		);
-
-		expect(unanswered).toEqual({});
-	});
-
-	test("while what decides nothing is passed over on purpose, not by accident", () => {
-		const passed = new Set(
-			Object.values(ALL).flatMap((document) =>
-				ignored(inspectConstructs(normalised(document))).map((finding) => finding.key),
-			),
-		);
-
-		expect([...passed].toSorted()).toEqual([
-			"$comment",
-			"$schema",
-			"attestation_version",
-			"formula",
-			"intent",
-		]);
-	});
-
-	test("and one added to a published document is refused rather than reported", () => {
-		const tampered = structuredClone(ALL.p2pk ?? {}) as Record<string, unknown>;
-		const actions = tampered.actions as Record<string, Record<string, unknown>>;
-
-		(actions.Pay ?? {}).on_validate = "assert!(true)";
-
-		expect(refusalOf(tampered)?.reject).toBe("unimplemented-construct");
 	});
 });
 
-describe("the version field cannot decide the generation", () => {
-	test("every document in every generation declares the same format version", () => {
-		const declared = new Set(Object.values(ALL).map((document) => document.manifest_version));
+describe("what a document is refused for", () => {
+	const p2pk = () => example("p2pk");
+	const refusal = (raw: Record<string, unknown>, contractSources = p2pk().contractSources) =>
+		refuseUnsupported(new Manifest(raw), { contractSources })?.reject;
 
-		expect([...declared]).toEqual(["0.1.0"]);
+	test("a format version this wallet does not read", () => {
+		expect(refusal({ ...p2pk().raw, manifest_version: "0.2.0" })).toBe("foreign-format");
 	});
 
-	test("and a document is normalised without its version being consulted", () => {
-		for (const [name, document] of Object.entries(ALL)) {
-			const withoutVersion = { ...document };
-
-			delete withoutVersion.manifest_version;
-
-			expect({ [name]: normaliseManifest(withoutVersion).manifest.actions }).toEqual({
-				[name]: normaliseManifest(document).manifest.actions,
-			});
-		}
-	});
-});
-
-describe("both generations of a protocol are read the same way", () => {
-	for (const name of Object.keys(CURRENT)) {
-		const older = OLDER[name] ?? {};
-		const current = CURRENT[name] ?? {};
-
-		test(`${name} declares the same actions in either container spelling`, () => {
-			expect(namesOf(current)).toEqual(namesOf(older));
-		});
-
-		test(`${name} meets the same constructs in both, whatever each generation calls them`, () => {
-			expect(unreadIn(current)).toEqual(unreadIn(older));
-		});
-
-		test(`${name} is refused, or not refused, the same way in both`, () => {
-			expect(refusalOf(current)?.reject).toEqual(refusalOf(older)?.reject);
-		});
-	}
-
-	test("and the two declaration shapes of p2pk converge on the same actions outright", () => {
-		const grouped = normalised(OLDER["p2pk-grouped"] ?? {});
-		const flat = normalised(OLDER.p2pk ?? {});
-
-		expect(grouped.actions.map((action) => action.name).toSorted()).toEqual(
-			flat.actions.map((action) => action.name).toSorted(),
+	test("a capability this wallet does not provide", () => {
+		expect(refusal({ ...p2pk().raw, requires: ["custom::feature"] })).toBe(
+			"unimplemented-construct",
 		);
-
-		for (const action of flat.actions) {
-			const twin = grouped.actions.find((candidate) => candidate.name === action.name);
-
-			expect({ [action.name]: comparable(twin?.node) }).toEqual({
-				[action.name]: comparable(action.node),
-			});
-		}
-	});
-});
-
-describe("the corpus carries one reference spelling", () => {
-	test("every instance reference in every document is written the canonical way", () => {
-		const older = Object.entries(ALL)
-			.filter(([, document]) => spellings(document).deprecated > 0)
-			.map(([name]) => name)
-			.toSorted();
-
-		expect(older).toEqual([]);
 	});
 
-	test("and the namespace that was removed no longer reads as one", () => {
-		expect(parseReference("compile_params.OWNER")).toMatchObject({
-			attribute: "OWNER",
-			form: "input-attribute",
-			name: "compile_params",
-		});
-		expect(parseReference("instance.OWNER")).toMatchObject({ form: "instance", name: "OWNER" });
+	test("a key the format does not define", () => {
+		expect(refusal({ ...p2pk().raw, attestation_version: "1" })).toBe("document-fault");
 	});
-});
 
-function namesOf(document: Record<string, unknown>): string[] {
-	return normalised(document)
-		.actions.map((action) => action.name)
-		.toSorted();
-}
+	test("a compiler other than the one this wallet ships", () => {
+		const { contractSources, manifest } = example("p2pk");
 
-function unreadIn(document: Record<string, unknown>): string[] {
-	return [
-		...new Set(loadBearing(inspectConstructs(normalised(document))).map((found) => found.key)),
-	].toSorted();
-}
-
-function comparable(node: Record<string, unknown> | undefined): unknown {
-	if (!node) {
-		return undefined;
-	}
-
-	const rest = { ...node };
-
-	for (const key of ["$comment", "description", "is_constructor", "ui"]) {
-		delete rest[key];
-	}
-
-	return rest;
-}
-
-function spellings(document: Record<string, unknown>): { current: number; deprecated: number } {
-	let deprecated = 0;
-	let current = 0;
-
-	for (const { at, text } of strings(document)) {
-		if (at.includes("compile_params.") && !text.startsWith("compile_params.")) {
-			continue;
-		}
-
-		if (text.replace(/^\$/, "").startsWith("compile_params.")) {
-			deprecated += 1;
-
-			continue;
-		}
-
-		if (parseReference(text)?.form === "instance") {
-			current += 1;
-		}
-	}
-
-	return { current, deprecated };
-}
-
-function strings(node: unknown, at = ""): { at: string; text: string }[] {
-	if (typeof node === "string") {
-		return [{ at, text: node }];
-	}
-
-	if (Array.isArray(node)) {
-		return node.flatMap((item, index) => strings(item, `${at}[${index}]`));
-	}
-
-	if (node && typeof node === "object") {
-		return Object.entries(node).flatMap(([key, value]) =>
-			strings(value, at === "" ? key : `${at}.${key}`),
+		expect(refuseUnsupported(manifest, { compilerVersion: "0.7.1", contractSources })?.reject).toBe(
+			"foreign-compiler",
 		);
-	}
+	});
 
-	return [];
-}
+	test("a contract source other than the one the document pins", () => {
+		expect(refusal(p2pk().raw, { "./p2pk.simf": "fn main() {}" })).toBe("source-mismatch");
+	});
+});
+
+describe("a SimplicityHL version requirement", () => {
+	test("reads a bare version as a caret range", () => {
+		expect(satisfies("0.7.4", "0.7.1")).toBe(true);
+		expect(satisfies("0.8.0", "0.7.1")).toBe(false);
+		expect(satisfies("1.4.0", "1.2")).toBe(true);
+	});
+
+	test("reads comparators and their conjunction", () => {
+		expect(satisfies("0.8.0", ">=0.7")).toBe(true);
+		expect(satisfies("0.8.0", ">=0.7, <0.8")).toBe(false);
+		expect(satisfies("0.7.9", "~0.7.1")).toBe(true);
+	});
+});

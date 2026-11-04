@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import manifestJson from "../__fixtures__/current/lending_v3.manifest.json";
-import { normaliseManifest } from "../document/normalise";
+import manifestJson from "../__fixtures__/lending_v3/txmanifest.json";
+import { Manifest } from "../document/manifest";
+import { Refusal } from "../refusal";
 import { deriveCovenantAddress } from "./covenant";
 
-const { manifest } = normaliseManifest(manifestJson as unknown as Record<string, unknown>);
+const manifest = new Manifest(manifestJson as unknown as Record<string, unknown>);
 
 const CURRENT_DEBT = "1000";
 
@@ -44,7 +45,7 @@ const DECLARED: Record<string, string> = {
 
 async function leavesOf(utxoType: string, instance: Record<string, string> = INSTANCE) {
 	const seen: string[] = [];
-	const result = await deriveCovenantAddress(manifest, {
+	const derived = deriveCovenantAddress(manifest, {
 		compile: (asked) => {
 			seen.push(asked.extraLeavesJson);
 
@@ -64,14 +65,23 @@ async function leavesOf(utxoType: string, instance: Record<string, string> = INS
 		wiring: {},
 	});
 
-	return { result, seen };
+	const refusal = await derived.then(
+		() => undefined,
+		(error: unknown) => {
+			if (error instanceof Refusal) {
+				return error;
+			}
+
+			throw error;
+		},
+	);
+
+	return { refusal, seen };
 }
 
 describe("a contract whose address commits to its state", () => {
 	test("encodes the state it declares rather than refusing to derive at all", async () => {
-		const { result } = await leavesOf("lending_collateral");
-
-		expect(result.ok).toBe(true);
+		expect((await leavesOf("lending_collateral")).refusal).toBeUndefined();
 	});
 
 	test("hands the compiler one leaf per state value, each of them a full leaf wide", async () => {
@@ -108,12 +118,11 @@ describe("a contract whose address commits to its state", () => {
 	});
 
 	test("a debt too large for the width it is declared at is refused, not truncated", async () => {
-		const { result } = await leavesOf("lending_collateral", {
+		const { refusal } = await leavesOf("lending_collateral", {
 			...INSTANCE,
 			CURRENT_DEBT: "18446744073709551616",
 		});
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("does not fit");
+		expect(refusal?.reason).toContain("does not fit");
 	});
 });

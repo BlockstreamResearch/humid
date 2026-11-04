@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import manifestJson from "../__fixtures__/vaultlet.manifest.json";
-import { findAction, normaliseManifest } from "../document/normalise";
-import { deriveCovenantAddress } from "./covenant";
+import manifestJson from "../__fixtures__/vaultlet/txmanifest.json";
+import { Manifest } from "../document/manifest";
+import type { ReferenceScope } from "../document/references";
+import { Refusal } from "../refusal";
+import { type CovenantParamTypesOf, deriveCovenantAddress } from "./covenant";
 import { declaredParamTypes } from "./declaredTypes";
 
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -22,33 +24,23 @@ const INSTANCE = {
 const DECLARED = { SLOT_COUNT: "u8", WITH_BURN: "bool" };
 
 const SOURCE = readFileSync(
-	new URL("../__fixtures__/contracts/vault.simf", import.meta.url),
+	new URL("../__fixtures__/vaultlet/vault.simf", import.meta.url),
 	"utf8",
 );
 
-const { manifest } = normaliseManifest(manifestJson as unknown as Record<string, unknown>);
+const manifest = new Manifest(manifestJson as unknown as Record<string, unknown>);
 
-async function derive(input: { covenantParamTypes?: () => Record<string, string> } = {}) {
-	const action = findAction(manifest, "Withdraw");
+function derive(input: { covenantParamTypes?: CovenantParamTypesOf; scope?: ReferenceScope } = {}) {
+	const action = manifest.action("Withdraw");
 
 	if (!action) {
 		throw new Error("This fixture declares no action named Withdraw.");
 	}
 
-	const calls: {
-		argumentsJson: string;
-		extraLeavesJson: string;
-		includeDebugSymbols: boolean;
-		source: string;
-	}[] = [];
-	const result = await deriveCovenantAddress(manifest, {
-		compile: (asked) => {
-			calls.push({
-				argumentsJson: asked.argumentsJson,
-				extraLeavesJson: asked.extraLeavesJson,
-				includeDebugSymbols: asked.includeDebugSymbols,
-				source: asked.source,
-			});
+	const calls: { argumentsJson: string; source: string }[] = [];
+	const derived = deriveCovenantAddress(manifest, {
+		compile: ({ argumentsJson, source }) => {
+			calls.push({ argumentsJson, source });
 
 			return {
 				address: "ex1p_recorded",
@@ -57,24 +49,27 @@ async function derive(input: { covenantParamTypes?: () => Record<string, string>
 				tapleafHash: "1e".repeat(32),
 			};
 		},
-		...input,
+		...(input.covenantParamTypes === undefined
+			? {}
+			: { covenantParamTypes: input.covenantParamTypes }),
 		contractSources: { "./vault.simf": SOURCE },
 		declaredTypes: declaredParamTypes(manifest, action),
 		includeDebugSymbols: false,
 		network: "liquid",
-		scope: { instance: INSTANCE, params: {} },
+		scope: input.scope ?? { instance: INSTANCE, params: {} },
 		utxoType: "vault",
 		wiring: {},
 	});
 
-	return { calls, result };
+	return { calls, derived };
 }
 
 describe("the vault covenant", () => {
 	test("is built with a count and a flag typed by its contract, not by how they look", async () => {
-		const { calls, result } = await derive({ covenantParamTypes: () => DECLARED });
+		const { calls, derived } = derive({ covenantParamTypes: () => DECLARED });
 
-		expect(result.ok).toBe(true);
+		await derived;
+
 		expect(calls[0]?.argumentsJson).toBe(
 			`{"OWNER_PUB_KEY":{"type":"Pubkey","value":"0x${KEY}"},` +
 				`"VAULT_ASSET_ID":{"type":"u256","value":"0x${ASSET_COMMITTED}"},` +
@@ -85,61 +80,40 @@ describe("the vault covenant", () => {
 	});
 
 	test("and from the contract source the request supplied, not one of its own", async () => {
-		const { calls } = await derive({ covenantParamTypes: () => DECLARED });
+		const { calls, derived } = derive({ covenantParamTypes: () => DECLARED });
+
+		await derived;
 
 		expect(calls[0]?.source).toBe(SOURCE);
-	});
-
-	test("reads every other parameter off the deployment, at the type the class declares", async () => {
-		const { calls } = await derive({ covenantParamTypes: () => DECLARED });
-		const args = JSON.parse(calls[0]?.argumentsJson ?? "{}") as Record<string, unknown>;
-
-		expect(args.OWNER_PUB_KEY).toEqual({ type: "Pubkey", value: `0x${KEY}` });
-		expect(args.RESERVE_COV_HASH).toEqual({ type: "u256", value: `0x${RESERVE_HASH}` });
 	});
 });
 
 describe("what it refuses rather than getting wrong", () => {
 	test("the same covenant, when nothing says what the contract declares", async () => {
-		const { calls, result } = await derive();
+		const { calls, derived } = derive();
 
-		expect(result.ok).toBe(false);
+		await expect(derived).rejects.toThrow(Refusal);
 		expect(calls).toHaveLength(0);
 	});
 
 	test("a contract whose declarations cannot be read at all", async () => {
-		const { calls, result } = await derive({
+		const { calls, derived } = derive({
 			covenantParamTypes: () => {
 				throw new Error("not a program");
 			},
 		});
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("./vault.simf");
+		await expect(derived).rejects.toThrow("./vault.simf");
 		expect(calls).toHaveLength(0);
 	});
 
 	test("a deployment missing a field the covenant is built from", async () => {
-		const action = findAction(manifest, "Withdraw");
 		const { RESERVE_COV_HASH: _absent, ...short } = INSTANCE;
-		const result = await deriveCovenantAddress(manifest, {
-			compile: () => ({
-				address: "ex1p",
-				cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-				scriptPubKeyHex: "51",
-				tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
-			}),
+		const { derived } = derive({
 			covenantParamTypes: () => DECLARED,
-			contractSources: { "./vault.simf": SOURCE },
-			declaredTypes: declaredParamTypes(manifest, action!),
-			includeDebugSymbols: false,
-			network: "liquid",
 			scope: { instance: short, params: {} },
-			utxoType: "vault",
-			wiring: {},
 		});
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("RESERVE_COV_HASH");
+		await expect(derived).rejects.toThrow("RESERVE_COV_HASH");
 	});
 });

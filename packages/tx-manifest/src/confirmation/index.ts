@@ -1,10 +1,11 @@
-import { asRecord } from "../document/json";
-import type { NormalisedAction, NormalisedManifest } from "../document/normalise";
+import type { Action, Manifest } from "../document/manifest";
+import { type ReferenceScope, resolveReference } from "../document/references";
 import {
 	type BlindingDecision,
 	describeBlinding,
 	describePublishedChange,
 } from "../evaluation/blinding";
+import { Refusal } from "../refusal";
 import type { ManifestReview } from "../review";
 import { computed, fromDapp, map, type Origin, type Provenanced, verified } from "./provenance";
 
@@ -48,11 +49,11 @@ export type ReviewedPlan = Omit<ManifestReview, "confirmation">;
 
 export function confirmationModel(
 	review: ReviewedPlan,
-	manifest: NormalisedManifest,
-	action: NormalisedAction,
-	input: { accountLabel: string; policyAsset: string },
+	manifest: Manifest,
+	action: Action,
+	input: { accountLabel: string; policyAsset: string; scope: ReferenceScope },
 ): ConfirmationModel {
-	const summary = actionSummary(action);
+	const summary = intentOf(action, input.scope);
 
 	return {
 		account: computed(input.accountLabel),
@@ -134,10 +135,16 @@ export function describeOrigin(origin: Origin): string {
 	}
 }
 
-function actionSummary(action: NormalisedAction): string | undefined {
-	const declared = asRecord(action.node.ui)?.action ?? action.node.description;
+function intentOf(action: Action, scope: ReferenceScope): string | undefined {
+	const intent = action.node.intent;
 
-	return typeof declared === "string" ? declared : undefined;
+	return typeof intent === "string"
+		? intent.replaceAll(/\{(?<ref>[^{}:]+)(?::[^{}]*)?\}/g, (text, ref: string) => {
+				const found = Refusal.attempt(() => resolveReference(ref, "expression", scope));
+
+				return found === undefined ? text : String(found.value);
+			})
+		: undefined;
 }
 
 export type ShownConfirmation = Omit<ConfirmationModel, "feeSats" | "netEffect"> & {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk.manifest.json";
+import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk/txmanifest.json";
 
 import { DENY_ALL_AUTHORIZATION } from "@/core/wallet-rpc/types";
 
@@ -17,7 +17,7 @@ import { PROCESS_CT_CONFIRMATION_KIND } from "./ProcessCtConfirmation";
 const SOURCE_PATH = "./p2pk.simf";
 const SOURCE = readFileSync(
 	new URL(
-		"../../../../../../../../../packages/tx-manifest/src/__fixtures__/p2pk.simf",
+		"../../../../../../../../../packages/tx-manifest/src/__fixtures__/p2pk/p2pk.simf",
 		import.meta.url,
 	),
 	"utf8",
@@ -550,7 +550,7 @@ describe("what it holds, and for how long", () => {
 		]);
 	});
 
-	test("asks against the local root when the account was resolved against it", async () => {
+	test("asks against the local root when the account was resolved there", async () => {
 		const { log } = await run(payRequest());
 
 		expect(log.mnemonicRequests).toEqual([{ accountGroupIndex: 3 }]);

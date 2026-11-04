@@ -1,0 +1,58 @@
+/*
+ * LAST WILL
+ *
+ * The inheritor can spend the coins if the owner doesn't move them for 180
+ * days. The owner has to repeat the covenant when he moves the coins with his
+ * hot key. The owner can break out of the covenant with his cold key.
+ *
+ * Adapted for SimplicityCompose:
+ *   - The three keys are compile-time parameters (param::*), wired from the
+ *     compose file instead of being hardcoded constants.
+ *   - The spending path is chosen by a dedicated `SPEND_PATH` selector witness,
+ *     and the signature for the chosen path is supplied as its own witness
+ *     (INHERITOR_SIG / COLD_SIG / HOT_SIG). This is the witness shape that
+ *     compose-wallet can compute and sign; see the Witnesses recipe.
+ */
+fn checksig(pk: Pubkey, sig: Signature) {
+    let msg: u256 = jet::sig_all_hash();
+    jet::bip_0340_verify((pk, msg), sig);
+}
+
+// Enforce the covenant to repeat in the first output.
+//
+// Elements has explicit fee outputs, so enforce a fee output in the second output.
+// Disallow further outputs.
+fn recursive_covenant() {
+    assert!(jet::eq_32(jet::num_outputs(), 2));
+    let this_script_hash: u256 = jet::current_script_hash();
+    let output_script_hash: u256 = unwrap(jet::output_script_hash(0));
+    assert!(jet::eq_256(this_script_hash, output_script_hash));
+    assert!(unwrap(jet::output_is_fee(1)));
+}
+
+fn inherit_spend(inheritor_sig: Signature) {
+    // Relative timelock (in blocks) before the heir may claim. `Distance` is a
+    // builtin alias for u16, so the compile parameter is a u16. ~180 days ≈ 25920.
+    let blocks: Distance = param::INHERIT_BLOCKS;
+    jet::broken_do_not_use_check_lock_distance(blocks);
+    checksig(param::INHERITOR_PUB_KEY, inheritor_sig);
+}
+
+fn cold_spend(cold_sig: Signature) {
+    checksig(param::COLD_PUB_KEY, cold_sig);
+}
+
+fn refresh_spend(hot_sig: Signature) {
+    checksig(param::HOT_PUB_KEY, hot_sig);
+    recursive_covenant();
+}
+
+fn main() {
+    match witness::SPEND_PATH {
+        Left(inherit: ()) => inherit_spend(witness::INHERITOR_SIG),
+        Right(cold_or_hot: Either<(), ()>) => match cold_or_hot {
+            Left(cold: ()) => cold_spend(witness::COLD_SIG),
+            Right(hot: ()) => refresh_spend(witness::HOT_SIG),
+        },
+    }
+}

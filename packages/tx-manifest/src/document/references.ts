@@ -1,8 +1,9 @@
+import { Refusal } from "../refusal";
 import { asArray, asRecord } from "./json";
-import { declaredFields, type NormalisedAction, type NormalisedManifest } from "./normalise";
+import { type Action, type Manifest } from "./manifest";
 import { namedUtxoTypes } from "./sites";
 
-export type ReferenceForm = "args" | "bare" | "input-attribute" | "instance" | "params";
+export type ReferenceForm = "bare" | "input-attribute" | "instance" | "params";
 
 export type ParsedReference = {
 	attribute?: string;
@@ -11,15 +12,13 @@ export type ParsedReference = {
 };
 
 export type ReferenceScope = {
-	args?: Record<string, unknown>;
+	fee?: bigint;
 	inputs?: Record<string, Record<string, unknown>>;
 	instance?: Record<string, unknown>;
 	params: Record<string, unknown>;
 };
 
-export type ReferenceResolution =
-	| { form: ReferenceForm; ok: true; value: unknown }
-	| { ok: false; reason: string };
+export type ReferenceResolution = { form: ReferenceForm; value: unknown };
 
 export type ReferenceSiteKind =
 	| "amount"
@@ -34,58 +33,64 @@ export type ReferenceSiteKind =
 
 const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: string }> = {
 	amount: {
-		accepts: ["instance", "params", "args", "input-attribute", "bare"],
+		accepts: ["instance", "params", "input-attribute", "bare"],
 		describes: "an amount",
 	},
 	asset: {
-		accepts: ["instance", "params", "args", "input-attribute", "bare"],
+		accepts: ["instance", "params", "input-attribute", "bare"],
 		describes: "an asset",
 	},
 	compileParam: {
-		accepts: ["instance", "params", "args", "bare"],
+		accepts: ["instance", "params", "bare"],
 		describes: "a compile parameter",
 	},
 	destination: { accepts: ["params"], describes: "a destination" },
 	expression: {
-		accepts: ["instance", "params", "args", "input-attribute", "bare"],
+		accepts: ["instance", "params", "input-attribute", "bare"],
 		describes: "an expression",
 	},
 	issuedAmount: {
-		accepts: ["instance", "params", "args", "bare"],
+		accepts: ["instance", "params", "bare"],
 		describes: "an issued amount",
 	},
 	stateLeaf: {
-		accepts: ["instance", "params", "args", "bare"],
+		accepts: ["instance", "params", "bare"],
 		describes: "part of a state leaf",
 	},
 	witnessKey: {
-		accepts: ["instance", "params", "args", "bare"],
+		accepts: ["instance", "params", "bare"],
 		describes: "a witness key",
 	},
 	witnessValue: {
-		accepts: ["instance", "params", "args"],
+		accepts: ["instance", "params"],
 		describes: "part of a witness value",
 	},
 };
 
 const NAMESPACES: Record<string, ReferenceForm> = {
-	args: "args",
 	instance: "instance",
 	params: "params",
 };
 
 const NAME = "[A-Za-z_][A-Za-z0-9_]*";
-const REFERENCE = new RegExp(`^\\$?(?<head>${NAME})(?:\\.(?<tail>${NAME}))?$`);
+const REFERENCE = new RegExp(
+	`^\\$?(?:inputs\\.(?<input>${NAME})\\.(?<field>${NAME})|(?<head>${NAME})(?:\\.(?<tail>${NAME}))?)$`,
+);
 
 export function parseReference(text: string): ParsedReference | undefined {
-	const match = REFERENCE.exec(text.trim());
-	const head = match?.groups?.head;
+	const groups = REFERENCE.exec(text.trim())?.groups;
+
+	if (groups?.input && groups.field) {
+		return { attribute: groups.field, form: "input-attribute", name: groups.input };
+	}
+
+	const head = groups?.head;
 
 	if (!head) {
 		return undefined;
 	}
 
-	const tail = match.groups?.tail;
+	const tail = groups.tail;
 
 	if (tail === undefined) {
 		return { form: "bare", name: head };
@@ -93,11 +98,7 @@ export function parseReference(text: string): ParsedReference | undefined {
 
 	const form = NAMESPACES[head];
 
-	if (form) {
-		return { form, name: tail };
-	}
-
-	return { attribute: tail, form: "input-attribute", name: head };
+	return form ? { form, name: tail } : { attribute: tail, form: "input-attribute", name: head };
 }
 
 export function resolveReference(
@@ -109,57 +110,45 @@ export function resolveReference(
 	const accepted = SITES[site];
 
 	if (!reference) {
-		return { ok: false, reason: `"${text}" is not a reference.` };
+		throw new Refusal(`"${text}" is not a reference.`);
 	}
 
 	if (!accepted.accepts.includes(reference.form)) {
-		return { ok: false, reason: `"${text}" cannot be used as ${accepted.describes}.` };
+		throw new Refusal(`"${text}" cannot be used as ${accepted.describes}.`);
 	}
 
-	const found = lookUp(reference, scope);
-
-	return found.ok ? { form: reference.form, ok: true, value: found.value } : found;
+	return { form: reference.form, value: lookUp(reference, scope) };
 }
 
-function lookUp(
-	reference: ParsedReference,
-	scope: ReferenceScope,
-): { ok: true; value: unknown } | { ok: false; reason: string } {
+function lookUp(reference: ParsedReference, scope: ReferenceScope): unknown {
 	switch (reference.form) {
-		case "args": {
-			return read(scope.args, reference.name, "args");
-		}
-
 		case "bare": {
-			if (reference.name in scope.params) {
-				return { ok: true, value: scope.params[reference.name] };
+			if (reference.name === "fee" && scope.fee !== undefined) {
+				return scope.fee;
 			}
 
-			if (scope.args && reference.name in scope.args) {
-				return { ok: true, value: scope.args[reference.name] };
+			if (!(reference.name in scope.params)) {
+				throw new Refusal(`"${reference.name}" is not a parameter of this action.`);
 			}
 
-			return {
-				ok: false,
-				reason: `"${reference.name}" is neither a parameter nor an argument of this action.`,
-			};
+			return scope.params[reference.name];
 		}
 
 		case "input-attribute": {
 			const input = scope.inputs?.[reference.name];
 
 			if (!input) {
-				return {
-					ok: false,
-					reason: `"${reference.name}" is not an input this action resolved.`,
-				};
+				throw new Refusal(`"${reference.name}" is not an input this action resolved.`);
 			}
 
 			return read(input, reference.attribute ?? "", `input ${reference.name}`);
 		}
 
 		case "instance": {
-			return read(scope.instance, reference.name, "instance");
+			const fromParams =
+				!(reference.name in (scope.instance ?? {})) && reference.name in scope.params;
+
+			return read(fromParams ? scope.params : scope.instance, reference.name, "instance");
 		}
 
 		case "params": {
@@ -168,20 +157,16 @@ function lookUp(
 	}
 }
 
-function read(
-	source: Record<string, unknown> | undefined,
-	name: string,
-	label: string,
-): { ok: true; value: unknown } | { ok: false; reason: string } {
+function read(source: Record<string, unknown> | undefined, name: string, label: string): unknown {
 	if (!source) {
-		return { ok: false, reason: `This request carries no ${label} to resolve "${name}" against.` };
+		throw new Refusal(`This request carries no ${label} to resolve "${name}" against.`);
 	}
 
 	if (!(name in source)) {
-		return { ok: false, reason: `${label} carries no "${name}".` };
+		throw new Refusal(`${label} carries no "${name}".`);
 	}
 
-	return { ok: true, value: source[name] };
+	return source[name];
 }
 
 export type ReferenceOccurrence = {
@@ -192,10 +177,7 @@ export type ReferenceOccurrence = {
 
 const DESTINATION_KEYWORDS = new Set(["change", "wallet"]);
 
-export function actionReferences(
-	manifest: NormalisedManifest,
-	action: NormalisedAction,
-): ReferenceOccurrence[] {
+export function actionReferences(manifest: Manifest, action: Action): ReferenceOccurrence[] {
 	const found: ReferenceOccurrence[] = [];
 	const where = `action ${action.name}`;
 
@@ -252,7 +234,7 @@ export function actionReferences(
 	for (const name of namedUtxoTypes(action.node)) {
 		addWiring(
 			`utxo type ${name} / script`,
-			asRecord(asRecord(manifest.utxoTypes[name])?.script)?.compile_params,
+			asRecord(manifest.utxoType(name)?.script)?.compile_params,
 		);
 	}
 
@@ -260,14 +242,15 @@ export function actionReferences(
 }
 
 export function instanceReferences(
-	manifest: NormalisedManifest,
-	action: NormalisedAction,
+	manifest: Manifest,
+	action: Action,
 	supplied: Record<string, unknown>,
 ): ReferenceOccurrence[] {
-	const fields = declaredFields(manifest, action);
+	const fields = manifest.templateFields(action);
 	const created = new Set(
 		Object.keys(asRecord(asRecord(action.node.create_instance)?.fields) ?? {}),
 	);
+	const params = asRecord(action.node.params) ?? {};
 
 	return actionReferences(manifest, action).filter((occurrence) => {
 		const reference = parseReference(occurrence.text);
@@ -277,7 +260,7 @@ export function instanceReferences(
 		}
 
 		if (reference.form === "instance") {
-			return true;
+			return !(reference.name in params);
 		}
 
 		return (

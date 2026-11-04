@@ -127,7 +127,7 @@ function parseTransaction(transactionHex: string): ParseResult {
 		return {
 			ok: false,
 			reason:
-				"The signed transaction says it carries witness data and does not carry all of it. " +
+				"The signed transaction says it carries witness data and then cuts the data short. " +
 				"Nothing is returned.",
 		};
 	}
@@ -135,7 +135,7 @@ function parseTransaction(transactionHex: string): ParseResult {
 	if (reader.at !== bytes.length) {
 		return {
 			ok: false,
-			reason: `The signed transaction carries ${bytes.length - reader.at} bytes after the end of it.`,
+			reason: `The signed transaction carries ${bytes.length - reader.at} bytes past its end.`,
 		};
 	}
 

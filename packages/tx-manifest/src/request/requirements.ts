@@ -1,13 +1,13 @@
 import { asRecord } from "../document/json";
-import type { NormalisedAction, NormalisedManifest } from "../document/normalise";
+import { type Action, type Manifest, readInstance } from "../document/manifest";
 import { instanceReferences } from "../document/references";
 import { covenantSites, namedUtxoTypes } from "../document/sites";
 import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./request";
 
 export function resolveActionRequirements(
 	request: ParsedLiquidProcessCtParams,
-	manifest: NormalisedManifest,
-	declared: NormalisedAction,
+	manifest: Manifest,
+	declared: Action,
 ): ActionRequirements {
 	const action = declared.node;
 	const required: ActionRequirements["required"] = [];
@@ -53,7 +53,7 @@ export function resolveActionRequirements(
 				keys: reads.map((occurrence) => occurrence.at),
 				reason:
 					`The action "${declared.name}" reads a deployment's field values and is declared ` +
-					"outside any class, so there is no deployment for it to read.",
+					"outside any template, so there is no deployment for it to read.",
 			});
 		} else {
 			required.push("instance");
@@ -63,20 +63,23 @@ export function resolveActionRequirements(
 					keys: reads.map((occurrence) => occurrence.at),
 					part: "instance",
 					reason:
-						`The action "${declared.name}" is a method of ${declared.boundTo} and reads the ` +
-						"field values of one deployment of it.",
+						`The action "${declared.name}" is an action of ${declared.boundTo} and reads the ` +
+						"field values of one deployment of that template.",
 				});
 			}
 		}
 	}
 
-	if (spendsCovenant(action)) {
+	const pinned = readInstance(request.instance).providedInputs;
+
+	if (covenantSites(action).some((site) => site.role === "spent" && !(site.id in pinned))) {
 		required.push("state");
 
 		if (!request.state) {
 			missing.push({
 				part: "state",
-				reason: "The action spends a covenant UTXO, which is located through the state file.",
+				reason:
+					"The action spends a covenant UTXO that the instance file does not pin, so the state file has to locate one.",
 			});
 		}
 	}
@@ -84,15 +87,11 @@ export function resolveActionRequirements(
 	return { missing, required };
 }
 
-function referencedContractSources(
-	manifest: NormalisedManifest,
-	action: Record<string, unknown>,
-): string[] {
-	const utxoTypes = manifest.utxoTypes;
+function referencedContractSources(manifest: Manifest, action: Record<string, unknown>): string[] {
 	const paths = new Set<string>();
 
 	for (const name of namedUtxoTypes(action)) {
-		const source = asRecord(asRecord(utxoTypes[name])?.script)?.source;
+		const source = asRecord(manifest.utxoType(name)?.script)?.source;
 
 		if (typeof source === "string") {
 			paths.add(source);
@@ -102,10 +101,6 @@ function referencedContractSources(
 	return [...paths];
 }
 
-function spendsCovenant(action: Record<string, unknown>): boolean {
-	return covenantSites(action).some((site) => site.role === "spent");
-}
-
 function promptedParams(action: Record<string, unknown>): string[] {
 	const params = asRecord(action.params) ?? {};
 
@@ -113,7 +108,7 @@ function promptedParams(action: Record<string, unknown>): string[] {
 		.filter(([, declared]) => {
 			const record = asRecord(declared);
 
-			return !record || !("source" in record || "compute" in record || "derived" in record);
+			return !record || !("compute" in record);
 		})
 		.map(([name]) => name);
 }

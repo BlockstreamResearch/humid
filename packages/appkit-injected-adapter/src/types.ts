@@ -4,7 +4,7 @@ import type { Provider, RequestArguments } from "@reown/appkit-controllers";
 /**
  * The minimal surface an injected wallet must expose on the page. `request` speaks the CAIP-25 /
  * CAIP-27 envelope; `on` is the optional EIP-1193-style event channel. Both the raw injected global
- * (e.g. `window.<wallet>`) and this package's bridged provider satisfy it.
+ * (e.g. `window.<wallet>`) and this package's bridged provider satisfy this type.
  */
 export type RawInjectedProvider = {
 	request: <T>(args: InjectedRequestArguments) => Promise<T>;

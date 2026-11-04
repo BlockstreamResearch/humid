@@ -1,7 +1,0 @@
-{
-    "manifest_version": "0.1.0",
-    "description": "Example zeroconf",
-    "chain": "liquid",
-    "utxo_types": {},
-    "actions": {}
-}

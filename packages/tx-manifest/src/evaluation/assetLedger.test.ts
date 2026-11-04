@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import multiassetManifest from "../__fixtures__/multiasset.manifest.json";
-import { findAction, type NormalisedAction, normaliseManifest } from "../document/normalise";
+import multiassetManifest from "../__fixtures__/multiasset/txmanifest.json";
+import { type Action, Manifest } from "../document/manifest";
+import { refusalOf } from "../review/reviewForTests";
 import { assetLedger, type HeldValue, resolveAsset } from "./assetLedger";
 import { planAction } from "./plan";
 
@@ -9,23 +10,18 @@ const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585
 const TOKEN = "ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2";
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 
-const { manifest } = normaliseManifest(multiassetManifest as unknown as Record<string, unknown>);
+const manifest = new Manifest(multiassetManifest as unknown as Record<string, unknown>);
 
 function payToken(params: Record<string, unknown>) {
-	const action = findAction(manifest, "PayToken");
+	const action = manifest.action("PayToken");
 
 	if (!action) {
 		throw new Error("the fixture declares no PayToken");
 	}
 
 	const scope = { params };
-	const plan = planAction(action, scope);
 
-	if (!plan.ok) {
-		throw new Error(plan.reason);
-	}
-
-	return { action, plan: plan.plan, scope };
+	return { action, plan: planAction(action, scope), scope };
 }
 
 function ledgerOf(params: Record<string, unknown>, held: HeldValue[] = []) {
@@ -40,14 +36,11 @@ describe("which asset a declared site is in", () => {
 	const context = { policyAsset: POLICY_ASSET, scope: { params: {} } };
 
 	test("nothing stated means the asset the network charges fees in", () => {
-		expect(resolveAsset(undefined, "output out", context)).toEqual({
-			id: POLICY_ASSET,
-			ok: true,
-		});
+		expect(resolveAsset(undefined, "output out", context)).toBe(POLICY_ASSET);
 	});
 
 	test("a literal id stays exactly itself", () => {
-		expect(resolveAsset(TOKEN, "output out", context)).toEqual({ id: TOKEN, ok: true });
+		expect(resolveAsset(TOKEN, "output out", context)).toBe(TOKEN);
 	});
 
 	test("and a lookup becomes whatever the deployment or the request supplied", () => {
@@ -56,33 +49,34 @@ describe("which asset a declared site is in", () => {
 				policyAsset: POLICY_ASSET,
 				scope: { instance: { PRINCIPAL: TOKEN }, params: {} },
 			}),
-		).toEqual({ id: TOKEN, ok: true });
+		).toBe(TOKEN);
 	});
 
 	test("a lookup nothing resolves is not an asset yet", () => {
-		const resolved = resolveAsset("instance.PRINCIPAL", "output out", context);
+		const refusal = refusalOf(() => resolveAsset("instance.PRINCIPAL", "output out", context));
 
-		expect(resolved.ok).toBe(false);
-		expect(resolved.ok ? "" : resolved.reason).toContain("instance.PRINCIPAL");
-		expect(resolved.ok ? "" : resolved.reason).toContain("could not establish");
+		expect(refusal.reject).toBe("foreign-asset");
+		expect(refusal.reason).toContain("instance.PRINCIPAL");
+		expect(refusal.reason).toContain("could not establish");
 	});
 
 	test("and one that resolves to a second lookup is refused rather than chased", () => {
-		const resolved = resolveAsset("params.token", "output out", {
-			policyAsset: POLICY_ASSET,
-			scope: { params: { token: "instance.PRINCIPAL" } },
-		});
+		const refusal = refusalOf(() =>
+			resolveAsset("params.token", "output out", {
+				policyAsset: POLICY_ASSET,
+				scope: { params: { token: "instance.PRINCIPAL" } },
+			}),
+		);
 
-		expect(resolved.ok).toBe(false);
-		expect(resolved.ok ? "" : resolved.reason).toContain("another lookup");
+		expect(refusal.reason).toContain("another lookup");
 	});
 
 	test("a literal id and a lookup resolving elsewhere stay distinct and exact", () => {
 		const other = "aa".repeat(32);
 		const supplied = { policyAsset: POLICY_ASSET, scope: { params: { token: other } } };
 
-		expect(resolveAsset(TOKEN, "output one", supplied)).toEqual({ id: TOKEN, ok: true });
-		expect(resolveAsset("params.token", "output two", supplied)).toEqual({ id: other, ok: true });
+		expect(resolveAsset(TOKEN, "output one", supplied)).toBe(TOKEN);
+		expect(resolveAsset("params.token", "output two", supplied)).toBe(other);
 	});
 
 	test("a lookup that resolves to the network's own asset is that asset", () => {
@@ -91,53 +85,38 @@ describe("which asset a declared site is in", () => {
 				policyAsset: POLICY_ASSET,
 				scope: { params: { token: "lbtc" } },
 			}),
-		).toEqual({ id: POLICY_ASSET, ok: true });
+		).toBe(POLICY_ASSET);
 	});
 });
 
 describe("reading one action as a statement about several assets", () => {
 	test("keeps each asset's cost to itself rather than adding them together", () => {
-		const result = ledgerOf(PARAMS);
-
-		expect(result.ok).toBe(true);
-
-		if (result.ok) {
-			expect(result.ledger.entries).toEqual([
-				{
-					asset: POLICY_ASSET,
-					change: { blinded: false, id: "change_out" },
-					held: 0n,
-					needed: 700n,
-				},
-				{ asset: TOKEN, change: { blinded: false, id: "token_change" }, held: 0n, needed: 1000n },
-			]);
-		}
-	});
-
-	test("says which asset each planned output pays in, in the plan's own order", () => {
-		const result = ledgerOf(PARAMS);
-
-		expect(result.ok ? result.ledger.outputs : []).toEqual([
-			TOKEN,
-			POLICY_ASSET,
-			TOKEN,
-			POLICY_ASSET,
+		expect(ledgerOf(PARAMS).entries).toEqual([
+			{
+				asset: POLICY_ASSET,
+				change: { blinded: false, id: "change_out" },
+				held: 0n,
+				needed: 700n,
+			},
+			{ asset: TOKEN, change: { blinded: false, id: "token_change" }, held: 0n, needed: 1000n },
 		]);
 	});
 
-	test("and names the wallet inputs the action needs, with the asset each is in", () => {
-		const result = ledgerOf(PARAMS);
+	test("says which asset each planned output pays in, in the plan's own order", () => {
+		expect(ledgerOf(PARAMS).outputs).toEqual([TOKEN, POLICY_ASSET, TOKEN, POLICY_ASSET]);
+	});
 
-		expect(result.ok ? result.ledger.walletInputs : []).toEqual([{ asset: TOKEN, id: "token_in" }]);
+	test("and names the wallet inputs the action needs, with the asset each is in", () => {
+		expect(ledgerOf(PARAMS).walletInputs).toEqual([{ asset: TOKEN, id: "token_in" }]);
 	});
 
 	test("nets what the transaction already brings, asset by asset", () => {
-		const result = ledgerOf(PARAMS, [
+		const ledger = ledgerOf(PARAMS, [
 			{ asset: TOKEN, id: "token_in", sats: 400n },
 			{ asset: POLICY_ASSET, id: "money_in", sats: 100n },
 		]);
 
-		expect(result.ok ? result.ledger.entries : []).toEqual([
+		expect(ledger.entries).toEqual([
 			{
 				asset: POLICY_ASSET,
 				change: { blinded: false, id: "change_out" },
@@ -150,25 +129,19 @@ describe("reading one action as a statement about several assets", () => {
 
 	test("refuses a plan that does not line up with the outputs the document declares", () => {
 		const { action, plan, scope } = payToken(PARAMS);
-		const result = assetLedger(action, plan.outputs.slice(1), {
-			held: [],
-			policyAsset: POLICY_ASSET,
-			scope,
-		});
+		const refusal = refusalOf(() =>
+			assetLedger(action, plan.outputs.slice(1), { held: [], policyAsset: POLICY_ASSET, scope }),
+		);
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reject).toBe("document-fault");
+		expect(refusal.reject).toBe("document-fault");
 	});
 
 	test("and refuses an asset it cannot establish rather than assuming one", () => {
-		const result = ledgerOf({ ...PARAMS, token: undefined });
-
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reject).toBe("foreign-asset");
+		expect(refusalOf(() => ledgerOf({ ...PARAMS, token: undefined })).reject).toBe("foreign-asset");
 	});
 
 	test("refuses a covenant input the chain says holds a different asset", () => {
-		const action: NormalisedAction = {
+		const action: Action = {
 			isConstructor: false,
 			name: "Spend",
 			node: {
@@ -177,18 +150,15 @@ describe("reading one action as a statement about several assets", () => {
 			},
 		};
 		const plan = planAction(action, { params: {} });
+		const refusal = refusalOf(() =>
+			assetLedger(action, plan.outputs, {
+				held: [{ asset: POLICY_ASSET, id: "vault_in", sats: 500n }],
+				policyAsset: POLICY_ASSET,
+				scope: { params: {} },
+			}),
+		);
 
-		if (!plan.ok) {
-			throw new Error(plan.reason);
-		}
-
-		const result = assetLedger(action, plan.plan.outputs, {
-			held: [{ asset: POLICY_ASSET, id: "vault_in", sats: 500n }],
-			policyAsset: POLICY_ASSET,
-			scope: { params: {} },
-		});
-
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("vault_in");
+		expect(refusal.reject).toBe("foreign-asset");
+		expect(refusal.reason).toContain("vault_in");
 	});
 });

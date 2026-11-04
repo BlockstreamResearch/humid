@@ -131,8 +131,8 @@ export function ProcessCtUnreadable({ onDecline }: { onDecline: () => void }) {
 			<header className="p-4 pb-3 text-center">
 				<h2 className="cn-font-heading text-xl font-bold">This cannot be shown to you</h2>
 				<p className="text-muted-foreground mt-1 text-sm">
-					The wallet could not read what it was asked to put on this screen, so it will not ask you
-					to approve it. Nothing has been signed and nothing has been sent.
+					The wallet could not read what it was asked to put on this screen, so it will not ask for
+					your approval. Nothing has been signed and nothing has been sent.
 				</p>
 			</header>
 

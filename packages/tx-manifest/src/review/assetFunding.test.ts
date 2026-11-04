@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { AssetEntry } from "../evaluation/assetLedger";
 import { fundAssets } from "./assetFunding";
 import type { SelectableUtxo } from "./coinSelection";
+import { refusalOf } from "./reviewForTests";
 
 const POLICY = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 const TOKEN = "aa".repeat(32);
@@ -41,17 +42,17 @@ describe("funding an action asset by asset", () => {
 			[TOKEN]: [utxo("1500")],
 		});
 
-		expect(
-			result.ok && result.funded.map((funded) => funded.selected.map((one) => one.amount)),
-		).toEqual([["900"], ["1500"]]);
+		expect(result.map((funded) => funded.selected.map((one) => one.amount))).toEqual([
+			["900"],
+			["1500"],
+		]);
 	});
 
 	test("adds the fee to the network's own asset and to no other", () => {
-		const short = fund([entry(POLICY, 0n)], { [POLICY]: [utxo("400")] }, 500n);
-		const exact = fund([entry(TOKEN, 400n, { change: CHANGE })], { [TOKEN]: [utxo("400")] }, 500n);
-
-		expect(short.ok).toBe(false);
-		expect(exact.ok).toBe(true);
+		expect(
+			refusalOf(() => fund([entry(POLICY, 0n)], { [POLICY]: [utxo("400")] }, 500n)).reject,
+		).toBe("shortfall");
+		fund([entry(TOKEN, 400n, { change: CHANGE })], { [TOKEN]: [utxo("400")] }, 500n);
 	});
 
 	test("returns the exact surplus of every asset but the network's own", () => {
@@ -60,7 +61,7 @@ describe("funding an action asset by asset", () => {
 			[TOKEN]: [utxo("1500")],
 		});
 
-		expect(result.ok && result.funded.map((funded) => funded.changeSats)).toEqual([0n, 500n]);
+		expect(result.map((funded) => funded.changeSats)).toEqual([0n, 500n]);
 	});
 
 	test("counts what the transaction already brings before asking the wallet for anything", () => {
@@ -68,59 +69,55 @@ describe("funding an action asset by asset", () => {
 			[POLICY]: [utxo("9000")],
 		});
 
-		expect(result.ok && result.funded[1]?.selected).toEqual([]);
+		expect(result[1]?.selected).toEqual([]);
 	});
 
-	test("and asks for only the difference when it brings some of it", () => {
+	test("and asks for only the difference when the action brings some of the asset", () => {
 		const result = fund([entry(POLICY, 0n), entry(TOKEN, 1000n, { change: CHANGE, held: 600n })], {
 			[POLICY]: [utxo("9000")],
 			[TOKEN]: [utxo("500"), utxo("50")],
 		});
 
-		expect(result.ok && result.funded[1]?.selected.map((one) => one.amount)).toEqual(["500"]);
-		expect(result.ok && result.funded[1]?.changeSats).toBe(100n);
+		expect(result[1]?.selected.map((one) => one.amount)).toEqual(["500"]);
+		expect(result[1]?.changeSats).toBe(100n);
 	});
 });
 
 describe("when one asset cannot be funded", () => {
-	test("the refusal names the asset and what the account holds of it", () => {
-		const result = fund([entry(POLICY, 0n), entry(TOKEN, 1000n)], {
-			[POLICY]: [utxo("9000")],
-			[TOKEN]: [utxo("40")],
-		});
+	test("the refusal names the asset and what the account holds of the asset", () => {
+		const result = refusalOf(() =>
+			fund([entry(POLICY, 0n), entry(TOKEN, 1000n)], {
+				[POLICY]: [utxo("9000")],
+				[TOKEN]: [utxo("40")],
+			}),
+		);
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain(TOKEN);
-		expect(result.ok ? "" : result.reason).toContain("40");
-		expect(result.ok ? "" : result.reject).toBe("shortfall");
+		expect(result.reason).toContain(TOKEN);
+		expect(result.reason).toContain("40");
+		expect(result.reject).toBe("shortfall");
 	});
 
 	test("and never explains a shortfall in one asset by the fee charged in another", () => {
-		const result = fund([entry(TOKEN, 1000n)], { [TOKEN]: [utxo("40")] });
+		const result = refusalOf(() => fund([entry(TOKEN, 1000n)], { [TOKEN]: [utxo("40")] }));
 
-		expect(result.ok ? "" : result.reason).not.toContain("fee");
+		expect(result.reason).not.toContain("fee");
 	});
 
 	test("a confidential holding is funded from like any other", () => {
-		const result = fund([entry(TOKEN, 1000n)], {
+		fund([entry(TOKEN, 1000n)], {
 			[TOKEN]: [utxo("1000", { confidential: true })],
 		});
-
-		expect(result.ok).toBe(true);
 	});
 
 	test("a surplus the document declares no change output for is refused", () => {
-		const result = fund([entry(TOKEN, 1000n)], { [TOKEN]: [utxo("1500")] });
+		const result = refusalOf(() => fund([entry(TOKEN, 1000n)], { [TOKEN]: [utxo("1500")] }));
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("500");
-		expect(result.ok ? "" : result.reject).toBe("document-fault");
+		expect(result.reason).toContain("500");
+		expect(result.reject).toBe("document-fault");
 	});
 
-	test("and the same surplus in the network's own asset is not, because the fee takes it", () => {
-		const result = fund([entry(POLICY, 1000n)], { [POLICY]: [utxo("9000")] });
-
-		expect(result.ok).toBe(true);
+	test("and the same surplus in the network's own asset is not, because the fee takes the surplus", () => {
+		fund([entry(POLICY, 1000n)], { [POLICY]: [utxo("9000")] });
 	});
 });
 
@@ -142,11 +139,8 @@ describe("an output already committed to for an issuance", () => {
 			[TOKEN]: [reserved, utxo("400")],
 		});
 
-		expect(result.ok && result.funded[0]?.selected.map((one) => one.amount)).toEqual([
-			"700",
-			"400",
-		]);
-		expect(result.ok && result.funded[0]?.changeSats).toBe(100n);
+		expect(result[0]?.selected.map((one) => one.amount)).toEqual(["700", "400"]);
+		expect(result[0]?.changeSats).toBe(100n);
 	});
 
 	test("and comes first, because the asset it mints is a statement about that output", () => {
@@ -154,6 +148,6 @@ describe("an output already committed to for an issuance", () => {
 			[TOKEN]: [reserved, utxo("5000")],
 		});
 
-		expect(result.ok && result.funded[0]?.selected[0]).toBe(reserved);
+		expect(result[0]?.selected[0]).toBe(reserved);
 	});
 });

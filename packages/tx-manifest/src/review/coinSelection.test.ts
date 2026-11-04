@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { type SelectableUtxo, selectCoins } from "./coinSelection";
+import { refusalOf } from "./reviewForTests";
 
 function utxo(amount: string, overrides: Partial<SelectableUtxo> = {}): SelectableUtxo {
 	return {
@@ -17,56 +18,38 @@ describe("selectCoins", () => {
 	test("covers the target plus the fee headroom", () => {
 		const result = selectCoins([utxo("30000"), utxo("80000")], 50_000n, 5_000n);
 
-		expect(result).toMatchObject({ ok: true });
-
-		if (result.ok) {
-			expect(result.totalSats).toBeGreaterThanOrEqual(55_000n);
-		}
+		expect(result.totalSats).toBeGreaterThanOrEqual(55_000n);
 	});
 
 	test("takes the largest first and stops once covered", () => {
 		const result = selectCoins([utxo("10000"), utxo("90000"), utxo("20000")], 50_000n, 0n);
 
-		expect(result).toMatchObject({ ok: true });
-
-		if (result.ok) {
-			expect(result.selected).toHaveLength(1);
-			expect(result.selected[0]?.amount).toBe("90000");
-		}
+		expect(result.selected).toHaveLength(1);
+		expect(result.selected[0]?.amount).toBe("90000");
 	});
 
 	test("refuses when the account cannot cover the fee, even if it covers the outputs", () => {
-		const result = selectCoins([utxo("50000")], 50_000n, 5_000n);
-
-		expect(result).toMatchObject({ ok: false });
+		expect(refusalOf(() => selectCoins([utxo("50000")], 50_000n, 5_000n)).reject).toBe("shortfall");
 	});
 
 	test("ignores what the wallet says it cannot spend", () => {
-		const result = selectCoins([utxo("90000", { spendable: false })], 50_000n, 0n);
-
-		expect(result).toMatchObject({ ok: false });
+		expect(
+			refusalOf(() => selectCoins([utxo("90000", { spendable: false })], 50_000n, 0n)).reject,
+		).toBe("shortfall");
 	});
 
 	test("refuses to fund nothing", () => {
-		const result = selectCoins([utxo("90000")], 0n, 0n);
-
-		expect(result).toMatchObject({ ok: false });
+		expect(refusalOf(() => selectCoins([utxo("90000")], 0n, 0n)).reject).toBe("shortfall");
 	});
 
 	test("keeps amounts beyond a double's range exact", () => {
 		const result = selectCoins([utxo("9007199254740993")], 9_007_199_254_740_992n, 1n);
 
-		expect(result).toMatchObject({ ok: true });
-
-		if (result.ok) {
-			expect(result.totalSats).toBe(9_007_199_254_740_993n);
-		}
+		expect(result.totalSats).toBe(9_007_199_254_740_993n);
 	});
 
 	test("does not leave the selection short when the last output is exactly enough", () => {
-		const result = selectCoins([utxo("55000")], 50_000n, 5_000n);
-
-		expect(result).toMatchObject({ ok: true });
+		selectCoins([utxo("55000")], 50_000n, 5_000n);
 	});
 
 	test("keeps equal amounts in the order the wallet listed them", () => {
@@ -76,11 +59,7 @@ describe("selectCoins", () => {
 
 		const result = selectCoins([first, second, third], 70_000n, 0n);
 
-		expect(result).toMatchObject({ ok: true });
-
-		if (result.ok) {
-			expect(result.selected.map((selected) => selected.txid)).toEqual([first.txid, second.txid]);
-		}
+		expect(result.selected.map((selected) => selected.txid)).toEqual([first.txid, second.txid]);
 	});
 
 	test("still takes a larger output ahead of equal smaller ones", () => {
@@ -90,11 +69,7 @@ describe("selectCoins", () => {
 
 		const result = selectCoins([small, big, alsoSmall], 50_000n, 0n);
 
-		expect(result).toMatchObject({ ok: true });
-
-		if (result.ok) {
-			expect(result.selected.map((selected) => selected.txid)).toEqual([big.txid]);
-		}
+		expect(result.selected.map((selected) => selected.txid)).toEqual([big.txid]);
 	});
 
 	describe("what it will spend", () => {
@@ -115,10 +90,7 @@ describe("selectCoins", () => {
 				0n,
 			);
 
-			expect(result.ok).toBe(true);
-			expect(result.ok ? result.selected.map((chosen) => chosen.txid) : []).toEqual([
-				"a".repeat(64),
-			]);
+			expect(result.selected.map((chosen) => chosen.txid)).toEqual(["a".repeat(64)]);
 		});
 
 		test("and counts a blinded output towards what the account holds", () => {
@@ -138,22 +110,22 @@ describe("selectCoins", () => {
 				0n,
 			);
 
-			expect(result.ok).toBe(true);
-			expect(result.ok ? result.totalSats : 0n).toBe(1_000_000n);
+			expect(result.totalSats).toBe(1_000_000n);
 		});
 
 		test("and still refuses when everything it holds is short", () => {
-			const result = selectCoins(
-				[{ amount: "500", spendable: true, txOut: "00", txid: "b".repeat(64), vout: 0 }],
-				4000n,
-				0n,
+			const result = refusalOf(() =>
+				selectCoins(
+					[{ amount: "500", spendable: true, txOut: "00", txid: "b".repeat(64), vout: 0 }],
+					4000n,
+					0n,
+				),
 			);
 
-			expect(result.ok).toBe(false);
-			expect(result.ok ? "" : result.reason).toContain("500");
+			expect(result.reason).toContain("500");
 		});
 
-		test("takes an outpoint once, however many objects describe it", () => {
+		test("takes an outpoint once, however many objects describe the outpoint", () => {
 			const duplicated = {
 				amount: "900",
 				spendable: true,
@@ -171,8 +143,7 @@ describe("selectCoins", () => {
 				0n,
 			);
 
-			expect(result.ok).toBe(true);
-			expect(result.ok ? result.selected.map((chosen) => chosen.txid) : []).toEqual([
+			expect(result.selected.map((chosen) => chosen.txid)).toEqual([
 				"a".repeat(64),
 				"b".repeat(64),
 			]);

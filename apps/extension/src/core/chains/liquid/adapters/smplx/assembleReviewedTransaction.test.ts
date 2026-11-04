@@ -312,7 +312,6 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 		feeRateSatsPerKvb: 1000,
 		issuances: [],
 		movements: [{ asset: ASSET, sats: -50_344n }],
-		normalisation: [],
 		outputs: [
 			{
 				asset: ASSET,

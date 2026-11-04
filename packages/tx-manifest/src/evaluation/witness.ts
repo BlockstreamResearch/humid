@@ -1,6 +1,7 @@
 import { asArray, asRecord } from "../document/json";
-import type { NormalisedAction } from "../document/normalise";
+import type { Action } from "../document/manifest";
 import { type ReferenceScope, parseReference, resolveReference } from "../document/references";
+import { Refusal } from "../refusal";
 
 export type StaticWitness = {
 	name: string;
@@ -8,16 +9,12 @@ export type StaticWitness = {
 	value: string;
 };
 
-export type StaticWitnessResult =
-	| { ok: false; reason: string }
-	| { ok: true; witnesses: Map<string, StaticWitness[]> };
-
 export const STATIC_WITNESS = "simplicityhl";
 
 export function resolveStaticWitnesses(
-	action: NormalisedAction,
+	action: Action,
 	scope: ReferenceScope,
-): StaticWitnessResult {
+): Map<string, StaticWitness[]> {
 	const witnesses = new Map<string, StaticWitness[]>();
 
 	for (const entry of asArray(action.node.inputs)) {
@@ -41,21 +38,18 @@ export function resolveStaticWitnesses(
 			const value = witness.value;
 
 			if (typeof simplicityType !== "string" || typeof value !== "string") {
-				return {
-					ok: false,
-					reason:
-						`The witness ${name} on input ${id} is a stated value, and the document states ` +
+				throw new Refusal(
+					`The witness ${name} on input ${id} is a stated value, and the document states ` +
 						"either no type for it or no value.",
-				};
+				);
 			}
 
-			const filled = fill(value, scope);
+			const filled = Refusal.amend(
+				() => fill(value, scope),
+				(reason) => `The witness ${name} on input ${id}: ${reason}`,
+			);
 
-			if (!filled.ok) {
-				return { ok: false, reason: `The witness ${name} on input ${id}: ${filled.reason}` };
-			}
-
-			stated.push({ name, simplicityType, value: filled.value });
+			stated.push({ name, simplicityType, value: filled });
 		}
 
 		if (stated.length > 0) {
@@ -63,36 +57,17 @@ export function resolveStaticWitnesses(
 		}
 	}
 
-	return { ok: true, witnesses };
+	return witnesses;
 }
 
-const NAMED = /\$?[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*/g;
+const NAMED = /\$?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){1,2}/g;
 
-function fill(
-	value: string,
-	scope: ReferenceScope,
-): { ok: false; reason: string } | { ok: true; value: string } {
-	let failure: string | undefined;
-
-	const filled = value.replaceAll(NAMED, (text) => {
-		const reference = parseReference(text);
-
-		if (reference?.form === "input-attribute") {
-			failure ??= `"${text}" cannot be used as part of a witness value.`;
-
-			return text;
+function fill(value: string, scope: ReferenceScope): string {
+	return value.replaceAll(NAMED, (text) => {
+		if (parseReference(text)?.form === "input-attribute") {
+			throw new Refusal(`"${text}" cannot be used as part of a witness value.`);
 		}
 
-		const found = resolveReference(text, "witnessValue", scope);
-
-		if (!found.ok) {
-			failure ??= found.reason;
-
-			return text;
-		}
-
-		return String(found.value);
+		return String(resolveReference(text, "witnessValue", scope).value);
 	});
-
-	return failure === undefined ? { ok: true, value: filled } : { ok: false, reason: failure };
 }

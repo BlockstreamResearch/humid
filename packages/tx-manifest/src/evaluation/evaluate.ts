@@ -1,11 +1,9 @@
-import type { NormalisationNote } from "../document/normalise";
 import {
 	type ReferenceScope,
 	type ReferenceSiteKind,
 	resolveReference,
 } from "../document/references";
-
-export type EvaluationResult = { ok: true; value: bigint } | { ok: false; reason: string };
+import { Refusal } from "../refusal";
 
 const I64_MAX = 2n ** 63n - 1n;
 const I64_MIN = -(2n ** 63n);
@@ -14,33 +12,34 @@ export function evaluateExpression(
 	text: string,
 	site: ReferenceSiteKind,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
-): EvaluationResult {
+): bigint {
 	const tokens = tokenise(text);
 
-	if (!tokens.ok) {
-		return unreadable(text);
+	if (!tokens) {
+		throw unreadable(text);
 	}
 
-	const reader = { at: 0, notes, scope, site, tokens: tokens.tokens };
-	const value = readSum(reader);
+	const reader = { at: 0, scope, site, tokens };
+	const value = Refusal.amend(
+		() => readSum(reader),
+		(reason) => `${reason} The expression was "${text}".`,
+	);
 
-	if (!value.ok) {
-		return { ok: false, reason: `${value.reason} The expression was "${text}".` };
+	if (reader.at !== reader.tokens.length) {
+		throw unreadable(text);
 	}
 
-	return reader.at === reader.tokens.length ? value : unreadable(text);
+	return value;
 }
 
-function unreadable(text: string): EvaluationResult {
-	return { ok: false, reason: `"${text}" is not an expression this runtime reads.` };
+function unreadable(text: string): Refusal {
+	return new Refusal(`"${text}" is not an expression this runtime reads.`);
 }
 
 type Token = { kind: "name" | "number" | "symbol"; text: string };
 
 type Reader = {
 	at: number;
-	notes?: NormalisationNote[];
 	scope: ReferenceScope;
 	site: ReferenceSiteKind;
 	tokens: Token[];
@@ -48,7 +47,7 @@ type Reader = {
 
 const SYMBOLS = new Set(["+", "-", "*", "/", "%", "(", ")", ","]);
 
-function tokenise(text: string): { ok: true; tokens: Token[] } | { ok: false } {
+function tokenise(text: string): Token[] | undefined {
 	const tokens: Token[] = [];
 	let at = 0;
 
@@ -68,7 +67,7 @@ function tokenise(text: string): { ok: true; tokens: Token[] } | { ok: false } {
 			continue;
 		}
 
-		const name = /^\$?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?/.exec(text.slice(at));
+		const name = /^\$?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,2}/.exec(text.slice(at));
 
 		if (name) {
 			tokens.push({ kind: "name", text: name[0] });
@@ -86,10 +85,10 @@ function tokenise(text: string): { ok: true; tokens: Token[] } | { ok: false } {
 			continue;
 		}
 
-		return { ok: false };
+		return undefined;
 	}
 
-	return tokens.length > 0 ? { ok: true, tokens } : { ok: false };
+	return tokens.length > 0 ? tokens : undefined;
 }
 
 function peek(reader: Reader): Token | undefined {
@@ -106,17 +105,19 @@ function eat(reader: Reader, text: string): boolean {
 	return false;
 }
 
-function readSum(reader: Reader): EvaluationResult {
+function expect(reader: Reader, text: string, reason: string): void {
+	if (!eat(reader, text)) {
+		throw new Refusal(reason);
+	}
+}
+
+function readSum(reader: Reader): bigint {
 	let left = readProduct(reader);
 
-	if (!left.ok) {
-		return left;
-	}
-
 	for (;;) {
-		const operator = peek(reader);
+		const operator = peek(reader)?.text;
 
-		if (operator?.kind !== "symbol" || (operator.text !== "+" && operator.text !== "-")) {
+		if (operator !== "+" && operator !== "-") {
 			return left;
 		}
 
@@ -124,36 +125,17 @@ function readSum(reader: Reader): EvaluationResult {
 
 		const right = readProduct(reader);
 
-		if (!right.ok) {
-			return right;
-		}
-
-		const combined = bounded(
-			operator.text === "+" ? left.value + right.value : left.value - right.value,
-		);
-
-		if (!combined.ok) {
-			return combined;
-		}
-
-		left = combined;
+		left = bounded(operator === "+" ? left + right : left - right);
 	}
 }
 
-function readProduct(reader: Reader): EvaluationResult {
+function readProduct(reader: Reader): bigint {
 	let left = readUnary(reader);
 
-	if (!left.ok) {
-		return left;
-	}
-
 	for (;;) {
-		const operator = peek(reader);
+		const operator = peek(reader)?.text;
 
-		if (
-			operator?.kind !== "symbol" ||
-			(operator.text !== "*" && operator.text !== "/" && operator.text !== "%")
-		) {
+		if (operator !== "*" && operator !== "/" && operator !== "%") {
 			return left;
 		}
 
@@ -161,129 +143,82 @@ function readProduct(reader: Reader): EvaluationResult {
 
 		const right = readUnary(reader);
 
-		if (!right.ok) {
-			return right;
+		if (operator !== "*" && right === 0n) {
+			throw new Refusal("This amount divides by zero, and no value is the right answer to that.");
 		}
 
-		if (operator.text !== "*" && right.value === 0n) {
-			return {
-				ok: false,
-				reason: "This amount divides by zero, and no value is the right answer to that.",
-			};
-		}
-
-		const combined = bounded(
-			operator.text === "*"
-				? left.value * right.value
-				: operator.text === "/"
-					? left.value / right.value
-					: left.value % right.value,
+		left = bounded(
+			operator === "*" ? left * right : operator === "/" ? left / right : left % right,
 		);
-
-		if (!combined.ok) {
-			return combined;
-		}
-
-		left = combined;
 	}
 }
 
-function readUnary(reader: Reader): EvaluationResult {
-	if (eat(reader, "-")) {
-		const inner = readUnary(reader);
-
-		return inner.ok ? bounded(-inner.value) : inner;
-	}
-
-	return readTerm(reader);
+function readUnary(reader: Reader): bigint {
+	return eat(reader, "-") ? bounded(-readUnary(reader)) : readTerm(reader);
 }
 
-function readTerm(reader: Reader): EvaluationResult {
+function readTerm(reader: Reader): bigint {
 	const token = peek(reader);
 
 	if (!token) {
-		return { ok: false, reason: "This amount ends where a value was expected." };
-	}
-
-	if (token.text === "(") {
-		reader.at += 1;
-
-		const inner = readSum(reader);
-
-		if (!inner.ok) {
-			return inner;
-		}
-
-		return eat(reader, ")")
-			? inner
-			: { ok: false, reason: "This amount opens a bracket it never closes." };
-	}
-
-	if (token.kind === "number") {
-		reader.at += 1;
-
-		return bounded(BigInt(token.text));
-	}
-
-	if (token.kind !== "name") {
-		return { ok: false, reason: `This amount uses "${token.text}", which is not a value.` };
+		throw new Refusal("This amount ends where a value was expected.");
 	}
 
 	reader.at += 1;
 
+	if (token.text === "(") {
+		const inner = readSum(reader);
+
+		expect(reader, ")", "This amount opens a bracket it never closes.");
+
+		return inner;
+	}
+
+	if (token.kind === "number") {
+		return bounded(BigInt(token.text));
+	}
+
+	if (token.kind !== "name") {
+		throw new Refusal(`This amount uses "${token.text}", which is not a value.`);
+	}
+
 	return peek(reader)?.text === "(" ? readCall(reader, token.text) : readReference(reader, token);
 }
 
-function readCall(reader: Reader, name: string): EvaluationResult {
+function readCall(reader: Reader, name: string): bigint {
 	if (name !== "pow") {
-		return { ok: false, reason: `This amount calls "${name}", which this runtime does not have.` };
+		throw new Refusal(`This amount calls "${name}", which this runtime does not have.`);
 	}
 
 	reader.at += 1;
 
 	const base = readSum(reader);
 
-	if (!base.ok) {
-		return base;
-	}
-
-	if (!eat(reader, ",")) {
-		return { ok: false, reason: "pow takes a base and an exponent." };
-	}
+	expect(reader, ",", "pow takes a base and an exponent.");
 
 	const exponent = readSum(reader);
 
-	if (!exponent.ok) {
-		return exponent;
+	expect(reader, ")", "This amount opens a bracket it never closes.");
+
+	if (exponent < 0n) {
+		throw new Refusal("pow was given a negative exponent, which has no whole answer.");
 	}
 
-	if (!eat(reader, ")")) {
-		return { ok: false, reason: "This amount opens a bracket it never closes." };
+	if (exponent > 63n) {
+		throw new Refusal("pow was given an exponent beyond the 64-bit range.");
 	}
 
-	if (exponent.value < 0n) {
-		return { ok: false, reason: "pow was given a negative exponent, which has no whole answer." };
-	}
-
-	if (exponent.value > 63n) {
-		return { ok: false, reason: "pow was given an exponent beyond the 64-bit range." };
-	}
-
-	return bounded(base.value ** exponent.value);
+	return bounded(base ** exponent);
 }
 
-function readReference(reader: Reader, token: Token): EvaluationResult {
-	const found = resolveReference(token.text, reader.site, reader.scope);
+function readReference(reader: Reader, token: Token): bigint {
+	const count = asInteger(resolveReference(token.text, reader.site, reader.scope).value);
 
-	if (!found.ok) {
-		return found;
+	if (count === undefined) {
+		throw new Refusal(`"${token.text}" is not a number, so it cannot be part of an amount.`);
 	}
 
-	const count = asInteger(found.value);
-
-	return count === undefined
-		? { ok: false, reason: `"${token.text}" is not a number, so it cannot be part of an amount.` }
-		: bounded(count);
+	return bounded(count);
 }
 
 function asInteger(value: unknown): bigint | undefined {
@@ -298,63 +233,10 @@ function asInteger(value: unknown): bigint | undefined {
 	return typeof value === "string" && /^-?\d+$/.test(value) ? BigInt(value) : undefined;
 }
 
-function bounded(value: bigint): EvaluationResult {
-	return value > I64_MAX || value < I64_MIN
-		? { ok: false, reason: "This amount leaves the 64-bit range these numbers are held in." }
-		: { ok: true, value };
-}
-
-export function evaluateCondition(
-	text: string,
-	site: ReferenceSiteKind,
-	scope: ReferenceScope,
-	notes?: NormalisationNote[],
-): { met: boolean; ok: true } | { ok: false; reason: string } {
-	const split = /^(?<left>.+?)\s*(?<operator>>=|<=|==|!=|>|<)\s*(?<right>.+)$/.exec(text.trim());
-	const operator = split?.groups?.operator;
-
-	if (!operator) {
-		return {
-			ok: false,
-			reason: `"${text}" is not a comparison, and this runtime reads no other condition.`,
-		};
+function bounded(value: bigint): bigint {
+	if (value > I64_MAX || value < I64_MIN) {
+		throw new Refusal("This amount leaves the 64-bit range these numbers are held in.");
 	}
 
-	const left = evaluateExpression(split?.groups?.left ?? "", site, scope, notes);
-
-	if (!left.ok) {
-		return left;
-	}
-
-	const right = evaluateExpression(split?.groups?.right ?? "", site, scope, notes);
-
-	if (!right.ok) {
-		return right;
-	}
-
-	switch (operator) {
-		case "!=": {
-			return { met: left.value !== right.value, ok: true };
-		}
-
-		case "<": {
-			return { met: left.value < right.value, ok: true };
-		}
-
-		case "<=": {
-			return { met: left.value <= right.value, ok: true };
-		}
-
-		case "==": {
-			return { met: left.value === right.value, ok: true };
-		}
-
-		case ">": {
-			return { met: left.value > right.value, ok: true };
-		}
-
-		default: {
-			return { met: left.value >= right.value, ok: true };
-		}
-	}
+	return value;
 }
