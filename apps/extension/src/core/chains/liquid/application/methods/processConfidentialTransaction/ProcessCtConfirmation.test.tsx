@@ -42,7 +42,7 @@ const MODEL: ShownConfirmation = {
 			id: computed("change"),
 			reason: computed(
 				"nothing says otherwise and this network blinds an output by default, and this " +
-					"wallet publishes it anyway so your next action can spend it",
+					"wallet publishes it anyway so your next action can spend those funds",
 			),
 		},
 	],
@@ -84,7 +84,7 @@ describe("the payload this surface accepts", () => {
 		expect(isProcessCtConfirmationData("a string")).toBe(false);
 	});
 
-	test("refuses its own kind with nothing, or something that is not a model, behind it", () => {
+	test("refuses its own kind backed by nothing, or by something that is not a model", () => {
 		expect(isProcessCtConfirmationData({ kind: PROCESS_CT_CONFIRMATION_KIND })).toBe(false);
 		expect(isProcessCtConfirmationData(payload(null))).toBe(false);
 		expect(isProcessCtConfirmationData(payload("not a model"))).toBe(false);
@@ -304,7 +304,7 @@ describe("what the screen says", () => {
 		expect(attribution - utxoType).toBeLessThan(200);
 	});
 
-	test("attributes a blinded amount's name separately from the word that blinded it", () => {
+	test("attributes a blinded amount's name separately from the reason for the blinding", () => {
 		const html = markup();
 		const name = html.indexOf("received_out");
 		const decision = html.indexOf("this protocol asks for it to be blinded");
@@ -319,7 +319,7 @@ describe("what the screen says", () => {
 	test("and a published amount's name separately from the reason it was published", () => {
 		const html = markup();
 		const name = html.indexOf(">change<");
-		const reason = html.indexOf("so your next action can spend it");
+		const reason = html.indexOf("so your next action can spend those funds");
 
 		expect(name).toBeGreaterThan(-1);
 		expect(reason).toBeGreaterThan(name);
@@ -356,7 +356,7 @@ describe("what the screen says", () => {
 		const html = markup();
 
 		expect(html).toContain("Amount published onchain");
-		expect(html).toContain("so your next action can spend it");
+		expect(html).toContain("so your next action can spend those funds");
 	});
 
 	test("shows a protocol's own token in base units, never as L-BTC", () => {

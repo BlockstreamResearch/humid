@@ -91,5 +91,5 @@ function shortOf(asset: string, needed: bigint, pool: SelectableUtxo[]): string 
 		0n,
 	);
 
-	return `This action pays ${needed} of ${asset}, and this account holds ${usable} of it.`;
+	return `This action pays ${needed} of ${asset}, and this account holds ${usable} of that asset.`;
 }

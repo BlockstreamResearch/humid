@@ -102,7 +102,7 @@ describe("an amount the document works out rather than states", () => {
 		}
 	});
 
-	test("refuses a division by zero rather than answering it", async () => {
+	test("refuses a division by zero rather than answering", async () => {
 		const result = await reviewPay(
 			payDocument((pay) => {
 				const outputs = pay.outputs as Record<string, unknown>[];
@@ -172,7 +172,7 @@ describe("what fills a parameter nobody supplied", () => {
 		}
 	});
 
-	test("but never over a value the request supplied, however the document fills it", async () => {
+	test("but never over a value the request supplied, however the document fills the parameter", async () => {
 		const document = payDocument((pay) => {
 			const params = pay.params as Record<string, Record<string, unknown>>;
 			const outputs = pay.outputs as Record<string, unknown>[];
@@ -189,7 +189,7 @@ describe("what fills a parameter nobody supplied", () => {
 		}
 	});
 
-	test("and a computed value wins over the default beneath it", async () => {
+	test("and a computed value wins over the parameter's default", async () => {
 		const result = await reviewPay(
 			payDocument((pay) => {
 				const params = pay.params as Record<string, Record<string, unknown>>;
@@ -243,7 +243,7 @@ describe("the assignments an action runs before anything is built", () => {
 		}
 	});
 
-	test("in the order the document writes them, each seeing the one before it", async () => {
+	test("in the order the document writes them, each seeing the ones before", async () => {
 		const result = await reviewPay(
 			payDocument((pay) => {
 				const outputs = pay.outputs as Record<string, unknown>[];
@@ -320,7 +320,7 @@ describe("state an output covenant commits to", () => {
 		expect(leaves).toEqual([[`${"00".repeat(24)}00000000000007d0`]]);
 	});
 
-	test("so a hook that sets a different value moves the covenant's state with it", async () => {
+	test("so a hook that sets a different value moves the covenant's state too", async () => {
 		const { leaves } = await leavesPaid("params.amount_sat * 3");
 
 		expect(leaves).toEqual([[`${"00".repeat(24)}0000000000000bb8`]]);
@@ -444,7 +444,7 @@ describe("what an action requires of an input beyond where its money comes from"
 		}
 	});
 
-	test("an address the action pins funding to restricts what may fund it", async () => {
+	test("an address the action pins funding to restricts what may fund the action", async () => {
 		const result = await reviewPay(
 			payDocument((pay) => {
 				const inputs = pay.inputs as Record<string, unknown>[];

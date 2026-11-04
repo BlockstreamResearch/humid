@@ -9,9 +9,7 @@ import { inspectConstructs } from "./registry";
 export type RejectToken =
 	| "foreign-chain"
 	| "foreign-format"
-	| "removed-construct"
 	| "unimplemented-construct"
-	| "unrecognised-construct"
 	| "foreign-compiler"
 	| "source-mismatch"
 	| "unreadable-build-mode"
@@ -90,30 +88,15 @@ function refuseConstructs(manifest: NormalisedManifest): Refusal | undefined {
 		return undefined;
 	}
 
-	switch (found.state) {
-		case "removed": {
-			return {
-				reason:
-					`"${found.key}" at ${found.at} was removed from the manifest format` +
-					(found.replacement === undefined ? "." : `; use ${found.replacement}.`),
-				reject: "removed-construct",
-			};
-		}
-
-		case "unimplemented": {
-			return {
+	return found.state === "unimplemented"
+		? {
 				reason: `This protocol uses "${found.key}" at ${found.at}, which this wallet does not implement yet.`,
 				reject: "unimplemented-construct",
+			}
+		: {
+				reason: `The manifest is malformed: the format defines no "${found.key}" at ${found.at}.`,
+				reject: "document-fault",
 			};
-		}
-
-		default: {
-			return {
-				reason: `This protocol uses "${found.key}" at ${found.at}, which the manifest format does not define.`,
-				reject: "unrecognised-construct",
-			};
-		}
-	}
 }
 
 function refuseCapabilities(manifest: NormalisedManifest): Refusal | undefined {

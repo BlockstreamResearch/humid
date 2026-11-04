@@ -222,7 +222,7 @@ function parseRequest(params: unknown): ParsedLiquidProcessCtParams {
  * The wallet's own outputs in one asset, as the review selects from.
  *
  * `getFundingUtxos` answers about every output including the blinded ones, and carries what only
- * this wallet knows: what a blinded output unblinds to, and which key signs it. None of that is
+ * this wallet knows: what a blinded output unblinds to, and which key signs for that output. None of that is
  * ever answered to a dapp, which is why it does not travel on the shape `getUTXOs` returns.
  */
 function fundable(

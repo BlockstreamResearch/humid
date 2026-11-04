@@ -5,7 +5,7 @@
     "description": "Last Will — a recursive covenant with three spending paths: inherit (after a 180-day timelock), cold-key break-out, and hot-key refresh. Modelled as a class: one instance per will.",
     "chain": "liquid",
     "requires": ["simplicity"],
-    "simplicity_hl": { "version": "0.7.1" },
+    "simplicity_hl": { "version": "0.8.0" },
     "utxo_types": {
         "last_will": {
             "description": "Funds locked under the last-will covenant.",

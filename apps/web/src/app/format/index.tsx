@@ -14,9 +14,9 @@ export default function FormatSupport() {
 				<CardHeader>
 					<CardTitle>What this wallet reads of the format</CardTitle>
 					<CardDescription>
-						Every field the transaction-manifest format defines or has removed, against what this
-						wallet does with each. Nothing here depends on a document: this is the same table the
-						wallet decides by, printed.
+						Every field the transaction-manifest format defines, against what this wallet does with
+						each. Nothing here depends on a document: this is the same table the wallet decides by,
+						printed.
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
@@ -28,11 +28,6 @@ export default function FormatSupport() {
 				title="Not implemented"
 				description="The format defines these and this wallet does not act on them. A document using one is refused rather than read past."
 				entries={entries.filter((entry) => entry.state === "unimplemented")}
-			/>
-			<Section
-				title="Removed from the format"
-				description="Earlier versions of the format defined these. A document using one is refused, naming what replaced it."
-				entries={entries.filter((entry) => entry.state === "removed")}
 			/>
 			<Section
 				title="Read, and shown to a person"
@@ -80,11 +75,8 @@ function Section({
 									className="border-border/50 border-b align-top"
 								>
 									<td className="py-2 pr-4 font-mono whitespace-nowrap">{entry.key}</td>
-									<td className="text-muted-foreground py-2 pr-4 whitespace-nowrap">
+									<td className="text-muted-foreground py-2 whitespace-nowrap">
 										{WHERE_IT_SITS[entry.site]}
-									</td>
-									<td className="text-muted-foreground py-2">
-										{entry.replacement === undefined ? null : `use ${entry.replacement}`}
 									</td>
 								</tr>
 							))}

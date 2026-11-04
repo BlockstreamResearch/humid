@@ -31,15 +31,6 @@ describe("the namespaces a reference can name", () => {
 		});
 	});
 
-	test("no longer reads compile_params. as a namespace of its own", () => {
-		const removed = resolveReference("compile_params.TIMEOUT", "compileParam", SCOPE);
-
-		expect(removed).toEqual({
-			ok: false,
-			reason: '"compile_params.TIMEOUT" cannot be used as a compile parameter.',
-		});
-	});
-
 	test("reads a bare name as a parameter", () => {
 		expect(resolveReference("amount_sat", "amount", SCOPE)).toMatchObject({ value: "1000" });
 	});

@@ -183,7 +183,7 @@ describe("an action that moves two assets", () => {
 });
 
 describe("which of the wallet's outputs may be spent", () => {
-	test("selects an outpoint at most once, however many objects describe it", async () => {
+	test("selects an outpoint at most once, however many objects describe the outpoint", async () => {
 		const result = await pay({
 			money: [utxo("900", MONEY_TXID), { ...utxo("900", MONEY_TXID) }, utxo("900", "e".repeat(64))],
 		});
@@ -684,7 +684,7 @@ describe("change when the wallet funds an action from a blinded output", () => {
 					id: "change",
 					reason:
 						"nothing says otherwise and this network blinds an output by default, and this " +
-						"wallet publishes it anyway so your next action can spend it",
+						"wallet publishes it anyway so your next action can spend those funds",
 				},
 			],
 		});
@@ -775,7 +775,7 @@ describe("a covenant that does not state what it holds", () => {
 		}
 	});
 
-	test("but is netted against that asset's cost where it states and names it", async () => {
+	test("but is netted against that asset's cost where the input states and names the asset", async () => {
 		const result = await spendReading({ amountSats: "600", rawAssetId: POLICY_ASSET });
 
 		expect(isRefusal(result)).toBe(false);

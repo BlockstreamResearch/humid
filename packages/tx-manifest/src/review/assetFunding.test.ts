@@ -71,7 +71,7 @@ describe("funding an action asset by asset", () => {
 		expect(result.ok && result.funded[1]?.selected).toEqual([]);
 	});
 
-	test("and asks for only the difference when it brings some of it", () => {
+	test("and asks for only the difference when the action brings some of the asset", () => {
 		const result = fund([entry(POLICY, 0n), entry(TOKEN, 1000n, { change: CHANGE, held: 600n })], {
 			[POLICY]: [utxo("9000")],
 			[TOKEN]: [utxo("500"), utxo("50")],
@@ -83,7 +83,7 @@ describe("funding an action asset by asset", () => {
 });
 
 describe("when one asset cannot be funded", () => {
-	test("the refusal names the asset and what the account holds of it", () => {
+	test("the refusal names the asset and what the account holds of the asset", () => {
 		const result = fund([entry(POLICY, 0n), entry(TOKEN, 1000n)], {
 			[POLICY]: [utxo("9000")],
 			[TOKEN]: [utxo("40")],
@@ -117,7 +117,7 @@ describe("when one asset cannot be funded", () => {
 		expect(result.ok ? "" : result.reject).toBe("document-fault");
 	});
 
-	test("and the same surplus in the network's own asset is not, because the fee takes it", () => {
+	test("and the same surplus in the network's own asset is not, because the fee takes the surplus", () => {
 		const result = fund([entry(POLICY, 1000n)], { [POLICY]: [utxo("9000")] });
 
 		expect(result.ok).toBe(true);

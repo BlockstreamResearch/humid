@@ -43,7 +43,7 @@ export function resolveIssuance(
 			ok: false,
 			reason:
 				`Input ${input.id} reissues an asset, and this wallet has nothing to derive it from: ` +
-				"the entropy of the original issuance is not part of what a site sends it.",
+				"the entropy of the original issuance is not part of what a site sends this wallet.",
 			reject: "unimplemented-construct",
 		};
 	}

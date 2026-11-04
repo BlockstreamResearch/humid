@@ -68,7 +68,7 @@ export function resolveActionRequirements(
 					part: "instance",
 					reason:
 						`The action "${declared.name}" is an action of ${declared.boundTo} and reads the ` +
-						"field values of one deployment of it.",
+						"field values of one deployment of that template.",
 				});
 			}
 		}

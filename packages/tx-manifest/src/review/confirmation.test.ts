@@ -297,7 +297,7 @@ describe("what a person is told about an amount this wallet published", () => {
 				id: "change",
 				reason:
 					"nothing says otherwise and this network blinds an output by default, and this " +
-					"wallet publishes it anyway so your next action can spend it",
+					"wallet publishes it anyway so your next action can spend those funds",
 			},
 		]);
 	});
@@ -308,7 +308,7 @@ describe("what a person is told about an amount this wallet published", () => {
 				id: "change",
 				reason:
 					"this protocol asks for it to be blinded, and this wallet publishes it anyway so " +
-					"your next action can spend it",
+					"your next action can spend those funds",
 			},
 		]);
 	});
@@ -319,7 +319,7 @@ describe("what a person is told about an amount this wallet published", () => {
 				id: "change",
 				reason:
 					"nothing says otherwise and this network blinds an output by default, and this " +
-					"wallet publishes it anyway so your next action can spend it",
+					"wallet publishes it anyway so your next action can spend those funds",
 			},
 		]);
 	});

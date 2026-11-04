@@ -207,7 +207,7 @@ describe("when a deployment's field values are needed", () => {
 		]);
 	});
 
-	test("a bare name the template declares as a field does, unless the request filled it", () => {
+	test("a bare name the template declares as a field does, unless the request filled the field", () => {
 		const wiring = {
 			outputs: [
 				{

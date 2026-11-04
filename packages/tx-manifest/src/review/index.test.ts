@@ -224,7 +224,7 @@ describe("reviewManifestAction", () => {
 		});
 	});
 
-	test("refuses a request missing a part the action needs, naming it", async () => {
+	test("refuses a request missing a part the action needs, naming the part", async () => {
 		const result = await reviewManifestAction(request({ contractSources: {} }), {
 			...deps,
 			readTxOut: chainHolding(DERIVED_SCRIPT),
@@ -237,7 +237,7 @@ describe("reviewManifestAction", () => {
 		}
 	});
 
-	test("refuses an action the manifest does not declare, naming it", async () => {
+	test("refuses an action the manifest does not declare, naming the action", async () => {
 		const result = await reviewManifestAction(request({ action: "Withdraw" }), {
 			...deps,
 			readTxOut: chainHolding(DERIVED_SCRIPT),

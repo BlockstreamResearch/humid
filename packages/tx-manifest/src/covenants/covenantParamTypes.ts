@@ -35,7 +35,7 @@ export function encodeContractLiteral(
 			ok: false,
 			reason:
 				`${name} is written as the value "${value}", and ${contract.source} declares no ` +
-				"compile parameter of that name to take it.",
+				"compile parameter of that name.",
 		};
 	}
 
@@ -58,7 +58,7 @@ export function encodeContractLiteral(
 	if (!encoded.ok) {
 		return {
 			ok: false,
-			reason: `${encoded.reason} That is the type ${contract.source} declares for it.`,
+			reason: `${encoded.reason} That is the type ${contract.source} declares for ${name}.`,
 		};
 	}
 

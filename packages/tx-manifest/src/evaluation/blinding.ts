@@ -59,7 +59,7 @@ export function describeBlinding(decision: BlindingDecision): string {
 export function describePublishedChange(overrode?: BlindingWord): string {
 	return overrode === undefined
 		? sentenceFor("spendable-change")
-		: `${sentenceFor(overrode)}, and this wallet publishes it anyway so your next action can spend it`;
+		: `${sentenceFor(overrode)}, and this wallet publishes it anyway so your next action can spend those funds`;
 }
 
 function sentenceFor(word: BlindingWord): string {
@@ -73,7 +73,7 @@ function sentenceFor(word: BlindingWord): string {
 		}
 
 		case "spendable-change": {
-			return "this wallet publishes a contract's change so your next action can spend it";
+			return "this wallet publishes a contract's change so your next action can spend those funds";
 		}
 
 		case "unblindable": {

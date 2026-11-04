@@ -276,7 +276,7 @@ function padBytes(
 	if (padTo < bytes.length) {
 		return {
 			ok: false,
-			reason: `${at} is ${bytes.length} bytes and is padded to ${padTo}, which would lose part of it.`,
+			reason: `${at} is ${bytes.length} bytes and is padded to ${padTo}, which would lose part of the value.`,
 		};
 	}
 

@@ -153,7 +153,7 @@ describe("selectCoins", () => {
 			expect(result.ok ? "" : result.reason).toContain("500");
 		});
 
-		test("takes an outpoint once, however many objects describe it", () => {
+		test("takes an outpoint once, however many objects describe the outpoint", () => {
 			const duplicated = {
 				amount: "900",
 				spendable: true,

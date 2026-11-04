@@ -23,14 +23,12 @@ function example(name: string) {
 	return { contractSources, manifest: normaliseManifest(raw), raw };
 }
 
-function outcome(name: string, compilerVersion?: string) {
+function outcome(name: string) {
 	const { contractSources, manifest } = example(name);
 
 	return (
-		refuseUnsupported(manifest, {
-			contractSources,
-			...(compilerVersion === undefined ? {} : { compilerVersion }),
-		})?.reject ?? "read-in-full"
+		refuseUnsupported(manifest, { compilerVersion: SMPLX_COMPILER_VERSION, contractSources })
+			?.reject ?? "read-in-full"
 	);
 }
 
@@ -43,12 +41,6 @@ describe("the reference examples", () => {
 			lending_v3: "read-in-full",
 			p2pk: "read-in-full",
 		});
-	});
-
-	test("ask for a compiler older than the one this wallet ships", () => {
-		for (const name of ["dex", "last_will", "lending_v3", "p2pk"]) {
-			expect(outcome(name, SMPLX_COMPILER_VERSION)).toBe("foreign-compiler");
-		}
 	});
 });
 
@@ -67,8 +59,16 @@ describe("what a document is refused for", () => {
 		);
 	});
 
-	test("a key the format removed", () => {
-		expect(refusal({ ...p2pk().raw, attestation_version: "1" })).toBe("removed-construct");
+	test("a key the format does not define", () => {
+		expect(refusal({ ...p2pk().raw, attestation_version: "1" })).toBe("document-fault");
+	});
+
+	test("a compiler other than the one this wallet ships", () => {
+		const { contractSources, manifest } = example("p2pk");
+
+		expect(refuseUnsupported(manifest, { compilerVersion: "0.7.1", contractSources })?.reject).toBe(
+			"foreign-compiler",
+		);
 	});
 
 	test("a contract source other than the one the document pins", () => {

@@ -19,16 +19,6 @@ describe("what this wallet does not read", () => {
 		);
 	});
 
-	test("names what replaced each removed construct", () => {
-		const html = render();
-
-		for (const { replacement } of describeRegistry()) {
-			if (replacement !== undefined) {
-				expect(html).toContain(escaped(`use ${replacement}`));
-			}
-		}
-	});
-
 	test("counts what is missing from the table rather than from a sentence", () => {
 		const unimplemented = describeRegistry().filter((entry) => entry.state === "unimplemented");
 
@@ -36,7 +26,7 @@ describe("what this wallet does not read", () => {
 	});
 });
 
-describe("the whole table, not a sample of it", () => {
+describe("the whole table, not a sample", () => {
 	test("renders every construct the runtime registers", () => {
 		const html = render();
 
@@ -66,12 +56,3 @@ describe("the page stands alone", () => {
 		expect(html).not.toContain("<textarea");
 	});
 });
-
-function escaped(text: string): string {
-	return text
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("'", "&#x27;");
-}

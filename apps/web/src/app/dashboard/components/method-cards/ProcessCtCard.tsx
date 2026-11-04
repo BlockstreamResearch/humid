@@ -44,7 +44,7 @@ export function ProcessCtCard() {
 		action,
 		broadcast,
 		contractSources: { "./p2pk.simf": P2PK_SOURCE },
-		manifest: { ...p2pkManifest, simplicity_hl: { version: "0.8" } },
+		manifest: p2pkManifest,
 		params: spending
 			? { pubkey: pubkey.trim() }
 			: { amount_sat: Number(amount) || 0, pubkey: pubkey.trim() },
@@ -91,7 +91,7 @@ export function ProcessCtCard() {
 
 			<CheckboxField
 				checked={broadcast}
-				label="Broadcast — leave off to get the signed transaction back without sending it"
+				label="Broadcast — leave off to get the signed transaction back unsent"
 				onChange={setBroadcast}
 			/>
 

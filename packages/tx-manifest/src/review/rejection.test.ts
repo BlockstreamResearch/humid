@@ -129,7 +129,7 @@ describe("every refusal carries a name as well as a reason", () => {
 			}),
 		});
 
-		expect(refusal?.reject).toBe("unrecognised-construct");
+		expect(refusal?.reject).toBe("document-fault");
 		expect(refusal?.reason).toContain("sacrifice_to");
 	});
 

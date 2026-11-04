@@ -118,7 +118,7 @@ describe("what the review carries out about a covenant it will spend", () => {
 		expect(review.covenantInputs[0]?.signatureWitness).toBeUndefined();
 	});
 
-	test("carries a stated witness value through without reading it", async () => {
+	test("carries a stated witness value through without reading the value", async () => {
 		const inputs = receiveInputs();
 
 		inputs[0] = {
@@ -298,7 +298,7 @@ describe("a covenant input that issues an asset", () => {
 		expect(review.issuances[0]?.outpoint).toEqual({ txid: TXID, vout: 0 });
 	});
 
-	test("reserves none of the wallet's own outputs for it", async () => {
+	test("reserves none of the wallet's own outputs for the issuance", async () => {
 		const review = await reviewed(spendRequest(issuingDocument()));
 
 		expect(review.selected.every((utxo) => utxo.txid === FUNDING_TXID)).toBe(true);

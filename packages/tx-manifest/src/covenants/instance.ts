@@ -67,7 +67,10 @@ export function resolveCreatedInstance(
 	const declared = asRecord(block.fields);
 
 	if (!declared) {
-		return { ok: false, reason: "The action creates an instance and declares no fields for it." };
+		return {
+			ok: false,
+			reason: "The action creates an instance and declares no fields for the instance.",
+		};
 	}
 
 	const direct: Record<string, string> = {};

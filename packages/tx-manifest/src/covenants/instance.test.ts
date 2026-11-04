@@ -287,7 +287,7 @@ describe("when the compiler cannot produce a hash", () => {
 		expect(result.ok ? "" : result.reason).toContain("wasm module not loaded");
 	});
 
-	test("a compiler returning something that is not a script refuses rather than hashing it", () => {
+	test("a compiler returning something that is not a script refuses rather than hashing the result", () => {
 		for (const answer of ["", "not hex", "5120abc"]) {
 			const result = computing(() => answer);
 
@@ -512,7 +512,7 @@ describe("the state a contract's address commits to", () => {
 		]);
 	});
 
-	test("and takes the other end of a number when the document asks for it", () => {
+	test("and takes the other end of a number when the document asks", () => {
 		const { calls } = hashOf([
 			{
 				payload: [{ align: "right", endian: "le", pad_to: 32, type: "u64", value: "1000" }],

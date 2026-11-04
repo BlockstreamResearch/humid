@@ -1,37 +1,25 @@
 import { asArray, asRecord } from "./json";
 import type { NormalisedManifest } from "./normalise";
 
-export type ConstructState = "acted-on" | "shown" | "unimplemented" | "removed";
+export type ConstructState = "acted-on" | "shown" | "unimplemented";
 
-type Construct = { replacement?: string; state: ConstructState };
+type Construct = { state: ConstructState };
 
 const READ: Construct = { state: "acted-on" };
 const SHOWN: Construct = { state: "shown" };
 const UNIMPLEMENTED: Construct = { state: "unimplemented" };
 
-function removed(replacement?: string): Construct {
-	return replacement === undefined ? { state: "removed" } : { replacement, state: "removed" };
-}
-
 const SITES = {
 	action: {
 		allow_change: UNIMPLEMENTED,
-		args: removed(),
 		create_instance: READ,
-		deploy: removed(),
 		description: SHOWN,
-		hooks: removed("on_resolved on the input"),
 		inputs: READ,
 		intent: SHOWN,
-		is_constructor: removed("create_instance"),
-		on_input_resolved: removed("on_resolved on the input"),
 		on_post_broadcast: UNIMPLEMENTED,
 		on_pre_broadcast: READ,
 		outputs: READ,
 		params: READ,
-		ui: removed("intent"),
-		validations: removed(),
-		witnesses: removed("witnesses on the input"),
 	},
 	covenantReference: {
 		args: UNIMPLEMENTED,
@@ -42,9 +30,7 @@ const SITES = {
 		utxo_type: READ,
 	},
 	createInstance: {
-		class: removed(),
 		fields: READ,
-		template: removed(),
 	},
 	input: {
 		amount_sat: READ,
@@ -64,24 +50,14 @@ const SITES = {
 	},
 	manifest: {
 		actions: READ,
-		attestation_version: removed(),
 		chain: READ,
-		classes: removed("contract_templates"),
-		compile_debug_symbols: removed("simplicity_hl.debug_symbols"),
-		compile_params: removed("fields on the template"),
-		confidential_outputs: removed("confidential on the output"),
 		contract_templates: READ,
 		description: SHOWN,
-		errors: removed(),
-		lifecycle: removed(),
 		manifest_version: READ,
-		params: removed("params on the action"),
 		programs: UNIMPLEMENTED,
 		protocol: SHOWN,
 		requires: READ,
 		simplicity_hl: READ,
-		simplicity_hl_version: removed("simplicity_hl.version"),
-		source: removed("source on the script"),
 		utxo_types: READ,
 	},
 	output: {
@@ -101,10 +77,7 @@ const SITES = {
 	param: {
 		compute: READ,
 		default: READ,
-		derived: removed("compute"),
 		description: SHOWN,
-		formula: removed("compute"),
-		source: removed("compute"),
 		type: READ,
 	},
 	script: {
@@ -125,7 +98,6 @@ const SITES = {
 		actions: READ,
 		description: SHOWN,
 		fields: READ,
-		methods: removed("actions"),
 	},
 	ui: {
 		group: SHOWN,
@@ -135,7 +107,6 @@ const SITES = {
 	},
 	utxoType: {
 		asset: SHOWN,
-		confidential: removed("confidential on the output"),
 		description: SHOWN,
 		params: UNIMPLEMENTED,
 		script: READ,
@@ -158,24 +129,24 @@ const IGNORED = new Set(["$comment", "$schema"]);
 
 export type ConstructRegistryEntry = {
 	key: string;
-	replacement?: string;
 	site: ConstructSiteKind;
 	state: ConstructState;
 };
 
 export function describeRegistry(): ConstructRegistryEntry[] {
 	return Object.entries(SITES).flatMap(([site, constructs]) =>
-		Object.entries(constructs).map(([key, construct]: [string, Construct]) =>
-			Object.assign({ key, site: site as ConstructSiteKind }, construct),
-		),
+		Object.entries(constructs).map(([key, construct]: [string, Construct]) => ({
+			key,
+			site: site as ConstructSiteKind,
+			state: construct.state,
+		})),
 	);
 }
 
 export type ConstructFinding = {
 	at: string;
 	key: string;
-	replacement?: string;
-	state: "removed" | "unimplemented" | "unrecognised";
+	state: "unimplemented" | "unrecognised";
 };
 
 export function inspectConstructs(manifest: NormalisedManifest): ConstructFinding[] {
@@ -193,8 +164,8 @@ export function inspectConstructs(manifest: NormalisedManifest): ConstructFindin
 
 			if (!construct) {
 				findings.push({ at, key, state: "unrecognised" });
-			} else if (construct.state === "removed" || construct.state === "unimplemented") {
-				findings.push({ at, key, ...construct, state: construct.state });
+			} else if (construct.state === "unimplemented") {
+				findings.push({ at, key, state: "unimplemented" });
 			}
 		}
 	});

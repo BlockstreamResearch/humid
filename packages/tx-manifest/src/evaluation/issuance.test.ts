@@ -137,7 +137,7 @@ describe("what it will not mint, and says so rather than modelling", () => {
 });
 
 describe("what an issuance says about itself, for a later name to read", () => {
-	test("the asset it creates and the token that would reissue it", () => {
+	test("the asset it creates and its reissuance token", () => {
 		const result = resolve({ asset_amount_sat: 1000, kind: "new" });
 
 		expect(result.ok).toBe(true);

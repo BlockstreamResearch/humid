@@ -202,7 +202,7 @@ describe("a template action against a deployment that exists", () => {
 		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain("not the contract the site");
 	});
 
-	test("refuses without the deployment file, naming it", async () => {
+	test("refuses without the deployment file, naming the file", async () => {
 		const { compiled, result } = review({ ...withdraw(vaultlet), instance: undefined });
 		const reviewed = await result;
 
@@ -510,7 +510,7 @@ describe("the derivation the review carries out", () => {
 		expect(found?.scriptPubKeyHex).toBe(DERIVED_SCRIPT);
 	});
 
-	test("names the path the document used it under, for a reader who has to find it", async () => {
+	test("names the path the document used it under, for a reader who has to find the source", async () => {
 		const reviewed = await review(withdraw(vaultlet)).result;
 
 		expect(isRefusal(reviewed) ? [] : reviewed.covenants.map((f) => f.sourcePath)).toEqual([

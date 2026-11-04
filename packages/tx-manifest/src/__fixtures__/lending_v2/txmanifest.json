@@ -3,7 +3,7 @@
   "manifest_version": "0.3.1",
   "protocol": "simplicity-lending",
   "requires": ["simplicity"],
-  "simplicity_hl": { "version": "0.7.1", "debug_symbols": true },
+  "simplicity_hl": { "version": "0.8.0", "debug_symbols": true },
   "description": "P2P collateralised lending on Liquid, wire-compatible with the simplicity-lending reference implementation (github BlockstreamResearch/simplicity-lending, `smplx-sdk` covenants). This 'v2' manifest reproduces that protocol's exact on-chain transaction layout so offers created with tx-manifest-wallet are discoverable and settleable by simplicity-lending's own CLI / indexer / web app, and vice-versa. Key differences from the standalone 'lending' example: (1) the principal payout AND the borrower NFT both go to the borrower's plain wallet address (an explicit v0 P2WPKH), committed into the covenant as sha256(scriptPubKey) — there is no p2pk covenant and no separate claim step; (2) the borrower NFT is held in the borrower's wallet during the active loan and spent with an ordinary signature on repayment; (3) NFT ordering is first-params, second-params, borrower, lender; (4) the creation OP_RETURN carries borrower_pubkey || principal_asset_id (64 bytes, internal asset order) for indexer discovery; (5) a single AMOUNTS_DECIMALS drives the bit-packed parameter NFTs, matching the reference wallet.",
   "utxo_types": {
     "pre_lock": {
