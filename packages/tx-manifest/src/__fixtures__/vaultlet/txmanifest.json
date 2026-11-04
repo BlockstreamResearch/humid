@@ -1,7 +1,7 @@
 {
 	"manifest_version": "0.3.1",
 	"protocol": "vaultlet",
-	"description": "A time-locked vault with a reserve covenant behind it.",
+	"description": "A time-locked vault with a reserve covenant behind the vault.",
 	"chain": "liquid",
 	"requires": [
 		"simplicity"

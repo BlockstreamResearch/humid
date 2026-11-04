@@ -3,20 +3,28 @@ import { describe, expect, test } from "bun:test";
 import lendingManifest from "../__fixtures__/lending_v3/txmanifest.json";
 import { findAction, normaliseManifest } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
+import { Refusal } from "../refusal";
 import { encodeMetadataParts, type PartResolver } from "./metadataParts";
 import { planAction } from "./plan";
 
 function part(declared: Record<string, unknown>, resolve?: PartResolver): string {
-	const result = encodeMetadataParts({ parts: [declared] }, resolve);
-
-	return result.ok ? result.hex : result.reason;
+	try {
+		return encodeMetadataParts({ parts: [declared] }, resolve);
+	} catch (error) {
+		return error instanceof Refusal ? error.reason : String(error);
+	}
 }
 
 const STATED_ASSET = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
 const PUBLISHED_ASSET = "201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a090807060504030201";
 
-const resolveTag: PartResolver = (name) =>
-	name === "params.TAG" ? { ok: true, value: "a9b4ade7" } : { ok: false, reason: "missing" };
+const resolveTag: PartResolver = (name) => {
+	if (name !== "params.TAG") {
+		throw new Refusal("missing");
+	}
+
+	return "a9b4ade7";
+};
 
 describe("encoding object-form data parts", () => {
 	test("integers are little-endian unless endian says be", () => {
@@ -66,13 +74,11 @@ function publishedRecord(name: string): string {
 		normaliseManifest(lendingManifest as unknown as Record<string, unknown>),
 		name,
 	);
-	const plan = action && planAction(action, SCOPE);
-
-	if (!plan?.ok) {
-		throw new Error(plan ? plan.reason : `the document declares no ${name}`);
+	if (!action) {
+		throw new Error(`the document declares no ${name}`);
 	}
 
-	const record = plan.plan.outputs.find((output) => output.target.kind === "data");
+	const record = planAction(action, SCOPE).outputs.find((output) => output.target.kind === "data");
 
 	return record?.target.kind === "data" ? record.target.hex : "";
 }

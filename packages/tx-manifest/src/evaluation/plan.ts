@@ -1,6 +1,7 @@
 import { asArray, asRecord } from "../document/json";
 import type { NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
+import { Refusal } from "../refusal";
 import { type BlindingDecision, resolveBlinding } from "./blinding";
 import { evaluateExpression } from "./evaluate";
 import { encodeMetadataParts } from "./metadataParts";
@@ -21,9 +22,7 @@ export type PlannedSpend = {
 	outputs: PlannedOutput[];
 };
 
-export type PlanResult = { ok: false; reason: string } | { ok: true; plan: PlannedSpend };
-
-export function planAction(action: NormalisedAction, scope: ReferenceScope): PlanResult {
+export function planAction(action: NormalisedAction, scope: ReferenceScope): PlannedSpend {
 	const outputs: PlannedOutput[] = [];
 	let fundingSats = 0n;
 
@@ -35,13 +34,11 @@ export function planAction(action: NormalisedAction, scope: ReferenceScope): Pla
 		}
 
 		const id = typeof output.id === "string" ? output.id : "";
-		const resolved = resolveTarget(output.destination, output.data, scope);
-
-		if (!resolved.ok) {
-			return { ok: false, reason: `Output ${id || "(unnamed)"} ${resolved.reason}` };
-		}
-
-		const target = resolved.target;
+		const named = `Output ${id || "(unnamed)"}`;
+		const target = Refusal.amend(
+			() => resolveTarget(output.destination, output.data, scope),
+			(reason) => `${named} ${reason}`,
+		);
 
 		const blinding = resolveBlinding({
 			declared: output.confidential,
@@ -65,73 +62,68 @@ export function planAction(action: NormalisedAction, scope: ReferenceScope): Pla
 			continue;
 		}
 
-		const amount = resolveAmount(output.amount_sat, scope);
+		const sats = Refusal.amend(
+			() => resolveAmount(output.amount_sat, scope),
+			(reason) => `${named} cannot be paid: ${reason}`,
+		);
 
-		if (!amount.ok) {
-			return { ok: false, reason: `Output ${id || "(unnamed)"} cannot be paid: ${amount.reason}` };
+		if (sats <= 0n) {
+			throw new Refusal(`${named} would pay nothing.`);
 		}
 
-		if (amount.sats <= 0n) {
-			return { ok: false, reason: `Output ${id || "(unnamed)"} would pay nothing.` };
-		}
-
-		fundingSats += amount.sats;
-		outputs.push({ blinding, id, sats: amount.sats, target });
+		fundingSats += sats;
+		outputs.push({ blinding, id, sats, target });
 	}
 
 	if (outputs.length === 0) {
-		return { ok: false, reason: "The action declares no outputs." };
+		throw new Refusal("The action declares no outputs.");
 	}
 
-	return { ok: true, plan: { fundingSats, outputs } };
+	return { fundingSats, outputs };
 }
 
 function resolveTarget(
 	destination: unknown,
 	data: unknown,
 	scope: ReferenceScope,
-): { ok: false; reason: string } | { ok: true; target: PlannedOutput["target"] } {
+): PlannedOutput["target"] {
 	if (destination === "change") {
-		return { ok: true, target: { kind: "change" } };
+		return { kind: "change" };
 	}
 
 	if (destination === "wallet") {
-		return { ok: true, target: { kind: "wallet" } };
+		return { kind: "wallet" };
 	}
 
 	const record = asRecord(destination);
 	const utxoType = record?.utxo_type;
 
 	if (typeof utxoType === "string") {
-		return { ok: true, target: { kind: "covenant", utxoType } };
+		return { kind: "covenant", utxoType };
 	}
 
 	if (record?.type !== "op_return") {
-		return { ok: false, reason: "pays somewhere this runtime does not resolve yet." };
+		throw new Refusal("pays somewhere this runtime does not resolve yet.");
 	}
 
 	if (data === undefined) {
-		return { ok: true, target: { hex: "6a", kind: "data" } };
+		return { hex: "6a", kind: "data" };
 	}
 
-	const encoded = encodeMetadataParts(data, (reference) => {
-		const found = resolveReference(reference, "expression", scope);
+	const hex = Refusal.amend(
+		() =>
+			encodeMetadataParts(
+				data,
+				(reference) => resolveReference(reference, "expression", scope).value,
+			),
+		(reason) => `carries data this runtime cannot encode: ${reason}`,
+	);
 
-		return found.ok ? { ok: true, value: found.value } : { ok: false, reason: found.reason };
-	});
-
-	if (!encoded.ok) {
-		return { ok: false, reason: `carries data this runtime cannot encode: ${encoded.reason}` };
+	if (hex.length / 2 > 0xff) {
+		throw new Refusal("carries more than 255 bytes of data, which this runtime does not push.");
 	}
 
-	if (encoded.hex.length / 2 > 0xff) {
-		return {
-			ok: false,
-			reason: "carries more than 255 bytes of data, which this runtime does not push.",
-		};
-	}
-
-	return { ok: true, target: { hex: opReturnScript(encoded.hex), kind: "data" } };
+	return { hex: opReturnScript(hex), kind: "data" };
 }
 
 function opReturnScript(payloadHex: string): string {
@@ -144,19 +136,14 @@ function opReturnScript(payloadHex: string): string {
 	return `6a4c${length.toString(16).padStart(2, "0")}${payloadHex}`;
 }
 
-function resolveAmount(
-	amount: unknown,
-	scope: ReferenceScope,
-): { ok: false; reason: string } | { ok: true; sats: bigint } {
+function resolveAmount(amount: unknown, scope: ReferenceScope): bigint {
 	if (typeof amount === "number" && Number.isSafeInteger(amount)) {
-		return { ok: true, sats: BigInt(amount) };
+		return BigInt(amount);
 	}
 
 	if (typeof amount !== "string") {
-		return { ok: false, reason: "the document states no amount this runtime can read." };
+		throw new Refusal("the document states no amount this runtime can read.");
 	}
 
-	const evaluated = evaluateExpression(amount, "amount", scope);
-
-	return evaluated.ok ? { ok: true, sats: evaluated.value } : evaluated;
+	return evaluateExpression(amount, "amount", scope);
 }

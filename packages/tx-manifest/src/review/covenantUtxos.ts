@@ -1,11 +1,8 @@
 import { type Outpoint, outpointKey } from "../chain/outpoint";
 import { asArray, asRecord } from "../document/json";
+import { Refusal } from "../refusal";
 
 type ListedUtxo = Outpoint & { asset?: string; utxoType: unknown };
-
-export type ClaimResult =
-	| { ok: true; outpoint: Outpoint }
-	| { ok: false; reason: string; reject: "document-fault" | "no-utxo-to-spend" };
 
 export class CovenantUtxos {
 	readonly #claimed = new Set<string>();
@@ -38,39 +35,34 @@ export class CovenantUtxos {
 		});
 	}
 
-	claim(inputId: string, utxoType: string, asset?: string): ClaimResult {
+	claim(inputId: string, utxoType: string, asset?: string): Outpoint {
 		const outpoint =
 			inputId in this.#pinned
 				? outpointOf(this.#pinned[inputId])
 				: this.#listedFor(utxoType, asset);
 
 		if (!outpoint) {
-			return inputId in this.#pinned
-				? {
-						ok: false,
-						reason: `The instance file pins input ${inputId} to something that is not an outpoint.`,
-						reject: "document-fault",
-					}
-				: {
-						ok: false,
-						reason: `The state file lists no ${utxoType} left for input ${inputId} to spend.`,
-						reject: "no-utxo-to-spend",
-					};
+			throw inputId in this.#pinned
+				? new Refusal(
+						`The instance file pins input ${inputId} to something that is not an outpoint.`,
+					)
+				: new Refusal(
+						`The state file lists no ${utxoType} left for input ${inputId} to spend.`,
+						"no-utxo-to-spend",
+					);
 		}
 
 		const key = outpointKey(outpoint);
 
 		if (this.#claimed.has(key)) {
-			return {
-				ok: false,
-				reason: `Input ${inputId} would spend ${key}, which another input of this action already spends.`,
-				reject: "document-fault",
-			};
+			throw new Refusal(
+				`Input ${inputId} would spend ${key}, which another input of this action already spends.`,
+			);
 		}
 
 		this.#claimed.add(key);
 
-		return { ok: true, outpoint };
+		return outpoint;
 	}
 
 	#listedFor(utxoType: string, asset: string | undefined): Outpoint | undefined {

@@ -2,15 +2,12 @@ import { asRecord } from "../document/json";
 import type { NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { computedValue, computesValue } from "../evaluation/computedValue";
+import { Refusal } from "../refusal";
 import { resolveCompileParams } from "./compileParams";
 import { COVENANT_HASH_SEED, type HashCovenant, ITERATION_BOUND } from "./covenantHash";
-import { encodeStateLeaves } from "./stateLeaves";
+import { stateLeavesOf } from "./stateLeaves";
 
 export type CreatedInstance = { fields: Record<string, string>; rounds: number };
-
-export type CreateInstanceResult =
-	| { instance: CreatedInstance; ok: true }
-	| { ok: false; reason: string };
 
 export function createsInstance(action: NormalisedAction): boolean {
 	return asRecord(action.node.create_instance) !== undefined;
@@ -40,10 +37,10 @@ export function statedCreatedFields(
 			continue;
 		}
 
-		const resolved = resolveFieldReference(name, value, scope);
+		const resolved = Refusal.attempt(() => resolveFieldReference(name, value, scope));
 
-		if (resolved.ok) {
-			stated[name] = resolved.value;
+		if (resolved !== undefined) {
+			stated[name] = resolved;
 		}
 	}
 
@@ -57,20 +54,17 @@ export function resolveCreatedInstance(
 		hashCovenant: HashCovenant;
 		scope: ReferenceScope;
 	},
-): CreateInstanceResult {
+): CreatedInstance {
 	const block = asRecord(action.node.create_instance);
 
 	if (!block) {
-		return { ok: false, reason: "This action does not create an instance." };
+		throw new Refusal("This action does not create an instance.");
 	}
 
 	const declared = asRecord(block.fields);
 
 	if (!declared) {
-		return {
-			ok: false,
-			reason: "The action creates an instance and declares no fields for the instance.",
-		};
+		throw new Refusal("The action creates an instance and declares no fields for the instance.");
 	}
 
 	const direct: Record<string, string> = {};
@@ -78,13 +72,7 @@ export function resolveCreatedInstance(
 
 	for (const [name, value] of Object.entries(declared)) {
 		if (typeof value === "string") {
-			const resolved = resolveFieldReference(name, value, input.scope);
-
-			if (!resolved.ok) {
-				return resolved;
-			}
-
-			direct[name] = resolved.value;
+			direct[name] = resolveFieldReference(name, value, input.scope);
 
 			continue;
 		}
@@ -92,38 +80,36 @@ export function resolveCreatedInstance(
 		const node = asRecord(value);
 
 		if (!node) {
-			return { ok: false, reason: `Field ${name} is neither a reference nor a computed value.` };
+			throw new Refusal(`Field ${name} is neither a reference nor a computed value.`);
 		}
 
 		const kind = computeKind(node);
 
 		if (kind !== "tapleaf") {
-			return {
-				ok: false,
-				reason:
-					`Field ${name} is computed by "${String(kind)}", which this runtime does not ` +
+			throw new Refusal(
+				`Field ${name} is computed by "${String(kind)}", which this runtime does not ` +
 					"implement. Honouring it means executing a contract while building the " +
 					"transaction, not merely compiling one.",
-			};
+			);
 		}
 
 		const simf = node.simf;
 
 		if (typeof simf !== "string") {
-			return { ok: false, reason: `Field ${name} names no contract to compute from.` };
+			throw new Refusal(`Field ${name} names no contract to compute from.`);
 		}
 
 		const source = input.contractSources[simf];
 
 		if (source === undefined) {
-			return { ok: false, reason: `The source of ${simf} was not supplied.` };
+			throw new Refusal(`The source of ${simf} was not supplied.`);
 		}
 
 		computed.push({ name, node, source });
 	}
 
 	if (computed.length === 0) {
-		return { instance: { fields: direct, rounds: 0 }, ok: true };
+		return { fields: direct, rounds: 0 };
 	}
 
 	const declaredTypes = fieldTypes(declared);
@@ -143,63 +129,47 @@ export function resolveCreatedInstance(
 				instance: { ...input.scope.instance, ...withNewFields },
 				params: { ...input.scope.params, ...withNewFields },
 			};
-			const wiring = tapleafWiring(node);
+			const hash = Refusal.amend(
+				() => {
+					const wiring = tapleafWiring(node);
 
-			if (!wiring.ok) {
-				return { ok: false, reason: `Computing ${name}: ${wiring.reason}` };
-			}
-
-			const resolved = resolveCompileParams(
-				wiring.wiring,
-				declaredTypes,
-				scope,
-				undefined,
-				wiring.declaredAtUse,
+					return input.hashCovenant({
+						argumentsJson: JSON.stringify(
+							resolveCompileParams(
+								wiring.wiring,
+								declaredTypes,
+								scope,
+								undefined,
+								wiring.declaredAtUse,
+							),
+						),
+						extraLeavesJson: JSON.stringify(
+							stateLeavesOf(node.extra_leaves, { at: `Field ${name}`, scope }),
+						),
+						source,
+					});
+				},
+				(reason) => `Computing ${name}: ${reason}`,
 			);
 
-			if (!resolved.ok) {
-				return { ok: false, reason: `Computing ${name}: ${resolved.reason}` };
-			}
-
-			const stateLeaves = encodeStateLeaves(node.extra_leaves, {
-				at: `Field ${name}`,
-				scope,
-			});
-
-			if (!stateLeaves.ok) {
-				return { ok: false, reason: `Computing ${name}: ${stateLeaves.reason}` };
-			}
-
-			const hashed = input.hashCovenant({
-				argumentsJson: JSON.stringify(resolved.arguments),
-				extraLeavesJson: JSON.stringify(stateLeaves.leaves),
-				source,
-			});
-
-			if (!hashed.ok) {
-				return { ok: false, reason: `Computing ${name}: ${hashed.reason}` };
-			}
-
-			next[name] = hashed.hash;
-			settled[name] = hashed.hash;
+			next[name] = hash;
+			settled[name] = hash;
 		}
 
 		if (computed.every(({ name }) => next[name] === values[name])) {
-			return { instance: { fields: { ...direct, ...next }, rounds: round }, ok: true };
+			return { fields: { ...direct, ...next }, rounds: round };
 		}
 
 		values = next;
 	}
 
-	return {
-		ok: false,
-		reason:
-			`The covenant hashes this deployment's fields compute never settle: ${computed
-				.map(({ name }) => name)
-				.join(", ")} still change after ${ITERATION_BOUND} rounds. ` +
+	throw new Refusal(
+		`The covenant hashes this deployment's fields compute never settle: ${computed
+			.map(({ name }) => name)
+			.join(", ")} still change after ${ITERATION_BOUND} rounds. ` +
 			"A deployment recorded from values that never agreed with themselves would locate " +
 			"funds at an address nobody checked.",
-	};
+	);
 }
 
 type ComputedField = { name: string; node: Record<string, unknown>; source: string };
@@ -245,14 +215,10 @@ function inDependencyOrder(computed: ComputedField[]): ComputedField[] {
 }
 
 function dependenciesOf(field: ComputedField, names: Set<string>): Set<string> {
-	const wiring = tapleafWiring(field.node);
+	const wiring = Refusal.attempt(() => tapleafWiring(field.node));
 	const found = new Set<string>();
 
-	if (!wiring.ok) {
-		return found;
-	}
-
-	for (const value of Object.values(wiring.wiring)) {
+	for (const value of Object.values(wiring?.wiring ?? {})) {
 		if (typeof value !== "string") {
 			continue;
 		}
@@ -269,17 +235,14 @@ function dependenciesOf(field: ComputedField, names: Set<string>): Set<string> {
 
 type TapleafWiring = {
 	declaredAtUse: Record<string, string>;
-	ok: true;
 	wiring: Record<string, unknown>;
 };
 
-function tapleafWiring(
-	node: Record<string, unknown>,
-): TapleafWiring | { ok: false; reason: string } {
+function tapleafWiring(node: Record<string, unknown>): TapleafWiring {
 	const declared = asRecord(node.params);
 
 	if (!declared) {
-		return { declaredAtUse: {}, ok: true, wiring: {} };
+		return { declaredAtUse: {}, wiring: {} };
 	}
 
 	const declaredAtUse: Record<string, string> = {};
@@ -295,7 +258,7 @@ function tapleafWiring(
 		const value = asRecord(spec)?.value;
 
 		if (typeof value !== "string") {
-			return { ok: false, reason: `Parameter ${name} names no value to compile with.` };
+			throw new Refusal(`Parameter ${name} names no value to compile with.`);
 		}
 
 		const type = asRecord(spec)?.type;
@@ -307,36 +270,40 @@ function tapleafWiring(
 		wiring[name] = value;
 	}
 
-	return { declaredAtUse, ok: true, wiring };
+	return { declaredAtUse, wiring };
 }
 
-function resolveFieldReference(
-	name: string,
-	text: string,
-	scope: ReferenceScope,
-): { ok: false; reason: string } | { ok: true; value: string } {
-	const found = resolveReference(text, "compileParam", scope);
+function resolveFieldReference(name: string, text: string, scope: ReferenceScope): string {
+	let found: unknown;
 
-	if (!found.ok) {
-		if (computesValue(text)) {
-			const computed = computedValue(text, "compileParam", scope);
-
-			return computed.ok ? computed : { ok: false, reason: `Field ${name}: ${computed.reason}` };
+	try {
+		found = resolveReference(text, "compileParam", scope).value;
+	} catch (error) {
+		if (!(error instanceof Refusal)) {
+			throw error;
 		}
 
-		return text.startsWith("$") || text.includes(".")
-			? { ok: false, reason: `Field ${name}: ${found.reason}` }
-			: { ok: true, value: text };
+		if (computesValue(text)) {
+			return Refusal.amend(
+				() => computedValue(text, "compileParam", scope),
+				(reason) => `Field ${name}: ${reason}`,
+			);
+		}
+
+		if (text.startsWith("$") || text.includes(".")) {
+			throw new Refusal(`Field ${name}: ${error.reason}`);
+		}
+
+		return text;
 	}
 
-	if (typeof found.value !== "string") {
-		return {
-			ok: false,
-			reason: `Field ${name} resolves to a value this runtime cannot record as a field yet.`,
-		};
+	if (typeof found !== "string") {
+		throw new Refusal(
+			`Field ${name} resolves to a value this runtime cannot record as a field yet.`,
+		);
 	}
 
-	return { ok: true, value: found.value };
+	return found;
 }
 
 function fieldTypes(declared: Record<string, unknown>): Record<string, string> {

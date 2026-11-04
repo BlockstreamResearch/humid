@@ -1,6 +1,7 @@
 import { asRecord } from "../document/json";
 import type { NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
+import { Refusal } from "../refusal";
 import { evaluateExpression } from "./evaluate";
 
 type HookTarget = "instance" | "params";
@@ -8,8 +9,6 @@ type HookTarget = "instance" | "params";
 const TARGETS: Record<string, HookTarget> = { instance: "instance", params: "params" };
 
 export type HookValues = Record<HookTarget, Record<string, string>>;
-
-export type RunHookResult = { ok: false; reason: string } | { ok: true; values: HookValues };
 
 export type DeclaredHook =
 	| { kind: "absent" }
@@ -50,7 +49,7 @@ function declaredHook(declared: unknown, at: string): DeclaredHook {
 	return { kind: "present", set };
 }
 
-export function runHook(set: Record<string, unknown>, scope: ReferenceScope): RunHookResult {
+export function runHook(set: Record<string, unknown>, scope: ReferenceScope): HookValues {
 	const values: HookValues = { instance: {}, params: {} };
 	let running = scope;
 
@@ -62,50 +61,45 @@ export function runHook(set: Record<string, unknown>, scope: ReferenceScope): Ru
 		const name = split?.groups?.name;
 
 		if (!namespace || !name) {
-			return { ok: false, reason: `A hook assigns to "${target}", which names no value.` };
+			throw new Refusal(`A hook assigns to "${target}", which names no value.`);
 		}
 
 		const lane = TARGETS[namespace];
 
 		if (!lane) {
-			return {
-				ok: false,
-				reason: `A hook assigns to "${target}", and "${namespace}" is not something this runtime can set.`,
-			};
+			throw new Refusal(
+				`A hook assigns to "${target}", and "${namespace}" is not something this runtime can set.`,
+			);
 		}
 
 		if (typeof expression !== "string") {
-			return { ok: false, reason: `The hook's value for ${target} is not an expression.` };
+			throw new Refusal(`The hook's value for ${target} is not an expression.`);
 		}
 
-		const evaluated = valueOf(expression, running);
+		const value = Refusal.amend(
+			() => valueOf(expression, running),
+			(reason) => `Setting ${target}: ${reason}`,
+		);
 
-		if (!evaluated.ok) {
-			return { ok: false, reason: `Setting ${target}: ${evaluated.reason}` };
-		}
-
-		values[lane][name] = evaluated.value;
-		running = foldInto(running, lane, name, evaluated.value);
+		values[lane][name] = value;
+		running = foldInto(running, lane, name, value);
 	}
 
-	return { ok: true, values };
+	return values;
 }
 
-function valueOf(
-	expression: string,
-	scope: ReferenceScope,
-): { ok: false; reason: string } | { ok: true; value: string } {
-	const evaluated = evaluateExpression(expression, "expression", scope);
+function valueOf(expression: string, scope: ReferenceScope): string {
+	try {
+		return String(evaluateExpression(expression, "expression", scope));
+	} catch (error) {
+		const named = Refusal.attempt(() => resolveReference(expression, "expression", scope).value);
 
-	if (evaluated.ok) {
-		return { ok: true, value: String(evaluated.value) };
+		if (typeof named === "string") {
+			return named;
+		}
+
+		throw error;
 	}
-
-	const named = resolveReference(expression, "expression", scope);
-
-	return named.ok && typeof named.value === "string"
-		? { ok: true, value: named.value }
-		: { ok: false, reason: evaluated.reason };
 }
 
 export function inputHookScope(

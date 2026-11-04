@@ -2,36 +2,10 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
 import { STATIC_WITNESS } from "../evaluation/witness";
+import { Refusal } from "../refusal";
 import { asArray, asRecord } from "./json";
 import type { NormalisedManifest } from "./normalise";
 import { inspectConstructs } from "./registry";
-
-export type RejectToken =
-	| "foreign-chain"
-	| "foreign-format"
-	| "unimplemented-construct"
-	| "foreign-compiler"
-	| "source-mismatch"
-	| "unreadable-build-mode"
-	| "unproducible-witness"
-	| "foreign-asset"
-	| "unbuildable-utxo-type"
-	| "unbuildable-position"
-	| "incomplete-request"
-	| "no-such-action"
-	| "no-utxo-to-spend"
-	| "chain-read-failed"
-	| "covenant-mismatch"
-	| "no-fee-rate"
-	| "no-funds-at-signing-address"
-	| "shortfall"
-	| "document-fault"
-	| "built-something-else";
-
-export type Refusal = {
-	reason: string;
-	reject: RejectToken;
-};
 
 const FORMAT_MAJOR = 0;
 const FORMAT_MINOR = 3;
@@ -62,10 +36,10 @@ function refuseForeignFormat(manifest: NormalisedManifest): Refusal | undefined 
 		return undefined;
 	}
 
-	return {
-		reason: `This document is written in manifest format ${JSON.stringify(declared)}, and this wallet reads ${FORMAT_MAJOR}.${FORMAT_MINOR}.`,
-		reject: "foreign-format",
-	};
+	return new Refusal(
+		`This document is written in manifest format ${JSON.stringify(declared)}, and this wallet reads ${FORMAT_MAJOR}.${FORMAT_MINOR}.`,
+		"foreign-format",
+	);
 }
 
 function refuseForeignChain(manifest: NormalisedManifest): Refusal | undefined {
@@ -75,10 +49,10 @@ function refuseForeignChain(manifest: NormalisedManifest): Refusal | undefined {
 		return undefined;
 	}
 
-	return {
-		reason: `This protocol is for ${JSON.stringify(declared)}, and this wallet builds Liquid transactions.`,
-		reject: "foreign-chain",
-	};
+	return new Refusal(
+		`This protocol is for ${JSON.stringify(declared)}, and this wallet builds Liquid transactions.`,
+		"foreign-chain",
+	);
 }
 
 function refuseConstructs(manifest: NormalisedManifest): Refusal | undefined {
@@ -89,14 +63,14 @@ function refuseConstructs(manifest: NormalisedManifest): Refusal | undefined {
 	}
 
 	return found.state === "unimplemented"
-		? {
-				reason: `This protocol uses "${found.key}" at ${found.at}, which this wallet does not implement yet.`,
-				reject: "unimplemented-construct",
-			}
-		: {
-				reason: `The manifest is malformed: the format defines no "${found.key}" at ${found.at}.`,
-				reject: "document-fault",
-			};
+		? new Refusal(
+				`This protocol uses "${found.key}" at ${found.at}, which this wallet does not implement yet.`,
+				"unimplemented-construct",
+			)
+		: new Refusal(
+				`The manifest is malformed: the format defines no "${found.key}" at ${found.at}.`,
+				"document-fault",
+			);
 }
 
 function refuseCapabilities(manifest: NormalisedManifest): Refusal | undefined {
@@ -106,10 +80,10 @@ function refuseCapabilities(manifest: NormalisedManifest): Refusal | undefined {
 
 	return missing === undefined
 		? undefined
-		: {
-				reason: `This protocol requires ${JSON.stringify(missing)}, which this wallet does not provide.`,
-				reject: "unimplemented-construct",
-			};
+		: new Refusal(
+				`This protocol requires ${JSON.stringify(missing)}, which this wallet does not provide.`,
+				"unimplemented-construct",
+			);
 }
 
 function refuseUnbuildableUtxoType(manifest: NormalisedManifest): Refusal | undefined {
@@ -117,10 +91,10 @@ function refuseUnbuildableUtxoType(manifest: NormalisedManifest): Refusal | unde
 		const scriptType = asRecord(asRecord(declared)?.script)?.type;
 
 		if (scriptType !== undefined && scriptType !== "simplicity") {
-			return {
-				reason: `The ${name} contract is a ${String(scriptType)} script, and this wallet builds Simplicity covenants.`,
-				reject: "unbuildable-utxo-type",
-			};
+			return new Refusal(
+				`The ${name} contract is a ${String(scriptType)} script, and this wallet builds Simplicity covenants.`,
+				"unbuildable-utxo-type",
+			);
 		}
 	}
 
@@ -141,10 +115,10 @@ function refuseSourceMismatch(
 		}
 
 		if (declared !== `sha256:${bytesToHex(sha256(utf8ToBytes(source)))}`) {
-			return {
-				reason: `The contract at ${String(path)} is not the one the ${name} contract pins with ${String(declared)}.`,
-				reject: "source-mismatch",
-			};
+			return new Refusal(
+				`The contract at ${String(path)} is not the one the ${name} contract pins with ${String(declared)}.`,
+				"source-mismatch",
+			);
 		}
 	}
 
@@ -171,10 +145,10 @@ function refuseForeignCompiler(
 
 		for (const required of [range, directive]) {
 			if (typeof required === "string" && !satisfies(shipped, required)) {
-				return {
-					reason: `The ${name} contract asks for SimplicityHL ${required}, and this wallet compiles with ${shipped}.`,
-					reject: "foreign-compiler",
-				};
+				return new Refusal(
+					`The ${name} contract asks for SimplicityHL ${required}, and this wallet compiles with ${shipped}.`,
+					"foreign-compiler",
+				);
 			}
 		}
 	}
@@ -192,10 +166,10 @@ function refuseUnproducibleWitness(manifest: NormalisedManifest): Refusal | unde
 				const reason = witness === "unused" ? undefined : unproducible(asRecord(witness));
 
 				if (reason) {
-					return {
-						reason: `The witness ${name} at ${action.name} / input ${id} ${reason}.`,
-						reject: "unproducible-witness",
-					};
+					return new Refusal(
+						`The witness ${name} at ${action.name} / input ${id} ${reason}.`,
+						"unproducible-witness",
+					);
 				}
 			}
 		}

@@ -11,8 +11,6 @@ export function computedValue(
 	text: string,
 	site: ReferenceSiteKind,
 	scope: ReferenceScope,
-): { ok: false; reason: string } | { ok: true; value: string } {
-	const evaluated = evaluateExpression(text, site, scope);
-
-	return evaluated.ok ? { ok: true, value: String(evaluated.value) } : evaluated;
+): string {
+	return String(evaluateExpression(text, site, scope));
 }

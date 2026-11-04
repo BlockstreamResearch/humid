@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { findAction, type NormalisedAction, normaliseManifest } from "../document/normalise";
-import { Fixture } from "../review/reviewForTests";
+import { Fixture, refusalOf } from "../review/reviewForTests";
 import { COVENANT_HASH_SEED, covenantHashFrom, ITERATION_BOUND } from "./covenantHash";
 import { createsInstance, resolveCreatedInstance } from "./instance";
 
@@ -109,10 +109,7 @@ describe("a chain of fields that each read the one before", () => {
 	}
 
 	test("settles however long the chain is, in the two rounds a single field takes", () => {
-		const { result } = settleChain();
-
-		expect(result.ok).toBe(true);
-		expect(result.ok ? result.instance.rounds : 0).toBe(2);
+		expect(settleChain().result.rounds).toBe(2);
 	});
 
 	test("and compiles each link once per round rather than once per link per round", () => {
@@ -124,14 +121,7 @@ describe("a chain of fields that each read the one before", () => {
 	test("with every link settled to a hash of its own", () => {
 		const { result } = settleChain();
 
-		if (!result.ok) {
-			throw new Error(result.reason);
-		}
-
-		const hashes = Array.from(
-			{ length: LINKS },
-			(_, index) => result.instance.fields[`LINK_${index}`],
-		);
+		const hashes = Array.from({ length: LINKS }, (_, index) => result.fields[`LINK_${index}`]);
 
 		expect(new Set(hashes).size).toBe(LINKS);
 		expect(hashes.every((hash) => hash?.length === 64)).toBe(true);
@@ -174,47 +164,36 @@ describe("the deployment a constructor creates", () => {
 	test("records the values the request supplied, under the names the document gives them", () => {
 		const { result } = open();
 
-		expect(result.ok).toBe(true);
-
-		if (result.ok) {
-			expect(result.instance.fields.OWNER_PUB_KEY).toBe(KEY);
-			expect(result.instance.fields.VAULT_ASSET_ID).toBe(ASSET);
-			expect(result.instance.fields.TIMEOUT).toBe("900000");
-		}
+		expect(result.fields).toMatchObject({
+			OWNER_PUB_KEY: KEY,
+			TIMEOUT: "900000",
+			VAULT_ASSET_ID: ASSET,
+		});
 	});
 
 	test("and the covenant hashes nothing but a compiler could produce", () => {
 		const { result } = open();
 
-		expect(result.ok ? result.instance.fields.RESERVE_COV_HASH : "").toHaveLength(64);
-		expect(result.ok ? result.instance.fields.GUARD_COV_HASH : "").toHaveLength(64);
+		expect(result.fields.RESERVE_COV_HASH).toHaveLength(64);
+		expect(result.fields.GUARD_COV_HASH).toHaveLength(64);
 	});
 
 	test("settles a hash that depends on another hash in the fewest rounds there are", () => {
-		const { result } = open();
-
-		expect(result.ok ? result.instance.rounds : 0).toBe(2);
+		expect(open().result.rounds).toBe(2);
 	});
 
 	test("compiles the guard against the reserve's settled hash, not against the seed", () => {
 		const { calls, result } = open();
 
-		if (!result.ok) {
-			throw new Error(result.reason);
-		}
-
 		const guard = calls.findLast((call) => call.source === SOURCES["./guard.simf"]);
 
 		expect(JSON.parse(guard?.argumentsJson ?? "{}")).toEqual({
-			RESERVE_COV_HASH: { type: "u256", value: `0x${result.instance.fields.RESERVE_COV_HASH}` },
+			RESERVE_COV_HASH: { type: "u256", value: `0x${result.fields.RESERVE_COV_HASH}` },
 		});
 	});
 
 	test("builds each covenant at the types the document declares beside the values", () => {
-		const { calls, result } = open();
-
-		expect(result.ok).toBe(true);
-
+		const { calls } = open();
 		const reserve = calls.find((call) => call.source === SOURCES["./reserve.simf"]);
 
 		expect(JSON.parse(reserve?.argumentsJson ?? "{}")).toEqual({
@@ -227,13 +206,12 @@ describe("the deployment a constructor creates", () => {
 describe("the mode the document states its contracts were built in", () => {
 	test("is passed to the compiler that takes each hash", () => {
 		const { calls, hashCovenant } = recordingCompiler(true);
-		const result = resolveCreatedInstance(OPEN_VAULT, {
+		resolveCreatedInstance(OPEN_VAULT, {
 			contractSources: SOURCES,
 			hashCovenant,
 			scope: { params: PARAMS },
 		});
 
-		expect(result.ok).toBe(true);
 		expect(calls.length).toBeGreaterThan(0);
 		expect(calls.every((call) => call.includeDebugSymbols)).toBe(true);
 	});
@@ -247,13 +225,7 @@ describe("the mode the document states its contracts were built in", () => {
 			scope: { params: PARAMS },
 		});
 
-		expect(plain.ok && debug.ok).toBe(true);
-
-		if (!plain.ok || !debug.ok) {
-			return;
-		}
-
-		expect(debug.instance.fields.RESERVE_COV_HASH).not.toBe(plain.instance.fields.RESERVE_COV_HASH);
+		expect(debug.fields.RESERVE_COV_HASH).not.toBe(plain.fields.RESERVE_COV_HASH);
 	});
 
 	test("travels beside an explicitly empty leaf list", () => {
@@ -273,21 +245,21 @@ describe("when the compiler cannot produce a hash", () => {
 	}
 
 	test("a compiler that throws refuses, naming the field and carrying the reason", () => {
-		const result = computing(() => {
-			throw new Error("wasm module not loaded");
-		});
+		const result = refusalOf(() =>
+			computing(() => {
+				throw new Error("wasm module not loaded");
+			}),
+		);
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("RESERVE_COV_HASH");
-		expect(result.ok ? "" : result.reason).toContain("wasm module not loaded");
+		expect(result.reason).toContain("RESERVE_COV_HASH");
+		expect(result.reason).toContain("wasm module not loaded");
 	});
 
 	test("a compiler returning something that is not a script refuses rather than hashing the result", () => {
 		for (const answer of ["", "not hex", "5120abc"]) {
-			const result = computing(() => answer);
+			const result = refusalOf(() => computing(() => answer));
 
-			expect(result.ok).toBe(false);
-			expect(result.ok ? "" : result.reason).toContain("not bytes");
+			expect(result.reason).toContain("not bytes");
 		}
 	});
 });
@@ -331,25 +303,18 @@ describe("a covenant hash that names another through the deployment", () => {
 	}
 
 	test("settles through an explicit instance reference, in the same fewest rounds", () => {
-		const { result } = settle("instance.RESERVE_COV_HASH");
-
-		expect(result.ok).toBe(true);
-		expect(result.ok ? result.instance.rounds : 0).toBe(2);
+		expect(settle("instance.RESERVE_COV_HASH").result.rounds).toBe(2);
 	});
 
 	test("and compiles the dependant against the settled hash, not the seed", () => {
 		const { calls, result } = settle("instance.RESERVE_COV_HASH");
 
-		if (!result.ok) {
-			throw new Error(result.reason);
-		}
-
 		const guard = calls.findLast((call) => call.source === SOURCES["./guard.simf"]);
 
 		expect(JSON.parse(guard?.argumentsJson ?? "{}")).toEqual({
-			RESERVE_COV_HASH: { type: "u256", value: `0x${result.instance.fields.RESERVE_COV_HASH}` },
+			RESERVE_COV_HASH: { type: "u256", value: `0x${result.fields.RESERVE_COV_HASH}` },
 		});
-		expect(result.instance.fields.RESERVE_COV_HASH).not.toBe(COVENANT_HASH_SEED);
+		expect(result.fields.RESERVE_COV_HASH).not.toBe(COVENANT_HASH_SEED);
 	});
 
 	test("and identically to the bare name the same reading is also written as", () => {
@@ -381,42 +346,41 @@ describe("a covenant hash that names another through the deployment", () => {
 			},
 		);
 
-		expect(result.ok).toBe(true);
-		expect(result.ok ? result.instance.rounds : 0).toBe(2);
+		expect(result.rounds).toBe(2);
 	});
 });
 
 describe("what it refuses rather than recording a value nobody chose", () => {
 	test("a field naming something the request did not supply", () => {
-		const { result } = open({ OWNER_PUB_KEY: KEY, TIMEOUT: "900000" });
-
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("VAULT_ASSET_ID");
+		expect(refusalOf(() => open({ OWNER_PUB_KEY: KEY, TIMEOUT: "900000" })).reason).toContain(
+			"VAULT_ASSET_ID",
+		);
 	});
 
 	test("a contract whose source was not supplied", () => {
 		const { hashCovenant } = recordingCompiler();
-		const result = resolveCreatedInstance(OPEN_VAULT, {
-			contractSources: { "./reserve.simf": SOURCES["./reserve.simf"] ?? "" },
-			hashCovenant,
-			scope: { params: PARAMS },
-		});
+		const result = refusalOf(() =>
+			resolveCreatedInstance(OPEN_VAULT, {
+				contractSources: { "./reserve.simf": SOURCES["./reserve.simf"] ?? "" },
+				hashCovenant,
+				scope: { params: PARAMS },
+			}),
+		);
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("./guard.simf");
+		expect(result.reason).toContain("./guard.simf");
 	});
 
 	test("a pair of hashes that never settle, saying which fields and after how many rounds", () => {
 		const { hashCovenant } = recordingCompiler();
-		const result = resolveCreatedInstance(actionNamed(mutual, "Knot"), {
-			contractSources: SOURCES,
-			hashCovenant,
-			scope: { params: {} },
-		});
+		const result = refusalOf(() =>
+			resolveCreatedInstance(actionNamed(mutual, "Knot"), {
+				contractSources: SOURCES,
+				hashCovenant,
+				scope: { params: {} },
+			}),
+		);
 
-		expect(result.ok).toBe(false);
-
-		const reason = result.ok ? "" : result.reason;
+		const reason = result.reason;
 
 		expect(reason).toContain("LEFT_COV_HASH, RIGHT_COV_HASH");
 		expect(reason).toContain(`${ITERATION_BOUND} rounds`);
@@ -424,49 +388,52 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 
 	test("a field computed by something this runtime does not implement", () => {
 		const { hashCovenant } = recordingCompiler();
-		const result = resolveCreatedInstance(
-			{
-				isConstructor: true,
-				name: "Odd",
-				node: { create_instance: { fields: { X: { compute: "contract", simf: "./a.simf" } } } },
-			},
-			{ contractSources: SOURCES, hashCovenant, scope: { params: {} } },
+		const result = refusalOf(() =>
+			resolveCreatedInstance(
+				{
+					isConstructor: true,
+					name: "Odd",
+					node: { create_instance: { fields: { X: { compute: "contract", simf: "./a.simf" } } } },
+				},
+				{ contractSources: SOURCES, hashCovenant, scope: { params: {} } },
+			),
 		);
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("contract");
+		expect(result.reason).toContain("contract");
 	});
 
 	test("a state leaf that is not the width a contract reads one at", () => {
-		const result = leafy([{ payload: ["0x00"], type: "tapdata" }]);
+		const result = refusalOf(() => leafy([{ payload: ["0x00"], type: "tapdata" }]));
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("a leaf is 32");
+		expect(result.reason).toContain("a leaf is 32");
 	});
 
 	test("a state leaf of some other kind than the one state is carried in", () => {
-		const result = leafy([{ payload: [`0x${"00".repeat(32)}`], type: "tapscript" }]);
+		const result = refusalOf(() =>
+			leafy([{ payload: [`0x${"00".repeat(32)}`], type: "tapscript" }]),
+		);
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("tapdata");
+		expect(result.reason).toContain("tapdata");
 	});
 
 	test("a multi-byte value that does not say which end its bytes run from", () => {
-		const result = leafy([
-			{ payload: [{ pad_to: 32, align: "right", type: "u64", value: "7" }], type: "tapdata" },
-		]);
+		const result = refusalOf(() =>
+			leafy([
+				{ payload: [{ pad_to: 32, align: "right", type: "u64", value: "7" }], type: "tapdata" },
+			]),
+		);
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("which end");
+		expect(result.reason).toContain("which end");
 	});
 
 	test("a value padded out without saying which end of the padding it sits at", () => {
-		const result = leafy([
-			{ payload: [{ endian: "be", pad_to: 32, type: "u64", value: "7" }], type: "tapdata" },
-		]);
+		const result = refusalOf(() =>
+			leafy([
+				{ payload: [{ endian: "be", pad_to: 32, type: "u64", value: "7" }], type: "tapdata" },
+			]),
+		);
 
-		expect(result.ok).toBe(false);
-		expect(result.ok ? "" : result.reason).toContain("which end");
+		expect(result.reason).toContain("which end");
 	});
 });
 
@@ -487,7 +454,7 @@ describe("the state a contract's address commits to", () => {
 			},
 		]);
 
-		expect(result.ok).toBe(true);
+		expect(result.rounds).toBe(2);
 		expect(JSON.parse(calls[0]?.extraLeavesJson ?? "[]")).toEqual([
 			`${"00".repeat(31)}01`,
 			`${"00".repeat(24)}00000000000003e8`,

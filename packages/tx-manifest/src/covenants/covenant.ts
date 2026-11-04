@@ -1,9 +1,10 @@
 import { asRecord } from "../document/json";
 import type { NormalisedManifest } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
+import { Refusal } from "../refusal";
 import { resolveCompileParams } from "./compileParams";
 import type { CovenantParamTypes } from "./covenantParamTypes";
-import { encodeStateLeaves } from "./stateLeaves";
+import { stateLeavesOf } from "./stateLeaves";
 
 export type CompiledCovenant = {
 	address: string;
@@ -37,10 +38,6 @@ export type CovenantDerivation = {
 	utxoType: string;
 };
 
-export type DeriveCovenantResult =
-	| { derivation: CovenantDerivation; ok: true }
-	| { ok: false; reason: string };
-
 export async function deriveCovenantAddress(
 	manifest: NormalisedManifest,
 	input: {
@@ -54,24 +51,24 @@ export async function deriveCovenantAddress(
 		utxoType: string;
 		wiring: Record<string, unknown>;
 	},
-): Promise<DeriveCovenantResult> {
+): Promise<CovenantDerivation> {
 	const declared = asRecord(manifest.utxoTypes[input.utxoType]);
 
 	if (!declared) {
-		return { ok: false, reason: `The manifest declares no utxo type named "${input.utxoType}".` };
+		throw new Refusal(`The manifest declares no utxo type named "${input.utxoType}".`);
 	}
 
 	const script = asRecord(declared.script);
 	const sourcePath = script?.source;
 
 	if (typeof sourcePath !== "string") {
-		return { ok: false, reason: `Utxo type "${input.utxoType}" names no contract source.` };
+		throw new Refusal(`Utxo type "${input.utxoType}" names no contract source.`);
 	}
 
 	const source = input.contractSources[sourcePath];
 
 	if (source === undefined) {
-		return { ok: false, reason: `The source of ${sourcePath} was not supplied.` };
+		throw new Refusal(`The source of ${sourcePath} was not supplied.`);
 	}
 
 	const wiring = { ...asRecord(script?.compile_params), ...input.wiring };
@@ -82,30 +79,19 @@ export async function deriveCovenantAddress(
 		try {
 			declaring = { declares: await input.covenantParamTypes(source), source: sourcePath };
 		} catch (error) {
-			return {
-				ok: false,
-				reason: `The contract at ${sourcePath} did not compile: ${String(error)}`,
-			};
+			throw new Refusal(`The contract at ${sourcePath} did not compile: ${String(error)}`);
 		}
 	}
 
-	const params = resolveCompileParams(wiring, input.declaredTypes, input.scope, declaring);
-
-	if (!params.ok) {
-		return params;
-	}
-
-	const stateLeaves = encodeStateLeaves(script?.extra_leaves, {
-		at: `Utxo type "${input.utxoType}"`,
-		scope: input.scope,
-	});
-
-	if (!stateLeaves.ok) {
-		return { ok: false, reason: stateLeaves.reason };
-	}
-
-	const argumentsJson = JSON.stringify(params.arguments);
-	const extraLeavesJson = JSON.stringify(stateLeaves.leaves);
+	const argumentsJson = JSON.stringify(
+		resolveCompileParams(wiring, input.declaredTypes, input.scope, declaring),
+	);
+	const extraLeavesJson = JSON.stringify(
+		stateLeavesOf(script?.extra_leaves, {
+			at: `Utxo type "${input.utxoType}"`,
+			scope: input.scope,
+		}),
+	);
 
 	try {
 		const compiled = await input.compile({
@@ -117,41 +103,32 @@ export async function deriveCovenantAddress(
 		});
 
 		return {
-			derivation: {
-				address: compiled.address,
-				argumentsJson,
-				cmr: compiled.cmr,
-				extraLeavesJson,
-				includeDebugSymbols: input.includeDebugSymbols,
-				scriptPubKeyHex: compiled.scriptPubKeyHex,
-				source,
-				sourcePath,
-				tapleafHash: compiled.tapleafHash,
-				utxoType: input.utxoType,
-			},
-			ok: true,
+			address: compiled.address,
+			argumentsJson,
+			cmr: compiled.cmr,
+			extraLeavesJson,
+			includeDebugSymbols: input.includeDebugSymbols,
+			scriptPubKeyHex: compiled.scriptPubKeyHex,
+			source,
+			sourcePath,
+			tapleafHash: compiled.tapleafHash,
+			utxoType: input.utxoType,
 		};
 	} catch (error) {
-		return {
-			ok: false,
-			reason: `The contract at ${sourcePath} did not compile: ${String(error)}`,
-		};
+		throw new Refusal(`The contract at ${sourcePath} did not compile: ${String(error)}`);
 	}
 }
 
-export function covenantMatchesChain(
+export function checkCovenantOnChain(
 	derivation: CovenantDerivation,
 	onChainScriptPubKeyHex: string,
-): { matched: true } | { matched: false; reason: string } {
-	if (derivation.scriptPubKeyHex.toLowerCase() === onChainScriptPubKeyHex.toLowerCase()) {
-		return { matched: true };
-	}
-
-	return {
-		matched: false,
-		reason:
+): void {
+	if (derivation.scriptPubKeyHex.toLowerCase() !== onChainScriptPubKeyHex.toLowerCase()) {
+		throw new Refusal(
 			`The ${derivation.utxoType} contract rebuilds to ${derivation.address}, ` +
-			"but the funds are locked by a different contract. " +
-			"This is not the contract the site described.",
-	};
+				"but the funds are locked by a different contract. " +
+				"This is not the contract the site described.",
+			"covenant-mismatch",
+		);
+	}
 }

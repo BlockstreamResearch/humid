@@ -16,13 +16,13 @@ import {
 
 const p2pk = Fixture.load("p2pk");
 
-const pay = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+const payRequest = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
 	p2pk.request("Pay", { params: { amount_sat: 1000, pubkey: PUBKEY }, ...overrides });
 
 const payDocument = (edit: (pay: Document) => void) => p2pk.editedAction("Pay", edit).manifest;
 
 const payWith = (manifest: Document, params?: Record<string, unknown>) =>
-	pay(params === undefined ? { manifest } : { manifest, params });
+	payRequest(params === undefined ? { manifest } : { manifest, params });
 const reviewedPay = (manifest: Document, params?: Record<string, unknown>) =>
 	reviewed(payWith(manifest, params));
 const refusedPay = (manifest: Document, params?: Record<string, unknown>) =>
@@ -211,7 +211,7 @@ describe("state an output covenant commits to", () => {
 			},
 		];
 
-		await reviewed(pay({ manifest }), {
+		await reviewed(payRequest({ manifest }), {
 			compile: (asked) => {
 				seen.push(asked.extraLeavesJson);
 
@@ -352,7 +352,7 @@ describe("what an action requires of an input beyond where its money comes from"
 		});
 
 		await reviewed(
-			pay({
+			payRequest({
 				manifest,
 				params: { amount_sat: 1000, borrower: WALLET_SCRIPT, pubkey: PUBKEY },
 			}),

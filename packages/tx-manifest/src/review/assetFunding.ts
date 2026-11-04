@@ -1,5 +1,6 @@
 import { byOutpoint, outpointKey } from "../chain/outpoint";
 import type { AssetEntry } from "../evaluation/assetLedger";
+import { Refusal } from "../refusal";
 import { type SelectableUtxo, selectCoins, toSats } from "./coinSelection";
 
 export type AssetHoldings = (asset: string) => SelectableUtxo[];
@@ -10,10 +11,6 @@ export type FundedAsset = {
 	selected: SelectableUtxo[];
 };
 
-export type AssetFundingResult =
-	| { funded: FundedAsset[]; ok: true }
-	| { ok: false; reason: string; reject: "document-fault" | "shortfall" };
-
 export type AssetFundingContext = {
 	feeSats: bigint;
 	headroomSats: bigint;
@@ -22,10 +19,7 @@ export type AssetFundingContext = {
 	reserved: { asset: string; utxo: SelectableUtxo }[];
 };
 
-export function fundAssets(
-	entries: AssetEntry[],
-	context: AssetFundingContext,
-): AssetFundingResult {
+export function fundAssets(entries: AssetEntry[], context: AssetFundingContext): FundedAsset[] {
 	const policyAsset = context.policyAsset.trim().toLowerCase();
 	const funded: FundedAsset[] = [];
 	const committed = new Set(context.reserved.map(({ utxo }) => outpointKey(utxo)));
@@ -45,15 +39,10 @@ export function fundAssets(
 			const pool = context
 				.holdings(entry.asset)
 				.filter((utxo) => !committed.has(outpointKey(utxo)));
-			const selection = selectCoins(pool, outstanding, isPolicy ? context.headroomSats : 0n);
-
-			if (!selection.ok) {
-				return {
-					ok: false,
-					reason: isPolicy ? selection.reason : shortOf(entry.asset, outstanding, pool),
-					reject: "shortfall",
-				};
-			}
+			const selection = Refusal.amend(
+				() => selectCoins(pool, outstanding, isPolicy ? context.headroomSats : 0n),
+				(reason) => (isPolicy ? reason : shortOf(entry.asset, outstanding, pool)),
+			);
 
 			selected = [...reserved, ...selection.selected];
 			total = brought + selection.totalSats;
@@ -66,13 +55,10 @@ export function fundAssets(
 		const surplus = total - entry.needed - fee;
 
 		if (!isPolicy && surplus > 0n && !entry.change) {
-			return {
-				ok: false,
-				reason:
-					`This action leaves ${surplus} of ${entry.asset} over, and declares no change ` +
+			throw new Refusal(
+				`This action leaves ${surplus} of ${entry.asset} over, and declares no change ` +
 					"output to return it to. Building it would destroy that amount.",
-				reject: "document-fault",
-			};
+			);
 		}
 
 		funded.push({
@@ -82,7 +68,7 @@ export function fundAssets(
 		});
 	}
 
-	return { funded, ok: true };
+	return funded;
 }
 
 function shortOf(asset: string, needed: bigint, pool: SelectableUtxo[]): string {

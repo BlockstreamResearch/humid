@@ -1,3 +1,4 @@
+import { Refusal } from "../refusal";
 import { asArray, asRecord } from "./json";
 import { declaredFields, type NormalisedAction, type NormalisedManifest } from "./normalise";
 import { namedUtxoTypes } from "./sites";
@@ -16,9 +17,7 @@ export type ReferenceScope = {
 	params: Record<string, unknown>;
 };
 
-export type ReferenceResolution =
-	| { form: ReferenceForm; ok: true; value: unknown }
-	| { ok: false; reason: string };
+export type ReferenceResolution = { form: ReferenceForm; value: unknown };
 
 export type ReferenceSiteKind =
 	| "amount"
@@ -110,37 +109,31 @@ export function resolveReference(
 	const accepted = SITES[site];
 
 	if (!reference) {
-		return { ok: false, reason: `"${text}" is not a reference.` };
+		throw new Refusal(`"${text}" is not a reference.`);
 	}
 
 	if (!accepted.accepts.includes(reference.form)) {
-		return { ok: false, reason: `"${text}" cannot be used as ${accepted.describes}.` };
+		throw new Refusal(`"${text}" cannot be used as ${accepted.describes}.`);
 	}
 
-	const found = lookUp(reference, scope);
-
-	return found.ok ? { form: reference.form, ok: true, value: found.value } : found;
+	return { form: reference.form, value: lookUp(reference, scope) };
 }
 
-function lookUp(
-	reference: ParsedReference,
-	scope: ReferenceScope,
-): { ok: true; value: unknown } | { ok: false; reason: string } {
+function lookUp(reference: ParsedReference, scope: ReferenceScope): unknown {
 	switch (reference.form) {
 		case "bare": {
-			return reference.name in scope.params
-				? { ok: true, value: scope.params[reference.name] }
-				: { ok: false, reason: `"${reference.name}" is not a parameter of this action.` };
+			if (!(reference.name in scope.params)) {
+				throw new Refusal(`"${reference.name}" is not a parameter of this action.`);
+			}
+
+			return scope.params[reference.name];
 		}
 
 		case "input-attribute": {
 			const input = scope.inputs?.[reference.name];
 
 			if (!input) {
-				return {
-					ok: false,
-					reason: `"${reference.name}" is not an input this action resolved.`,
-				};
+				throw new Refusal(`"${reference.name}" is not an input this action resolved.`);
 			}
 
 			return read(input, reference.attribute ?? "", `input ${reference.name}`);
@@ -159,20 +152,16 @@ function lookUp(
 	}
 }
 
-function read(
-	source: Record<string, unknown> | undefined,
-	name: string,
-	label: string,
-): { ok: true; value: unknown } | { ok: false; reason: string } {
+function read(source: Record<string, unknown> | undefined, name: string, label: string): unknown {
 	if (!source) {
-		return { ok: false, reason: `This request carries no ${label} to resolve "${name}" against.` };
+		throw new Refusal(`This request carries no ${label} to resolve "${name}" against.`);
 	}
 
 	if (!(name in source)) {
-		return { ok: false, reason: `${label} carries no "${name}".` };
+		throw new Refusal(`${label} carries no "${name}".`);
 	}
 
-	return { ok: true, value: source[name] };
+	return source[name];
 }
 
 export type ReferenceOccurrence = {

@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 
 import type { ReadTxOut } from "../chain/chainRead";
+import { Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import type { SelectableUtxo } from "./coinSelection";
 import {
@@ -155,4 +156,18 @@ export async function refused(
 	overrides: Partial<ReviewDependencies> = {},
 ): Promise<ReviewRefusal> {
 	return asRefusal(await review(request, overrides));
+}
+
+export function refusalOf(run: () => unknown): Refusal {
+	try {
+		run();
+	} catch (error) {
+		if (error instanceof Refusal) {
+			return error;
+		}
+
+		throw error;
+	}
+
+	throw new Error("Ran where a refusal was expected.");
 }

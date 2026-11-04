@@ -6,7 +6,7 @@ import {
 	type CompileCovenant,
 	type CovenantParamTypesOf,
 	type CovenantDerivation,
-	covenantMatchesChain,
+	checkCovenantOnChain,
 	deriveCovenantAddress,
 } from "../covenants/covenant";
 import { type CompileScriptPubKey, covenantHashFrom } from "../covenants/covenantHash";
@@ -25,7 +25,7 @@ import {
 	normaliseManifest,
 } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
-import { type RejectToken, refuseUnsupported } from "../document/refuse";
+import { refuseUnsupported } from "../document/refuse";
 import { covenantSites } from "../document/sites";
 import { assetLedger, type HeldValue, resolveAsset } from "../evaluation/assetLedger";
 import {
@@ -42,7 +42,7 @@ import {
 } from "../evaluation/hooks";
 import { type PlaceableInput, placeInputs } from "../evaluation/inputOrder";
 import {
-	relativeTimelockPlacement,
+	checkRelativeTimelockPlacement,
 	resolveInputRules,
 	transactionSequence,
 } from "../evaluation/inputRules";
@@ -57,6 +57,7 @@ import { planAction } from "../evaluation/plan";
 import { checkPositions, type StatedPosition } from "../evaluation/positions";
 import { resolveStaticWitnesses, type StaticWitness } from "../evaluation/witness";
 import { estimateFeeSats } from "../fee";
+import { type RejectToken, Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { resolveActionRequirements } from "../request/requirements";
 import { type AssetHoldings, fundAssets } from "./assetFunding";
@@ -133,24 +134,41 @@ export function isRefusal(result: ReviewManifestActionResult): result is ReviewR
 	return "refused" in result;
 }
 
+type ReviewInput = {
+	accountLabel: string;
+	compile: CompileCovenant;
+	compilerVersion?: string;
+	covenantParamTypes?: CovenantParamTypesOf;
+	fundingUtxos: SelectableUtxo[];
+	holdingsOf?: AssetHoldings;
+	network: string;
+	policyAsset: string;
+	readChainTip?: ReadChainTip;
+	readFeeRate: ReadFeeRate;
+	readTxOut: ReadTxOut;
+	scriptPubKeyOf: CompileScriptPubKey;
+	walletScriptPubKeyHex: string;
+};
+
 export async function reviewManifestAction(
 	request: ParsedLiquidProcessCtParams,
-	input: {
-		accountLabel: string;
-		compile: CompileCovenant;
-		compilerVersion?: string;
-		covenantParamTypes?: CovenantParamTypesOf;
-		fundingUtxos: SelectableUtxo[];
-		holdingsOf?: AssetHoldings;
-		network: string;
-		policyAsset: string;
-		readChainTip?: ReadChainTip;
-		readFeeRate: ReadFeeRate;
-		readTxOut: ReadTxOut;
-		scriptPubKeyOf: CompileScriptPubKey;
-		walletScriptPubKeyHex: string;
-	},
+	input: ReviewInput,
 ): Promise<ReviewManifestActionResult> {
+	try {
+		return await reviewAction(request, input);
+	} catch (error) {
+		if (error instanceof Refusal) {
+			return { reason: error.reason, refused: true, reject: error.reject };
+		}
+
+		throw error;
+	}
+}
+
+async function reviewAction(
+	request: ParsedLiquidProcessCtParams,
+	input: ReviewInput,
+): Promise<ManifestReview> {
 	const manifest = normaliseManifest(request.manifest);
 	const deployment = normaliseInstance(request.instance);
 
@@ -160,41 +178,34 @@ export async function reviewManifestAction(
 	});
 
 	if (unsupported) {
-		return { reason: unsupported.reason, refused: true, reject: unsupported.reject };
+		throw unsupported;
 	}
 
 	const action = findAction(manifest, request.action);
 
 	if (!action) {
-		return {
-			reason: `The manifest declares no action named "${request.action}".`,
-			refused: true,
-			reject: "no-such-action",
-		};
+		throw new Refusal(
+			`The manifest declares no action named "${request.action}".`,
+			"no-such-action",
+		);
 	}
 
 	const buildMode = manifest.buildMode;
 
 	if (!buildMode.ok) {
-		return { reason: buildMode.reason, refused: true, reject: "unreadable-build-mode" };
+		throw new Refusal(buildMode.reason, "unreadable-build-mode");
 	}
 
-	const filled = fillParameters(action, request.params, {
+	const params = fillParameters(action, request.params, {
 		instance: deployment.fields,
 		params: request.params,
 	});
-
-	if (!filled.ok) {
-		return { reason: filled.reason, refused: true, reject: filled.reject };
-	}
-
 	const malformed = malformedDeclaration(action);
 
 	if (malformed) {
-		return { reason: malformed, refused: true, reject: "document-fault" };
+		throw new Refusal(malformed);
 	}
 
-	const params = filled.params;
 	const requirements = resolveActionRequirements({ ...request, params }, manifest, action);
 
 	if (requirements.missing.length > 0) {
@@ -202,11 +213,7 @@ export async function reviewManifestAction(
 			.map((entry) => (entry.keys ? `${entry.reason} (${entry.keys.join(", ")})` : entry.reason))
 			.join(" ");
 
-		return {
-			reason: `This request cannot be built. ${named}`,
-			refused: true,
-			reject: "incomplete-request",
-		};
+		throw new Refusal(`This request cannot be built. ${named}`, "incomplete-request");
 	}
 
 	const pools = new Map<string, SelectableUtxo[]>();
@@ -261,21 +268,10 @@ export async function reviewManifestAction(
 			wiring: site.wiring,
 		});
 
-		if (!derived.ok) {
-			return { reason: derived.reason, refused: true, reject: "document-fault" };
-		}
-
-		const asset = resolveAsset(site.asset, `input ${site.id}`, {
-			policyAsset: input.policyAsset,
-			scope,
-		});
-		const claimed = utxos.claim(site.id, site.utxoType, asset.ok ? asset.id : undefined);
-
-		if (!claimed.ok) {
-			return { reason: claimed.reason, refused: true, reject: claimed.reject };
-		}
-
-		const { outpoint } = claimed;
+		const asset = Refusal.attempt(() =>
+			resolveAsset(site.asset, `input ${site.id}`, { policyAsset: input.policyAsset, scope }),
+		);
+		const outpoint = utxos.claim(site.id, site.utxoType, asset);
 
 		let onChain;
 
@@ -283,70 +279,59 @@ export async function reviewManifestAction(
 			// oxlint-disable-next-line no-await-in-loop
 			onChain = await input.readTxOut(outpoint);
 		} catch (error) {
-			return {
-				reason: `Could not read what is at ${outpoint.txid}:${outpoint.vout}: ${String(error)}`,
-				refused: true,
-				reject: "chain-read-failed",
-			};
+			throw new Refusal(
+				`Could not read what is at ${outpoint.txid}:${outpoint.vout}: ${String(error)}`,
+				"chain-read-failed",
+			);
 		}
 
-		const matched = covenantMatchesChain(derived.derivation, onChain.scriptPubKeyHex);
-
-		if (!matched.matched) {
-			return { reason: matched.reason, refused: true, reject: "covenant-mismatch" };
-		}
+		checkCovenantOnChain(derived, onChain.scriptPubKeyHex);
 
 		if (onChain.amountSats === undefined || onChain.rawAssetId === undefined) {
-			return {
-				reason:
-					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} did not come back with an ` +
+			throw new Refusal(
+				`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} did not come back with an ` +
 					"explicit amount and asset, so this wallet cannot say what it holds. It will not " +
 					"assume a balance for an output it is about to spend.",
-				refused: true,
-				reject: "unbuildable-utxo-type",
-			};
+				"unbuildable-utxo-type",
+			);
 		}
 
 		if (!site.id) {
-			return {
-				reason:
-					`The ${site.utxoType} this action spends holds ${onChain.amountSats} of ` +
+			throw new Refusal(
+				`The ${site.utxoType} this action spends holds ${onChain.amountSats} of ` +
 					`${onChain.rawAssetId}, and the manifest gives that input no id, so this wallet ` +
 					"cannot account for what it brings.",
-				refused: true,
-				reject: "document-fault",
-			};
+				"document-fault",
+			);
 		}
 
 		const held = baseUnits(onChain.amountSats);
 
 		if (held === undefined) {
-			return {
-				reason:
-					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} came back holding ` +
+			throw new Refusal(
+				`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} came back holding ` +
 					`${JSON.stringify(onChain.amountSats)}, which is not an amount this wallet can read. ` +
 					"It will not spend an output it cannot say the value of.",
-				refused: true,
-				reject: "unbuildable-utxo-type",
-			};
+				"unbuildable-utxo-type",
+			);
 		}
 
 		inputs[site.id] = { amount_sat: held, asset: onChain.rawAssetId };
 		chainHeld.push({ asset: onChain.rawAssetId, id: site.id, sats: held });
 
 		covenantInputs.push({
-			argumentsJson: derived.derivation.argumentsJson,
-			extraLeavesJson: derived.derivation.extraLeavesJson,
+			argumentsJson: derived.argumentsJson,
+			extraLeavesJson: derived.extraLeavesJson,
 			id: site.id,
-			includeDebugSymbols: derived.derivation.includeDebugSymbols,
+			includeDebugSymbols: derived.includeDebugSymbols,
 			...(site.signatureWitness === undefined ? {} : { signatureWitness: site.signatureWitness }),
-			source: derived.derivation.source,
+			source: derived.source,
 			txOutHex: onChain.txOutHex,
 			txid: outpoint.txid,
 			utxoType: site.utxoType,
 			vout: outpoint.vout,
 		});
-		covenants.push({ ...derived.derivation, role: "spent", verified: "matches-chain" });
+		covenants.push({ ...derived, role: "spent", verified: "matches-chain" });
 	}
 
 	const issued = resolveIssuances(action, {
@@ -357,17 +342,7 @@ export async function reviewManifestAction(
 		scope,
 	});
 
-	if (!issued.ok) {
-		return { reason: issued.reason, refused: true, reject: issued.reject };
-	}
-
-	const hooked = runActionHooks(action, scope);
-
-	if (!hooked.ok) {
-		return { reason: hooked.reason, refused: true, reject: "document-fault" };
-	}
-
-	scope = hooked.scope;
+	scope = runActionHooks(action, scope);
 
 	const created = createsInstance(action)
 		? resolveCreatedInstance(action, {
@@ -377,12 +352,8 @@ export async function reviewManifestAction(
 			})
 		: undefined;
 
-	if (created && !created.ok) {
-		return { reason: created.reason, refused: true, reject: "document-fault" };
-	}
-
 	if (created) {
-		scope = { ...scope, instance: { ...scope.instance, ...created.instance.fields } };
+		scope = { ...scope, instance: { ...scope.instance, ...created.fields } };
 	}
 
 	for (const site of covenantSites(action.node).filter((declared) => declared.role === "created")) {
@@ -401,21 +372,13 @@ export async function reviewManifestAction(
 			wiring: site.wiring,
 		});
 
-		if (!derived.ok) {
-			return { reason: derived.reason, refused: true, reject: "document-fault" };
-		}
-
-		covenants.push({ ...derived.derivation, role: "created", verified: "not-yet-onchain" });
+		covenants.push({ ...derived, role: "created", verified: "not-yet-onchain" });
 	}
 
 	const stated = resolveStaticWitnesses(action, scope);
 
-	if (!stated.ok) {
-		return { reason: stated.reason, refused: true, reject: "document-fault" };
-	}
-
 	for (const covenant of covenantInputs) {
-		const values = stated.witnesses.get(covenant.id);
+		const values = stated.get(covenant.id);
 
 		if (values && values.length > 0) {
 			covenant.witnessValues = values;
@@ -424,45 +387,29 @@ export async function reviewManifestAction(
 
 	const plan = planAction(action, scope);
 
-	if (!plan.ok) {
-		return { reason: plan.reason, refused: true, reject: "document-fault" };
-	}
-
 	const inputRules = resolveInputRules(action, scope);
-
-	if (!inputRules.ok) {
-		return { reason: inputRules.reason, refused: true, reject: "document-fault" };
-	}
-
-	const sequence = transactionSequence(inputRules.rules);
-
-	if (!sequence.ok) {
-		return { reason: sequence.reason, refused: true, reject: "unimplemented-construct" };
-	}
+	const sequence = transactionSequence(inputRules);
 
 	let feeRateSatsPerKvb: number;
 
 	try {
 		feeRateSatsPerKvb = await input.readFeeRate(FEE_TARGET_BLOCKS);
 	} catch (error) {
-		return {
-			reason: `The wallet could not establish a fee rate, so it will not build this: ${String(error)}`,
-			refused: true,
-			reject: "no-fee-rate",
-		};
+		throw new Refusal(
+			`The wallet could not establish a fee rate, so it will not build this: ${String(error)}`,
+			"no-fee-rate",
+		);
 	}
 
 	if (!Number.isFinite(feeRateSatsPerKvb) || feeRateSatsPerKvb < 0) {
-		return {
-			reason:
-				`The wallet was given ${feeRateSatsPerKvb} as a fee rate, which is not a rate anything ` +
+		throw new Refusal(
+			`The wallet was given ${feeRateSatsPerKvb} as a fee rate, which is not a rate anything ` +
 				"can be charged at. It will not build a transaction it cannot price.",
-			refused: true,
-			reject: "no-fee-rate",
-		};
+			"no-fee-rate",
+		);
 	}
 
-	const reckoned = assetLedger(action, plan.plan.outputs, {
+	const ledger = assetLedger(action, plan.outputs, {
 		held: [
 			...chainHeld,
 			...issued.issuances.map((issuance) => ({
@@ -476,14 +423,9 @@ export async function reviewManifestAction(
 		scope,
 	});
 
-	if (!reckoned.ok) {
-		return { reason: reckoned.reason, refused: true, reject: reckoned.reject };
-	}
-
-	const ledger = reckoned.ledger;
 	const policyAsset = input.policyAsset.trim().toLowerCase();
 
-	const networkChange = plan.plan.outputs.filter(
+	const networkChange = plan.outputs.filter(
 		(planned, at) => planned.target.kind === "change" && ledger.outputs[at] === policyAsset,
 	);
 	const plannedChange: BlindingDecision = networkChange[0]?.blinding ?? {
@@ -492,7 +434,7 @@ export async function reviewManifestAction(
 		overrode: "chain",
 	};
 
-	const foreign = plan.plan.outputs.find(
+	const foreign = plan.outputs.find(
 		(planned) =>
 			planned.blinding.blinding === "blinded" &&
 			planned.target.kind !== "change" &&
@@ -500,18 +442,16 @@ export async function reviewManifestAction(
 	);
 
 	if (foreign) {
-		return {
-			reason:
-				`The output ${foreign.id || "(unnamed)"} must hide what it carries and pays somewhere ` +
+		throw new Refusal(
+			`The output ${foreign.id || "(unnamed)"} must hide what it carries and pays somewhere ` +
 				"this wallet holds no blinding key for.",
-			refused: true,
-			reject: "unimplemented-construct",
-		};
+			"unimplemented-construct",
+		);
 	}
 
 	const pinFor = new Map<string, string>();
 
-	for (const rule of inputRules.rules) {
+	for (const rule of inputRules) {
 		if (rule.fromAddress !== undefined) {
 			pinFor.set(rule.id, rule.fromAddress);
 		}
@@ -521,13 +461,11 @@ export async function reviewManifestAction(
 
 	for (const [id, script] of pinFor) {
 		if (!fundedInput.has(id)) {
-			return {
-				reason:
-					`This action requires input ${id} to be funded from ${script}, and that input is ` +
+			throw new Refusal(
+				`This action requires input ${id} to be funded from ${script}, and that input is ` +
 					"not one this wallet funds out of its own outputs.",
-				refused: true,
-				reject: "document-fault",
-			};
+				"document-fault",
+			);
 		}
 	}
 
@@ -543,14 +481,12 @@ export async function reviewManifestAction(
 		const already = pinnedAsset.get(wallet.asset);
 
 		if (already && !sameScript(already.script, script)) {
-			return {
-				reason:
-					`This action requires input ${already.id} to be funded from ${already.script} and ` +
+			throw new Refusal(
+				`This action requires input ${already.id} to be funded from ${already.script} and ` +
 					`input ${wallet.id} from ${script}, and both are funded in ${wallet.asset} out of ` +
 					"one selection. This wallet cannot fund one run of outputs from two places.",
-				refused: true,
-				reject: "no-funds-at-signing-address",
-			};
+				"no-funds-at-signing-address",
+			);
 		}
 
 		pinnedAsset.set(wallet.asset, { id: wallet.id, script });
@@ -568,13 +504,11 @@ export async function reviewManifestAction(
 		const committed = issued.reserved.some((held) => held.asset === asset);
 
 		if (pinnedHoldings(asset).length === 0 && !committed) {
-			return {
-				reason:
-					`This action must fund input ${pin.id} from ${pin.script}, and this wallet holds ` +
+			throw new Refusal(
+				`This action must fund input ${pin.id} from ${pin.script}, and this wallet holds ` +
 					`nothing in ${asset} there.`,
-				refused: true,
-				reject: "no-funds-at-signing-address",
-			};
+				"no-funds-at-signing-address",
+			);
 		}
 	}
 
@@ -585,17 +519,15 @@ export async function reviewManifestAction(
 	});
 
 	if (misplaced) {
-		return {
-			reason:
-				`This action must fund input ${misplaced.inputId} from ` +
+		throw new Refusal(
+			`This action must fund input ${misplaced.inputId} from ` +
 				`${pinFor.get(misplaced.inputId) ?? ""}, and the output it issues an asset from is not ` +
 				"there.",
-			refused: true,
-			reject: "no-funds-at-signing-address",
-		};
+			"no-funds-at-signing-address",
+		);
 	}
 
-	const funding = fundAssets(ledger.entries, {
+	const funded = fundAssets(ledger.entries, {
 		feeSats: feeHeadroomSats(feeRateSatsPerKvb),
 		headroomSats: 0n,
 		holdings: pinnedHoldings,
@@ -603,11 +535,7 @@ export async function reviewManifestAction(
 		reserved: issued.reserved,
 	});
 
-	if (!funding.ok) {
-		return { reason: funding.reason, refused: true, reject: funding.reject };
-	}
-
-	const fundedFor = new Map(funding.funded.map((entry) => [entry.asset, entry]));
+	const fundedFor = new Map(funded.map((entry) => [entry.asset, entry]));
 
 	const covenantScripts = new Map(
 		covenants.map((found) => [found.utxoType, found.scriptPubKeyHex]),
@@ -621,7 +549,7 @@ export async function reviewManifestAction(
 	// such a change output looks like an action with no outputs at all.
 	let changeDeferred = false;
 
-	for (const [at, planned] of plan.plan.outputs.entries()) {
+	for (const [at, planned] of plan.outputs.entries()) {
 		const asset = ledger.outputs[at] ?? policyAsset;
 
 		if (planned.target.kind === "change") {
@@ -665,11 +593,10 @@ export async function reviewManifestAction(
 					: input.walletScriptPubKeyHex;
 
 		if (!scriptPubKeyHex) {
-			return {
-				reason: `Output ${planned.id} pays a covenant the wallet did not verify.`,
-				refused: true,
-				reject: "covenant-mismatch",
-			};
+			throw new Refusal(
+				`Output ${planned.id} pays a covenant the wallet did not verify.`,
+				"covenant-mismatch",
+			);
 		}
 
 		if (planned.target.kind === "wallet") {
@@ -690,7 +617,7 @@ export async function reviewManifestAction(
 	const fundedOrder = [
 		...new Set([
 			...ledger.walletInputs.map((wallet) => wallet.asset),
-			...funding.funded.map((entry) => entry.asset),
+			...funded.map((entry) => entry.asset),
 		]),
 	];
 	const creditedWith = new Map<string, string>();
@@ -749,17 +676,13 @@ export async function reviewManifestAction(
 
 	const placement = placeInputs(placeable);
 
-	const carried = relativeTimelockPlacement(
-		sequence.value,
-		inputRules.rules,
+	checkRelativeTimelockPlacement(
+		sequence,
+		inputRules,
 		placement.order.map((planned) =>
 			planned.source === "covenant" ? { declaredBy: planned.covenant.id } : {},
 		),
 	);
-
-	if (!carried.ok) {
-		return { reason: carried.reason, refused: true, reject: "unimplemented-construct" };
-	}
 
 	const landedAt = (id: string): number | undefined => {
 		const own = placement.at.get(id);
@@ -785,11 +708,10 @@ export async function reviewManifestAction(
 		const wanted = statedIndex(declared.required_index);
 
 		if (wanted === undefined) {
-			return {
-				reason: `Input ${id} states a position of ${JSON.stringify(declared.required_index)}, which is not a place in a transaction.`,
-				refused: true,
-				reject: "unbuildable-position",
-			};
+			throw new Refusal(
+				`Input ${id} states a position of ${JSON.stringify(declared.required_index)}, which is not a place in a transaction.`,
+				"unbuildable-position",
+			);
 		}
 
 		positions.push({
@@ -811,34 +733,27 @@ export async function reviewManifestAction(
 		const wanted = statedIndex(declared.required_index);
 
 		if (wanted === undefined) {
-			return {
-				reason: `Output ${id ?? "(unnamed)"} states a position of ${JSON.stringify(declared.required_index)}, which is not a place in a transaction.`,
-				refused: true,
-				reject: "unbuildable-position",
-			};
+			throw new Refusal(
+				`Output ${id ?? "(unnamed)"} states a position of ${JSON.stringify(declared.required_index)}, which is not a place in a transaction.`,
+				"unbuildable-position",
+			);
 		}
 
 		if (id === undefined) {
-			return {
-				reason:
-					`This action states a position for an output the manifest gives no id, so this ` +
+			throw new Refusal(
+				`This action states a position for an output the manifest gives no id, so this ` +
 					"wallet cannot say which output it is or where it landed.",
-				refused: true,
-				reject: "unbuildable-position",
-			};
+				"unbuildable-position",
+			);
 		}
 
 		positions.push({ at: outputAt.get(id) ?? outputs.length, id, kind: "output", stated: wanted });
 	}
 
-	const positioned = checkPositions(positions, {
+	checkPositions(positions, {
 		inputs: placement.order.length,
 		outputs: outputs.length + Math.min(networkChange.length, 1),
 	});
-
-	if (!positioned.ok) {
-		return { reason: positioned.reason, refused: true, reject: "unbuildable-position" };
-	}
 
 	const selected = fundedOrder.flatMap((asset) => fundedFor.get(asset)?.selected ?? []);
 	const change = resolveChangeBlinding(
@@ -882,7 +797,7 @@ export async function reviewManifestAction(
 				: { changeOverrode: change.overrode }),
 		covenantInputs,
 		covenants,
-		...(created === undefined ? {} : { createdInstance: created.instance }),
+		...(created === undefined ? {} : { createdInstance: created }),
 		estimatedFeeSats,
 		feeRateSatsPerKvb,
 		inputOrder: placement.order,
@@ -893,7 +808,7 @@ export async function reviewManifestAction(
 		policyAsset,
 		protocol: manifest.protocol ?? "",
 		selected,
-		...(sequence.value === undefined ? {} : { sequence: sequence.value }),
+		...(sequence === undefined ? {} : { sequence: sequence }),
 	};
 
 	return {
@@ -906,13 +821,10 @@ export async function reviewManifestAction(
 	};
 }
 
-type ResolvedIssuances =
-	| {
-			issuances: PlannedIssuance[];
-			ok: true;
-			reserved: { asset: string; inputId: string; utxo: SelectableUtxo }[];
-	  }
-	| { ok: false; reason: string; reject: RejectToken };
+type ResolvedIssuances = {
+	issuances: PlannedIssuance[];
+	reserved: { asset: string; inputId: string; utxo: SelectableUtxo }[];
+};
 
 function resolveIssuances(
 	action: NormalisedAction,
@@ -964,10 +876,6 @@ function resolveIssuances(
 			scope: context.scope,
 		});
 
-		if (!asset.ok) {
-			return { ok: false, reason: asset.reason, reject: "foreign-asset" };
-		}
-
 		const covenant = context.covenantInputs.find((candidate) => candidate.id === id);
 
 		if (covenant) {
@@ -975,42 +883,30 @@ function resolveIssuances(
 			const key = outpointKey(outpoint);
 
 			if (taken.has(key)) {
-				return {
-					ok: false,
-					reason:
-						`Input ${id} issues an asset from ${outpoint.txid}:${outpoint.vout}, which ` +
+				throw new Refusal(
+					`Input ${id} issues an asset from ${outpoint.txid}:${outpoint.vout}, which ` +
 						"another input of this transaction already issues from. One output cannot " +
 						"create two assets.",
-					reject: "document-fault",
-				};
+				);
 			}
 
 			const issuedHere = resolveIssuance({ declared: issuance, id, outpoint }, context.scope);
 
-			if (!issuedHere.ok) {
-				return { ok: false, reason: issuedHere.reason, reject: issuedHere.reject };
-			}
-
 			taken.add(key);
-			issuances.push(issuedHere.issuance);
-			context.inputs[id] = {
-				...context.inputs[id],
-				...issuanceAttributes(issuedHere.issuance),
-			};
+			issuances.push(issuedHere);
+			context.inputs[id] = { ...context.inputs[id], ...issuanceAttributes(issuedHere) };
 
 			continue;
 		}
 
-		const funding = spareIn(asset.id);
+		const funding = spareIn(asset);
 
 		if (!funding) {
-			return {
-				ok: false,
-				reason:
-					`Input ${id} issues an asset, which needs one of this wallet's own outputs in ` +
-					`${asset.id} to derive it from, and there is none left to use.`,
-				reject: "shortfall",
-			};
+			throw new Refusal(
+				`Input ${id} issues an asset, which needs one of this wallet's own outputs in ` +
+					`${asset} to derive it from, and there is none left to use.`,
+				"shortfall",
+			);
 		}
 
 		const resolved = resolveIssuance(
@@ -1018,17 +914,13 @@ function resolveIssuances(
 			context.scope,
 		);
 
-		if (!resolved.ok) {
-			return { ok: false, reason: resolved.reason, reject: resolved.reject };
-		}
-
 		taken.add(outpointKey(funding));
-		reserved.push({ asset: asset.id, inputId: id, utxo: funding });
-		issuances.push(resolved.issuance);
-		context.inputs[id] = { ...context.inputs[id], ...issuanceAttributes(resolved.issuance) };
+		reserved.push({ asset, inputId: id, utxo: funding });
+		issuances.push(resolved);
+		context.inputs[id] = { ...context.inputs[id], ...issuanceAttributes(resolved) };
 	}
 
-	return { issuances, ok: true, reserved };
+	return { issuances, reserved };
 }
 
 const FEE_TARGET_BLOCKS = 1;
@@ -1045,9 +937,7 @@ function bySize(left: bigint, right: bigint, smallestFirst: boolean): number {
 	return left > right === smallestFirst ? 1 : -1;
 }
 
-type HookedScope = { ok: false; reason: string } | { ok: true; scope: ReferenceScope };
-
-function runActionHooks(action: NormalisedAction, scope: ReferenceScope): HookedScope {
+function runActionHooks(action: NormalisedAction, scope: ReferenceScope): ReferenceScope {
 	let running = scope;
 
 	for (const entry of asArray(action.node.inputs)) {
@@ -1061,35 +951,26 @@ function runActionHooks(action: NormalisedAction, scope: ReferenceScope): Hooked
 		const hook = inputHook(declared);
 
 		if (hook.kind === "malformed") {
-			return { ok: false, reason: `Input ${id}: ${hook.reason}` };
+			throw new Refusal(`Input ${id}: ${hook.reason}`);
 		}
 
 		if (hook.kind === "absent") {
 			continue;
 		}
 
-		const ran = runHook(hook.set, inputHookScope(running, running.inputs?.[id] ?? {}));
-
-		if (!ran.ok) {
-			return ran;
-		}
-
-		running = withHookValues(running, ran.values);
+		running = withHookValues(
+			running,
+			runHook(hook.set, inputHookScope(running, running.inputs?.[id] ?? {})),
+		);
 	}
 
 	const hook = actionHook(action);
 
 	if (hook.kind === "malformed") {
-		return { ok: false, reason: `${action.name}: ${hook.reason}` };
+		throw new Refusal(`${action.name}: ${hook.reason}`);
 	}
 
-	if (hook.kind === "absent") {
-		return { ok: true, scope: running };
-	}
-
-	const ran = runHook(hook.set, running);
-
-	return ran.ok ? { ok: true, scope: withHookValues(running, ran.values) } : ran;
+	return hook.kind === "absent" ? running : withHookValues(running, runHook(hook.set, running));
 }
 
 function sameScript(one: string, other: string): boolean {

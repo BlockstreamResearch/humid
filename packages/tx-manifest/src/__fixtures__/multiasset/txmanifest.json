@@ -30,7 +30,7 @@
 				},
 				"amount_sat": {
 					"type": "u64",
-					"description": "How much of it."
+					"description": "How much of that asset."
 				},
 				"fee_sat": {
 					"type": "u64",

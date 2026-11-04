@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { RejectToken } from "../document/refuse";
+import type { RejectToken } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
 	COVENANT_TXOUT,

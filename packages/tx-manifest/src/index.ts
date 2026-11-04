@@ -12,7 +12,7 @@ export {
 	reviewManifestAction,
 } from "./review";
 export type { StaticWitness } from "./evaluation/witness";
-export type { RejectToken } from "./document/refuse";
+export type { RejectToken } from "./refusal";
 
 export { type ShownConfirmation, describeOrigin, toShownConfirmation } from "./confirmation";
 export { type Provenanced, computed, fromDapp, verified } from "./confirmation/provenance";

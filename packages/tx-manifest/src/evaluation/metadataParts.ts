@@ -1,7 +1,6 @@
 import { asArray, asRecord } from "../document/json";
 import { parseReference } from "../document/references";
-
-export type EncodedBytes = { hex: string; ok: true } | { ok: false; reason: string };
+import { Refusal } from "../refusal";
 
 type PartType = {
 	bytes?: number;
@@ -26,55 +25,41 @@ const BYTE_ORDERS: Record<string, "be" | "le"> = { be: "be", le: "le" };
 
 const UNSUPPORTED_MODIFIERS = ["align", "pad_to"];
 
-export type PartResolver = (
-	reference: string,
-) => { ok: true; value: unknown } | { ok: false; reason: string };
+export type PartResolver = (reference: string) => unknown;
 
 export function encodeMetadataParts(
 	data: unknown,
-	resolve: PartResolver = (reference) => ({ ok: true, value: reference }),
-): EncodedBytes {
+	resolve: PartResolver = (reference) => reference,
+): string {
 	const declared = asRecord(data)?.parts;
 
 	if (!Array.isArray(declared)) {
-		return { ok: false, reason: "Object-form data carries no parts list." };
+		throw new Refusal("Object-form data carries no parts list.");
 	}
 
-	let hex = "";
-	let position = 0;
+	return asArray(declared)
+		.map((entry, at) => {
+			const part = asRecord(entry);
 
-	for (const entry of asArray(declared)) {
-		position += 1;
+			if (!part) {
+				throw new Refusal(`Data part ${at + 1} is not a typed value.`);
+			}
 
-		const part = asRecord(entry);
-
-		if (!part) {
-			return { ok: false, reason: `Data part ${position} is not a typed value.` };
-		}
-
-		const encoded = encodePart(part, position, resolve);
-
-		if (!encoded.ok) {
-			return encoded;
-		}
-
-		hex += encoded.hex;
-	}
-
-	return { hex, ok: true };
+			return encodePart(part, at + 1, resolve);
+		})
+		.join("");
 }
 
 function encodePart(
 	part: Record<string, unknown>,
 	position: number,
 	resolve: PartResolver,
-): EncodedBytes {
+): string {
 	for (const key of UNSUPPORTED_MODIFIERS) {
 		if (key in part) {
-			return {
-				ok: false,
-				reason: `Data part ${position} carries ${key}, which this runtime does not encode in data parts.`,
-			};
+			throw new Refusal(
+				`Data part ${position} carries ${key}, which this runtime does not encode in data parts.`,
+			);
 		}
 	}
 
@@ -82,116 +67,107 @@ function encodePart(
 	const declared = typeof type === "string" ? PART_TYPES[type] : undefined;
 
 	if (!declared) {
-		return {
-			ok: false,
-			reason: `Data part ${position} is declared ${String(type)}, which object-form data does not have.`,
-		};
+		throw new Refusal(
+			`Data part ${position} is declared ${String(type)}, which object-form data does not have.`,
+		);
 	}
 
 	if (!("value" in part)) {
-		return { ok: false, reason: `Data part ${position}, declared ${type}, carries no value.` };
+		throw new Refusal(`Data part ${position}, declared ${type}, carries no value.`);
 	}
 
 	const order = byteOrder(part, position, declared);
-
-	if (!order.ok) {
-		return order;
-	}
-
 	const named =
 		typeof part.value === "string" && parseReference(part.value) !== undefined
 			? part.value
 			: undefined;
-	const resolved = named === undefined ? { ok: true as const, value: part.value } : resolve(named);
-
-	if (!resolved.ok) {
-		return {
-			ok: false,
-			reason: `Data part ${position} is wired to "${named}", which did not resolve: ${resolved.reason}`,
-		};
-	}
-
-	const wrong = (found: string): EncodedBytes => ({
-		ok: false,
-		reason: `Data part ${position} is declared ${String(type)}, which is ${declared.shape}. Got ${found}.`,
-	});
+	const value =
+		named === undefined
+			? part.value
+			: Refusal.amend(
+					() => resolve(named),
+					(reason) =>
+						`Data part ${position} is wired to "${named}", which did not resolve: ${reason}`,
+				);
+	const wrong = (found: string) =>
+		new Refusal(
+			`Data part ${position} is declared ${String(type)}, which is ${declared.shape}. Got ${found}.`,
+		);
 
 	return declared.encoding === "integer"
-		? encodeInteger(declared, resolved.value, order.order, wrong)
-		: encodeBytes(declared, resolved.value, wrong);
+		? encodeInteger(declared, value, order, wrong)
+		: encodeBytes(declared, value, wrong);
 }
 
 function byteOrder(
 	part: Record<string, unknown>,
 	position: number,
 	declared: PartType,
-): { ok: false; reason: string } | { ok: true; order: "be" | "le" } {
+): "be" | "le" {
 	if (!("endian" in part)) {
-		return { ok: true, order: "le" };
+		return "le";
 	}
 
 	if (declared.encoding !== "integer") {
-		return {
-			ok: false,
-			reason: `Data part ${position} carries endian, which applies only to an integer.`,
-		};
+		throw new Refusal(`Data part ${position} carries endian, which applies only to an integer.`);
 	}
 
 	const order = typeof part.endian === "string" ? BYTE_ORDERS[part.endian] : undefined;
 
-	return order === undefined
-		? {
-				ok: false,
-				reason: `Data part ${position} declares endian ${String(part.endian)}, and the byte orders are le and be.`,
-			}
-		: { ok: true, order };
+	if (order === undefined) {
+		throw new Refusal(
+			`Data part ${position} declares endian ${String(part.endian)}, and the byte orders are le and be.`,
+		);
+	}
+
+	return order;
 }
 
 function encodeInteger(
 	declared: PartType,
 	value: unknown,
 	order: "be" | "le",
-	wrong: (found: string) => EncodedBytes,
-): EncodedBytes {
+	wrong: (found: string) => Refusal,
+): string {
 	const width = declared.bytes ?? 0;
 	const count = asCount(value);
 
 	if (count === undefined || count < 0n) {
-		return wrong(quoted(value));
+		throw wrong(quoted(value));
 	}
 
 	if (count > 2n ** BigInt(width * 8) - 1n) {
-		return wrong(`${count}`);
+		throw wrong(`${count}`);
 	}
 
 	const big = count.toString(16).padStart(width * 2, "0");
 
-	return { hex: order === "be" ? big : reverseBytes(big), ok: true };
+	return order === "be" ? big : reverseBytes(big);
 }
 
 function encodeBytes(
 	declared: PartType,
 	value: unknown,
-	wrong: (found: string) => EncodedBytes,
-): EncodedBytes {
+	wrong: (found: string) => Refusal,
+): string {
 	if (typeof value !== "string") {
-		return wrong(quoted(value));
+		throw wrong(quoted(value));
 	}
 
 	const trimmed = value.trim();
 	const digits = /^0x/i.test(trimmed) ? trimmed.slice(2) : trimmed;
 
 	if (digits.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(digits)) {
-		return wrong(quoted(value));
+		throw wrong(quoted(value));
 	}
 
 	if (declared.bytes !== undefined && digits.length !== declared.bytes * 2) {
-		return wrong(`${digits.length} hexadecimal characters`);
+		throw wrong(`${digits.length} hexadecimal characters`);
 	}
 
 	const lower = digits.toLowerCase();
 
-	return { hex: declared.encoding === "reversedBytes" ? reverseBytes(lower) : lower, ok: true };
+	return declared.encoding === "reversedBytes" ? reverseBytes(lower) : lower;
 }
 
 function reverseBytes(hex: string): string {

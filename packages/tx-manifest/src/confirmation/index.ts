@@ -5,6 +5,7 @@ import {
 	describeBlinding,
 	describePublishedChange,
 } from "../evaluation/blinding";
+import { Refusal } from "../refusal";
 import type { ManifestReview } from "../review";
 import { computed, fromDapp, map, type Origin, type Provenanced, verified } from "./provenance";
 
@@ -139,9 +140,9 @@ function intentOf(action: NormalisedAction, scope: ReferenceScope): string | und
 
 	return typeof intent === "string"
 		? intent.replaceAll(/\{(?<ref>[^{}:]+)(?::[^{}]*)?\}/g, (text, ref: string) => {
-				const found = resolveReference(ref, "expression", scope);
+				const found = Refusal.attempt(() => resolveReference(ref, "expression", scope));
 
-				return found.ok ? String(found.value) : text;
+				return found === undefined ? text : String(found.value);
 			})
 		: undefined;
 }
