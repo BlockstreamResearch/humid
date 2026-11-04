@@ -2,10 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import manifest from "../__fixtures__/lending_v3/txmanifest.json";
-import { reviewManifestAction } from "./index";
-
-const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-const SCRIPT = `5120${"11".repeat(32)}`;
+import { COMPILED, POLICY_ASSET, review } from "./harness";
 
 const contractSources = Object.fromEntries(
 	[...JSON.stringify(manifest).matchAll(/"(\.\/[a-z_]+\.simf)"/g)].map(([, path]) => [
@@ -17,7 +14,7 @@ const contractSources = Object.fromEntries(
 async function argumentsCompiledFor(source: string): Promise<Record<string, unknown>[]> {
 	const compiled: Record<string, unknown>[] = [];
 
-	await reviewManifestAction(
+	await review(
 		{
 			action: "CreateOffer",
 			broadcast: false,
@@ -37,32 +34,21 @@ async function argumentsCompiledFor(source: string): Promise<Record<string, unkn
 			state: { utxos: [{ txid: "b".repeat(64), utxo_type: "issuance_factory", vout: 0 }] },
 		} as never,
 		{
-			accountLabel: "liquid:testnet account 0",
-			compile: (asked: { argumentsJson: string; source: string }) => {
+			compile: (asked) => {
 				if (asked.source === source) {
 					compiled.push(JSON.parse(asked.argumentsJson) as Record<string, unknown>);
 				}
 
-				return {
-					address: "tex1p_recorded",
-					cmr: "cc".repeat(32),
-					scriptPubKeyHex: SCRIPT,
-					tapleafHash: "1e".repeat(32),
-				};
+				return COMPILED;
 			},
 			fundingUtxos: [],
-			network: "liquidtestnet",
-			policyAsset: POLICY_ASSET,
-			readFeeRate: async () => 1000,
 			readTxOut: async () => ({
 				amountSats: "1",
 				rawAssetId: "fa".repeat(32),
-				scriptPubKeyHex: SCRIPT,
+				scriptPubKeyHex: COMPILED.scriptPubKeyHex,
 				txOutHex: "00",
 			}),
-			scriptPubKeyOf: () => SCRIPT,
-			walletScriptPubKeyHex: `0014${"33".repeat(20)}`,
-		} as never,
+		},
 	);
 
 	return compiled;

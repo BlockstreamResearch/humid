@@ -1,82 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 
-import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
-import type { TxOutAtOutPoint } from "../chain/chainRead";
 import { estimateFeeSats } from "../fee";
-import { isRefusal, reviewManifestAction, toShownConfirmation } from "../index";
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import { toShownConfirmation } from "../index";
+import {
+	ACCOUNT,
+	DERIVED,
+	type Document,
+	editedAction,
+	P2PK,
+	payRequest,
+	POLICY_ASSET,
+	PUBKEY,
+	receiveRequest,
+	reviewed,
+} from "./harness";
 
-const SOURCE_PATH = "./p2pk.simf";
-const SOURCE = readFileSync(new URL("../__fixtures__/p2pk/p2pk.simf", import.meta.url), "utf8");
-const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
-const TXID = "b".repeat(64);
-const MANIFEST = p2pkManifest as unknown as Record<string, unknown>;
-
-const DERIVED = "tex1p_derived";
-const DERIVED_SCRIPT = `5120${"11".repeat(32)}`;
-const ELSEWHERE_SCRIPT = `5120${"22".repeat(32)}`;
-
-const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
-const ACCOUNT = "liquid:testnet account 0";
-const COVENANT_HOLDS = "50000";
-
-const deps = {
-	accountLabel: ACCOUNT,
-	compile: () => ({
-		address: DERIVED,
-		cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-		scriptPubKeyHex: DERIVED_SCRIPT,
-		tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
-	}),
-	fundingUtxos: [
-		{ amount: "1000000", spendable: true, txOut: "00", txid: "c".repeat(64), vout: 0 },
-	],
-	network: "liquid",
-	policyAsset: POLICY_ASSET,
-	readFeeRate: async () => 1000,
-	scriptPubKeyOf: () => DERIVED_SCRIPT,
-	walletScriptPubKeyHex: WALLET_SCRIPT,
-};
-
-const chainHolding = (scriptPubKeyHex: string) => async (): Promise<TxOutAtOutPoint> => ({
-	amountSats: COVENANT_HOLDS,
-	rawAssetId: POLICY_ASSET,
-	scriptPubKeyHex,
-	txOutHex: `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`,
-});
-
-const oneCovenantUtxo = { utxos: [{ txid: TXID, utxo_type: "p2pk_output", vout: 0 }] };
-
-const spendRequest = (
-	manifest: Record<string, unknown> = MANIFEST,
-): ParsedLiquidProcessCtParams => ({
-	action: "Receive",
-	broadcast: false,
-	contractSources: { [SOURCE_PATH]: SOURCE },
-	manifest,
-	params: { pubkey: PUBKEY },
-	state: oneCovenantUtxo as unknown as Record<string, unknown>,
-});
-
-async function reviewed(
-	manifest: Record<string, unknown> = MANIFEST,
-	scriptPubKeyHex: string = DERIVED_SCRIPT,
-) {
-	const result = await reviewManifestAction(spendRequest(manifest), {
-		...deps,
-		readTxOut: chainHolding(scriptPubKeyHex),
-	});
-
-	if (isRefusal(result)) {
-		throw new Error(result.reason);
-	}
-
-	return result;
-}
-
-const shown = async (manifest?: Record<string, unknown>) => (await reviewed(manifest)).confirmation;
+const receive = (manifest: Document = P2PK) => reviewed(receiveRequest({ manifest }));
+const shown = async (manifest?: Document) => (await receive(manifest)).confirmation;
 
 describe("what the wallet established for itself", () => {
 	test("names which account is acting, because the wallet chose it implicitly", async () => {
@@ -91,7 +31,7 @@ describe("what the wallet established for itself", () => {
 	});
 
 	test("and that figure is what this shape costs at the rate it read", async () => {
-		const result = await reviewed();
+		const result = await receive();
 
 		expect(result.confirmation.feeSats.value).toBe(result.estimatedFeeSats);
 		expect(result.estimatedFeeSats).toBe(
@@ -120,28 +60,13 @@ describe("what the wallet established for itself", () => {
 	});
 
 	test("and that change is the covenant's holding back, less what the fee takes", async () => {
-		const result = await reviewed();
+		const result = await receive();
 
-		expect(result.confirmation.netEffect[0]?.sats.value).toBe(
-			BigInt(COVENANT_HOLDS) - result.estimatedFeeSats,
-		);
+		expect(result.confirmation.netEffect[0]?.sats.value).toBe(50_000n - result.estimatedFeeSats);
 	});
 
 	test("and reads as an outgoing figure when the action pays a covenant", async () => {
-		const result = await reviewManifestAction(
-			{
-				action: "Pay",
-				broadcast: false,
-				contractSources: { [SOURCE_PATH]: SOURCE },
-				manifest: MANIFEST,
-				params: { amount_sat: 1000, pubkey: PUBKEY },
-			},
-			{ ...deps, readTxOut: chainHolding(ELSEWHERE_SCRIPT) },
-		);
-
-		if (isRefusal(result)) {
-			throw new Error(result.reason);
-		}
+		const result = await reviewed(payRequest());
 
 		expect(result.confirmation.netEffect[0]?.sats.value).toBe(-1000n - result.estimatedFeeSats);
 	});
@@ -154,20 +79,7 @@ describe("what the wallet established for itself", () => {
 	});
 
 	test("and says so plainly about one it did not", async () => {
-		const result = await reviewManifestAction(
-			{
-				action: "Pay",
-				broadcast: false,
-				contractSources: { [SOURCE_PATH]: SOURCE },
-				manifest: MANIFEST,
-				params: { amount_sat: 1000, pubkey: PUBKEY },
-			},
-			{ ...deps, readTxOut: chainHolding(ELSEWHERE_SCRIPT) },
-		);
-
-		if (isRefusal(result)) {
-			throw new Error(result.reason);
-		}
+		const result = await reviewed(payRequest());
 
 		expect(result.confirmation.covenants[0]?.verified).toMatchObject({
 			origin: "computed",
@@ -187,13 +99,11 @@ describe("what the dapp merely said", () => {
 	});
 
 	test("the action's intent is the dapp's, with its references filled in", async () => {
-		const document = structuredClone(p2pkManifest) as unknown as {
-			actions: { Receive: Record<string, unknown> };
-		};
+		const manifest = editedAction("Receive", (action) => {
+			action.intent = "spend to {params.pubkey:short}";
+		});
 
-		document.actions.Receive.intent = "spend to {params.pubkey:short}";
-
-		expect((await shown(document as unknown as Record<string, unknown>)).summary).toMatchObject({
+		expect((await shown(manifest)).summary).toMatchObject({
 			origin: "dapp",
 			value: `spend to ${PUBKEY}`,
 		});
@@ -211,23 +121,22 @@ describe("what the dapp merely said", () => {
 	});
 });
 
-function saying(confidential: boolean | undefined): Record<string, unknown> {
-	const document = structuredClone(p2pkManifest) as unknown as Record<string, unknown>;
-	const output = (
-		document as unknown as { actions: { Receive: { outputs: Record<string, unknown>[] } } }
-	).actions.Receive.outputs[0]!;
+function confidentialAt(at: number, confidential: boolean | undefined): Document {
+	return editedAction("Receive", (action) => {
+		const output = (action.outputs as Document[])[at]!;
 
-	if (confidential === undefined) {
-		delete output.confidential;
-	} else {
-		output.confidential = confidential;
-	}
-
-	return document;
+		if (confidential === undefined) {
+			delete output.confidential;
+		} else {
+			output.confidential = confidential;
+		}
+	});
 }
 
+const saying = (confidential: boolean | undefined) => confidentialAt(0, confidential);
+
 describe("what a person is told about a blinded amount", () => {
-	async function blinded(manifest: Record<string, unknown>) {
+	async function blinded(manifest: Document) {
 		return (await shown(manifest)).blindedAmounts.map((row) => ({
 			decidedBy: row.decidedBy.value,
 			id: row.id.value,
@@ -260,31 +169,16 @@ describe("what a person is told about a blinded amount", () => {
 	});
 });
 
-function changeSaying(confidential: boolean | undefined | "absent"): Record<string, unknown> {
-	const document = structuredClone(p2pkManifest) as unknown as Record<string, unknown>;
-	const outputs = (
-		document as unknown as { actions: { Receive: { outputs: Record<string, unknown>[] } } }
-	).actions.Receive.outputs;
-
-	if (confidential === "absent") {
-		outputs.pop();
-
-		return document;
-	}
-
-	const output = outputs[1]!;
-
-	if (confidential === undefined) {
-		delete output.confidential;
-	} else {
-		output.confidential = confidential;
-	}
-
-	return document;
+function changeSaying(confidential: boolean | undefined | "absent"): Document {
+	return confidential === "absent"
+		? editedAction("Receive", (action) => {
+				(action.outputs as Document[]).pop();
+			})
+		: confidentialAt(1, confidential);
 }
 
 describe("what a person is told about an amount this wallet published", () => {
-	async function published(manifest: Record<string, unknown>) {
+	async function published(manifest: Document) {
 		return (await shown(manifest)).publishedAmounts.map((row) => ({
 			id: row.id.value,
 			reason: row.reason.value,
@@ -333,7 +227,7 @@ describe("what a person is told about an amount this wallet published", () => {
 
 describe("the model as it crosses to a surface", () => {
 	test("writes every amount as a decimal string", async () => {
-		const result = await reviewed();
+		const result = await receive();
 		const crossed = toShownConfirmation(result.confirmation);
 
 		expect(crossed.feeSats.value).toBe(result.estimatedFeeSats.toString());
@@ -343,13 +237,13 @@ describe("the model as it crosses to a surface", () => {
 	});
 
 	test("and survives the encoding the bus actually uses", async () => {
-		const crossed = toShownConfirmation((await reviewed()).confirmation);
+		const crossed = toShownConfirmation((await receive()).confirmation);
 
 		expect(JSON.parse(JSON.stringify(crossed)).account.value).toBe(ACCOUNT);
 	});
 
 	test("keeping each value's origin, which is the whole reason it is carried", async () => {
-		const crossed = toShownConfirmation((await reviewed()).confirmation);
+		const crossed = toShownConfirmation((await receive()).confirmation);
 
 		expect(crossed.feeSats.origin).toBe("computed");
 		expect(crossed.netEffect[0]?.sats.origin).toBe("computed");
@@ -359,7 +253,7 @@ describe("the model as it crosses to a surface", () => {
 
 describe("what the confirmation says a contract is", () => {
 	test("carries the contract's own hashes beside the address its funds sit at", async () => {
-		const result = await reviewed();
+		const result = await receive();
 
 		expect(result.confirmation.covenants).not.toHaveLength(0);
 
@@ -372,7 +266,7 @@ describe("what the confirmation says a contract is", () => {
 	});
 
 	test("and says both were worked out here rather than taken from the dapp", async () => {
-		const result = await reviewed();
+		const result = await receive();
 
 		for (const row of result.confirmation.covenants) {
 			expect(row.cmr.origin).toBe("computed");

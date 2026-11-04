@@ -4,25 +4,28 @@ import { readFileSync } from "node:fs";
 import mutualManifest from "../__fixtures__/mutual.manifest.json";
 import vaultlet from "../__fixtures__/vaultlet.manifest.json";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
-import { isRefusal, reviewManifestAction } from "./index";
+import {
+	asRefusal,
+	asReview,
+	chainHolding,
+	COMPILED,
+	DERIVED,
+	DERIVED_SCRIPT,
+	type Document,
+	edited,
+	ELSEWHERE_SCRIPT,
+	POLICY_ASSET,
+	PUBKEY,
+	review,
+	type ReviewDependencies,
+	TXID,
+	WALLET_SCRIPT,
+} from "./harness";
 
-const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const ASSET_STATED = `a0${"00".repeat(30)}0a`;
 const ASSET_COMMITTED = `0a${"00".repeat(30)}a0`;
 const RESERVE_HASH = "cc".repeat(32);
-const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-
-const DERIVED = "ex1p_derived";
-const DERIVED_SCRIPT = `5120${"11".repeat(32)}`;
-const ELSEWHERE_SCRIPT = `5120${"22".repeat(32)}`;
-const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
-
-const COVENANT_TXOUT = `01${"aa".repeat(32)}010000000000000064000022${"00".repeat(34)}`;
-const COVENANT_HOLDING = {
-	amountSats: "50000",
-	rawAssetId: POLICY_ASSET,
-	txOutHex: COVENANT_TXOUT,
-};
+const VAULT_PATH = "./vault.simf";
 
 const SOURCES = Object.fromEntries(
 	["vault", "reserve", "guard", "left", "right"].map((name) => [
@@ -31,131 +34,97 @@ const SOURCES = Object.fromEntries(
 	]),
 );
 
-const debugVaultlet = { ...vaultlet, simplicity_hl: { debug_symbols: true } };
-
-const DECLARED = { SLOT_COUNT: "u8", WITH_BURN: "bool" };
+const VAULTLET = vaultlet as unknown as Document;
+const DEBUG_VAULTLET = { ...VAULTLET, simplicity_hl: { debug_symbols: true } };
 
 const DEPLOYMENT = {
 	instance: {
-		template: "vaultlet_contract",
 		fields: {
 			GUARD_COV_HASH: "dd".repeat(32),
-			OWNER_PUB_KEY: KEY,
+			OWNER_PUB_KEY: PUBKEY,
 			RESERVE_COV_HASH: RESERVE_HASH,
 			TIMEOUT: "900000",
 			VAULT_AMOUNT: "50000",
 			VAULT_ASSET_ID: ASSET_STATED,
 		},
+		template: "vaultlet_contract",
 	},
 };
 
-const FUNDING = [
-	{ amount: "100000000", spendable: true, txOut: "00", txid: "c".repeat(64), vout: 0 },
-];
+type Compiled = {
+	argumentsJson: string;
+	extraLeavesJson: string;
+	includeDebugSymbols: boolean;
+	source: string;
+};
 
-function review(
+function vaultletReview(
 	request: Partial<ParsedLiquidProcessCtParams>,
-	overrides: { hashedBy?: () => string; onChain?: string } = {},
+	overrides: Partial<ReviewDependencies> & { hashedBy?: () => string } = {},
 ) {
-	const compiled: {
-		argumentsJson: string;
-		extraLeavesJson: string;
-		includeDebugSymbols: boolean;
-		source: string;
-	}[] = [];
+	const compiled: Compiled[] = [];
 	const hashed: { includeDebugSymbols: boolean; source: string }[] = [];
+	const { hashedBy, ...dependencies } = overrides;
 
-	return {
-		compiled,
-		hashed,
-		result: reviewManifestAction(
-			{
-				broadcast: false,
-				contractSources: SOURCES,
-				params: {},
-				...request,
-			} as ParsedLiquidProcessCtParams,
-			{
-				accountLabel: "liquid:testnet account 0",
-				compile: (input) => {
-					compiled.push({
-						argumentsJson: input.argumentsJson,
-						extraLeavesJson: input.extraLeavesJson,
-						includeDebugSymbols: input.includeDebugSymbols,
-						source: input.source,
-					});
+	const result = review(
+		{ broadcast: false, contractSources: SOURCES, params: {}, ...request } as never,
+		{
+			compile: ({ argumentsJson, extraLeavesJson, includeDebugSymbols, source }) => {
+				compiled.push({ argumentsJson, extraLeavesJson, includeDebugSymbols, source });
 
-					return {
-						address: DERIVED,
-						cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-						scriptPubKeyHex: DERIVED_SCRIPT,
-						tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
-					};
-				},
-				covenantParamTypes: () => DECLARED,
-				fundingUtxos: FUNDING,
-				network: "liquid",
-				policyAsset: POLICY_ASSET,
-				readFeeRate: async () => 1000,
-				readTxOut: async () => ({
-					...COVENANT_HOLDING,
-					scriptPubKeyHex: overrides.onChain ?? DERIVED_SCRIPT,
-				}),
-				scriptPubKeyOf: ({ argumentsJson, includeDebugSymbols, source }) => {
-					hashed.push({ includeDebugSymbols, source });
-
-					return (
-						overrides.hashedBy?.() ??
-						`5120${Bun.hash(JSON.stringify([source, argumentsJson, includeDebugSymbols]))
-							.toString(16)
-							.padStart(64, "0")}`
-					);
-				},
-				walletScriptPubKeyHex: WALLET_SCRIPT,
+				return COMPILED;
 			},
-		),
-	};
+			covenantParamTypes: () => ({ SLOT_COUNT: "u8", WITH_BURN: "bool" }),
+			scriptPubKeyOf: ({ argumentsJson, includeDebugSymbols, source }) => {
+				hashed.push({ includeDebugSymbols, source });
+
+				return (
+					hashedBy?.() ??
+					`5120${Bun.hash(JSON.stringify([source, argumentsJson, includeDebugSymbols]))
+						.toString(16)
+						.padStart(64, "0")}`
+				);
+			},
+			...dependencies,
+		},
+	);
+
+	return { compiled, hashed, result };
 }
 
-const withdraw = (document: unknown) => ({
+const withdraw = (manifest: Document = VAULTLET) => ({
 	action: "Withdraw",
 	instance: DEPLOYMENT,
-	manifest: document as Record<string, unknown>,
-	state: { utxos: [{ txid: "b".repeat(64), utxo_type: "vault", vout: 0 }] },
+	manifest,
+	state: { utxos: [{ txid: TXID, utxo_type: "vault", vout: 0 }] },
 });
 
-const openVault = (document: unknown) => ({
+const openVault = (manifest: Document = VAULTLET) => ({
 	action: "OpenVault",
-	manifest: document as Record<string, unknown>,
+	manifest,
 	params: {
-		OWNER_PUB_KEY: KEY,
+		OWNER_PUB_KEY: PUBKEY,
 		TIMEOUT: "900000",
 		VAULT_AMOUNT: "50000",
 		VAULT_ASSET_ID: ASSET_STATED,
 	},
 });
 
+const reviewedAs = async (request: Partial<ParsedLiquidProcessCtParams>) =>
+	asReview(await vaultletReview(request).result);
+
 describe("a template action against a deployment that exists", () => {
-	test("is reviewed rather than refused for an action nobody could find", async () => {
-		const { result } = review(withdraw(vaultlet));
-
-		expect(isRefusal(await result)).toBe(false);
-	});
-
 	test("reports which template the action belongs to", async () => {
-		const { result } = review(withdraw(vaultlet));
-		const reviewed = await result;
-
-		expect(isRefusal(reviewed) ? undefined : reviewed.boundTo).toBe("vaultlet_contract");
+		expect((await reviewedAs(withdraw())).boundTo).toBe("vaultlet_contract");
 	});
 
 	test("rebuilds its covenant from the deployment's own fields, at the template's declared types", async () => {
-		const { compiled, result } = review(withdraw(vaultlet));
+		const { compiled, result } = vaultletReview(withdraw());
 
 		await result;
 
 		expect(JSON.parse(compiled[0]?.argumentsJson ?? "{}")).toEqual({
-			OWNER_PUB_KEY: { type: "Pubkey", value: `0x${KEY}` },
+			OWNER_PUB_KEY: { type: "Pubkey", value: `0x${PUBKEY}` },
 			RESERVE_COV_HASH: { type: "u256", value: `0x${RESERVE_HASH}` },
 			SLOT_COUNT: { type: "u8", value: "2" },
 			VAULT_ASSET_ID: { type: "u256", value: `0x${ASSET_COMMITTED}` },
@@ -163,21 +132,22 @@ describe("a template action against a deployment that exists", () => {
 		});
 	});
 
-	test("checks what it rebuilt against what the chain says, and reports it verified", async () => {
-		const { result } = review(withdraw(vaultlet));
-		const reviewed = await result;
+	test("checks what it rebuilt against the chain, carrying out exactly what it compiled", async () => {
+		const { compiled, result } = vaultletReview(withdraw());
+		const { covenants } = asReview(await result);
+		const [asked] = compiled;
 
-		expect(isRefusal(reviewed) ? [] : reviewed.covenants).toEqual([
+		expect(covenants).toEqual([
 			{
 				address: DERIVED,
-				argumentsJson: expect.any(String),
+				argumentsJson: asked?.argumentsJson ?? "",
 				cmr: "cc".repeat(32),
-				extraLeavesJson: "[]",
+				extraLeavesJson: asked?.extraLeavesJson ?? "",
 				includeDebugSymbols: false,
 				role: "spent",
 				scriptPubKeyHex: DERIVED_SCRIPT,
-				source: SOURCES["./vault.simf"],
-				sourcePath: "./vault.simf",
+				source: SOURCES[VAULT_PATH],
+				sourcePath: VAULT_PATH,
 				tapleafHash: "1e".repeat(32),
 				utxoType: "vault",
 				verified: "matches-chain",
@@ -185,42 +155,26 @@ describe("a template action against a deployment that exists", () => {
 		]);
 	});
 
-	test("carries out what it compiled with, so nothing has to resolve the references again", async () => {
-		const { compiled, result } = review(withdraw(vaultlet));
-		const reviewed = await result;
-
-		expect(isRefusal(reviewed) ? "" : reviewed.covenants[0]?.argumentsJson).toBe(
-			compiled[0]?.argumentsJson ?? "",
-		);
-	});
-
 	test("refuses when the funds are locked by a different contract", async () => {
-		const { result } = review(withdraw(vaultlet), { onChain: ELSEWHERE_SCRIPT });
-		const reviewed = await result;
+		const { result } = vaultletReview(withdraw(), { readTxOut: chainHolding(ELSEWHERE_SCRIPT) });
+		const refusal = asRefusal(await result);
 
-		expect(isRefusal(reviewed)).toBe(true);
-		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain("not the contract the site");
+		expect(refusal.reject).toBe("covenant-mismatch");
+		expect(refusal.reason).toContain("not the contract the site");
 	});
 
 	test("refuses without the deployment file, naming the file", async () => {
-		const { compiled, result } = review({ ...withdraw(vaultlet), instance: undefined });
-		const reviewed = await result;
+		const { compiled, result } = vaultletReview({ ...withdraw(), instance: undefined });
+		const refusal = asRefusal(await result);
 
-		expect(isRefusal(reviewed)).toBe(true);
-		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain(
-			"is an action of vaultlet_contract",
-		);
-		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain(
-			"utxo type vault / script / RESERVE_COV_HASH",
-		);
+		expect(refusal.reject).toBe("incomplete-request");
+		expect(refusal.reason).toContain("is an action of vaultlet_contract");
+		expect(refusal.reason).toContain("utxo type vault / script / RESERVE_COV_HASH");
 		expect(compiled).toHaveLength(0);
 	});
 
 	test("resolves the output's amount from the deployment rather than from the request", async () => {
-		const { result } = review(withdraw(vaultlet));
-		const reviewed = await result;
-
-		expect(isRefusal(reviewed) ? [] : reviewed.outputs).toEqual([
+		expect((await reviewedAs(withdraw())).outputs).toEqual([
 			{
 				asset: POLICY_ASSET,
 				blinded: true,
@@ -231,59 +185,43 @@ describe("a template action against a deployment that exists", () => {
 			},
 		]);
 	});
+
+	test("carries no deployment, since it only spends what exists", async () => {
+		expect((await reviewedAs(withdraw())).createdInstance).toBeUndefined();
+	});
 });
 
 describe("the constructor of the same template", () => {
 	test("is reviewed with no deployment to read, and reports the one it creates", async () => {
-		const { result } = review(openVault(vaultlet));
-		const reviewed = await result;
+		const { createdInstance } = await reviewedAs(openVault());
 
-		expect(isRefusal(reviewed)).toBe(false);
-
-		if (isRefusal(reviewed)) {
-			return;
-		}
-
-		expect(reviewed.createdInstance?.fields.OWNER_PUB_KEY).toBe(KEY);
-		expect(reviewed.createdInstance?.fields.RESERVE_COV_HASH).toHaveLength(64);
-		expect(reviewed.createdInstance?.rounds).toBe(2);
+		expect(createdInstance?.fields.OWNER_PUB_KEY).toBe(PUBKEY);
+		expect(createdInstance?.fields.RESERVE_COV_HASH).toHaveLength(64);
+		expect(createdInstance?.rounds).toBe(2);
 	});
 
 	test("works out a field the document computes rather than recording its text", async () => {
-		const document = structuredClone(vaultlet) as Record<string, unknown>;
-		const templates = document.contract_templates as Record<
-			string,
-			{ actions: Record<string, unknown> }
-		>;
-		const constructor = templates.vaultlet_contract?.actions.OpenVault as Record<string, unknown>;
-		const created = constructor.create_instance as { fields: Record<string, unknown> };
+		const manifest = edited(VAULTLET, (copy) => {
+			const templates = copy.contract_templates as Record<string, { actions: Document }>;
+			const created = (templates.vaultlet_contract!.actions.OpenVault as Document)
+				.create_instance as { fields: Document };
 
-		created.fields.VAULT_AMOUNT = "params.VAULT_AMOUNT * 2";
+			created.fields.VAULT_AMOUNT = "params.VAULT_AMOUNT * 2";
+		});
 
-		const { result } = review(openVault(document));
-		const reviewed = await result;
-
-		expect(isRefusal(reviewed)).toBe(false);
-
-		if (!isRefusal(reviewed)) {
-			expect(reviewed.createdInstance?.fields.VAULT_AMOUNT).toBe("100000");
-		}
+		expect((await reviewedAs(openVault(manifest))).createdInstance?.fields.VAULT_AMOUNT).toBe(
+			"100000",
+		);
 	});
 
 	test("and leaves a literal alone, however much it looks like arithmetic", async () => {
-		const { result } = review(openVault(vaultlet));
-		const reviewed = await result;
-
-		expect(isRefusal(reviewed) ? "" : reviewed.createdInstance?.fields.VAULT_ASSET_ID).toBe(
+		expect((await reviewedAs(openVault())).createdInstance?.fields.VAULT_ASSET_ID).toBe(
 			ASSET_STATED,
 		);
 	});
 
 	test("reports the covenant it creates as one with nothing yet to compare against", async () => {
-		const { result } = review(openVault(vaultlet));
-		const reviewed = await result;
-
-		expect(isRefusal(reviewed) ? [] : reviewed.covenants.map((found) => found.verified)).toEqual([
+		expect((await reviewedAs(openVault())).covenants.map((found) => found.verified)).toEqual([
 			"not-yet-onchain",
 		]);
 	});
@@ -291,121 +229,63 @@ describe("the constructor of the same template", () => {
 	test("never consults the chain for something that does not exist yet", async () => {
 		let asked = 0;
 
-		await reviewManifestAction(
-			{
-				broadcast: false,
-				contractSources: SOURCES,
-				...openVault(vaultlet),
-			} as ParsedLiquidProcessCtParams,
-			{
-				accountLabel: "liquid:testnet account 0",
-				compile: () => ({
-					address: DERIVED,
-					cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-					scriptPubKeyHex: DERIVED_SCRIPT,
-					tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
-				}),
-				covenantParamTypes: () => DECLARED,
-				fundingUtxos: FUNDING,
-				network: "liquid",
-				policyAsset: POLICY_ASSET,
-				readFeeRate: async () => 1000,
-				readTxOut: async () => {
-					asked += 1;
+		await vaultletReview(openVault(), {
+			readTxOut: async (outpoint) => {
+				asked += 1;
 
-					return { ...COVENANT_HOLDING, scriptPubKeyHex: DERIVED_SCRIPT };
-				},
-				scriptPubKeyOf: () => DERIVED_SCRIPT,
-				walletScriptPubKeyHex: WALLET_SCRIPT,
+				return chainHolding()(outpoint);
 			},
-		);
+		}).result;
 
 		expect(asked).toBe(0);
 	});
 
 	test("derives the covenant it creates from the deployment it worked out", async () => {
-		const { compiled, result } = review(openVault(vaultlet));
-		const reviewed = await result;
-
-		if (isRefusal(reviewed)) {
-			throw new Error(reviewed.reason);
-		}
-
-		const vault = compiled.findLast((call) => call.source === SOURCES["./vault.simf"]);
+		const { compiled, result } = vaultletReview(openVault());
+		const { createdInstance } = asReview(await result);
+		const vault = compiled.findLast((call) => call.source === SOURCES[VAULT_PATH]);
 
 		expect(JSON.parse(vault?.argumentsJson ?? "{}")).toMatchObject({
 			RESERVE_COV_HASH: {
 				type: "u256",
-				value: `0x${reviewed.createdInstance?.fields.RESERVE_COV_HASH ?? ""}`,
+				value: `0x${createdInstance?.fields.RESERVE_COV_HASH ?? ""}`,
 			},
 		});
-	});
-
-	test("carries no deployment for the action that only spends what exists", async () => {
-		const { result } = review(withdraw(vaultlet));
-		const reviewed = await result;
-
-		expect(isRefusal(reviewed) ? "refused" : reviewed.createdInstance).toBeUndefined();
 	});
 });
 
 describe("what a review still refuses", () => {
 	test("a deployment whose covenant hashes never settle", async () => {
-		const { compiled, result } = review({
+		const { compiled, result } = vaultletReview({
 			action: "Knot",
-			manifest: mutualManifest as unknown as Record<string, unknown>,
+			manifest: mutualManifest as unknown as Document,
 		});
-		const reviewed = await result;
+		const refusal = asRefusal(await result);
 
-		expect(isRefusal(reviewed)).toBe(true);
-		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain("never settle");
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("never settle");
 		expect(compiled).toHaveLength(0);
 	});
 
 	test("a covenant wired to a value when nothing says what the contract declares", async () => {
-		const reviewed = await reviewManifestAction(
-			{
-				broadcast: false,
-				contractSources: SOURCES,
-				params: {},
-				...withdraw(vaultlet),
-			} as ParsedLiquidProcessCtParams,
-			{
-				accountLabel: "liquid:testnet account 0",
-				compile: () => ({
-					address: DERIVED,
-					cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-					scriptPubKeyHex: DERIVED_SCRIPT,
-					tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
-				}),
-				fundingUtxos: FUNDING,
-				network: "liquid",
-				policyAsset: POLICY_ASSET,
-				readFeeRate: async () => 1000,
-				readTxOut: async () => ({ ...COVENANT_HOLDING, scriptPubKeyHex: DERIVED_SCRIPT }),
-				scriptPubKeyOf: () => DERIVED_SCRIPT,
-				walletScriptPubKeyHex: WALLET_SCRIPT,
-			},
-		);
+		const { result } = vaultletReview(withdraw(), { covenantParamTypes: undefined });
 
-		expect(isRefusal(reviewed)).toBe(true);
+		expect(asRefusal(await result).reject).toBe("document-fault");
 	});
 
 	test("an action the document does not declare", async () => {
-		const { result } = review({
-			action: "Nowhere",
-			manifest: vaultlet as unknown as Record<string, unknown>,
-		});
-		const reviewed = await result;
+		const { result } = vaultletReview({ action: "Nowhere", manifest: VAULTLET });
+		const refusal = asRefusal(await result);
 
-		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain("Nowhere");
+		expect(refusal.reject).toBe("no-such-action");
+		expect(refusal.reason).toContain("Nowhere");
 	});
 });
 
 describe("the build mode a document declares", () => {
 	test("reaches the compiler for an ordinary derivation", async () => {
-		const plain = review(withdraw(vaultlet));
-		const debug = review(withdraw(debugVaultlet));
+		const plain = vaultletReview(withdraw());
+		const debug = vaultletReview(withdraw(DEBUG_VAULTLET));
 
 		await plain.result;
 		await debug.result;
@@ -415,8 +295,8 @@ describe("the build mode a document declares", () => {
 	});
 
 	test("and the compiler that takes the hashes a deployment's fields compute", async () => {
-		const plain = review(openVault(vaultlet));
-		const debug = review(openVault(debugVaultlet));
+		const plain = vaultletReview(openVault());
+		const debug = vaultletReview(openVault(DEBUG_VAULTLET));
 
 		await plain.result;
 		await debug.result;
@@ -427,14 +307,8 @@ describe("the build mode a document declares", () => {
 	});
 
 	test("so the deployment the same constructor creates differs between the two", async () => {
-		const plain = await review(openVault(vaultlet)).result;
-		const debug = await review(openVault(debugVaultlet)).result;
-
-		expect(isRefusal(plain) || isRefusal(debug)).toBe(false);
-
-		if (isRefusal(plain) || isRefusal(debug)) {
-			return;
-		}
+		const plain = await reviewedAs(openVault());
+		const debug = await reviewedAs(openVault(DEBUG_VAULTLET));
 
 		expect(debug.createdInstance?.fields.RESERVE_COV_HASH).not.toBe(
 			plain.createdInstance?.fields.RESERVE_COV_HASH,
@@ -442,129 +316,53 @@ describe("the build mode a document declares", () => {
 	});
 
 	test("and is reported on every covenant the review establishes", async () => {
-		const reviewed = await review(withdraw(debugVaultlet)).result;
+		const { covenants } = await reviewedAs(withdraw(DEBUG_VAULTLET));
 
-		expect(isRefusal(reviewed) ? [] : reviewed.covenants.map((f) => f.includeDebugSymbols)).toEqual(
-			[true],
-		);
+		expect(covenants.map((found) => found.includeDebugSymbols)).toEqual([true]);
 	});
 
 	test("a mode that cannot be read refuses before any contract is compiled", async () => {
-		const { compiled, result } = review({
-			action: "Withdraw",
-			instance: DEPLOYMENT,
-			manifest: { ...vaultlet, simplicity_hl: { debug_symbols: "yes" } } as Record<string, unknown>,
-			state: { utxos: [{ txid: "b".repeat(64), utxo_type: "vault", vout: 0 }] },
-		});
-		const reviewed = await result;
+		const { compiled, result } = vaultletReview(
+			withdraw({ ...VAULTLET, simplicity_hl: { debug_symbols: "yes" } }),
+		);
+		const refusal = asRefusal(await result);
 
-		expect(isRefusal(reviewed)).toBe(true);
-		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain("neither on nor off");
+		expect(refusal.reject).toBe("unreadable-build-mode");
+		expect(refusal.reason).toContain("neither on nor off");
 		expect(compiled).toHaveLength(0);
 	});
 });
 
-describe("the derivation the review carries out", () => {
-	test("is everything the covenant was compiled from, with nothing left to look up", async () => {
-		const { compiled, result } = review(withdraw(vaultlet));
-		const reviewed = await result;
-
-		if (isRefusal(reviewed)) {
-			throw new Error(reviewed.reason);
-		}
-
-		const [found] = reviewed.covenants;
-		const [asked] = compiled;
-
-		expect({
-			argumentsJson: found?.argumentsJson,
-			extraLeavesJson: found?.extraLeavesJson,
-			includeDebugSymbols: found?.includeDebugSymbols,
-			source: found?.source,
-		}).toEqual({
-			argumentsJson: asked?.argumentsJson ?? "",
-			extraLeavesJson: asked?.extraLeavesJson ?? "",
-			includeDebugSymbols: asked?.includeDebugSymbols ?? false,
-			source: asked?.source ?? "",
-		});
-	});
-
-	test("recompiles to the same script without the request", async () => {
-		const { compiled, result } = review(withdraw(vaultlet));
-		const reviewed = await result;
-
-		if (isRefusal(reviewed)) {
-			throw new Error(reviewed.reason);
-		}
-
-		const found = reviewed.covenants[0];
-		const rebuilt = compiled.find(
-			(call) =>
-				call.source === found?.source &&
-				call.argumentsJson === found.argumentsJson &&
-				call.extraLeavesJson === found.extraLeavesJson &&
-				call.includeDebugSymbols === found.includeDebugSymbols,
-		);
-
-		expect(rebuilt).toBeDefined();
-		expect(found?.scriptPubKeyHex).toBe(DERIVED_SCRIPT);
-	});
-
-	test("names the path the document used it under, for a reader who has to find the source", async () => {
-		const reviewed = await review(withdraw(vaultlet)).result;
-
-		expect(isRefusal(reviewed) ? [] : reviewed.covenants.map((f) => f.sourcePath)).toEqual([
-			"./vault.simf",
-		]);
-	});
-});
-
-describe("when the hash compiler fails", () => {
-	test("a compiler that throws becomes a refusal naming the field", async () => {
-		const { result } = review(openVault(vaultlet), {
+describe("when a compiler fails", () => {
+	test("a hash compiler that throws becomes a refusal naming the field", async () => {
+		const { result } = vaultletReview(openVault(), {
 			hashedBy: () => {
 				throw new Error("wasm module not loaded");
 			},
 		});
-		const reviewed = await result;
+		const refusal = asRefusal(await result);
 
-		expect(isRefusal(reviewed)).toBe(true);
-		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain("RESERVE_COV_HASH");
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("RESERVE_COV_HASH");
 	});
 
-	test("a compiler returning something that is not a script becomes one too", async () => {
-		const { result } = review(openVault(vaultlet), { hashedBy: () => "not hex" });
-		const reviewed = await result;
+	test("a hash compiler returning something that is not a script becomes one too", async () => {
+		const { result } = vaultletReview(openVault(), { hashedBy: () => "not hex" });
+		const refusal = asRefusal(await result);
 
-		expect(isRefusal(reviewed)).toBe(true);
-		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain("not bytes");
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("not bytes");
 	});
 
 	test("a covenant compiler that throws becomes a refusal naming the contract", async () => {
-		const reviewed = await reviewManifestAction(
-			{
-				broadcast: false,
-				contractSources: SOURCES,
-				params: {},
-				...withdraw(vaultlet),
-			} as ParsedLiquidProcessCtParams,
-			{
-				accountLabel: "liquid:testnet account 0",
-				compile: () => {
-					throw new Error("wasm module not loaded");
-				},
-				covenantParamTypes: () => DECLARED,
-				fundingUtxos: FUNDING,
-				network: "liquid",
-				policyAsset: POLICY_ASSET,
-				readFeeRate: async () => 1000,
-				readTxOut: async () => ({ ...COVENANT_HOLDING, scriptPubKeyHex: DERIVED_SCRIPT }),
-				scriptPubKeyOf: () => DERIVED_SCRIPT,
-				walletScriptPubKeyHex: WALLET_SCRIPT,
+		const { result } = vaultletReview(withdraw(), {
+			compile: () => {
+				throw new Error("wasm module not loaded");
 			},
-		);
+		});
+		const refusal = asRefusal(await result);
 
-		expect(isRefusal(reviewed)).toBe(true);
-		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain("./vault.simf");
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain(VAULT_PATH);
 	});
 });
