@@ -1,11 +1,5 @@
 import { asRecord } from "./json";
 
-export type NormalisationNote = {
-	at: string;
-	canonical: string;
-	found: string;
-};
-
 export type NormalisedAction = {
 	boundTo?: string;
 	isConstructor: boolean;
@@ -25,71 +19,29 @@ export type NormalisedManifest = {
 
 export type BuildMode = { includeDebugSymbols: boolean; ok: true } | { ok: false; reason: string };
 
-export type NormaliseManifestResult = {
-	manifest: NormalisedManifest;
-	notes: NormalisationNote[];
-};
-
-const CONTAINERS = [
-	{ holder: "classes", holds: "methods" },
-	{ holder: "contract_templates", holds: "actions" },
-] as const;
-
-export function normaliseManifest(raw: Record<string, unknown>): NormaliseManifestResult {
-	const notes: NormalisationNote[] = [];
-
+export function normaliseManifest(raw: Record<string, unknown>): NormalisedManifest {
 	return {
-		manifest: {
-			actions: normaliseActions(raw, notes),
-			buildMode: readBuildMode(raw, notes),
-			chain: asString(raw.chain),
-			node: { ...raw },
-			protocol: asString(raw.protocol),
-			raw,
-			utxoTypes: asRecord(raw.utxo_types) ?? {},
-		},
-		notes,
+		actions: normaliseActions(raw),
+		buildMode: readBuildMode(raw),
+		chain: asString(raw.chain),
+		node: { ...raw },
+		protocol: asString(raw.protocol),
+		raw,
+		utxoTypes: asRecord(raw.utxo_types) ?? {},
 	};
 }
 
-function readBuildMode(raw: Record<string, unknown>, notes: NormalisationNote[]): BuildMode {
-	const flat = raw.compile_debug_symbols;
-	const nested = asRecord(raw.simplicity_hl)?.debug_symbols;
+function readBuildMode(raw: Record<string, unknown>): BuildMode {
+	const declared = asRecord(raw.simplicity_hl)?.debug_symbols;
 
-	for (const [declared, at] of [
-		[flat, "compile_debug_symbols"],
-		[nested, "simplicity_hl.debug_symbols"],
-	] as const) {
-		if (declared !== undefined && typeof declared !== "boolean") {
-			return {
-				ok: false,
-				reason:
-					`This protocol declares ${at} as ${JSON.stringify(declared)}, which is neither on ` +
-					"nor off. The wallet builds each contract the way its protocol states, and cannot " +
-					"follow a statement it cannot read.",
-			};
-		}
-	}
-
-	if (flat !== undefined && nested !== undefined && flat !== nested) {
+	if (declared !== undefined && typeof declared !== "boolean") {
 		return {
 			ok: false,
-			reason:
-				"This protocol declares compile_debug_symbols and simplicity_hl.debug_symbols as " +
-				"opposite modes. The two build different contracts at different addresses, and the " +
-				"format does not say which spelling wins.",
+			reason: `This protocol declares simplicity_hl.debug_symbols as ${JSON.stringify(declared)}, which is neither on nor off.`,
 		};
 	}
 
-	if (flat === undefined && nested !== undefined) {
-		notes.push({
-			at: "manifest",
-			canonical: "compile_debug_symbols",
-			found: "simplicity_hl.debug_symbols",
-		});
-	}
-
-	return { includeDebugSymbols: (flat ?? nested) === true, ok: true };
+	return { includeDebugSymbols: declared === true, ok: true };
 }
 
 export function findAction(
@@ -103,144 +55,63 @@ export function declaredFields(
 	manifest: NormalisedManifest,
 	action: NormalisedAction,
 ): Record<string, unknown> {
-	if (action.boundTo === undefined) {
-		return {};
-	}
-
-	for (const container of CONTAINERS) {
-		const fields = asRecord(
-			asRecord(asRecord(manifest.raw[container.holder])?.[action.boundTo])?.fields,
-		);
-
-		if (fields) {
-			return fields;
-		}
-	}
-
-	return {};
+	return action.boundTo === undefined
+		? {}
+		: (asRecord(asRecord(templates(manifest.raw)[action.boundTo])?.fields) ?? {});
 }
 
 export type NormalisedInstance = {
-	className?: string;
 	fields: Record<string, unknown>;
 	providedInputs: Record<string, unknown>;
+	template?: string;
 };
 
-export type NormaliseInstanceResult = {
-	instance: NormalisedInstance;
-	notes: NormalisationNote[];
-};
-
-export function normaliseInstance(
-	raw: Record<string, unknown> | undefined,
-): NormaliseInstanceResult {
-	const notes: NormalisationNote[] = [];
-
-	if (!raw) {
-		return { instance: { fields: {}, providedInputs: {} }, notes };
-	}
-
-	const nested = asRecord(raw.instance);
-	const fields = asRecord(nested?.fields);
-	const legacy = asRecord(raw.instance_params);
-
-	if (!fields && legacy) {
-		notes.push({ at: "instance", canonical: "instance.fields", found: "instance_params" });
-	}
+export function normaliseInstance(raw: Record<string, unknown> | undefined): NormalisedInstance {
+	const nested = asRecord(raw?.instance);
+	const template = asString(nested?.template);
 
 	return {
-		instance: {
-			...(asString(nested?.class) === undefined ? {} : { className: asString(nested?.class) }),
-			fields: fields ?? legacy ?? {},
-			providedInputs: asRecord(raw.provided_inputs) ?? {},
-		},
-		notes,
+		fields: asRecord(nested?.fields) ?? {},
+		providedInputs: asRecord(raw?.provided_inputs) ?? {},
+		...(template === undefined ? {} : { template }),
 	};
 }
 
-function normaliseActions(
-	raw: Record<string, unknown>,
-	notes: NormalisationNote[],
-): NormalisedAction[] {
-	const actions: NormalisedAction[] = [];
-	const seen = new Set<string>();
+function normaliseActions(raw: Record<string, unknown>): NormalisedAction[] {
+	const actions = Object.entries(asRecord(raw.actions) ?? {}).map(([name, node]) =>
+		normaliseAction(name, node, undefined),
+	);
 
-	for (const [name, declared] of Object.entries(asRecord(raw.actions) ?? {})) {
-		const node = asRecord(declared);
-
-		if (!node) {
-			continue;
-		}
-
-		seen.add(name);
-		actions.push(normaliseAction(name, node, undefined, notes));
-	}
-
-	for (const container of CONTAINERS) {
-		for (const [owner, declared] of Object.entries(asRecord(raw[container.holder]) ?? {})) {
-			const held = asRecord(asRecord(declared)?.[container.holds]);
-
-			if (held && container.holder !== "classes") {
-				notes.push({ at: `container ${owner}`, canonical: "classes", found: container.holder });
-			}
-
-			for (const [name, method] of Object.entries(held ?? {})) {
-				const node = asRecord(method);
-
-				if (!node || seen.has(name)) {
-					continue;
-				}
-
-				seen.add(name);
-				actions.push(normaliseAction(name, node, owner, notes));
-			}
+	for (const [template, declared] of Object.entries(templates(raw))) {
+		for (const [name, node] of Object.entries(asRecord(asRecord(declared)?.actions) ?? {})) {
+			actions.push(normaliseAction(name, node, template));
 		}
 	}
 
-	return actions;
+	return actions.filter((action) => action !== undefined);
 }
 
 function normaliseAction(
 	name: string,
-	declared: Record<string, unknown>,
+	declared: unknown,
 	boundTo: string | undefined,
-	notes: NormalisationNote[],
-): NormalisedAction {
-	const node = { ...declared };
-	const isConstructor = pick(node, "is_constructor", "deploy", `action ${name}`, notes);
+): NormalisedAction | undefined {
+	const node = asRecord(declared);
 
-	delete node.deploy;
-
-	if (isConstructor !== undefined) {
-		node.is_constructor = Boolean(isConstructor);
+	if (!node) {
+		return undefined;
 	}
 
 	return {
 		...(boundTo === undefined ? {} : { boundTo }),
-		isConstructor: Boolean(isConstructor),
+		isConstructor: asRecord(node.create_instance) !== undefined,
 		name,
 		node,
 	};
 }
 
-function pick(
-	node: Record<string, unknown>,
-	canonical: string,
-	legacy: string,
-	at: string,
-	notes: NormalisationNote[],
-): unknown {
-	if (canonical in node) {
-		return node[canonical];
-	}
-
-	if (!(legacy in node)) {
-		return undefined;
-	}
-
-	notes.push({ at, canonical, found: legacy });
-
-	return node[legacy];
+function templates(raw: Record<string, unknown>): Record<string, unknown> {
+	return asRecord(raw.contract_templates) ?? {};
 }
 
 function asString(value: unknown): string | undefined {

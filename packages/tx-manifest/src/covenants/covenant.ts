@@ -1,5 +1,5 @@
 import { asRecord } from "../document/json";
-import type { NormalisationNote, NormalisedManifest } from "../document/normalise";
+import type { NormalisedManifest } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
 import { resolveCompileParams } from "./compileParams";
 import type { CovenantParamTypes } from "./covenantParamTypes";
@@ -50,7 +50,6 @@ export async function deriveCovenantAddress(
 		declaredTypes: Record<string, string>;
 		includeDebugSymbols: boolean;
 		network: string;
-		notes?: NormalisationNote[];
 		scope: ReferenceScope;
 		utxoType: string;
 		wiring: Record<string, unknown>;
@@ -98,7 +97,6 @@ export async function deriveCovenantAddress(
 
 	const stateLeaves = encodeStateLeaves(script?.extra_leaves, {
 		at: `Utxo type "${input.utxoType}"`,
-		...(input.notes === undefined ? {} : { notes: input.notes }),
 		scope: input.scope,
 	});
 

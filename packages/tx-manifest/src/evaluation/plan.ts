@@ -1,5 +1,5 @@
 import { asArray, asRecord } from "../document/json";
-import type { NormalisationNote, NormalisedAction } from "../document/normalise";
+import type { NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { type BlindingDecision, resolveBlinding } from "./blinding";
 import { evaluateExpression } from "./evaluate";
@@ -26,8 +26,6 @@ export type PlanResult = { ok: false; reason: string } | { ok: true; plan: Plann
 export function planAction(
 	action: NormalisedAction,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
-	documentDefault?: unknown,
 ): PlanResult {
 	const outputs: PlannedOutput[] = [];
 	let fundingSats = 0n;
@@ -50,7 +48,6 @@ export function planAction(
 
 		const blinding = resolveBlinding({
 			declared: output.confidential,
-			documentDefault,
 			...(target.kind === "change" ? { change: true } : {}),
 			...(target.kind === "covenant"
 				? { unblindable: "covenant" as const }
@@ -71,7 +68,7 @@ export function planAction(
 			continue;
 		}
 
-		const amount = resolveAmount(output.amount_sat, scope, notes);
+		const amount = resolveAmount(output.amount_sat, scope);
 
 		if (!amount.ok) {
 			return { ok: false, reason: `Output ${id || "(unnamed)"} cannot be paid: ${amount.reason}` };
@@ -153,7 +150,6 @@ function opReturnScript(payloadHex: string): string {
 function resolveAmount(
 	amount: unknown,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): { ok: false; reason: string } | { ok: true; sats: bigint } {
 	if (typeof amount === "number" && Number.isSafeInteger(amount)) {
 		return { ok: true, sats: BigInt(amount) };
@@ -163,7 +159,7 @@ function resolveAmount(
 		return { ok: false, reason: "the document states no amount this runtime can read." };
 	}
 
-	const evaluated = evaluateExpression(amount, "amount", scope, notes);
+	const evaluated = evaluateExpression(amount, "amount", scope);
 
 	return evaluated.ok ? { ok: true, sats: evaluated.value } : evaluated;
 }

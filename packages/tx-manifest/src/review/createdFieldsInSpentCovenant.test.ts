@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import manifest from "../__fixtures__/current/lending_v3.manifest.json";
+import manifest from "../__fixtures__/lending_v3/txmanifest.json";
 import { reviewManifestAction } from "./index";
 
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";

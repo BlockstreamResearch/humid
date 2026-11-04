@@ -1,5 +1,5 @@
 import { asArray, asRecord } from "../document/json";
-import type { NormalisationNote, NormalisedAction } from "../document/normalise";
+import type { NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { evaluateExpression } from "./evaluate";
 
@@ -22,7 +22,6 @@ function wholeCount(value: number): bigint | undefined {
 export function resolveInputRules(
 	action: NormalisedAction,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): InputRulesResult {
 	const rules: InputRule[] = [];
 
@@ -37,7 +36,7 @@ export function resolveInputRules(
 		const rule: InputRule = { id };
 
 		if ("sequence" in input) {
-			const sequence = resolveSequence(input.sequence, scope, notes);
+			const sequence = resolveSequence(input.sequence, scope);
 
 			if (!sequence.ok) {
 				return { ok: false, reason: `Input ${id}: ${sequence.reason}` };
@@ -65,7 +64,6 @@ export function resolveInputRules(
 function resolveSequence(
 	declared: unknown,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): { ok: false; reason: string } | { ok: true; value: number } {
 	if (typeof declared === "number") {
 		return Number.isSafeInteger(declared) && declared >= 0 && declared <= MAX_SEQUENCE
@@ -93,7 +91,7 @@ function resolveSequence(
 
 	const blocks =
 		counted === undefined
-			? evaluateExpression(String(relative), "expression", scope, notes)
+			? evaluateExpression(String(relative), "expression", scope)
 			: { ok: true as const, value: counted };
 
 	if (!blocks.ok) {

@@ -1,7 +1,6 @@
 import { MAX_BASE_UNITS } from "../chain/baseUnits";
 import { type DerivedIssuance, deriveNewIssuance, type Outpoint } from "../chain/issuance";
 import { asRecord } from "../document/json";
-import type { NormalisationNote } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
 import { evaluateExpression } from "./evaluate";
 
@@ -36,7 +35,6 @@ export function resolveIssuance(
 		outpoint: Outpoint;
 	},
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): IssuanceResult {
 	const kind = input.declared.kind;
 
@@ -60,7 +58,7 @@ export function resolveIssuance(
 		};
 	}
 
-	const assetAmount = amountOf(input.declared.asset_amount_sat, scope, notes);
+	const assetAmount = amountOf(input.declared.asset_amount_sat, scope);
 
 	if (!assetAmount.ok) {
 		return {
@@ -81,7 +79,7 @@ export function resolveIssuance(
 	const inflation =
 		input.declared.inflation_amount_sat === undefined
 			? { ok: true as const, value: 0n }
-			: amountOf(input.declared.inflation_amount_sat, scope, notes);
+			: amountOf(input.declared.inflation_amount_sat, scope);
 
 	if (!inflation.ok) {
 		return {
@@ -133,7 +131,6 @@ export function issuanceAttributes(issuance: PlannedIssuance): Record<string, un
 function amountOf(
 	declared: unknown,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): { ok: false; reason: string } | { ok: true; value: bigint } {
 	const literal = asCount(declared);
 
@@ -145,7 +142,7 @@ function amountOf(
 		return { ok: false, reason: "it is neither a number nor a name." };
 	}
 
-	const evaluated = evaluateExpression(declared, "issuedAmount", scope, notes);
+	const evaluated = evaluateExpression(declared, "issuedAmount", scope);
 
 	return evaluated.ok ? { ok: true, value: evaluated.value } : evaluated;
 }

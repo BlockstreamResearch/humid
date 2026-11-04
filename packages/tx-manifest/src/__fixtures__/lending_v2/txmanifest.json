@@ -1,63 +1,64 @@
 {
   "$schema": "../../schema/txmanifest.schema.json",
-  "manifest_version": "0.1.0",
+  "manifest_version": "0.3.1",
   "protocol": "simplicity-lending",
-  "simplicity_hl": { "debug_symbols": true },
+  "requires": ["simplicity"],
+  "simplicity_hl": { "version": "0.7.1", "debug_symbols": true },
   "description": "P2P collateralised lending on Liquid, wire-compatible with the simplicity-lending reference implementation (github BlockstreamResearch/simplicity-lending, `smplx-sdk` covenants). This 'v2' manifest reproduces that protocol's exact on-chain transaction layout so offers created with tx-manifest-wallet are discoverable and settleable by simplicity-lending's own CLI / indexer / web app, and vice-versa. Key differences from the standalone 'lending' example: (1) the principal payout AND the borrower NFT both go to the borrower's plain wallet address (an explicit v0 P2WPKH), committed into the covenant as sha256(scriptPubKey) — there is no p2pk covenant and no separate claim step; (2) the borrower NFT is held in the borrower's wallet during the active loan and spent with an ordinary signature on repayment; (3) NFT ordering is first-params, second-params, borrower, lender; (4) the creation OP_RETURN carries borrower_pubkey || principal_asset_id (64 bytes, internal asset order) for indexer discovery; (5) a single AMOUNTS_DECIMALS drives the bit-packed parameter NFTs, matching the reference wallet.",
   "utxo_types": {
     "pre_lock": {
       "description": "Collateral held in the PreLockCovenant while the borrower's offer is open. PATH::LEFT (create_lending_path) lets a lender activate the loan; PATH::RIGHT (cancel_pre_lock_path) lets the borrower cancel with a Schnorr signature, burning all Utility NFTs. Address is byte-identical to simplicity-lending's pre_lock covenant for the same parameters.",
       "script": {
         "type": "simplicity",
-        "source": "./pre_lock.simf"
+        "source": "./pre_lock.simf",
+        "source_hash": "sha256:27ca19d440bf2def58ca0348814ca2214154e4b9206a2d75a7e866dbb9195ac9"
       },
-      "asset": "COLLATERAL_ASSET_ID",
-      "confidential": false
+      "asset": "COLLATERAL_ASSET_ID"
     },
     "lending_collateral": {
       "description": "Collateral locked in the active LendingCovenant. Released via repayment (borrower returns principal+interest, reclaims collateral) or liquidation (lender claims collateral after LOAN_EXPIRATION_TIME).",
       "script": {
         "type": "simplicity",
-        "source": "./lending.simf"
+        "source": "./lending.simf",
+        "source_hash": "sha256:ea3eae41299583dfea56132f04e8eb3eda024c3d5c92b7970b22c2d12de65e5b"
       },
-      "asset": "COLLATERAL_ASSET_ID",
-      "confidential": false
+      "asset": "COLLATERAL_ASSET_ID"
     },
     "prelock_script_auth": {
       "description": "ScriptAuth covenant wrapping the Utility NFTs during the offer phase. Verifies co-spending with the pre_lock UTXO (input 0).",
       "script": {
         "type": "simplicity",
         "source": "./script_auth.simf",
+        "source_hash": "sha256:ffe473ee77ac0b51d90f1b7f1b26d883a64b40e7276212aedf9f4bfadb54e8f7",
         "compile_params": {
           "SCRIPT_HASH": "PRE_LOCK_COV_HASH"
         }
-      },
-      "confidential": false
+      }
     },
     "lending_script_auth": {
       "description": "ScriptAuth covenant wrapping the two Parameter NFTs during the active loan phase. Verifies co-spending with the lending_collateral UTXO (input 0). Unlike the standalone example, the Borrower NFT is NOT wrapped here — it lives in the borrower's wallet.",
       "script": {
         "type": "simplicity",
         "source": "./script_auth.simf",
+        "source_hash": "sha256:ffe473ee77ac0b51d90f1b7f1b26d883a64b40e7276212aedf9f4bfadb54e8f7",
         "compile_params": {
           "SCRIPT_HASH": "LENDING_COV_HASH"
         }
-      },
-      "confidential": false
+      }
     },
     "lender_principal_vault": {
       "description": "AssetAuth covenant holding the principal+interest payment from the borrower. The lender withdraws by co-spending and burning the Lender NFT.",
       "script": {
         "type": "simplicity",
         "source": "./asset_auth.simf",
+        "source_hash": "sha256:cfd27392a1571e2ee47e0399b5db0c5009ec2cdee11e0f0283a85d0b17e664b6",
         "compile_params": {
           "ASSET_ID": "LENDER_NFT_ASSET_ID",
           "ASSET_AMOUNT": "1",
           "WITH_ASSET_BURN": "true"
         }
       },
-      "asset": "PRINCIPAL_ASSET_ID",
-      "confidential": false
+      "asset": "PRINCIPAL_ASSET_ID"
     }
   },
   "actions": {
@@ -104,6 +105,7 @@
       ]
     },
     "PrepareLender": {
+      "allow_change": "any",
       "description": "Utility: ensure the lender wallet has a PRINCIPAL_AMOUNT-sat UTXO of PRINCIPAL_ASSET_ID ready for SetupLending. Accepts any UTXO of that asset and splits off the exact amount needed.",
       "inputs": [
         {
@@ -282,6 +284,7 @@
               "LENDER_PRINCIPAL_COV_HASH": {
                 "type": "tapleaf",
                 "simf": "./asset_auth.simf",
+                "simf_hash": "sha256:cfd27392a1571e2ee47e0399b5db0c5009ec2cdee11e0f0283a85d0b17e664b6",
                 "params": {
                   "ASSET_ID": {
                     "type": "liquid.asset_id",
@@ -300,6 +303,7 @@
               "LENDING_COV_HASH": {
                 "type": "tapleaf",
                 "simf": "./lending.simf",
+                "simf_hash": "sha256:ea3eae41299583dfea56132f04e8eb3eda024c3d5c92b7970b22c2d12de65e5b",
                 "params": {
                   "COLLATERAL_AMOUNT": {
                     "type": "u64",
@@ -351,6 +355,7 @@
               "PARAMETERS_NFT_OUTPUT_SCRIPT_HASH": {
                 "type": "tapleaf",
                 "simf": "./script_auth.simf",
+                "simf_hash": "sha256:ffe473ee77ac0b51d90f1b7f1b26d883a64b40e7276212aedf9f4bfadb54e8f7",
                 "params": {
                   "SCRIPT_HASH": {
                     "type": "bytes32",
@@ -361,6 +366,7 @@
               "PRE_LOCK_COV_HASH": {
                 "type": "tapleaf",
                 "simf": "./pre_lock.simf",
+                "simf_hash": "sha256:27ca19d440bf2def58ca0348814ca2214154e4b9206a2d75a7e866dbb9195ac9",
                 "params": {
                   "COLLATERAL_AMOUNT": {
                     "type": "u64",
@@ -427,6 +433,7 @@
               "PRELOCK_PARAMETERS_NFT_SCRIPT_HASH": {
                 "type": "tapleaf",
                 "simf": "./script_auth.simf",
+                "simf_hash": "sha256:ffe473ee77ac0b51d90f1b7f1b26d883a64b40e7276212aedf9f4bfadb54e8f7",
                 "params": {
                   "SCRIPT_HASH": {
                     "type": "bytes32",
@@ -866,7 +873,8 @@
                   "simplicity_type": "Either<()>",
                   "value": "Left(())",
                   "description": "Selects create_lending_path (PATH::LEFT)."
-                }
+                },
+                "SIGNATURE": "unused"
               }
             },
             {

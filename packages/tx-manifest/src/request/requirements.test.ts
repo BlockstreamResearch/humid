@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
+import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
 import { findAction, normaliseManifest } from "../document/normalise";
 import type { ParsedLiquidProcessCtParams } from "./request";
 import { resolveActionRequirements } from "./requirements";
@@ -24,7 +24,7 @@ function request(
 
 function requirements(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
 	const asked = request(overrides);
-	const { manifest } = normaliseManifest(asked.manifest);
+	const manifest = normaliseManifest(asked.manifest);
 	const action = findAction(manifest, asked.action);
 
 	if (!action) {
@@ -36,7 +36,7 @@ function requirements(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
 
 describe("resolveActionRequirements", () => {
 	test("an action the manifest does not declare is not one to ask about", () => {
-		const { manifest } = normaliseManifest(MANIFEST);
+		const manifest = normaliseManifest(MANIFEST);
 
 		expect(findAction(manifest, "Withdraw")).toBeUndefined();
 	});
@@ -102,20 +102,15 @@ describe("which parameters the request must fill", () => {
 		});
 	}
 
-	test("a parameter with a display formula is still prompted for", () => {
-		const { missing } = paramsOf({ total: { formula: "a + b", type: "u64" } });
-
-		expect(missing.find((entry) => entry.part === "params")?.keys).toEqual(["total"]);
-	});
 
 	test("a parameter the wallet supplies is not", () => {
-		const { missing } = paramsOf({ key: { source: { type: "wallet_key" }, type: "pubkey" } });
+		const { missing } = paramsOf({ key: { compute: { type: "wallet", wallet: "key" }, type: "pubkey" } });
 
 		expect(missing).toEqual([]);
 	});
 
 	test("a computed parameter is not", () => {
-		const { missing } = paramsOf({ hash: { compute: "tapleaf", simf: "./a.simf" } });
+		const { missing } = paramsOf({ hash: { compute: { simf: "./a.simf", type: "tapleaf" } } });
 
 		expect(missing).toEqual([]);
 	});
@@ -159,25 +154,25 @@ describe("wallet inputs and covenant inputs", () => {
 });
 
 describe("when a deployment's field values are needed", () => {
-	const CLASS_FIELDS = {
+	const TEMPLATE_FIELDS = {
 		OWNER_PUB_KEY: { type: "pubkey" },
 		TIMEOUT: { type: "u32" },
 	};
 
-	function classMethod(method: Record<string, unknown>, params: Record<string, unknown> = {}) {
+	function templateAction(method: Record<string, unknown>, params: Record<string, unknown> = {}) {
 		return requirements({
 			action: "Act",
 			contractSources: { [SOURCE_PATH]: "fn main() {}" },
 			manifest: {
-				classes: { thing: { fields: CLASS_FIELDS, methods: { Act: method } } },
+				contract_templates: { thing: { actions: { Act: method }, fields: TEMPLATE_FIELDS } },
 				utxo_types: { v: { script: { source: SOURCE_PATH } } },
 			},
 			params,
 		});
 	}
 
-	test("a method reading nothing off the deployment needs no instance file", () => {
-		const { missing, required } = classMethod({
+	test("an action reading nothing off the deployment needs no instance file", () => {
+		const { missing, required } = templateAction({
 			outputs: [
 				{
 					amount_sat: "params.amount_sat",
@@ -191,8 +186,8 @@ describe("when a deployment's field values are needed", () => {
 		expect(missing).toEqual([]);
 	});
 
-	test("a method naming the deployment outright does", () => {
-		const { missing, required } = classMethod({
+	test("an action naming the deployment outright does", () => {
+		const { missing, required } = templateAction({
 			outputs: [
 				{
 					amount_sat: "1000",
@@ -211,7 +206,7 @@ describe("when a deployment's field values are needed", () => {
 		]);
 	});
 
-	test("a bare name the class declares as a field does, unless the request filled it", () => {
+	test("a bare name the template declares as a field does, unless the request filled it", () => {
 		const wiring = {
 			outputs: [
 				{
@@ -222,12 +217,12 @@ describe("when a deployment's field values are needed", () => {
 			],
 		};
 
-		expect(classMethod(wiring).required).toContain("instance");
-		expect(classMethod(wiring, { OWNER_PUB_KEY: PUBKEY }).required).not.toContain("instance");
+		expect(templateAction(wiring).required).toContain("instance");
+		expect(templateAction(wiring, { OWNER_PUB_KEY: PUBKEY }).required).not.toContain("instance");
 	});
 
 	test("a bare value at the same position does not, however name-shaped it looks", () => {
-		const { missing, required } = classMethod({
+		const { missing, required } = templateAction({
 			outputs: [
 				{
 					amount_sat: "1000",
@@ -242,7 +237,7 @@ describe("when a deployment's field values are needed", () => {
 	});
 
 	test("an amount read off the deployment needs it too", () => {
-		const { required } = classMethod({
+		const { required } = templateAction({
 			outputs: [{ amount_sat: "instance.TIMEOUT", destination: "wallet", id: "out" }],
 		});
 
@@ -250,7 +245,7 @@ describe("when a deployment's field values are needed", () => {
 	});
 
 	test("a constructor reading a field its own create_instance produces needs no instance file", () => {
-		const { missing, required } = classMethod(
+		const { missing, required } = templateAction(
 			{
 				create_instance: {
 					fields: {
@@ -280,26 +275,9 @@ describe("when a deployment's field values are needed", () => {
 		expect(missing).toEqual([]);
 	});
 
-	test("and the same under the deprecated namespace", () => {
-		const { required } = classMethod({
-			create_instance: { fields: { RESERVE_HASH: { simf: "./r.simf", type: "tapleaf" } } },
-			outputs: [
-				{
-					amount_sat: "1000",
-					destination: {
-						compile_params: { RESERVE_COV_HASH: "compile_params.RESERVE_HASH" },
-						utxo_type: "v",
-					},
-					id: "out",
-				},
-			],
-		});
-
-		expect(required).not.toContain("instance");
-	});
 
 	test("but a field its create_instance does not produce is still read from one", () => {
-		const { required } = classMethod({
+		const { required } = templateAction({
 			create_instance: { fields: { RESERVE_HASH: { simf: "./r.simf", type: "tapleaf" } } },
 			outputs: [
 				{
@@ -333,7 +311,7 @@ describe("when a deployment's field values are needed", () => {
 
 		expect(required).not.toContain("instance");
 		expect(missing.find((entry) => entry.part === "instance")?.reason).toContain(
-			"declared outside any class",
+			"declared outside any template",
 		);
 	});
 });

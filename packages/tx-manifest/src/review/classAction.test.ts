@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import currentVaultlet from "../__fixtures__/current/vaultlet.manifest.json";
+import currentVaultlet from "../__fixtures__/vaultlet.manifest.json";
 import mutualManifest from "../__fixtures__/mutual.manifest.json";
 import debugVaultlet from "../__fixtures__/vaultlet-debug.manifest.json";
 import groupedVaultlet from "../__fixtures__/vaultlet.manifest.json";

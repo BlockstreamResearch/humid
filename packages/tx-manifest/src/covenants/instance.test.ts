@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import currentVaultletJson from "../__fixtures__/current/vaultlet.manifest.json";
 import mutualJson from "../__fixtures__/mutual.manifest.json";
 import vaultletJson from "../__fixtures__/vaultlet.manifest.json";
 import { findAction, type NormalisedAction, normaliseManifest } from "../document/normalise";
@@ -41,8 +40,8 @@ function recordingCompiler(debugSymbols = false) {
 	};
 }
 
-const vaultlet = normaliseManifest(vaultletJson as unknown as Record<string, unknown>).manifest;
-const mutual = normaliseManifest(mutualJson as unknown as Record<string, unknown>).manifest;
+const vaultlet = normaliseManifest(vaultletJson as unknown as Record<string, unknown>);
+const mutual = normaliseManifest(mutualJson as unknown as Record<string, unknown>);
 
 function actionNamed(manifest: typeof vaultlet, name: string): NormalisedAction {
 	const found = findAction(manifest, name);
@@ -156,7 +155,7 @@ function leafyWith(
 			node: {
 				create_instance: {
 					fields: {
-						X: { compute: "tapleaf", extra_leaves: extraLeaves, simf: "./reserve.simf" },
+						X: { type: "tapleaf", extra_leaves: extraLeaves, simf: "./reserve.simf" },
 					},
 				},
 			},
@@ -229,21 +228,6 @@ describe("the deployment a constructor creates", () => {
 		});
 	});
 
-	test("is the same deployment whichever generation of the document declared it", () => {
-		const current = normaliseManifest(
-			currentVaultletJson as unknown as Record<string, unknown>,
-		).manifest;
-		const { hashCovenant } = recordingCompiler();
-		const asked = {
-			contractSources: SOURCES,
-			hashCovenant,
-			scope: { params: PARAMS },
-		};
-
-		expect(resolveCreatedInstance(actionNamed(current, "OpenVault"), asked)).toEqual(
-			resolveCreatedInstance(OPEN_VAULT, asked),
-		);
-	});
 });
 
 describe("the mode the document states its contracts were built in", () => {

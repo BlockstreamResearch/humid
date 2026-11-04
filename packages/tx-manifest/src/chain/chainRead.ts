@@ -93,29 +93,6 @@ export function createEsploraFeeRateReader(
 
 export type ReadChainTip = () => Promise<number>;
 
-export function createEsploraChainTipReader(
-	endpoint: EsploraEndpoint,
-	fetchImpl: typeof fetch = fetch,
-): ReadChainTip {
-	const base = endpoint.url.replace(/\/+$/, "");
-
-	return async () => {
-		const response = await fetchImpl(`${base}/blocks/tip/height`, { headers: headersOf(endpoint) });
-
-		if (!response.ok) {
-			throw new Error(`Could not read the chain tip: ${response.status}`);
-		}
-
-		const height = Number(await response.text());
-
-		if (!Number.isInteger(height) || height < 0) {
-			throw new Error("The chain tip came back as something that is not a block height.");
-		}
-
-		return height;
-	};
-}
-
 function headersOf(endpoint: EsploraEndpoint): Record<string, string> {
 	return Object.fromEntries((endpoint.headers ?? []).map(({ name, value }) => [name, value]));
 }

@@ -26,7 +26,7 @@ const SOURCE = readFileSync(
 	"utf8",
 );
 
-const { manifest } = normaliseManifest(manifestJson as unknown as Record<string, unknown>);
+const manifest = normaliseManifest(manifestJson as unknown as Record<string, unknown>);
 
 async function derive(input: { covenantParamTypes?: () => Record<string, string> } = {}) {
 	const action = findAction(manifest, "Withdraw");
@@ -90,7 +90,7 @@ describe("the vault covenant", () => {
 		expect(calls[0]?.source).toBe(SOURCE);
 	});
 
-	test("reads every other parameter off the deployment, at the type the class declares", async () => {
+	test("reads every other parameter off the deployment, at the type the template declares", async () => {
 		const { calls } = await derive({ covenantParamTypes: () => DECLARED });
 		const args = JSON.parse(calls[0]?.argumentsJson ?? "{}") as Record<string, unknown>;
 

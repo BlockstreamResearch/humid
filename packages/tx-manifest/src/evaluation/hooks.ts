@@ -1,20 +1,13 @@
 import { asRecord } from "../document/json";
-import type { NormalisationNote, NormalisedAction } from "../document/normalise";
+import type { NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { evaluateExpression } from "./evaluate";
 
-type HookTarget = "args" | "instance" | "params";
+type HookTarget = "instance" | "params";
 
-const TARGETS: Record<string, HookTarget> = {
-	args: "args",
-	compile_params: "instance",
-	instance: "instance",
-	params: "params",
-};
+const TARGETS: Record<string, HookTarget> = { instance: "instance", params: "params" };
 
-export type HookValues = { args: Record<string, string>; instance: Record<string, string> } & {
-	params: Record<string, string>;
-};
+export type HookValues = Record<HookTarget, Record<string, string>>;
 
 export type RunHookResult = { ok: false; reason: string } | { ok: true; values: HookValues };
 
@@ -60,9 +53,8 @@ function declaredHook(declared: unknown, at: string): DeclaredHook {
 export function runHook(
 	set: Record<string, unknown>,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): RunHookResult {
-	const values: HookValues = { args: {}, instance: {}, params: {} };
+	const values: HookValues = { instance: {}, params: {} };
 	let running = scope;
 
 	for (const [target, expression] of Object.entries(set)) {
@@ -89,7 +81,7 @@ export function runHook(
 			return { ok: false, reason: `The hook's value for ${target} is not an expression.` };
 		}
 
-		const evaluated = valueOf(expression, running, notes);
+		const evaluated = valueOf(expression, running);
 
 		if (!evaluated.ok) {
 			return { ok: false, reason: `Setting ${target}: ${evaluated.reason}` };
@@ -105,9 +97,8 @@ export function runHook(
 function valueOf(
 	expression: string,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): { ok: false; reason: string } | { ok: true; value: string } {
-	const evaluated = evaluateExpression(expression, "expression", scope, notes);
+	const evaluated = evaluateExpression(expression, "expression", scope);
 
 	if (evaluated.ok) {
 		return { ok: true, value: String(evaluated.value) };
@@ -138,7 +129,6 @@ export function inputHookScope(
 export function withHookValues(scope: ReferenceScope, values: HookValues): ReferenceScope {
 	return {
 		...scope,
-		args: { ...scope.args, ...values.args },
 		instance: { ...scope.instance, ...values.instance },
 		params: { ...scope.params, ...values.params },
 	};

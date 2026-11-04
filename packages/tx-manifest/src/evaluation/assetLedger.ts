@@ -1,6 +1,6 @@
 import { statedAsset } from "../document/asset";
 import { asArray, asRecord } from "../document/json";
-import type { NormalisationNote, NormalisedAction } from "../document/normalise";
+import type { NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import type { PlannedOutput } from "./plan";
 
@@ -29,7 +29,6 @@ export type HeldValue = {
 };
 
 type Context = {
-	notes?: NormalisationNote[];
 	policyAsset: string;
 	scope: ReferenceScope;
 };

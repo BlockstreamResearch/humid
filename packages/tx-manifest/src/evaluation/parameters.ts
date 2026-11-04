@@ -1,5 +1,5 @@
 import { asRecord } from "../document/json";
-import type { NormalisationNote, NormalisedAction } from "../document/normalise";
+import type { NormalisedAction } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
 import type { RejectToken } from "../document/refuse";
 import { evaluateExpression } from "./evaluate";
@@ -12,7 +12,6 @@ export function fillParameters(
 	action: NormalisedAction,
 	supplied: Record<string, unknown>,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): FilledParams {
 	const declared = asRecord(action.node.params);
 
@@ -44,7 +43,7 @@ export function fillParameters(
 		const computed = spec.compute;
 
 		if (typeof computed === "string") {
-			const evaluated = evaluateExpression(computed, "expression", scope, notes);
+			const evaluated = evaluateExpression(computed, "expression", scope);
 
 			if (!evaluated.ok) {
 				return {
@@ -70,11 +69,9 @@ export function fillParameters(
 function walletSource(spec: Record<string, unknown>): string | undefined {
 	const computed = asRecord(spec.compute);
 
-	if (computed?.type === "wallet") {
-		return typeof computed.wallet === "string" ? computed.wallet.replaceAll("_", " ") : "value";
+	if (computed?.type !== "wallet") {
+		return undefined;
 	}
 
-	const source = asRecord(spec.source);
-
-	return source?.type === "wallet_key" ? "key" : undefined;
+	return typeof computed.wallet === "string" ? computed.wallet.replaceAll("_", " ") : "value";
 }

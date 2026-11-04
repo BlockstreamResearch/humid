@@ -3,7 +3,6 @@ import { describe, expect, test } from "bun:test";
 import { parseReference, type ReferenceScope, resolveReference } from "./references";
 
 const SCOPE: ReferenceScope = {
-	args: { seat: "row-4" },
 	instance: { TIMEOUT: "900000" },
 	params: { amount_sat: "1000" },
 };
@@ -32,13 +31,6 @@ describe("the namespaces a reference can name", () => {
 		});
 	});
 
-	test("reads the request's arguments", () => {
-		expect(resolveReference("args.seat", "compileParam", SCOPE)).toMatchObject({
-			ok: true,
-			value: "row-4",
-		});
-	});
-
 	test("no longer reads compile_params. as a namespace of its own", () => {
 		const removed = resolveReference("compile_params.TIMEOUT", "compileParam", SCOPE);
 
@@ -48,9 +40,8 @@ describe("the namespaces a reference can name", () => {
 		});
 	});
 
-	test("reads a bare name as a parameter first and an argument second", () => {
+	test("reads a bare name as a parameter", () => {
 		expect(resolveReference("amount_sat", "amount", SCOPE)).toMatchObject({ value: "1000" });
-		expect(resolveReference("seat", "compileParam", SCOPE)).toMatchObject({ value: "row-4" });
 	});
 });
 
@@ -81,12 +72,14 @@ describe("what a position refuses", () => {
 		expect(found.ok ? "" : found.reason).toContain("cannot be used as a destination");
 	});
 
-	test("an attribute of a transaction input is recognised as the lookup it is", () => {
-		expect(parseReference("vault_in.amount_sat")).toEqual({
-			attribute: "amount_sat",
-			form: "input-attribute",
-			name: "vault_in",
-		});
+	test("an attribute of a transaction input is recognised in either spelling", () => {
+		for (const text of ["inputs.vault_in.amount_sat", "vault_in.amount_sat"]) {
+			expect(parseReference(text)).toEqual({
+				attribute: "amount_sat",
+				form: "input-attribute",
+				name: "vault_in",
+			});
+		}
 	});
 
 	test("and resolves against the inputs this action actually resolved", () => {

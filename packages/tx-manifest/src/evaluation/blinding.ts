@@ -3,7 +3,6 @@ export type Blinding = "blinded" | "open";
 export type BlindingWord =
 	| "chain"
 	| "confidential-input"
-	| "document"
 	| "output"
 	| "spendable-change"
 	| "unblindable";
@@ -19,7 +18,6 @@ export type UnblindableTarget = "covenant" | "data";
 export function resolveBlinding(input: {
 	change?: boolean;
 	declared?: unknown;
-	documentDefault?: unknown;
 	unblindable?: UnblindableTarget;
 }): BlindingDecision {
 	if (input.unblindable) {
@@ -46,13 +44,9 @@ export function resolveChangeBlinding(
 	return { blinding: "blinded", decidedBy: "confidential-input", overrode: planned.decidedBy };
 }
 
-function byPrecedence(input: { declared?: unknown; documentDefault?: unknown }): BlindingDecision {
+function byPrecedence(input: { declared?: unknown }): BlindingDecision {
 	if (typeof input.declared === "boolean") {
 		return { blinding: input.declared ? "blinded" : "open", decidedBy: "output" };
-	}
-
-	if (typeof input.documentDefault === "boolean") {
-		return { blinding: input.documentDefault ? "blinded" : "open", decidedBy: "document" };
 	}
 
 	return { blinding: "blinded", decidedBy: "chain" };
@@ -72,10 +66,6 @@ function sentenceFor(word: BlindingWord): string {
 	switch (word) {
 		case "confidential-input": {
 			return "this action spends a blinded amount, and the network accepts that only if something it pays out is blinded too";
-		}
-
-		case "document": {
-			return "this protocol blinds its outputs by default";
 		}
 
 		case "output": {

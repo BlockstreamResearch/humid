@@ -1,18 +1,20 @@
 {
-    "manifest_version": "0.1.0",
-    "attestation_version": "1",
+    "$schema": "../../schema/txmanifest.schema.json",
+    "manifest_version": "0.3.1",
     "protocol": "p2pk-simplicity",
     "description": "Hello World — Pay-to-public-key using a Simplicity checksig program on Liquid.",
     "chain": "liquid",
+    "requires": ["simplicity"],
+    "simplicity_hl": { "version": "0.7.1" },
     "utxo_types": {
         "p2pk_output": {
             "description": "A Liquid UTXO locked to PUBKEY via the compiled p2pk.simf program.",
             "script": {
                 "type": "simplicity",
-                "source": "./p2pk.simf"
+                "source": "./p2pk.simf",
+                "source_hash": "sha256:658bf994eac2f8dcbf5486787910513a1e4a79bd56f6e3c6c2a74dac25c0e2bf"
             },
-            "asset": "lbtc",
-            "confidential": false
+            "asset": "lbtc"
         }
     },
     "actions": {
@@ -58,19 +60,6 @@
                     "destination": "change",
                     "asset": "lbtc",
                     "optional": true
-                }
-            ],
-            "validations": [
-                {
-                    "id": "amount_nonzero",
-                    "rule": {
-                        "type": "arithmetic",
-                        "expr": "params.amount_sat > 0"
-                    },
-                    "error": {
-                        "code": "INVALID_AMOUNT",
-                        "message": "Amount must be greater than zero"
-                    }
                 }
             ]
         },

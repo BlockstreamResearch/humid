@@ -1,0 +1,112 @@
+/*
+ * Tessera — one Mosaik swap offer
+ * ===============================
+ * A Tessera is one swap offer: a Liquid UTXO holding asset A, spendable two
+ * ways. The covenant is **keyless** — pure transaction introspection, no
+ * signatures anywhere.
+ *
+ *   SETTLE  — by ANYONE, if the spending transaction has an output paying
+ *             exactly AMOUNT_B of ASSET_B to the maker (MAKER_SPK).
+ *   REFUND  — by ANYONE, after block height TIMEOUT, *if* the spend returns the
+ *             locked asset to the maker, less at most MAX_FEE (the sweep's
+ *             network fee). A skim larger than MAX_FEE is rejected, so the
+ *             worst a griefer can do is burn MAX_FEE to the miner.
+ *
+ * Ported from Mosaik's tessera.simf:
+ *   github.com/kaleidoswap/mosaik — crates/tessera/contracts/tessera.simf
+ *
+ * Upstream carries the offer terms as inline literals tagged
+ * `TESSERA_PARAM:<NAME>` and text-substitutes them per offer (`Tessera::render`).
+ * Here they are ordinary `param::` constants resolved by the manifest engine.
+ * The placement is unchanged, and it is the point: the terms live in the
+ * program, so they live in the tapleaf, so they live in the UTXO's address —
+ * immutable once the offer is funded. MAX_FEE, a hardcoded 5000 upstream, is a
+ * param here for the same reason.
+ *
+ * There is no maker key. The maker is identified purely by MAKER_SPK, the
+ * sha256 of the scriptPubKey that must receive payment.
+ *
+ * Note what is NOT a term: the locked asset and its amount. The covenant never
+ * inspects them on the settle path, so the offer address does not commit to
+ * them — the offer is "whatever sits in this UTXO, for AMOUNT_B of ASSET_B".
+ * A taker must read the funded UTXO to learn what side A actually is.
+ *
+ * v1 requires the relevant outputs to be EXPLICIT (unblinded).
+ */
+
+// ── helpers ────────────────────────────────────────────────────────────────
+
+// Unwrap an explicit (unblinded) asset, or fail.
+fn explicit_asset(asset: Asset1) -> u256 {
+    match asset {
+        Right(a: ExplicitAsset) => a,
+        Left(_blinded: Confidential1) => panic!(), // blinded — v1 needs explicit
+    }
+}
+
+// Unwrap an explicit (unblinded) amount, or fail.
+fn explicit_amount(amount: Amount1) -> u64 {
+    match amount {
+        Right(a: u64) => a,
+        Left(_blinded: Confidential1) => panic!(),
+    }
+}
+
+// Assert the output at `vout` pays the script `expected_spk`.
+fn assert_script(vout: u32, expected_spk: u256) {
+    match jet::output_script_hash(vout) {
+        Some(spk: u256) => assert!(jet::eq_256(spk, expected_spk)),
+        None => panic!(),
+    }
+}
+
+// The (asset, amount) pair of output `vout`, or fail if there is none.
+fn output_pair(vout: u32) -> (Asset1, Amount1) {
+    match jet::output_amount(vout) {
+        Some(p: (Asset1, Amount1)) => p,
+        None => panic!(),
+    }
+}
+
+// ── SETTLE path ─────────────────────────────────────────────────────────────
+//
+// Permissionless fill: `settle_vout` points at the output paying the maker.
+fn settle(settle_vout: u32) {
+    let (out_asset, out_amount): (Asset1, Amount1) = output_pair(settle_vout);
+
+    assert!(jet::eq_256(explicit_asset(out_asset), param::ASSET_B));
+    assert!(jet::eq_64(explicit_amount(out_amount), param::AMOUNT_B));
+
+    assert_script(settle_vout, param::MAKER_SPK)
+}
+
+// ── REFUND path ─────────────────────────────────────────────────────────────
+//
+// Keyless. After TIMEOUT anyone may sweep the coin, but `refund_vout` must
+// return the locked asset to the maker, less at most MAX_FEE.
+fn refund(refund_vout: u32) {
+    jet::check_lock_height(param::TIMEOUT);
+
+    // What this covenant locks — its own input's asset and amount.
+    let (in_asset, in_amount): (Asset1, Amount1) = jet::current_amount();
+    let (out_asset, out_amount): (Asset1, Amount1) = output_pair(refund_vout);
+
+    // Same asset, and the maker receives at least `locked - MAX_FEE`:
+    //   out_amount + MAX_FEE >= in_amount
+    assert!(jet::eq_256(explicit_asset(in_asset), explicit_asset(out_asset)));
+    let (_carry, out_plus_fee): (bool, u64) = jet::add_64(explicit_amount(out_amount), param::MAX_FEE);
+    assert!(jet::le_64(explicit_amount(in_amount), out_plus_fee));
+
+    assert_script(refund_vout, param::MAKER_SPK)
+}
+
+// ── entry point ─────────────────────────────────────────────────────────────
+//
+// PATH is an Either: Left = settle (maker-output index), Right = refund
+// (refund-output index). Neither path carries a signature.
+fn main() {
+    match witness::PATH {
+        Left(settle_vout: u32) => settle(settle_vout),
+        Right(refund_vout: u32) => refund(refund_vout),
+    }
+}

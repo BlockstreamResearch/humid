@@ -1,5 +1,4 @@
 import { asArray, asRecord } from "../document/json";
-import type { NormalisationNote } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { computedValue, computesValue } from "../evaluation/computedValue";
 
@@ -24,7 +23,7 @@ const WIDTHS: Record<string, Width> = {
 
 export function encodeStateLeaves(
 	declared: unknown,
-	input: { at: string; notes?: NormalisationNote[]; scope: ReferenceScope },
+	input: { at: string; scope: ReferenceScope },
 ): EncodeStateLeavesResult {
 	const leaves: string[] = [];
 
@@ -44,7 +43,7 @@ export function encodeStateLeaves(
 function encodeLeaf(
 	declared: unknown,
 	index: number,
-	input: { notes?: NormalisationNote[]; scope: ReferenceScope },
+	input: { scope: ReferenceScope },
 ): { hex: string; ok: true } | { ok: false; reason: string } {
 	const node = asRecord(declared);
 	const at = `state leaf ${index}`;
@@ -96,7 +95,7 @@ function encodeLeaf(
 function encodePiece(
 	declared: unknown,
 	at: string,
-	input: { notes?: NormalisationNote[]; scope: ReferenceScope },
+	input: { scope: ReferenceScope },
 ): { bytes: number[]; ok: true } | { ok: false; reason: string } {
 	if (typeof declared === "string") {
 		const raw = hexBytes(declared);
@@ -154,7 +153,7 @@ function encodePiece(
 function readValue(
 	declared: unknown,
 	at: string,
-	input: { notes?: NormalisationNote[]; scope: ReferenceScope },
+	input: { scope: ReferenceScope },
 ): { ok: true; value: string } | { ok: false; reason: string } {
 	if (typeof declared !== "string") {
 		return { ok: false, reason: `${at} names no value to encode.` };
@@ -169,7 +168,7 @@ function readValue(
 	}
 
 	if (computesValue(declared)) {
-		const computed = computedValue(declared, "stateLeaf", input.scope, input.notes);
+		const computed = computedValue(declared, "stateLeaf", input.scope);
 
 		return computed.ok ? computed : { ok: false, reason: `${at}: ${computed.reason}` };
 	}

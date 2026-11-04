@@ -9,7 +9,7 @@ import type { ParsedLiquidProcessCtParams } from "../request/request";
 import type { SelectableUtxo } from "./coinSelection";
 
 const SOURCE_PATH = "./p2pk.simf";
-const SOURCE = readFileSync(new URL("../__fixtures__/p2pk.simf", import.meta.url), "utf8");
+const SOURCE = readFileSync(new URL("../__fixtures__/p2pk/p2pk.simf", import.meta.url), "utf8");
 const MANIFEST = multiassetManifest as unknown as Record<string, unknown>;
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";

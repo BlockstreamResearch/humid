@@ -1,9 +1,11 @@
 {
-	"$comment": "A synthetic protocol, written the way the corpus's earlier generation writes one: actions live inside `classes.<name>.methods`, and the constructor is marked with `deploy`. It is the same document as `current/vaultlet.manifest.json`, which spells the container `contract_templates.<name>.actions` and the flag `is_constructor`. Both generations exist in the published corpus, and a wallet that read only one would be blind to the money the other locates. Kept small on purpose: it exercises the two declaration shapes, a deployment's fields, a covenant wired to a bare value, and a covenant hash that depends on another covenant hash — and nothing else.",
-	"manifest_version": "1.0",
+	"manifest_version": "0.3.1",
 	"protocol": "vaultlet",
 	"description": "A time-locked vault with a reserve covenant behind it.",
 	"chain": "liquid",
+	"requires": [
+		"simplicity"
+	],
 	"utxo_types": {
 		"vault": {
 			"description": "Where the vault's funds sit. Its address commits to the reserve covenant's script hash, so the reserve cannot be changed without moving the vault.",
@@ -20,7 +22,7 @@
 			}
 		},
 		"reserve": {
-			"description": "Where the vault pays out after its timeout. Its parameters are written in the deprecated `instance.` namespace, which one generation of the format uses where the next writes `instance.`.",
+			"description": "Where the vault pays out after its timeout.",
 			"script": {
 				"type": "simplicity",
 				"source": "./reserve.simf",
@@ -41,7 +43,7 @@
 			}
 		}
 	},
-	"classes": {
+	"contract_templates": {
 		"vaultlet_contract": {
 			"description": "One deployed vault.",
 			"fields": {
@@ -70,24 +72,42 @@
 					"description": "sha256 of the guard covenant's scriptPubKey, which is itself built from RESERVE_COV_HASH. Computed by OpenVault."
 				}
 			},
-			"methods": {
+			"actions": {
 				"OpenVault": {
-					"deploy": true,
 					"description": "Fund a new vault and record the deployment it creates.",
 					"params": {
-						"OWNER_PUB_KEY": { "type": "pubkey" },
-						"VAULT_ASSET_ID": { "type": "liquid.asset_id" },
-						"VAULT_AMOUNT": { "type": "u64" },
-						"TIMEOUT": { "type": "u32" }
+						"OWNER_PUB_KEY": {
+							"type": "pubkey"
+						},
+						"VAULT_ASSET_ID": {
+							"type": "liquid.asset_id"
+						},
+						"VAULT_AMOUNT": {
+							"type": "u64"
+						},
+						"TIMEOUT": {
+							"type": "u32"
+						}
 					},
-					"inputs": [{ "id": "funding", "utxo_source": "wallet" }],
+					"inputs": [
+						{
+							"id": "funding",
+							"utxo_source": "wallet"
+						}
+					],
 					"outputs": [
 						{
 							"id": "vault_out",
-							"destination": { "utxo_type": "vault" },
+							"destination": {
+								"utxo_type": "vault"
+							},
 							"amount_sat": "params.VAULT_AMOUNT"
 						},
-						{ "id": "vault_change", "destination": "change", "optional": true }
+						{
+							"id": "vault_change",
+							"destination": "change",
+							"optional": true
+						}
 					],
 					"create_instance": {
 						"fields": {
@@ -99,15 +119,24 @@
 								"type": "tapleaf",
 								"simf": "./reserve.simf",
 								"params": {
-									"OWNER_PUB_KEY": { "type": "pubkey", "value": "OWNER_PUB_KEY" },
-									"TIMEOUT": { "type": "u32", "value": "TIMEOUT" }
+									"OWNER_PUB_KEY": {
+										"type": "pubkey",
+										"value": "OWNER_PUB_KEY"
+									},
+									"TIMEOUT": {
+										"type": "u32",
+										"value": "TIMEOUT"
+									}
 								}
 							},
 							"GUARD_COV_HASH": {
 								"type": "tapleaf",
 								"simf": "./guard.simf",
 								"params": {
-									"RESERVE_COV_HASH": { "type": "bytes32", "value": "RESERVE_COV_HASH" }
+									"RESERVE_COV_HASH": {
+										"type": "bytes32",
+										"value": "RESERVE_COV_HASH"
+									}
 								}
 							}
 						}
@@ -115,9 +144,20 @@
 				},
 				"Withdraw": {
 					"description": "Spend the vault back to the owner's wallet. Every value it compiles the vault with comes off the deployment; this action declares no parameters of its own.",
-					"inputs": [{ "id": "vault_in", "utxo_source": { "utxo_type": "vault" } }],
+					"inputs": [
+						{
+							"id": "vault_in",
+							"utxo_source": {
+								"utxo_type": "vault"
+							}
+						}
+					],
 					"outputs": [
-						{ "id": "withdrawn", "destination": "wallet", "amount_sat": "instance.VAULT_AMOUNT" }
+						{
+							"id": "withdrawn",
+							"destination": "wallet",
+							"amount_sat": "instance.VAULT_AMOUNT"
+						}
 					]
 				}
 			}

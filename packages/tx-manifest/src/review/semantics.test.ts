@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
+import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
 import type { TxOutAtOutPoint } from "../chain/chainRead";
 import { isRefusal, type ManifestReview, reviewManifestAction } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 
 const SOURCE_PATH = "./p2pk.simf";
-const SOURCE = readFileSync(new URL("../__fixtures__/p2pk.simf", import.meta.url), "utf8");
+const SOURCE = readFileSync(new URL("../__fixtures__/p2pk/p2pk.simf", import.meta.url), "utf8");
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const MANIFEST = p2pkManifest as unknown as Record<string, unknown>;
 

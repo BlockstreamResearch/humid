@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import lendingManifest from "../__fixtures__/current/lending_v3.manifest.json";
+import lendingManifest from "../__fixtures__/lending_v3/txmanifest.json";
 import { findAction, normaliseManifest } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
 import { encodeMetadataParts, type PartResolver } from "./metadataParts";
@@ -63,7 +63,7 @@ const SCOPE: ReferenceScope = {
 
 function publishedRecord(name: string): string {
 	const action = findAction(
-		normaliseManifest(lendingManifest as unknown as Record<string, unknown>).manifest,
+		normaliseManifest(lendingManifest as unknown as Record<string, unknown>),
 		name,
 	);
 	const plan = action && planAction(action, SCOPE);

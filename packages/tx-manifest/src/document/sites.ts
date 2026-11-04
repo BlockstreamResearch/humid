@@ -1,5 +1,4 @@
 import { asArray, asRecord } from "./json";
-import type { NormalisedManifest } from "./normalise";
 
 export type CovenantSite = {
 	asset?: unknown;
@@ -42,20 +41,6 @@ export function covenantSites(action: Record<string, unknown>): CovenantSite[] {
 
 export function namedUtxoTypes(action: Record<string, unknown>): string[] {
 	return [...new Set(covenantSites(action).map((site) => site.utxoType))];
-}
-
-export function contractSourcePaths(manifest: NormalisedManifest): string[] {
-	const paths = new Set<string>();
-
-	for (const declared of Object.values(manifest.utxoTypes)) {
-		const source = asRecord(asRecord(declared)?.script)?.source;
-
-		if (typeof source === "string") {
-			paths.add(source);
-		}
-	}
-
-	return [...paths];
 }
 
 function covenantReference(

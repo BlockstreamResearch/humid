@@ -3,7 +3,6 @@ export { parseLiquidProcessCtParams } from "./request/validation";
 
 export type { EsploraEndpoint, ReadChainTip, ReadFeeRate, ReadTxOut } from "./chain/chainRead";
 export {
-	createEsploraChainTipReader,
 	createEsploraFeeRateReader,
 	createEsploraTxOutReader,
 } from "./chain/chainRead";
@@ -26,18 +25,7 @@ export { type EncodeStateLeavesResult, encodeStateLeaves } from "./covenants/sta
 export type { SelectableUtxo } from "./review/coinSelection";
 
 export {
-	type InspectManifestOptions,
-	type InspectManifestResult,
-	type ManifestFault,
-	type ManifestInspection,
-	DOCUMENT_ONLY_REFUSALS,
-	inspectManifestDocument,
-} from "./document/inspect";
-export type { PartialCheck } from "./document/refuse";
-export type { NormalisationNote } from "./document/normalise";
-export {
 	type ConstructRegistryEntry,
-	type ConstructReport,
 	type ConstructSiteKind,
 	type ConstructState,
 	describeRegistry,

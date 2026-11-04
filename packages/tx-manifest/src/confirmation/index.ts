@@ -1,5 +1,5 @@
-import { asRecord } from "../document/json";
 import type { NormalisedAction, NormalisedManifest } from "../document/normalise";
+import { type ReferenceScope, resolveReference } from "../document/references";
 import {
 	type BlindingDecision,
 	describeBlinding,
@@ -50,9 +50,9 @@ export function confirmationModel(
 	review: ReviewedPlan,
 	manifest: NormalisedManifest,
 	action: NormalisedAction,
-	input: { accountLabel: string; policyAsset: string },
+	input: { accountLabel: string; policyAsset: string; scope: ReferenceScope },
 ): ConfirmationModel {
-	const summary = actionSummary(action);
+	const summary = intentOf(action, input.scope);
 
 	return {
 		account: computed(input.accountLabel),
@@ -134,10 +134,16 @@ export function describeOrigin(origin: Origin): string {
 	}
 }
 
-function actionSummary(action: NormalisedAction): string | undefined {
-	const declared = asRecord(action.node.ui)?.action ?? action.node.description;
+function intentOf(action: NormalisedAction, scope: ReferenceScope): string | undefined {
+	const intent = action.node.intent;
 
-	return typeof declared === "string" ? declared : undefined;
+	return typeof intent === "string"
+		? intent.replaceAll(/\{(?<ref>[^{}:]+)(?::[^{}]*)?\}/g, (text, ref: string) => {
+				const found = resolveReference(ref, "expression", scope);
+
+				return found.ok ? String(found.value) : text;
+			})
+		: undefined;
 }
 
 export type ShownConfirmation = Omit<ConfirmationModel, "feeSats" | "netEffect"> & {

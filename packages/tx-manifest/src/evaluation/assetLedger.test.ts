@@ -9,7 +9,7 @@ const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585
 const TOKEN = "ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2";
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 
-const { manifest } = normaliseManifest(multiassetManifest as unknown as Record<string, unknown>);
+const manifest = normaliseManifest(multiassetManifest as unknown as Record<string, unknown>);
 
 function payToken(params: Record<string, unknown>) {
 	const action = findAction(manifest, "PayToken");

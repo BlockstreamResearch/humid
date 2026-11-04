@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import p2pkManifest from "../__fixtures__/p2pk.manifest.json";
+import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
 import type { NormalisedAction } from "../document/normalise";
 import type { ReferenceScope } from "../document/references";
 import { planAction } from "./plan";

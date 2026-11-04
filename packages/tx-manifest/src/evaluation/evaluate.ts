@@ -1,4 +1,3 @@
-import type { NormalisationNote } from "../document/normalise";
 import {
 	type ReferenceScope,
 	type ReferenceSiteKind,
@@ -14,7 +13,6 @@ export function evaluateExpression(
 	text: string,
 	site: ReferenceSiteKind,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): EvaluationResult {
 	const tokens = tokenise(text);
 
@@ -22,7 +20,7 @@ export function evaluateExpression(
 		return unreadable(text);
 	}
 
-	const reader = { at: 0, notes, scope, site, tokens: tokens.tokens };
+	const reader = { at: 0, scope, site, tokens: tokens.tokens };
 	const value = readSum(reader);
 
 	if (!value.ok) {
@@ -40,7 +38,6 @@ type Token = { kind: "name" | "number" | "symbol"; text: string };
 
 type Reader = {
 	at: number;
-	notes?: NormalisationNote[];
 	scope: ReferenceScope;
 	site: ReferenceSiteKind;
 	tokens: Token[];
@@ -68,7 +65,7 @@ function tokenise(text: string): { ok: true; tokens: Token[] } | { ok: false } {
 			continue;
 		}
 
-		const name = /^\$?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?/.exec(text.slice(at));
+		const name = /^\$?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,2}/.exec(text.slice(at));
 
 		if (name) {
 			tokens.push({ kind: "name", text: name[0] });
@@ -302,59 +299,4 @@ function bounded(value: bigint): EvaluationResult {
 	return value > I64_MAX || value < I64_MIN
 		? { ok: false, reason: "This amount leaves the 64-bit range these numbers are held in." }
 		: { ok: true, value };
-}
-
-export function evaluateCondition(
-	text: string,
-	site: ReferenceSiteKind,
-	scope: ReferenceScope,
-	notes?: NormalisationNote[],
-): { met: boolean; ok: true } | { ok: false; reason: string } {
-	const split = /^(?<left>.+?)\s*(?<operator>>=|<=|==|!=|>|<)\s*(?<right>.+)$/.exec(text.trim());
-	const operator = split?.groups?.operator;
-
-	if (!operator) {
-		return {
-			ok: false,
-			reason: `"${text}" is not a comparison, and this runtime reads no other condition.`,
-		};
-	}
-
-	const left = evaluateExpression(split?.groups?.left ?? "", site, scope, notes);
-
-	if (!left.ok) {
-		return left;
-	}
-
-	const right = evaluateExpression(split?.groups?.right ?? "", site, scope, notes);
-
-	if (!right.ok) {
-		return right;
-	}
-
-	switch (operator) {
-		case "!=": {
-			return { met: left.value !== right.value, ok: true };
-		}
-
-		case "<": {
-			return { met: left.value < right.value, ok: true };
-		}
-
-		case "<=": {
-			return { met: left.value <= right.value, ok: true };
-		}
-
-		case "==": {
-			return { met: left.value === right.value, ok: true };
-		}
-
-		case ">": {
-			return { met: left.value > right.value, ok: true };
-		}
-
-		default: {
-			return { met: left.value >= right.value, ok: true };
-		}
-	}
 }

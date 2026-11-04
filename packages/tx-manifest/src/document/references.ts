@@ -2,7 +2,7 @@ import { asArray, asRecord } from "./json";
 import { declaredFields, type NormalisedAction, type NormalisedManifest } from "./normalise";
 import { namedUtxoTypes } from "./sites";
 
-export type ReferenceForm = "args" | "bare" | "input-attribute" | "instance" | "params";
+export type ReferenceForm = "bare" | "input-attribute" | "instance" | "params";
 
 export type ParsedReference = {
 	attribute?: string;
@@ -11,7 +11,6 @@ export type ParsedReference = {
 };
 
 export type ReferenceScope = {
-	args?: Record<string, unknown>;
 	inputs?: Record<string, Record<string, unknown>>;
 	instance?: Record<string, unknown>;
 	params: Record<string, unknown>;
@@ -34,58 +33,64 @@ export type ReferenceSiteKind =
 
 const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: string }> = {
 	amount: {
-		accepts: ["instance", "params", "args", "input-attribute", "bare"],
+		accepts: ["instance", "params", "input-attribute", "bare"],
 		describes: "an amount",
 	},
 	asset: {
-		accepts: ["instance", "params", "args", "input-attribute", "bare"],
+		accepts: ["instance", "params", "input-attribute", "bare"],
 		describes: "an asset",
 	},
 	compileParam: {
-		accepts: ["instance", "params", "args", "bare"],
+		accepts: ["instance", "params", "bare"],
 		describes: "a compile parameter",
 	},
 	destination: { accepts: ["params"], describes: "a destination" },
 	expression: {
-		accepts: ["instance", "params", "args", "input-attribute", "bare"],
+		accepts: ["instance", "params", "input-attribute", "bare"],
 		describes: "an expression",
 	},
 	issuedAmount: {
-		accepts: ["instance", "params", "args", "bare"],
+		accepts: ["instance", "params", "bare"],
 		describes: "an issued amount",
 	},
 	stateLeaf: {
-		accepts: ["instance", "params", "args", "bare"],
+		accepts: ["instance", "params", "bare"],
 		describes: "part of a state leaf",
 	},
 	witnessKey: {
-		accepts: ["instance", "params", "args", "bare"],
+		accepts: ["instance", "params", "bare"],
 		describes: "a witness key",
 	},
 	witnessValue: {
-		accepts: ["instance", "params", "args"],
+		accepts: ["instance", "params"],
 		describes: "part of a witness value",
 	},
 };
 
 const NAMESPACES: Record<string, ReferenceForm> = {
-	args: "args",
 	instance: "instance",
 	params: "params",
 };
 
 const NAME = "[A-Za-z_][A-Za-z0-9_]*";
-const REFERENCE = new RegExp(`^\\$?(?<head>${NAME})(?:\\.(?<tail>${NAME}))?$`);
+const REFERENCE = new RegExp(
+	`^\\$?(?:inputs\\.(?<input>${NAME})\\.(?<field>${NAME})|(?<head>${NAME})(?:\\.(?<tail>${NAME}))?)$`,
+);
 
 export function parseReference(text: string): ParsedReference | undefined {
-	const match = REFERENCE.exec(text.trim());
-	const head = match?.groups?.head;
+	const groups = REFERENCE.exec(text.trim())?.groups;
+
+	if (groups?.input && groups.field) {
+		return { attribute: groups.field, form: "input-attribute", name: groups.input };
+	}
+
+	const head = groups?.head;
 
 	if (!head) {
 		return undefined;
 	}
 
-	const tail = match.groups?.tail;
+	const tail = groups.tail;
 
 	if (tail === undefined) {
 		return { form: "bare", name: head };
@@ -93,11 +98,7 @@ export function parseReference(text: string): ParsedReference | undefined {
 
 	const form = NAMESPACES[head];
 
-	if (form) {
-		return { form, name: tail };
-	}
-
-	return { attribute: tail, form: "input-attribute", name: head };
+	return form ? { form, name: tail } : { attribute: tail, form: "input-attribute", name: head };
 }
 
 export function resolveReference(
@@ -126,23 +127,10 @@ function lookUp(
 	scope: ReferenceScope,
 ): { ok: true; value: unknown } | { ok: false; reason: string } {
 	switch (reference.form) {
-		case "args": {
-			return read(scope.args, reference.name, "args");
-		}
-
 		case "bare": {
-			if (reference.name in scope.params) {
-				return { ok: true, value: scope.params[reference.name] };
-			}
-
-			if (scope.args && reference.name in scope.args) {
-				return { ok: true, value: scope.args[reference.name] };
-			}
-
-			return {
-				ok: false,
-				reason: `"${reference.name}" is neither a parameter nor an argument of this action.`,
-			};
+			return reference.name in scope.params
+				? { ok: true, value: scope.params[reference.name] }
+				: { ok: false, reason: `"${reference.name}" is not a parameter of this action.` };
 		}
 
 		case "input-attribute": {

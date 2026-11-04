@@ -66,7 +66,7 @@ export function resolveStaticWitnesses(
 	return { ok: true, witnesses };
 }
 
-const NAMED = /\$?[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*/g;
+const NAMED = /\$?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){1,2}/g;
 
 function fill(
 	value: string,

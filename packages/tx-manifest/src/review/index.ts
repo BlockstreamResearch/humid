@@ -20,7 +20,6 @@ import {
 import { asArray, asRecord } from "../document/json";
 import {
 	findAction,
-	type NormalisationNote,
 	type NormalisedAction,
 	normaliseInstance,
 	normaliseManifest,
@@ -56,7 +55,6 @@ import {
 import { fillParameters } from "../evaluation/parameters";
 import { planAction } from "../evaluation/plan";
 import { checkPositions, type StatedPosition } from "../evaluation/positions";
-import { checkValidations } from "../evaluation/validate";
 import { resolveStaticWitnesses, type StaticWitness } from "../evaluation/witness";
 import { estimateFeeSats } from "../fee";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
@@ -121,7 +119,6 @@ export type ManifestReview = {
 	locktimeHeight?: number;
 	sequence?: number;
 	movements: AssetMovement[];
-	normalisation: NormalisationNote[];
 	outputs: ReviewedOutput[];
 	policyAsset: string;
 	protocol: string;
@@ -154,10 +151,8 @@ export async function reviewManifestAction(
 		walletScriptPubKeyHex: string;
 	},
 ): Promise<ReviewManifestActionResult> {
-	const normalised = normaliseManifest(request.manifest);
-	const manifest = normalised.manifest;
+	const manifest = normaliseManifest(request.manifest);
 	const deployment = normaliseInstance(request.instance);
-	const notes: NormalisationNote[] = [...normalised.notes, ...deployment.notes];
 
 	const unsupported = refuseUnsupported(manifest, {
 		...(input.compilerVersion === undefined ? {} : { compilerVersion: input.compilerVersion }),
@@ -187,8 +182,7 @@ export async function reviewManifestAction(
 	const filled = fillParameters(
 		action,
 		request.params,
-		{ instance: deployment.instance.fields, params: request.params },
-		notes,
+		{ instance: deployment.fields, params: request.params },
 	);
 
 	if (!filled.ok) {
@@ -242,15 +236,15 @@ export async function reviewManifestAction(
 	const inputs: Record<string, Record<string, unknown>> = {};
 	const chainHeld: HeldValue[] = [];
 	const statedFields = createsInstance(action)
-		? statedCreatedFields(action, { instance: deployment.instance.fields, params }, notes)
+		? statedCreatedFields(action, { instance: deployment.fields, params })
 		: {};
 	let scope: ReferenceScope = {
 		inputs,
-		instance: { ...deployment.instance.fields, ...statedFields },
+		instance: { ...deployment.fields, ...statedFields },
 		params,
 	};
 
-	const utxos = new CovenantUtxos(request.state, deployment.instance.providedInputs);
+	const utxos = new CovenantUtxos(request.state, deployment.providedInputs);
 
 	for (const site of covenantSites(action.node).filter((declared) => declared.role === "spent")) {
 		// oxlint-disable-next-line no-await-in-loop
@@ -263,7 +257,6 @@ export async function reviewManifestAction(
 			declaredTypes,
 			includeDebugSymbols: buildMode.includeDebugSymbols,
 			network: input.network,
-			notes,
 			scope,
 			utxoType: site.utxoType,
 			wiring: site.wiring,
@@ -361,7 +354,6 @@ export async function reviewManifestAction(
 		covenantInputs,
 		holdings,
 		inputs,
-		notes,
 		policyAsset: input.policyAsset,
 		scope,
 	});
@@ -370,7 +362,7 @@ export async function reviewManifestAction(
 		return { reason: issued.reason, refused: true, reject: issued.reject };
 	}
 
-	const hooked = runActionHooks(action, scope, notes);
+	const hooked = runActionHooks(action, scope);
 
 	if (!hooked.ok) {
 		return { reason: hooked.reason, refused: true, reject: "document-fault" };
@@ -382,7 +374,6 @@ export async function reviewManifestAction(
 		? resolveCreatedInstance(action, {
 				contractSources: request.contractSources,
 				hashCovenant,
-				notes,
 				scope,
 			})
 		: undefined;
@@ -406,7 +397,6 @@ export async function reviewManifestAction(
 			declaredTypes,
 			includeDebugSymbols: buildMode.includeDebugSymbols,
 			network: input.network,
-			notes,
 			scope,
 			utxoType: site.utxoType,
 			wiring: site.wiring,
@@ -433,19 +423,13 @@ export async function reviewManifestAction(
 		}
 	}
 
-	const plan = planAction(action, scope, notes, manifest.raw.confidential_outputs);
+	const plan = planAction(action, scope);
 
 	if (!plan.ok) {
 		return { reason: plan.reason, refused: true, reject: "document-fault" };
 	}
 
-	const failed = checkValidations(action, scope, notes);
-
-	if (failed) {
-		return { reason: failed.reason, refused: true, reject: "document-fault" };
-	}
-
-	const inputRules = resolveInputRules(action, scope, notes);
+	const inputRules = resolveInputRules(action, scope);
 
 	if (!inputRules.ok) {
 		return { reason: inputRules.reason, refused: true, reject: "document-fault" };
@@ -489,7 +473,6 @@ export async function reviewManifestAction(
 				sats: issuance.assetAmountSats,
 			})),
 		],
-		notes,
 		policyAsset: input.policyAsset,
 		scope,
 	});
@@ -907,7 +890,6 @@ export async function reviewManifestAction(
 		issuances: issued.issuances,
 		...(locktimeHeight === undefined ? {} : { locktimeHeight }),
 		movements,
-		normalisation: notes,
 		outputs,
 		policyAsset,
 		protocol: manifest.protocol ?? "",
@@ -920,6 +902,7 @@ export async function reviewManifestAction(
 		confirmation: confirmationModel(reviewed, manifest, action, {
 			accountLabel: input.accountLabel,
 			policyAsset: input.policyAsset,
+			scope,
 		}),
 	};
 }
@@ -938,7 +921,6 @@ function resolveIssuances(
 		covenantInputs: ReviewedCovenantInput[];
 		holdings: AssetHoldings;
 		inputs: Record<string, Record<string, unknown>>;
-		notes: NormalisationNote[];
 		policyAsset: string;
 		scope: ReferenceScope;
 	},
@@ -979,7 +961,6 @@ function resolveIssuances(
 		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
 
 		const asset = resolveAsset(declared.asset, `input ${id}`, {
-			notes: context.notes,
 			policyAsset: context.policyAsset,
 			scope: context.scope,
 		});
@@ -1008,7 +989,6 @@ function resolveIssuances(
 			const issuedHere = resolveIssuance(
 				{ declared: issuance, id, outpoint },
 				context.scope,
-				context.notes,
 			);
 
 			if (!issuedHere.ok) {
@@ -1040,7 +1020,6 @@ function resolveIssuances(
 		const resolved = resolveIssuance(
 			{ declared: issuance, id, outpoint: { txid: funding.txid, vout: funding.vout } },
 			context.scope,
-			context.notes,
 		);
 
 		if (!resolved.ok) {
@@ -1075,7 +1054,6 @@ type HookedScope = { ok: false; reason: string } | { ok: true; scope: ReferenceS
 function runActionHooks(
 	action: NormalisedAction,
 	scope: ReferenceScope,
-	notes: NormalisationNote[],
 ): HookedScope {
 	let running = scope;
 
@@ -1097,7 +1075,7 @@ function runActionHooks(
 			continue;
 		}
 
-		const ran = runHook(hook.set, inputHookScope(running, running.inputs?.[id] ?? {}), notes);
+		const ran = runHook(hook.set, inputHookScope(running, running.inputs?.[id] ?? {}));
 
 		if (!ran.ok) {
 			return ran;
@@ -1116,7 +1094,7 @@ function runActionHooks(
 		return { ok: true, scope: running };
 	}
 
-	const ran = runHook(hook.set, running, notes);
+	const ran = runHook(hook.set, running);
 
 	return ran.ok ? { ok: true, scope: withHookValues(running, ran.values) } : ran;
 }
@@ -1132,7 +1110,7 @@ function statedIndex(declared: unknown): number | undefined {
 function malformedDeclaration(action: NormalisedAction): string | undefined {
 	const node = action.node;
 
-	for (const key of ["inputs", "outputs", "validations"] as const) {
+	for (const key of ["inputs", "outputs"] as const) {
 		if (node[key] !== undefined && !Array.isArray(node[key])) {
 			return `${action.name} declares ${key} as something other than a list, so this wallet cannot read what it declares.`;
 		}

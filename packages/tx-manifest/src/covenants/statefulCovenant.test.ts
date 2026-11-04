@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import manifestJson from "../__fixtures__/current/lending_v3.manifest.json";
+import manifestJson from "../__fixtures__/lending_v3/txmanifest.json";
 import { normaliseManifest } from "../document/normalise";
 import { deriveCovenantAddress } from "./covenant";
 
-const { manifest } = normaliseManifest(manifestJson as unknown as Record<string, unknown>);
+const manifest = normaliseManifest(manifestJson as unknown as Record<string, unknown>);
 
 const CURRENT_DEBT = "1000";
 

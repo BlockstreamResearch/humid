@@ -1,74 +1,54 @@
 import { describe, expect, test } from "bun:test";
 
 import { normaliseManifest } from "./normalise";
-import { describeConstructs, describeRegistry, inspectConstructs } from "./registry";
+import { describeRegistry, inspectConstructs } from "./registry";
 
-const normalise = (raw: Record<string, unknown>) => normaliseManifest(raw).manifest;
+const findings = (raw: Record<string, unknown>) => inspectConstructs(normaliseManifest(raw));
 
-describe("what the runtime registers, with no document in hand", () => {
-	test("every construct it does not act on says why, and every one it does says nothing", () => {
-		for (const entry of describeRegistry()) {
-			if (entry.state === "acted-on" || entry.state === "shown") {
-				expect(entry.reason).toBeUndefined();
-				continue;
-			}
-
-			expect(entry.reason?.length).toBeGreaterThan(0);
-		}
+describe("the constructs a document declares", () => {
+	test("pass where the format defines and this wallet handles them", () => {
+		expect(findings({ $comment: "x", chain: "liquid", requires: ["simplicity"] })).toEqual([]);
 	});
 
-	test("no construct is registered as unrecognised, which is a state only a document reaches", () => {
-		expect(describeRegistry().some((entry) => entry.state === "unrecognised")).toBe(false);
-	});
-
-	test("carries the keys answered at every position with no position", () => {
-		const everywhere = describeRegistry().filter((entry) => entry.site === undefined);
-
-		expect(everywhere.map((entry) => entry.key).toSorted()).toEqual([
-			"$comment",
-			"$comment_schema",
-			"$schema",
+	test("name a removed key and what replaced it", () => {
+		expect(findings({ classes: {} })).toEqual([
+			{ at: "manifest", key: "classes", replacement: "contract_templates", state: "removed" },
 		]);
 	});
 
-	test("registers each key against the kind of position it sits at", () => {
-		const entries = describeRegistry().filter((entry) => entry.key === "description");
+	test("tell a removed key apart by where it sits", () => {
+		const params = findings({ actions: { Pay: { params: {} } }, params: {} });
 
-		expect(entries.length).toBeGreaterThan(1);
-		expect(new Set(entries.map((entry) => entry.site)).size).toBe(entries.length);
+		expect(params).toEqual([
+			{ at: "manifest", key: "params", replacement: "params on the action", state: "removed" },
+		]);
+	});
+
+	test("report what the format defines and this wallet does not implement yet", () => {
+		expect(findings({ actions: { Pay: { allow_change: "any" } } })).toEqual([
+			{ at: "action Pay", key: "allow_change", state: "unimplemented" },
+		]);
+	});
+
+	test("report a key the format does not define", () => {
+		expect(findings({ nobody_lists_this: 1 })).toEqual([
+			{ at: "manifest", key: "nobody_lists_this", state: "unrecognised" },
+		]);
+	});
+
+	test("look inside a covenant reference, where a binding changes the address", () => {
+		const declared = findings({
+			actions: { Pay: { outputs: [{ destination: { args: {}, utxo_type: "t" }, id: "o" }] } },
+		});
+
+		expect(declared.map((finding) => finding.key)).toEqual(["args"]);
 	});
 });
 
-describe("what one document declares, read from the same table", () => {
-	test("reports the handled constructs the refusal reader drops", () => {
-		const manifest = normalise({ chain: "liquid" });
-
-		expect(inspectConstructs(manifest)).toEqual([]);
-		expect(describeConstructs(manifest)).toEqual([
-			{ at: "manifest", key: "chain", site: "manifest", state: "acted-on" },
-		]);
-	});
-
-	test("agrees with the refusal reader about what is unhandled", () => {
-		const manifest = normalise({ actions: { Pay: { args: {} } }, nobody_lists_this: 1 });
-		const unhandled = describeConstructs(manifest).filter(
-			(report) => report.state === "unimplemented" || report.state === "unrecognised",
-		);
-
-		expect(unhandled.map((report) => report.key).toSorted()).toEqual(
-			inspectConstructs(manifest)
-				.map((finding) => finding.key)
-				.toSorted(),
-		);
-	});
-
-	test("reports the same key at two kinds of position as two constructs", () => {
-		const reports = describeConstructs(
-			normalise({
-				actions: { Pay: { description: "d", outputs: [{ description: "d", id: "o" }] } },
-			}),
-		).filter((report) => report.key === "description");
-
-		expect(reports.map((report) => report.site).toSorted()).toEqual(["action", "output"]);
-	});
+test("the registry names a replacement only for removed keys", () => {
+	for (const entry of describeRegistry()) {
+		if (entry.replacement !== undefined) {
+			expect(entry.state).toBe("removed");
+		}
+	}
 });

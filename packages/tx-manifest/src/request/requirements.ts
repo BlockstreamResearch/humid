@@ -57,7 +57,7 @@ export function resolveActionRequirements(
 				keys: reads.map((occurrence) => occurrence.at),
 				reason:
 					`The action "${declared.name}" reads a deployment's field values and is declared ` +
-					"outside any class, so there is no deployment for it to read.",
+					"outside any template, so there is no deployment for it to read.",
 			});
 		} else {
 			required.push("instance");
@@ -67,14 +67,14 @@ export function resolveActionRequirements(
 					keys: reads.map((occurrence) => occurrence.at),
 					part: "instance",
 					reason:
-						`The action "${declared.name}" is a method of ${declared.boundTo} and reads the ` +
+						`The action "${declared.name}" is an action of ${declared.boundTo} and reads the ` +
 						"field values of one deployment of it.",
 				});
 			}
 		}
 	}
 
-	const pinned = normaliseInstance(request.instance).instance.providedInputs;
+	const pinned = normaliseInstance(request.instance).providedInputs;
 
 	if (covenantSites(action).some((site) => site.role === "spent" && !(site.id in pinned))) {
 		required.push("state");
@@ -116,7 +116,7 @@ function promptedParams(action: Record<string, unknown>): string[] {
 		.filter(([, declared]) => {
 			const record = asRecord(declared);
 
-			return !record || !("source" in record || "compute" in record || "derived" in record);
+			return !record || !("compute" in record);
 		})
 		.map(([name]) => name);
 }

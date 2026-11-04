@@ -1,5 +1,5 @@
 import { asRecord } from "../document/json";
-import type { NormalisationNote, NormalisedAction } from "../document/normalise";
+import type { NormalisedAction } from "../document/normalise";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { computedValue, computesValue } from "../evaluation/computedValue";
 import { resolveCompileParams } from "./compileParams";
@@ -17,7 +17,7 @@ export function createsInstance(action: NormalisedAction): boolean {
 }
 
 function computeKind(node: Record<string, unknown>): string | undefined {
-	for (const key of ["compute", "type", "lang"]) {
+	for (const key of ["type", "lang"]) {
 		const value = node[key];
 
 		if (typeof value === "string") {
@@ -31,7 +31,6 @@ function computeKind(node: Record<string, unknown>): string | undefined {
 export function statedCreatedFields(
 	action: NormalisedAction,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): Record<string, string> {
 	const declared = asRecord(asRecord(action.node.create_instance)?.fields);
 	const stated: Record<string, string> = {};
@@ -41,7 +40,7 @@ export function statedCreatedFields(
 			continue;
 		}
 
-		const resolved = resolveFieldReference(name, value, scope, notes);
+		const resolved = resolveFieldReference(name, value, scope);
 
 		if (resolved.ok) {
 			stated[name] = resolved.value;
@@ -56,7 +55,6 @@ export function resolveCreatedInstance(
 	input: {
 		contractSources: Record<string, string>;
 		hashCovenant: HashCovenant;
-		notes?: NormalisationNote[];
 		scope: ReferenceScope;
 	},
 ): CreateInstanceResult {
@@ -77,7 +75,7 @@ export function resolveCreatedInstance(
 
 	for (const [name, value] of Object.entries(declared)) {
 		if (typeof value === "string") {
-			const resolved = resolveFieldReference(name, value, input.scope, input.notes);
+			const resolved = resolveFieldReference(name, value, input.scope);
 
 			if (!resolved.ok) {
 				return resolved;
@@ -162,7 +160,6 @@ export function resolveCreatedInstance(
 
 			const stateLeaves = encodeStateLeaves(node.extra_leaves, {
 				at: `Field ${name}`,
-				...(input.notes === undefined ? {} : { notes: input.notes }),
 				scope,
 			});
 
@@ -314,13 +311,12 @@ function resolveFieldReference(
 	name: string,
 	text: string,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): { ok: false; reason: string } | { ok: true; value: string } {
 	const found = resolveReference(text, "compileParam", scope);
 
 	if (!found.ok) {
 		if (computesValue(text)) {
-			const computed = computedValue(text, "compileParam", scope, notes);
+			const computed = computedValue(text, "compileParam", scope);
 
 			return computed.ok ? computed : { ok: false, reason: `Field ${name}: ${computed.reason}` };
 		}

@@ -1,4 +1,3 @@
-import type { NormalisationNote } from "../document/normalise";
 import type { ReferenceScope, ReferenceSiteKind } from "../document/references";
 import { evaluateExpression } from "./evaluate";
 
@@ -12,9 +11,8 @@ export function computedValue(
 	text: string,
 	site: ReferenceSiteKind,
 	scope: ReferenceScope,
-	notes?: NormalisationNote[],
 ): { ok: false; reason: string } | { ok: true; value: string } {
-	const evaluated = evaluateExpression(text, site, scope, notes);
+	const evaluated = evaluateExpression(text, site, scope);
 
 	return evaluated.ok ? { ok: true, value: String(evaluated.value) } : evaluated;
 }
