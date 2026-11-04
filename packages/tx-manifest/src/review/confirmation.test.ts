@@ -186,9 +186,21 @@ describe("what the dapp merely said", () => {
 		expect((await shown()).action).toMatchObject({ origin: "dapp", value: "Receive" });
 	});
 
-	test("the protocol's own summary is the dapp's", async () => {
-		expect((await shown()).summary?.origin).toBe("dapp");
-		expect((await shown()).summary?.value).toContain("Spend a p2pk output");
+	test("the action's intent is the dapp's, with its references filled in", async () => {
+		const document = structuredClone(p2pkManifest) as unknown as {
+			actions: { Receive: Record<string, unknown> };
+		};
+
+		document.actions.Receive.intent = "spend to {params.pubkey:short}";
+
+		expect((await shown(document as unknown as Record<string, unknown>)).summary).toMatchObject({
+			origin: "dapp",
+			value: `spend to ${PUBKEY}`,
+		});
+	});
+
+	test("and there is no summary where the action states no intent", async () => {
+		expect((await shown()).summary).toBeUndefined();
 	});
 
 	test("and so is its word for what kind of output a covenant is", async () => {
@@ -232,13 +244,6 @@ describe("what a person is told about a blinded amount", () => {
 	test("when nobody said anything and this network's own answer is to blind", async () => {
 		expect(await blinded(saying(undefined))).toContainEqual({
 			decidedBy: "nothing says otherwise and this network blinds an output by default",
-			id: "received_out",
-		});
-	});
-
-	test("when the document states it for the whole file", async () => {
-		expect(await blinded({ ...saying(undefined), confidential_outputs: true })).toContainEqual({
-			decidedBy: "this protocol blinds its outputs by default",
 			id: "received_out",
 		});
 	});

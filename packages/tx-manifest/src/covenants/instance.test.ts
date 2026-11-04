@@ -227,7 +227,6 @@ describe("the deployment a constructor creates", () => {
 			TIMEOUT: { type: "u32", value: "900000" },
 		});
 	});
-
 });
 
 describe("the mode the document states its contracts were built in", () => {

@@ -179,11 +179,10 @@ export async function reviewManifestAction(
 		return { reason: buildMode.reason, refused: true, reject: "unreadable-build-mode" };
 	}
 
-	const filled = fillParameters(
-		action,
-		request.params,
-		{ instance: deployment.fields, params: request.params },
-	);
+	const filled = fillParameters(action, request.params, {
+		instance: deployment.fields,
+		params: request.params,
+	});
 
 	if (!filled.ok) {
 		return { reason: filled.reason, refused: true, reject: filled.reject };
@@ -986,10 +985,7 @@ function resolveIssuances(
 				};
 			}
 
-			const issuedHere = resolveIssuance(
-				{ declared: issuance, id, outpoint },
-				context.scope,
-			);
+			const issuedHere = resolveIssuance({ declared: issuance, id, outpoint }, context.scope);
 
 			if (!issuedHere.ok) {
 				return { ok: false, reason: issuedHere.reason, reject: issuedHere.reject };
@@ -1051,10 +1047,7 @@ function bySize(left: bigint, right: bigint, smallestFirst: boolean): number {
 
 type HookedScope = { ok: false; reason: string } | { ok: true; scope: ReferenceScope };
 
-function runActionHooks(
-	action: NormalisedAction,
-	scope: ReferenceScope,
-): HookedScope {
+function runActionHooks(action: NormalisedAction, scope: ReferenceScope): HookedScope {
 	let running = scope;
 
 	for (const entry of asArray(action.node.inputs)) {

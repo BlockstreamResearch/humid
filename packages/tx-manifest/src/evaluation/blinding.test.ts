@@ -5,7 +5,10 @@ import { resolveBlinding } from "./blinding";
 describe("an output's blinding", () => {
 	test("follows the output's own word", () => {
 		expect(resolveBlinding({ declared: false })).toEqual({ blinding: "open", decidedBy: "output" });
-		expect(resolveBlinding({ declared: true })).toEqual({ blinding: "blinded", decidedBy: "output" });
+		expect(resolveBlinding({ declared: true })).toEqual({
+			blinding: "blinded",
+			decidedBy: "output",
+		});
 	});
 
 	test("defaults to blinded, as the network does", () => {

@@ -1,5 +1,5 @@
 import type { LiquidProcessConfidentialTransactionParams } from "@humid/appkit-injected-adapter";
-import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk.manifest.json";
+import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk/txmanifest.json";
 import { useState } from "react";
 
 import { useHumidContext } from "@/contexts/Web3Provider/HumidProvider";
@@ -44,7 +44,7 @@ export function ProcessCtCard() {
 		action,
 		broadcast,
 		contractSources: { "./p2pk.simf": P2PK_SOURCE },
-		manifest: p2pkManifest,
+		manifest: { ...p2pkManifest, simplicity_hl: { version: "0.8" } },
 		params: spending
 			? { pubkey: pubkey.trim() }
 			: { amount_sat: Number(amount) || 0, pubkey: pubkey.trim() },

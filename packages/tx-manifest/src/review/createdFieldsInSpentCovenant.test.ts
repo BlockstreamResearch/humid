@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import manifest from "../__fixtures__/lending_v3/txmanifest.json";
 import { reviewManifestAction } from "./index";
@@ -9,7 +10,7 @@ const SCRIPT = `5120${"11".repeat(32)}`;
 const contractSources = Object.fromEntries(
 	[...JSON.stringify(manifest).matchAll(/"(\.\/[a-z_]+\.simf)"/g)].map(([, path]) => [
 		path,
-		`// ${path}`,
+		readFileSync(new URL(`../__fixtures__/lending_v3/${path}`, import.meta.url), "utf8"),
 	]),
 );
 
@@ -69,7 +70,7 @@ async function argumentsCompiledFor(source: string): Promise<Record<string, unkn
 
 describe("a spent covenant compiled from a field of the deployment the action creates", () => {
 	test("CreateOffer compiles the issuance factory from the count its create_instance states", async () => {
-		const compiled = await argumentsCompiledFor("// ./issuance_factory.simf");
+		const compiled = await argumentsCompiledFor(contractSources["./issuance_factory.simf"]!);
 
 		expect(compiled[0]?.ISSUING_UTXOS_COUNT).toEqual({ type: "u8", value: "2" });
 	});

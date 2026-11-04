@@ -102,9 +102,10 @@ describe("which parameters the request must fill", () => {
 		});
 	}
 
-
 	test("a parameter the wallet supplies is not", () => {
-		const { missing } = paramsOf({ key: { compute: { type: "wallet", wallet: "key" }, type: "pubkey" } });
+		const { missing } = paramsOf({
+			key: { compute: { type: "wallet", wallet: "key" }, type: "pubkey" },
+		});
 
 		expect(missing).toEqual([]);
 	});
@@ -274,7 +275,6 @@ describe("when a deployment's field values are needed", () => {
 		expect(required).not.toContain("instance");
 		expect(missing).toEqual([]);
 	});
-
 
 	test("but a field its create_instance does not produce is still read from one", () => {
 		const { required } = templateAction({

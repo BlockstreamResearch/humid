@@ -114,12 +114,12 @@ describe("every refusal carries a name as well as a reason", () => {
 	test("a construct the format defines and this wallet does not implement", async () => {
 		const refusal = await refusalOf({
 			manifest: edited((manifest) => {
-				actionNode(manifest, "Pay").on_validate = "assert!(true)";
+				actionNode(manifest, "Pay").allow_change = "any";
 			}),
 		});
 
 		expect(refusal?.reject).toBe("unimplemented-construct");
-		expect(refusal?.reason).toContain("on_validate");
+		expect(refusal?.reason).toContain("allow_change");
 	});
 
 	test("a construct no specification this wallet knows describes", async () => {
@@ -149,7 +149,7 @@ describe("every refusal carries a name as well as a reason", () => {
 	test("a build mode that is neither on nor off", async () => {
 		const refusal = await refusalOf({
 			manifest: edited((manifest) => {
-				manifest.compile_debug_symbols = "maybe";
+				manifest.simplicity_hl = { debug_symbols: "maybe" };
 			}),
 		});
 
@@ -160,7 +160,7 @@ describe("every refusal carries a name as well as a reason", () => {
 		const refusal = await refusalOf(
 			{
 				manifest: edited((manifest) => {
-					manifest.simplicity_hl_version = "0.1.0";
+					manifest.simplicity_hl = { version: "0.1.0" };
 				}),
 			},
 			{ compilerVersion: "0.6.0" } as Partial<typeof deps>,
@@ -281,13 +281,6 @@ describe("a declaration this runtime cannot read is refused, never passed over",
 		says?: string;
 		what: string;
 	}[] = [
-		{
-			edit: (pay) => {
-				pay.validations = { amount_nonzero: { rule: { expr: "1 > 0", type: "arithmetic" } } };
-			},
-			reject: "document-fault",
-			what: "rules written as a set rather than a list, which would check none of them",
-		},
 		{
 			edit: (pay) => {
 				(pay.inputs as unknown[])[0] = "funding_input";

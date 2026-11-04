@@ -10,7 +10,7 @@ function render(): string {
 	return renderToStaticMarkup(<FormatSupport />);
 }
 
-describe("what this wallet does not implement", () => {
+describe("what this wallet does not read", () => {
 	test("leads with it, before anything the wallet does read", () => {
 		const html = render();
 
@@ -19,12 +19,13 @@ describe("what this wallet does not implement", () => {
 		);
 	});
 
-	test("names every construct the runtime does not act on, with its reason", () => {
+	test("names what replaced each removed construct", () => {
 		const html = render();
 
-		for (const entry of describeRegistry().filter((candidate) => candidate.reason !== undefined)) {
-			expect(html).toContain(entry.key);
-			expect(html).toContain(escaped(entry.reason ?? ""));
+		for (const { replacement } of describeRegistry()) {
+			if (replacement !== undefined) {
+				expect(html).toContain(escaped(`use ${replacement}`));
+			}
 		}
 	});
 
@@ -45,10 +46,7 @@ describe("the whole table, not a sample of it", () => {
 	});
 
 	test("says how much of the format this is, counted rather than stated", () => {
-		const entries = describeRegistry();
-		const positioned = entries.filter((entry) => entry.site !== undefined);
-
-		expect(render()).toContain(`${positioned.length} fields at`);
+		expect(render()).toContain(`${describeRegistry().length} fields at`);
 	});
 
 	test("says where each one sits in words a reader can use", () => {

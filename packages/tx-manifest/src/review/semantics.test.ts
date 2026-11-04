@@ -135,43 +135,6 @@ describe("an amount the document works out rather than states", () => {
 	});
 });
 
-describe("a rule the protocol states about its own action", () => {
-	test("refuses the action in the protocol's own words when it is not met", async () => {
-		const result = await reviewPay(
-			payDocument((pay) => {
-				pay.validations = [
-					{
-						error: { code: "INVALID_AMOUNT", message: "Amount must be greater than zero" },
-						id: "amount_large_enough",
-						rule: { expr: "params.amount_sat > 5000", type: "arithmetic" },
-					},
-				];
-			}),
-		);
-
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reason).toContain("Amount must be greater than zero");
-			expect(result.reject).toBe("document-fault");
-		}
-	});
-
-	test("and refuses a kind of rule it cannot check at all", async () => {
-		const result = await reviewPay(
-			payDocument((pay) => {
-				pay.validations = [{ id: "on_chain", rule: { type: "utxo_exists" } }];
-			}),
-		);
-
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reason).toContain("on_chain");
-		}
-	});
-});
-
 describe("what fills a parameter nobody supplied", () => {
 	test("a computed value, worked out from what the request did supply", async () => {
 		const result = await reviewPay(
@@ -249,7 +212,7 @@ describe("what fills a parameter nobody supplied", () => {
 			payDocument((pay) => {
 				const params = pay.params as Record<string, Record<string, unknown>>;
 
-				params.signer = { source: { type: "wallet_key" }, type: "pubkey" };
+				params.signer = { compute: { type: "wallet", wallet: "pubkey" }, type: "pubkey" };
 			}),
 		);
 

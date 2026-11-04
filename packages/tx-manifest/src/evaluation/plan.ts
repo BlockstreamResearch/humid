@@ -23,10 +23,7 @@ export type PlannedSpend = {
 
 export type PlanResult = { ok: false; reason: string } | { ok: true; plan: PlannedSpend };
 
-export function planAction(
-	action: NormalisedAction,
-	scope: ReferenceScope,
-): PlanResult {
+export function planAction(action: NormalisedAction, scope: ReferenceScope): PlanResult {
 	const outputs: PlannedOutput[] = [];
 	let fundingSats = 0n;
 

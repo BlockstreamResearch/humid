@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import currentVaultlet from "../__fixtures__/vaultlet.manifest.json";
 import mutualManifest from "../__fixtures__/mutual.manifest.json";
-import debugVaultlet from "../__fixtures__/vaultlet-debug.manifest.json";
-import groupedVaultlet from "../__fixtures__/vaultlet.manifest.json";
+import vaultlet from "../__fixtures__/vaultlet.manifest.json";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { isRefusal, reviewManifestAction } from "./index";
 
@@ -33,11 +31,13 @@ const SOURCES = Object.fromEntries(
 	]),
 );
 
+const debugVaultlet = { ...vaultlet, simplicity_hl: { debug_symbols: true } };
+
 const DECLARED = { SLOT_COUNT: "u8", WITH_BURN: "bool" };
 
 const DEPLOYMENT = {
 	instance: {
-		class: "vaultlet_contract",
+		template: "vaultlet_contract",
 		fields: {
 			GUARD_COV_HASH: "dd".repeat(32),
 			OWNER_PUB_KEY: KEY,
@@ -135,22 +135,22 @@ const openVault = (document: unknown) => ({
 	},
 });
 
-describe("a class method against a deployment that exists", () => {
+describe("a template action against a deployment that exists", () => {
 	test("is reviewed rather than refused for an action nobody could find", async () => {
-		const { result } = review(withdraw(groupedVaultlet));
+		const { result } = review(withdraw(vaultlet));
 
 		expect(isRefusal(await result)).toBe(false);
 	});
 
-	test("reports which class the method belongs to", async () => {
-		const { result } = review(withdraw(groupedVaultlet));
+	test("reports which template the action belongs to", async () => {
+		const { result } = review(withdraw(vaultlet));
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed) ? undefined : reviewed.boundTo).toBe("vaultlet_contract");
 	});
 
-	test("rebuilds its covenant from the deployment's own fields, at the class's declared types", async () => {
-		const { compiled, result } = review(withdraw(groupedVaultlet));
+	test("rebuilds its covenant from the deployment's own fields, at the template's declared types", async () => {
+		const { compiled, result } = review(withdraw(vaultlet));
 
 		await result;
 
@@ -164,7 +164,7 @@ describe("a class method against a deployment that exists", () => {
 	});
 
 	test("checks what it rebuilt against what the chain says, and reports it verified", async () => {
-		const { result } = review(withdraw(groupedVaultlet));
+		const { result } = review(withdraw(vaultlet));
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed) ? [] : reviewed.covenants).toEqual([
@@ -186,7 +186,7 @@ describe("a class method against a deployment that exists", () => {
 	});
 
 	test("carries out what it compiled with, so nothing has to resolve the references again", async () => {
-		const { compiled, result } = review(withdraw(groupedVaultlet));
+		const { compiled, result } = review(withdraw(vaultlet));
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed) ? "" : reviewed.covenants[0]?.argumentsJson).toBe(
@@ -195,7 +195,7 @@ describe("a class method against a deployment that exists", () => {
 	});
 
 	test("refuses when the funds are locked by a different contract", async () => {
-		const { result } = review(withdraw(groupedVaultlet), { onChain: ELSEWHERE_SCRIPT });
+		const { result } = review(withdraw(vaultlet), { onChain: ELSEWHERE_SCRIPT });
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed)).toBe(true);
@@ -203,12 +203,12 @@ describe("a class method against a deployment that exists", () => {
 	});
 
 	test("refuses without the deployment file, naming it", async () => {
-		const { compiled, result } = review({ ...withdraw(groupedVaultlet), instance: undefined });
+		const { compiled, result } = review({ ...withdraw(vaultlet), instance: undefined });
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed)).toBe(true);
 		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain(
-			"is a method of vaultlet_contract",
+			"is an action of vaultlet_contract",
 		);
 		expect(isRefusal(reviewed) ? reviewed.reason : "").toContain(
 			"utxo type vault / script / RESERVE_COV_HASH",
@@ -217,7 +217,7 @@ describe("a class method against a deployment that exists", () => {
 	});
 
 	test("resolves the output's amount from the deployment rather than from the request", async () => {
-		const { result } = review(withdraw(groupedVaultlet));
+		const { result } = review(withdraw(vaultlet));
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed) ? [] : reviewed.outputs).toEqual([
@@ -233,9 +233,9 @@ describe("a class method against a deployment that exists", () => {
 	});
 });
 
-describe("the constructor of the same class", () => {
+describe("the constructor of the same template", () => {
 	test("is reviewed with no deployment to read, and reports the one it creates", async () => {
-		const { result } = review(openVault(groupedVaultlet));
+		const { result } = review(openVault(vaultlet));
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed)).toBe(false);
@@ -250,9 +250,12 @@ describe("the constructor of the same class", () => {
 	});
 
 	test("works out a field the document computes rather than recording its text", async () => {
-		const document = structuredClone(groupedVaultlet) as Record<string, unknown>;
-		const classes = document.classes as Record<string, { methods: Record<string, unknown> }>;
-		const constructor = classes.vaultlet_contract?.methods.OpenVault as Record<string, unknown>;
+		const document = structuredClone(vaultlet) as Record<string, unknown>;
+		const templates = document.contract_templates as Record<
+			string,
+			{ actions: Record<string, unknown> }
+		>;
+		const constructor = templates.vaultlet_contract?.actions.OpenVault as Record<string, unknown>;
 		const created = constructor.create_instance as { fields: Record<string, unknown> };
 
 		created.fields.VAULT_AMOUNT = "params.VAULT_AMOUNT * 2";
@@ -268,7 +271,7 @@ describe("the constructor of the same class", () => {
 	});
 
 	test("and leaves a literal alone, however much it looks like arithmetic", async () => {
-		const { result } = review(openVault(groupedVaultlet));
+		const { result } = review(openVault(vaultlet));
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed) ? "" : reviewed.createdInstance?.fields.VAULT_ASSET_ID).toBe(
@@ -277,7 +280,7 @@ describe("the constructor of the same class", () => {
 	});
 
 	test("reports the covenant it creates as one with nothing yet to compare against", async () => {
-		const { result } = review(openVault(groupedVaultlet));
+		const { result } = review(openVault(vaultlet));
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed) ? [] : reviewed.covenants.map((found) => found.verified)).toEqual([
@@ -292,7 +295,7 @@ describe("the constructor of the same class", () => {
 			{
 				broadcast: false,
 				contractSources: SOURCES,
-				...openVault(groupedVaultlet),
+				...openVault(vaultlet),
 			} as ParsedLiquidProcessCtParams,
 			{
 				accountLabel: "liquid:testnet account 0",
@@ -321,7 +324,7 @@ describe("the constructor of the same class", () => {
 	});
 
 	test("derives the covenant it creates from the deployment it worked out", async () => {
-		const { compiled, result } = review(openVault(groupedVaultlet));
+		const { compiled, result } = review(openVault(vaultlet));
 		const reviewed = await result;
 
 		if (isRefusal(reviewed)) {
@@ -338,48 +341,11 @@ describe("the constructor of the same class", () => {
 		});
 	});
 
-	test("carries no deployment for the method that only spends what exists", async () => {
-		const { result } = review(withdraw(groupedVaultlet));
+	test("carries no deployment for the action that only spends what exists", async () => {
+		const { result } = review(withdraw(vaultlet));
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed) ? "refused" : reviewed.createdInstance).toBeUndefined();
-	});
-});
-
-describe("both generations of the same document", () => {
-	test("review a class method identically", async () => {
-		const grouped = review(withdraw(groupedVaultlet));
-		const current = review(withdraw(currentVaultlet));
-		const { normalisation: _grouped, ...groupedReview } = (await grouped.result) as Record<
-			string,
-			unknown
-		>;
-		const { normalisation: _current, ...currentReview } = (await current.result) as Record<
-			string,
-			unknown
-		>;
-
-		expect(groupedReview).toEqual(currentReview);
-		expect(grouped.compiled).toEqual(current.compiled);
-	});
-
-	test("and create the identical deployment from the constructor", async () => {
-		const grouped = await review(openVault(groupedVaultlet)).result;
-		const current = await review(openVault(currentVaultlet)).result;
-
-		expect(isRefusal(grouped) ? undefined : grouped.createdInstance).toEqual(
-			isRefusal(current) ? undefined : current.createdInstance,
-		);
-	});
-
-	test("differ only in the spellings each records having rewritten", async () => {
-		const grouped = await review(withdraw(groupedVaultlet)).result;
-
-		expect(isRefusal(grouped) ? [] : grouped.normalisation).toContainEqual({
-			at: "action OpenVault",
-			canonical: "is_constructor",
-			found: "deploy",
-		});
 	});
 });
 
@@ -402,7 +368,7 @@ describe("what a review still refuses", () => {
 				broadcast: false,
 				contractSources: SOURCES,
 				params: {},
-				...withdraw(groupedVaultlet),
+				...withdraw(vaultlet),
 			} as ParsedLiquidProcessCtParams,
 			{
 				accountLabel: "liquid:testnet account 0",
@@ -425,10 +391,10 @@ describe("what a review still refuses", () => {
 		expect(isRefusal(reviewed)).toBe(true);
 	});
 
-	test("an action neither declaration shape declares", async () => {
+	test("an action the document does not declare", async () => {
 		const { result } = review({
 			action: "Nowhere",
-			manifest: groupedVaultlet as unknown as Record<string, unknown>,
+			manifest: vaultlet as unknown as Record<string, unknown>,
 		});
 		const reviewed = await result;
 
@@ -438,7 +404,7 @@ describe("what a review still refuses", () => {
 
 describe("the build mode a document declares", () => {
 	test("reaches the compiler for an ordinary derivation", async () => {
-		const plain = review(withdraw(groupedVaultlet));
+		const plain = review(withdraw(vaultlet));
 		const debug = review(withdraw(debugVaultlet));
 
 		await plain.result;
@@ -449,7 +415,7 @@ describe("the build mode a document declares", () => {
 	});
 
 	test("and the compiler that takes the hashes a deployment's fields compute", async () => {
-		const plain = review(openVault(groupedVaultlet));
+		const plain = review(openVault(vaultlet));
 		const debug = review(openVault(debugVaultlet));
 
 		await plain.result;
@@ -461,7 +427,7 @@ describe("the build mode a document declares", () => {
 	});
 
 	test("so the deployment the same constructor creates differs between the two", async () => {
-		const plain = await review(openVault(groupedVaultlet)).result;
+		const plain = await review(openVault(vaultlet)).result;
 		const debug = await review(openVault(debugVaultlet)).result;
 
 		expect(isRefusal(plain) || isRefusal(debug)).toBe(false);
@@ -487,10 +453,7 @@ describe("the build mode a document declares", () => {
 		const { compiled, result } = review({
 			action: "Withdraw",
 			instance: DEPLOYMENT,
-			manifest: { ...(groupedVaultlet as object), compile_debug_symbols: "yes" } as Record<
-				string,
-				unknown
-			>,
+			manifest: { ...vaultlet, simplicity_hl: { debug_symbols: "yes" } } as Record<string, unknown>,
 			state: { utxos: [{ txid: "b".repeat(64), utxo_type: "vault", vout: 0 }] },
 		});
 		const reviewed = await result;
@@ -503,7 +466,7 @@ describe("the build mode a document declares", () => {
 
 describe("the derivation the review carries out", () => {
 	test("is everything the covenant was compiled from, with nothing left to look up", async () => {
-		const { compiled, result } = review(withdraw(groupedVaultlet));
+		const { compiled, result } = review(withdraw(vaultlet));
 		const reviewed = await result;
 
 		if (isRefusal(reviewed)) {
@@ -527,7 +490,7 @@ describe("the derivation the review carries out", () => {
 	});
 
 	test("recompiles to the same script without the request", async () => {
-		const { compiled, result } = review(withdraw(groupedVaultlet));
+		const { compiled, result } = review(withdraw(vaultlet));
 		const reviewed = await result;
 
 		if (isRefusal(reviewed)) {
@@ -548,7 +511,7 @@ describe("the derivation the review carries out", () => {
 	});
 
 	test("names the path the document used it under, for a reader who has to find it", async () => {
-		const reviewed = await review(withdraw(groupedVaultlet)).result;
+		const reviewed = await review(withdraw(vaultlet)).result;
 
 		expect(isRefusal(reviewed) ? [] : reviewed.covenants.map((f) => f.sourcePath)).toEqual([
 			"./vault.simf",
@@ -558,7 +521,7 @@ describe("the derivation the review carries out", () => {
 
 describe("when the hash compiler fails", () => {
 	test("a compiler that throws becomes a refusal naming the field", async () => {
-		const { result } = review(openVault(groupedVaultlet), {
+		const { result } = review(openVault(vaultlet), {
 			hashedBy: () => {
 				throw new Error("wasm module not loaded");
 			},
@@ -570,7 +533,7 @@ describe("when the hash compiler fails", () => {
 	});
 
 	test("a compiler returning something that is not a script becomes one too", async () => {
-		const { result } = review(openVault(groupedVaultlet), { hashedBy: () => "not hex" });
+		const { result } = review(openVault(vaultlet), { hashedBy: () => "not hex" });
 		const reviewed = await result;
 
 		expect(isRefusal(reviewed)).toBe(true);
@@ -583,7 +546,7 @@ describe("when the hash compiler fails", () => {
 				broadcast: false,
 				contractSources: SOURCES,
 				params: {},
-				...withdraw(groupedVaultlet),
+				...withdraw(vaultlet),
 			} as ParsedLiquidProcessCtParams,
 			{
 				accountLabel: "liquid:testnet account 0",

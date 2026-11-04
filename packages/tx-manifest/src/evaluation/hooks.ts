@@ -50,10 +50,7 @@ function declaredHook(declared: unknown, at: string): DeclaredHook {
 	return { kind: "present", set };
 }
 
-export function runHook(
-	set: Record<string, unknown>,
-	scope: ReferenceScope,
-): RunHookResult {
+export function runHook(set: Record<string, unknown>, scope: ReferenceScope): RunHookResult {
 	const values: HookValues = { instance: {}, params: {} };
 	let running = scope;
 

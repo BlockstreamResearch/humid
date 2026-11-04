@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk.manifest.json";
+import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
+import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk/txmanifest.json";
 
 import { DENY_ALL_AUTHORIZATION } from "@/core/wallet-rpc/types";
 
@@ -14,10 +15,11 @@ import {
 } from "./index";
 import { PROCESS_CT_CONFIRMATION_KIND } from "./ProcessCtConfirmation";
 
+const MANIFEST = { ...p2pkManifest, simplicity_hl: { version: SMPLX_COMPILER_VERSION } };
 const SOURCE_PATH = "./p2pk.simf";
 const SOURCE = readFileSync(
 	new URL(
-		"../../../../../../../../../packages/tx-manifest/src/__fixtures__/p2pk.simf",
+		"../../../../../../../../../packages/tx-manifest/src/__fixtures__/p2pk/p2pk.simf",
 		import.meta.url,
 	),
 	"utf8",
@@ -317,7 +319,7 @@ const payRequest = (broadcast = false) => ({
 	action: "Pay",
 	broadcast,
 	contractSources: { [SOURCE_PATH]: SOURCE },
-	manifest: p2pkManifest,
+	manifest: MANIFEST,
 	params: { amount_sat: 1000, pubkey: PUBKEY },
 });
 
@@ -325,7 +327,7 @@ const receiveRequest = (broadcast = false) => ({
 	action: "Receive",
 	broadcast,
 	contractSources: { [SOURCE_PATH]: SOURCE },
-	manifest: p2pkManifest,
+	manifest: MANIFEST,
 	params: { pubkey: PUBKEY },
 	state: { utxos: [{ txid: COVENANT_TXID, utxo_type: "p2pk_output", vout: 0 }] },
 });

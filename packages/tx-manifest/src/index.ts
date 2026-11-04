@@ -2,10 +2,7 @@ export type { ParsedLiquidProcessCtParams } from "./request/request";
 export { parseLiquidProcessCtParams } from "./request/validation";
 
 export type { EsploraEndpoint, ReadChainTip, ReadFeeRate, ReadTxOut } from "./chain/chainRead";
-export {
-	createEsploraFeeRateReader,
-	createEsploraTxOutReader,
-} from "./chain/chainRead";
+export { createEsploraFeeRateReader, createEsploraTxOutReader } from "./chain/chainRead";
 
 export {
 	type ManifestReview,

@@ -529,9 +529,8 @@ describe("what each output does with the value it carries", () => {
 		);
 	}
 
-	test("an output's own word comes first, over the document's", async () => {
+	test("an output's own word comes first", async () => {
 		const result = await documentSaying((document) => {
-			document.confidential_outputs = true;
 			outputsOf(document)[0]!.confidential = false;
 		});
 
@@ -539,19 +538,6 @@ describe("what each output does with the value it carries", () => {
 		expect(isRefusal(result) ? undefined : result.outputs[0]).toMatchObject({
 			blinded: false,
 			decidedBy: "output",
-			id: "token_out",
-		});
-	});
-
-	test("the document's word comes next, when the output says nothing", async () => {
-		const result = await documentSaying((document) => {
-			document.confidential_outputs = false;
-			delete outputsOf(document)[0]!.confidential;
-		});
-
-		expect(isRefusal(result) ? undefined : result.outputs[0]).toMatchObject({
-			blinded: false,
-			decidedBy: "document",
 			id: "token_out",
 		});
 	});
@@ -568,9 +554,8 @@ describe("what each output does with the value it carries", () => {
 		});
 	});
 
-	test("a covenant output is open whatever the document says", async () => {
+	test("a covenant output is open whatever it says", async () => {
 		const result = await documentSaying((document) => {
-			document.confidential_outputs = true;
 			outputsOf(document)[1]!.confidential = true;
 		});
 
@@ -600,18 +585,19 @@ describe("what each output does with the value it carries", () => {
 
 	test("a contract action's change is published, carrying the word that was set aside", async () => {
 		const result = await documentSaying((document) => {
-			document.confidential_outputs = true;
+			outputsOf(document)[2]!.confidential = true;
+			outputsOf(document)[3]!.confidential = true;
 		});
 
 		expect(isRefusal(result)).toBe(false);
 
 		if (!isRefusal(result)) {
 			expect(result.changeBlinded).toBe(false);
-			expect(result.changeOverrode).toBe("document");
+			expect(result.changeOverrode).toBe("output");
 			expect(result.outputs.find((output) => output.id === "token_change")).toMatchObject({
 				blinded: false,
 				decidedBy: "spendable-change",
-				overrode: "document",
+				overrode: "output",
 			});
 		}
 	});
@@ -629,7 +615,7 @@ describe("what each output does with the value it carries", () => {
 		}
 	});
 
-	test("and says the same about change the document says nothing about", async () => {
+	test("and says the same about change nothing says anything about", async () => {
 		const result = await reviewManifestAction(
 			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
 			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID)] },
