@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import manifestJson from "../__fixtures__/vaultlet/txmanifest.json";
-import { findAction, normaliseManifest } from "../document/normalise";
+import { Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
 import { type CovenantParamTypesOf, deriveCovenantAddress } from "./covenant";
@@ -28,10 +28,10 @@ const SOURCE = readFileSync(
 	"utf8",
 );
 
-const manifest = normaliseManifest(manifestJson as unknown as Record<string, unknown>);
+const manifest = new Manifest(manifestJson as unknown as Record<string, unknown>);
 
 function derive(input: { covenantParamTypes?: CovenantParamTypesOf; scope?: ReferenceScope } = {}) {
-	const action = findAction(manifest, "Withdraw");
+	const action = manifest.action("Withdraw");
 
 	if (!action) {
 		throw new Error("This fixture declares no action named Withdraw.");

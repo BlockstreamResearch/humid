@@ -1,5 +1,5 @@
 import { asRecord } from "../document/json";
-import type { NormalisedAction } from "../document/normalise";
+import type { Action } from "../document/manifest";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { computedValue, computesValue } from "../evaluation/computedValue";
 import { Refusal } from "../refusal";
@@ -9,7 +9,7 @@ import { stateLeavesOf } from "./stateLeaves";
 
 export type CreatedInstance = { fields: Record<string, string>; rounds: number };
 
-export function createsInstance(action: NormalisedAction): boolean {
+export function createsInstance(action: Action): boolean {
 	return asRecord(action.node.create_instance) !== undefined;
 }
 
@@ -25,10 +25,7 @@ function computeKind(node: Record<string, unknown>): string | undefined {
 	return undefined;
 }
 
-export function statedCreatedFields(
-	action: NormalisedAction,
-	scope: ReferenceScope,
-): Record<string, string> {
+export function statedCreatedFields(action: Action, scope: ReferenceScope): Record<string, string> {
 	const declared = asRecord(asRecord(action.node.create_instance)?.fields);
 	const stated: Record<string, string> = {};
 
@@ -48,7 +45,7 @@ export function statedCreatedFields(
 }
 
 export function resolveCreatedInstance(
-	action: NormalisedAction,
+	action: Action,
 	input: {
 		contractSources: Record<string, string>;
 		hashCovenant: HashCovenant;

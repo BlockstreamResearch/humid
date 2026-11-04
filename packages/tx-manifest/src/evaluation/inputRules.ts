@@ -1,5 +1,5 @@
 import { asArray, asRecord } from "../document/json";
-import type { NormalisedAction } from "../document/normalise";
+import type { Action } from "../document/manifest";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
 import { evaluateExpression } from "./evaluate";
@@ -18,7 +18,7 @@ function wholeCount(value: number): bigint | undefined {
 	return Number.isSafeInteger(value) && value >= 0 ? BigInt(value) : undefined;
 }
 
-export function resolveInputRules(action: NormalisedAction, scope: ReferenceScope): InputRule[] {
+export function resolveInputRules(action: Action, scope: ReferenceScope): InputRule[] {
 	const rules: InputRule[] = [];
 
 	for (const declared of asArray(action.node.inputs)) {

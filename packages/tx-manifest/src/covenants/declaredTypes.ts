@@ -1,16 +1,9 @@
 import { asRecord } from "../document/json";
-import {
-	declaredFields,
-	type NormalisedAction,
-	type NormalisedManifest,
-} from "../document/normalise";
+import { type Action, type Manifest } from "../document/manifest";
 
-export function declaredParamTypes(
-	manifest: NormalisedManifest,
-	action: NormalisedAction,
-): Record<string, string> {
+export function declaredParamTypes(manifest: Manifest, action: Action): Record<string, string> {
 	return {
-		...typesOf(declaredFields(manifest, action)),
+		...typesOf(manifest.templateFields(action)),
 		...typesOf(asRecord(action.node.params) ?? {}),
 	};
 }

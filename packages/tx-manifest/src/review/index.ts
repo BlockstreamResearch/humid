@@ -18,12 +18,7 @@ import {
 	statedCreatedFields,
 } from "../covenants/instance";
 import { asArray, asRecord } from "../document/json";
-import {
-	findAction,
-	type NormalisedAction,
-	normaliseInstance,
-	normaliseManifest,
-} from "../document/normalise";
+import { type Action, readInstance, Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { refuseUnsupported } from "../document/refuse";
 import { covenantSites } from "../document/sites";
@@ -169,8 +164,8 @@ async function reviewAction(
 	request: ParsedLiquidProcessCtParams,
 	input: ReviewInput,
 ): Promise<ManifestReview> {
-	const manifest = normaliseManifest(request.manifest);
-	const deployment = normaliseInstance(request.instance);
+	const manifest = new Manifest(request.manifest);
+	const deployment = readInstance(request.instance);
 
 	const unsupported = refuseUnsupported(manifest, {
 		...(input.compilerVersion === undefined ? {} : { compilerVersion: input.compilerVersion }),
@@ -181,7 +176,7 @@ async function reviewAction(
 		throw unsupported;
 	}
 
-	const action = findAction(manifest, request.action);
+	const action = manifest.action(request.action);
 
 	if (!action) {
 		throw new Refusal(
@@ -190,11 +185,7 @@ async function reviewAction(
 		);
 	}
 
-	const buildMode = manifest.buildMode;
-
-	if (!buildMode.ok) {
-		throw new Refusal(buildMode.reason, "unreadable-build-mode");
-	}
+	const includeDebugSymbols = manifest.includeDebugSymbols;
 
 	const params = fillParameters(action, request.params, {
 		instance: deployment.fields,
@@ -235,7 +226,7 @@ async function reviewAction(
 	};
 
 	const declaredTypes = declaredParamTypes(manifest, action);
-	const hashCovenant = covenantHashFrom(input.scriptPubKeyOf, buildMode.includeDebugSymbols);
+	const hashCovenant = covenantHashFrom(input.scriptPubKeyOf, includeDebugSymbols);
 	const covenants: CovenantFinding[] = [];
 	const covenantInputs: ReviewedCovenantInput[] = [];
 
@@ -261,7 +252,7 @@ async function reviewAction(
 				: { covenantParamTypes: input.covenantParamTypes }),
 			contractSources: request.contractSources,
 			declaredTypes,
-			includeDebugSymbols: buildMode.includeDebugSymbols,
+			includeDebugSymbols,
 			network: input.network,
 			scope,
 			utxoType: site.utxoType,
@@ -365,7 +356,7 @@ async function reviewAction(
 				: { covenantParamTypes: input.covenantParamTypes }),
 			contractSources: request.contractSources,
 			declaredTypes,
-			includeDebugSymbols: buildMode.includeDebugSymbols,
+			includeDebugSymbols,
 			network: input.network,
 			scope,
 			utxoType: site.utxoType,
@@ -827,7 +818,7 @@ type ResolvedIssuances = {
 };
 
 function resolveIssuances(
-	action: NormalisedAction,
+	action: Action,
 	context: {
 		covenantInputs: ReviewedCovenantInput[];
 		holdings: AssetHoldings;
@@ -937,7 +928,7 @@ function bySize(left: bigint, right: bigint, smallestFirst: boolean): number {
 	return left > right === smallestFirst ? 1 : -1;
 }
 
-function runActionHooks(action: NormalisedAction, scope: ReferenceScope): ReferenceScope {
+function runActionHooks(action: Action, scope: ReferenceScope): ReferenceScope {
 	let running = scope;
 
 	for (const entry of asArray(action.node.inputs)) {
@@ -981,7 +972,7 @@ function statedIndex(declared: unknown): number | undefined {
 	return typeof declared === "number" && Number.isSafeInteger(declared) ? declared : undefined;
 }
 
-function malformedDeclaration(action: NormalisedAction): string | undefined {
+function malformedDeclaration(action: Action): string | undefined {
 	const node = action.node;
 
 	for (const key of ["inputs", "outputs"] as const) {

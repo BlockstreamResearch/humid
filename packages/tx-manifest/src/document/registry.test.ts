@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { normaliseManifest } from "./normalise";
+import { Manifest } from "./manifest";
 import { inspectConstructs } from "./registry";
 
-const findings = (raw: Record<string, unknown>) => inspectConstructs(normaliseManifest(raw));
+const findings = (raw: Record<string, unknown>) => inspectConstructs(new Manifest(raw));
 
 describe("the constructs a document declares", () => {
 	test("pass where the format defines and this wallet handles them", () => {

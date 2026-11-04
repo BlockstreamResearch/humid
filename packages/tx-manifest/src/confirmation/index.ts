@@ -1,4 +1,4 @@
-import type { NormalisedAction, NormalisedManifest } from "../document/normalise";
+import type { Action, Manifest } from "../document/manifest";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import {
 	type BlindingDecision,
@@ -49,8 +49,8 @@ export type ReviewedPlan = Omit<ManifestReview, "confirmation">;
 
 export function confirmationModel(
 	review: ReviewedPlan,
-	manifest: NormalisedManifest,
-	action: NormalisedAction,
+	manifest: Manifest,
+	action: Action,
 	input: { accountLabel: string; policyAsset: string; scope: ReferenceScope },
 ): ConfirmationModel {
 	const summary = intentOf(action, input.scope);
@@ -135,7 +135,7 @@ export function describeOrigin(origin: Origin): string {
 	}
 }
 
-function intentOf(action: NormalisedAction, scope: ReferenceScope): string | undefined {
+function intentOf(action: Action, scope: ReferenceScope): string | undefined {
 	const intent = action.node.intent;
 
 	return typeof intent === "string"

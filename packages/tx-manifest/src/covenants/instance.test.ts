@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { findAction, type NormalisedAction, normaliseManifest } from "../document/normalise";
+import { type Action, Manifest } from "../document/manifest";
 import { Fixture, refusalOf } from "../review/reviewForTests";
 import { COVENANT_HASH_SEED, covenantHashFrom, ITERATION_BOUND } from "./covenantHash";
 import { createsInstance, resolveCreatedInstance } from "./instance";
@@ -35,11 +35,11 @@ function recordingCompiler(debugSymbols = false) {
 	};
 }
 
-const vaultlet = normaliseManifest(VAULTLET.manifest);
-const mutual = normaliseManifest(MUTUAL.manifest);
+const vaultlet = new Manifest(VAULTLET.manifest);
+const mutual = new Manifest(MUTUAL.manifest);
 
-function actionNamed(manifest: typeof vaultlet, name: string): NormalisedAction {
-	const found = findAction(manifest, name);
+function actionNamed(manifest: typeof vaultlet, name: string): Action {
+	const found = manifest.action(name);
 
 	if (!found) {
 		throw new Error(`This fixture declares no action named ${name}.`);
@@ -72,7 +72,7 @@ function open(params: Record<string, unknown> = PARAMS) {
 describe("a chain of fields that each read the one before", () => {
 	const LINKS = 5;
 
-	function chained(): NormalisedAction {
+	function chained(): Action {
 		const fields: Record<string, unknown> = { OWNER_PUB_KEY: "$params.OWNER_PUB_KEY" };
 
 		for (let index = LINKS - 1; index >= 0; index -= 1) {
@@ -264,7 +264,7 @@ describe("when the compiler cannot produce a hash", () => {
 	});
 });
 
-const dependant = (spelling: string): NormalisedAction => ({
+const dependant = (spelling: string): Action => ({
 	isConstructor: true,
 	name: "Open",
 	node: {

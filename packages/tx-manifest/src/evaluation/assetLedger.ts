@@ -1,6 +1,6 @@
 import { statedAsset } from "../document/asset";
 import { asArray, asRecord } from "../document/json";
-import type { NormalisedAction } from "../document/normalise";
+import type { Action } from "../document/manifest";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
 import type { PlannedOutput } from "./plan";
@@ -81,7 +81,7 @@ export function resolveAsset(declared: unknown, at: string, context: Context): s
 }
 
 export function assetLedger(
-	action: NormalisedAction,
+	action: Action,
 	planned: PlannedOutput[],
 	context: Context & { held: HeldValue[] },
 ): AssetLedger {

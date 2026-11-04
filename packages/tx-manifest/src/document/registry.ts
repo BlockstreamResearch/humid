@@ -1,5 +1,5 @@
 import { asArray, asRecord } from "./json";
-import type { NormalisedManifest } from "./normalise";
+import type { Manifest } from "./manifest";
 
 export type ConstructState = "acted-on" | "shown" | "unimplemented";
 
@@ -149,7 +149,7 @@ export type ConstructFinding = {
 	state: "unimplemented" | "unrecognised";
 };
 
-export function inspectConstructs(manifest: NormalisedManifest): ConstructFinding[] {
+export function inspectConstructs(manifest: Manifest): ConstructFinding[] {
 	const findings: ConstructFinding[] = [];
 
 	walkSites(manifest, (node, site, at) => {
@@ -175,7 +175,7 @@ export function inspectConstructs(manifest: NormalisedManifest): ConstructFindin
 
 type SiteVisitor = (node: Record<string, unknown>, site: ConstructSiteKind, at: string) => void;
 
-function walkSites(manifest: NormalisedManifest, visit: SiteVisitor): void {
+function walkSites(manifest: Manifest, visit: SiteVisitor): void {
 	const at = (where: string, node: unknown, site: ConstructSiteKind) => {
 		const record = asRecord(node);
 

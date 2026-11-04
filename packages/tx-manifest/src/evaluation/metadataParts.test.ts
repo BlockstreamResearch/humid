@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import lendingManifest from "../__fixtures__/lending_v3/txmanifest.json";
-import { findAction, normaliseManifest } from "../document/normalise";
+import { Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
 import { encodeMetadataParts, type PartResolver } from "./metadataParts";
@@ -70,10 +70,8 @@ const SCOPE: ReferenceScope = {
 };
 
 function publishedRecord(name: string): string {
-	const action = findAction(
-		normaliseManifest(lendingManifest as unknown as Record<string, unknown>),
-		name,
-	);
+	const action = new Manifest(lendingManifest as unknown as Record<string, unknown>).action(name);
+
 	if (!action) {
 		throw new Error(`the document declares no ${name}`);
 	}

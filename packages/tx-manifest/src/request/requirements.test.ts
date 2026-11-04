@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
-import { findAction, normaliseManifest } from "../document/normalise";
+import { Manifest } from "../document/manifest";
 import type { ParsedLiquidProcessCtParams } from "./request";
 import { resolveActionRequirements } from "./requirements";
 
@@ -24,8 +24,8 @@ function request(
 
 function requirements(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
 	const asked = request(overrides);
-	const manifest = normaliseManifest(asked.manifest);
-	const action = findAction(manifest, asked.action);
+	const manifest = new Manifest(asked.manifest);
+	const action = manifest.action(asked.action);
 
 	if (!action) {
 		throw new Error(`This manifest declares no action named ${asked.action}.`);
@@ -36,9 +36,9 @@ function requirements(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
 
 describe("resolveActionRequirements", () => {
 	test("an action the manifest does not declare is not one to ask about", () => {
-		const manifest = normaliseManifest(MANIFEST);
+		const manifest = new Manifest(MANIFEST);
 
-		expect(findAction(manifest, "Withdraw")).toBeUndefined();
+		expect(manifest.action("Withdraw")).toBeUndefined();
 	});
 
 	describe("Pay", () => {

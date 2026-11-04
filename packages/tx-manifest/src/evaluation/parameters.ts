@@ -1,11 +1,11 @@
 import { asRecord } from "../document/json";
-import type { NormalisedAction } from "../document/normalise";
+import type { Action } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
 import { evaluateExpression } from "./evaluate";
 
 export function fillParameters(
-	action: NormalisedAction,
+	action: Action,
 	supplied: Record<string, unknown>,
 	scope: ReferenceScope,
 ): Record<string, unknown> {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
-import type { NormalisedAction } from "../document/normalise";
+import type { Action } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
 import { planAction } from "./plan";
@@ -13,7 +13,7 @@ const PAY = action(
 	(MANIFEST.actions as Record<string, Record<string, unknown>>).Pay as Record<string, unknown>,
 );
 
-function action(name: string, node: Record<string, unknown>): NormalisedAction {
+function action(name: string, node: Record<string, unknown>): Action {
 	return { isConstructor: false, name, node };
 }
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
 import { SMPLX_COMPILER_VERSION } from "../../smplx-compiler/src/compilerVersion";
-import { normaliseManifest } from "./document/normalise";
+import { Manifest } from "./document/manifest";
 import { refuseUnsupported, satisfies } from "./document/refuse";
 
 const EXAMPLES = ["dex", "last_will", "lending_v2", "lending_v3", "p2pk"];
@@ -20,7 +20,7 @@ function example(name: string) {
 		}
 	}
 
-	return { contractSources, manifest: normaliseManifest(raw), raw };
+	return { contractSources, manifest: new Manifest(raw), raw };
 }
 
 function outcome(name: string) {
@@ -47,7 +47,7 @@ describe("the reference examples", () => {
 describe("what a document is refused for", () => {
 	const p2pk = () => example("p2pk");
 	const refusal = (raw: Record<string, unknown>, contractSources = p2pk().contractSources) =>
-		refuseUnsupported(normaliseManifest(raw), { contractSources })?.reject;
+		refuseUnsupported(new Manifest(raw), { contractSources })?.reject;
 
 	test("a format version this wallet does not read", () => {
 		expect(refusal({ ...p2pk().raw, manifest_version: "0.2.0" })).toBe("foreign-format");

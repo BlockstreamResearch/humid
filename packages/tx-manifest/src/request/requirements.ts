@@ -1,17 +1,13 @@
 import { asRecord } from "../document/json";
-import {
-	type NormalisedAction,
-	type NormalisedManifest,
-	normaliseInstance,
-} from "../document/normalise";
+import { type Action, type Manifest, readInstance } from "../document/manifest";
 import { instanceReferences } from "../document/references";
 import { covenantSites, namedUtxoTypes } from "../document/sites";
 import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./request";
 
 export function resolveActionRequirements(
 	request: ParsedLiquidProcessCtParams,
-	manifest: NormalisedManifest,
-	declared: NormalisedAction,
+	manifest: Manifest,
+	declared: Action,
 ): ActionRequirements {
 	const action = declared.node;
 	const required: ActionRequirements["required"] = [];
@@ -74,7 +70,7 @@ export function resolveActionRequirements(
 		}
 	}
 
-	const pinned = normaliseInstance(request.instance).providedInputs;
+	const pinned = readInstance(request.instance).providedInputs;
 
 	if (covenantSites(action).some((site) => site.role === "spent" && !(site.id in pinned))) {
 		required.push("state");
@@ -91,15 +87,11 @@ export function resolveActionRequirements(
 	return { missing, required };
 }
 
-function referencedContractSources(
-	manifest: NormalisedManifest,
-	action: Record<string, unknown>,
-): string[] {
-	const utxoTypes = manifest.utxoTypes;
+function referencedContractSources(manifest: Manifest, action: Record<string, unknown>): string[] {
 	const paths = new Set<string>();
 
 	for (const name of namedUtxoTypes(action)) {
-		const source = asRecord(asRecord(utxoTypes[name])?.script)?.source;
+		const source = asRecord(manifest.utxoType(name)?.script)?.source;
 
 		if (typeof source === "string") {
 			paths.add(source);

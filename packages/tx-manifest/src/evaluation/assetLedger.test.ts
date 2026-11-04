@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import multiassetManifest from "../__fixtures__/multiasset/txmanifest.json";
-import { findAction, type NormalisedAction, normaliseManifest } from "../document/normalise";
+import { type Action, Manifest } from "../document/manifest";
 import { refusalOf } from "../review/reviewForTests";
 import { assetLedger, type HeldValue, resolveAsset } from "./assetLedger";
 import { planAction } from "./plan";
@@ -10,10 +10,10 @@ const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585
 const TOKEN = "ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2";
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 
-const manifest = normaliseManifest(multiassetManifest as unknown as Record<string, unknown>);
+const manifest = new Manifest(multiassetManifest as unknown as Record<string, unknown>);
 
 function payToken(params: Record<string, unknown>) {
-	const action = findAction(manifest, "PayToken");
+	const action = manifest.action("PayToken");
 
 	if (!action) {
 		throw new Error("the fixture declares no PayToken");
@@ -141,7 +141,7 @@ describe("reading one action as a statement about several assets", () => {
 	});
 
 	test("refuses a covenant input the chain says holds a different asset", () => {
-		const action: NormalisedAction = {
+		const action: Action = {
 			isConstructor: false,
 			name: "Spend",
 			node: {

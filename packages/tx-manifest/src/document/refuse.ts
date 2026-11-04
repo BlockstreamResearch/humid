@@ -4,7 +4,7 @@ import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { STATIC_WITNESS } from "../evaluation/witness";
 import { Refusal } from "../refusal";
 import { asArray, asRecord } from "./json";
-import type { NormalisedManifest } from "./normalise";
+import type { Manifest } from "./manifest";
 import { inspectConstructs } from "./registry";
 
 const FORMAT_MAJOR = 0;
@@ -13,7 +13,7 @@ const CHAINS = new Set(["elements", "liquid"]);
 const CAPABILITIES = new Set(["simplicity"]);
 
 export function refuseUnsupported(
-	manifest: NormalisedManifest,
+	manifest: Manifest,
 	input: { compilerVersion?: string; contractSources: Record<string, string> },
 ): Refusal | undefined {
 	return (
@@ -28,7 +28,7 @@ export function refuseUnsupported(
 	);
 }
 
-function refuseForeignFormat(manifest: NormalisedManifest): Refusal | undefined {
+function refuseForeignFormat(manifest: Manifest): Refusal | undefined {
 	const declared = manifest.node.manifest_version;
 	const [major, minor] = typeof declared === "string" ? declared.split(".").map(Number) : [];
 
@@ -42,7 +42,7 @@ function refuseForeignFormat(manifest: NormalisedManifest): Refusal | undefined 
 	);
 }
 
-function refuseForeignChain(manifest: NormalisedManifest): Refusal | undefined {
+function refuseForeignChain(manifest: Manifest): Refusal | undefined {
 	const declared = manifest.node.chain;
 
 	if (declared === undefined || (typeof declared === "string" && CHAINS.has(declared))) {
@@ -55,7 +55,7 @@ function refuseForeignChain(manifest: NormalisedManifest): Refusal | undefined {
 	);
 }
 
-function refuseConstructs(manifest: NormalisedManifest): Refusal | undefined {
+function refuseConstructs(manifest: Manifest): Refusal | undefined {
 	const found = inspectConstructs(manifest)[0];
 
 	if (!found) {
@@ -73,7 +73,7 @@ function refuseConstructs(manifest: NormalisedManifest): Refusal | undefined {
 			);
 }
 
-function refuseCapabilities(manifest: NormalisedManifest): Refusal | undefined {
+function refuseCapabilities(manifest: Manifest): Refusal | undefined {
 	const missing = asArray(manifest.node.requires).find(
 		(capability) => typeof capability !== "string" || !CAPABILITIES.has(capability),
 	);
@@ -86,7 +86,7 @@ function refuseCapabilities(manifest: NormalisedManifest): Refusal | undefined {
 			);
 }
 
-function refuseUnbuildableUtxoType(manifest: NormalisedManifest): Refusal | undefined {
+function refuseUnbuildableUtxoType(manifest: Manifest): Refusal | undefined {
 	for (const [name, declared] of Object.entries(manifest.utxoTypes)) {
 		const scriptType = asRecord(asRecord(declared)?.script)?.type;
 
@@ -102,7 +102,7 @@ function refuseUnbuildableUtxoType(manifest: NormalisedManifest): Refusal | unde
 }
 
 function refuseSourceMismatch(
-	manifest: NormalisedManifest,
+	manifest: Manifest,
 	contractSources: Record<string, string>,
 ): Refusal | undefined {
 	for (const [name, script] of scripts(manifest)) {
@@ -126,7 +126,7 @@ function refuseSourceMismatch(
 }
 
 function refuseForeignCompiler(
-	manifest: NormalisedManifest,
+	manifest: Manifest,
 	input: { compilerVersion?: string; contractSources: Record<string, string> },
 ): Refusal | undefined {
 	const shipped = input.compilerVersion;
@@ -156,7 +156,7 @@ function refuseForeignCompiler(
 	return undefined;
 }
 
-function refuseUnproducibleWitness(manifest: NormalisedManifest): Refusal | undefined {
+function refuseUnproducibleWitness(manifest: Manifest): Refusal | undefined {
 	for (const action of manifest.actions) {
 		for (const declared of asArray(action.node.inputs)) {
 			const input = asRecord(declared);
@@ -198,7 +198,7 @@ function unproducible(witness: Record<string, unknown> | undefined): string | un
 		: `asks for ${String(witness.sig_type)}, and this wallet signs over the whole transaction`;
 }
 
-function scripts(manifest: NormalisedManifest): [string, Record<string, unknown>][] {
+function scripts(manifest: Manifest): [string, Record<string, unknown>][] {
 	return Object.entries(manifest.utxoTypes).flatMap(([name, declared]) => {
 		const script = asRecord(asRecord(declared)?.script);
 

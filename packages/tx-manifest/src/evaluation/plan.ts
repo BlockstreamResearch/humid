@@ -1,5 +1,5 @@
 import { asArray, asRecord } from "../document/json";
-import type { NormalisedAction } from "../document/normalise";
+import type { Action } from "../document/manifest";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
 import { type BlindingDecision, resolveBlinding } from "./blinding";
@@ -22,7 +22,7 @@ export type PlannedSpend = {
 	outputs: PlannedOutput[];
 };
 
-export function planAction(action: NormalisedAction, scope: ReferenceScope): PlannedSpend {
+export function planAction(action: Action, scope: ReferenceScope): PlannedSpend {
 	const outputs: PlannedOutput[] = [];
 	let fundingSats = 0n;
 

@@ -1,6 +1,6 @@
 import { Refusal } from "../refusal";
 import { asArray, asRecord } from "./json";
-import { declaredFields, type NormalisedAction, type NormalisedManifest } from "./normalise";
+import { type Action, type Manifest } from "./manifest";
 import { namedUtxoTypes } from "./sites";
 
 export type ReferenceForm = "bare" | "input-attribute" | "instance" | "params";
@@ -172,10 +172,7 @@ export type ReferenceOccurrence = {
 
 const DESTINATION_KEYWORDS = new Set(["change", "wallet"]);
 
-export function actionReferences(
-	manifest: NormalisedManifest,
-	action: NormalisedAction,
-): ReferenceOccurrence[] {
+export function actionReferences(manifest: Manifest, action: Action): ReferenceOccurrence[] {
 	const found: ReferenceOccurrence[] = [];
 	const where = `action ${action.name}`;
 
@@ -232,7 +229,7 @@ export function actionReferences(
 	for (const name of namedUtxoTypes(action.node)) {
 		addWiring(
 			`utxo type ${name} / script`,
-			asRecord(asRecord(manifest.utxoTypes[name])?.script)?.compile_params,
+			asRecord(manifest.utxoType(name)?.script)?.compile_params,
 		);
 	}
 
@@ -240,11 +237,11 @@ export function actionReferences(
 }
 
 export function instanceReferences(
-	manifest: NormalisedManifest,
-	action: NormalisedAction,
+	manifest: Manifest,
+	action: Action,
 	supplied: Record<string, unknown>,
 ): ReferenceOccurrence[] {
-	const fields = declaredFields(manifest, action);
+	const fields = manifest.templateFields(action);
 	const created = new Set(
 		Object.keys(asRecord(asRecord(action.node.create_instance)?.fields) ?? {}),
 	);

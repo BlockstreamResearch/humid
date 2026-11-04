@@ -1,5 +1,5 @@
 import { asRecord } from "../document/json";
-import type { NormalisedAction } from "../document/normalise";
+import type { Action } from "../document/manifest";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
 import { evaluateExpression } from "./evaluate";
@@ -15,7 +15,7 @@ export type DeclaredHook =
 	| { kind: "malformed"; reason: string }
 	| { kind: "present"; set: Record<string, unknown> };
 
-export function actionHook(action: NormalisedAction): DeclaredHook {
+export function actionHook(action: Action): DeclaredHook {
 	return declaredHook(action.node.on_pre_broadcast, "on_pre_broadcast");
 }
 

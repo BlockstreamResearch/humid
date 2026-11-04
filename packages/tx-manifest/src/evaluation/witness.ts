@@ -1,5 +1,5 @@
 import { asArray, asRecord } from "../document/json";
-import type { NormalisedAction } from "../document/normalise";
+import type { Action } from "../document/manifest";
 import { type ReferenceScope, parseReference, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
 
@@ -12,7 +12,7 @@ export type StaticWitness = {
 export const STATIC_WITNESS = "simplicityhl";
 
 export function resolveStaticWitnesses(
-	action: NormalisedAction,
+	action: Action,
 	scope: ReferenceScope,
 ): Map<string, StaticWitness[]> {
 	const witnesses = new Map<string, StaticWitness[]>();

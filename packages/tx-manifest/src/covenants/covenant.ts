@@ -1,5 +1,5 @@
 import { asRecord } from "../document/json";
-import type { NormalisedManifest } from "../document/normalise";
+import type { Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
 import { resolveCompileParams } from "./compileParams";
@@ -39,7 +39,7 @@ export type CovenantDerivation = {
 };
 
 export async function deriveCovenantAddress(
-	manifest: NormalisedManifest,
+	manifest: Manifest,
 	input: {
 		compile: CompileCovenant;
 		covenantParamTypes?: CovenantParamTypesOf;
@@ -52,7 +52,7 @@ export async function deriveCovenantAddress(
 		wiring: Record<string, unknown>;
 	},
 ): Promise<CovenantDerivation> {
-	const declared = asRecord(manifest.utxoTypes[input.utxoType]);
+	const declared = manifest.utxoType(input.utxoType);
 
 	if (!declared) {
 		throw new Refusal(`The manifest declares no utxo type named "${input.utxoType}".`);
