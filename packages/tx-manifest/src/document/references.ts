@@ -12,6 +12,7 @@ export type ParsedReference = {
 };
 
 export type ReferenceScope = {
+	fee?: bigint;
 	inputs?: Record<string, Record<string, unknown>>;
 	instance?: Record<string, unknown>;
 	params: Record<string, unknown>;
@@ -122,6 +123,10 @@ export function resolveReference(
 function lookUp(reference: ParsedReference, scope: ReferenceScope): unknown {
 	switch (reference.form) {
 		case "bare": {
+			if (reference.name === "fee" && scope.fee !== undefined) {
+				return scope.fee;
+			}
+
 			if (!(reference.name in scope.params)) {
 				throw new Refusal(`"${reference.name}" is not a parameter of this action.`);
 			}

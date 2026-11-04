@@ -183,23 +183,24 @@ describe("last_will", () => {
 		expect(await will()).toEqual({ ...keys, INHERIT_BLOCKS: "25920" });
 	});
 
-	test("spending the will waits on what this wallet does not implement yet", async () => {
-		const instance = await will();
-		const spends = [{ amount: "50000", asset: POLICY_ASSET, utxoType: "last_will" }];
-		const outcomes = Object.fromEntries(
-			await Promise.all(
-				["ColdBreak", "Refresh", "Inherit"].map(async (action) => [
-					action,
-					await lastWill.outcome(action, { instance, spends }),
-				]),
-			),
-		);
+	const spends = [{ amount: "50000", asset: POLICY_ASSET, utxoType: "last_will" }];
 
-		expect(outcomes).toEqual({
-			ColdBreak: "document-fault",
-			Inherit: "unimplemented-construct",
-			Refresh: "document-fault",
-		});
+	test("ColdBreak and Refresh move the will's funds less exactly the fee the review prices", async () => {
+		const instance = await will();
+
+		for (const action of ["ColdBreak", "Refresh"]) {
+			// oxlint-disable-next-line no-await-in-loop
+			const { estimatedFeeSats, outputs } = await lastWill.reviewed(action, { instance, spends });
+
+			expect(estimatedFeeSats).toBeGreaterThan(0n);
+			expect(outputs.map((output) => output.sats)).toEqual([50_000n - estimatedFeeSats]);
+		}
+	});
+
+	test("Inherit waits on a per-input sequence, which this wallet does not set yet", async () => {
+		expect(await lastWill.outcome("Inherit", { instance: await will(), spends })).toBe(
+			"unimplemented-construct",
+		);
 	});
 });
 

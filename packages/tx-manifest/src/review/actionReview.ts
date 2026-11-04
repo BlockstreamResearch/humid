@@ -176,23 +176,26 @@ export class ActionReview {
 		await this.#createCovenants();
 		this.#attachWitnessValues();
 
-		const plan = planAction(this.#action, this.#scope);
+		this.#scope = { ...this.#scope, fee: 0n };
+		planAction(this.#action, this.#scope);
+
 		const rules = resolveInputRules(this.#action, this.#scope);
 		const sequence = transactionSequence(rules);
 		const feeRateSatsPerKvb = await this.#feeRate();
-		const ledger = this.#ledger(plan, issued);
-		const networkChange = plan.outputs.filter(
-			(planned, at) => planned.target.kind === "change" && ledger.outputs[at] === this.#policyAsset,
-		);
+		let settled = this.#settle(issued, rules, sequence, feeRateSatsPerKvb);
 
-		this.#refuseHiddenPayments(plan);
+		for (
+			let round = 1;
+			round < FEE_ROUNDS && settled.feeSats > (this.#scope.fee ?? 0n);
+			round += 1
+		) {
+			this.#scope = { ...this.#scope, fee: settled.feeSats };
+			settled = this.#settle(issued, rules, sequence, feeRateSatsPerKvb);
+		}
 
-		const funded = this.#fund(ledger, rules, issued, feeRateSatsPerKvb);
-		const paid = this.#payOutputs(plan, ledger, funded);
-		const placed = this.#placeInputs(ledger, funded, rules, sequence);
-
-		this.#checkPositions(placed, paid, networkChange.length);
-
+		const { ledger, networkChange, paid, placed } = settled;
+		const reserved = this.#scope.fee ?? 0n;
+		const estimatedFeeSats = settled.feeSats > reserved ? settled.feeSats : reserved;
 		const change = resolveChangeBlinding(
 			networkChange[0]?.blinding ?? {
 				blinding: "open",
@@ -200,15 +203,6 @@ export class ActionReview {
 				overrode: "chain",
 			},
 			placed.selected.some((utxo) => utxo.confidential === true),
-		);
-		const estimatedFeeSats = estimateFeeSats(
-			{
-				covenantInputs: this.#covenantInputs.length,
-				issuingInputs: issued.issuances.length,
-				outputs: paid.outputs.length,
-				walletInputs: placed.selected.length,
-			},
-			feeRateSatsPerKvb,
 		);
 		const locktimeHeight =
 			this.#covenantInputs.length > 0 && this.#input.readChainTip
@@ -249,6 +243,39 @@ export class ActionReview {
 				scope: this.#scope,
 			}),
 		};
+	}
+
+	#settle(
+		issued: ResolvedIssuances,
+		rules: InputRule[],
+		sequence: number | undefined,
+		feeRateSatsPerKvb: number,
+	) {
+		const plan = planAction(this.#action, this.#scope);
+		const ledger = this.#ledger(plan, issued);
+		const networkChange = plan.outputs.filter(
+			(planned, at) => planned.target.kind === "change" && ledger.outputs[at] === this.#policyAsset,
+		);
+
+		this.#refuseHiddenPayments(plan);
+
+		const funded = this.#fund(ledger, rules, issued, feeRateSatsPerKvb);
+		const paid = this.#payOutputs(plan, ledger, funded);
+		const placed = this.#placeInputs(ledger, funded, rules, sequence);
+
+		this.#checkPositions(placed, paid, networkChange.length);
+
+		const feeSats = estimateFeeSats(
+			{
+				covenantInputs: this.#covenantInputs.length,
+				issuingInputs: issued.issuances.length,
+				outputs: paid.outputs.length,
+				walletInputs: placed.selected.length,
+			},
+			feeRateSatsPerKvb,
+		);
+
+		return { feeSats, ledger, networkChange, paid, placed };
 	}
 
 	#holdings(asset: string): SelectableUtxo[] {
@@ -542,7 +569,9 @@ export class ActionReview {
 		}
 
 		return fundAssets(ledger.entries, {
-			feeSats: BigInt(Math.ceil(feeRateSatsPerKvb)),
+			feeSats: namesFee(this.#action)
+				? (this.#scope.fee ?? 0n)
+				: BigInt(Math.ceil(feeRateSatsPerKvb)),
 			headroomSats: 0n,
 			holdings: pinnedHoldings,
 			policyAsset: this.#input.policyAsset,
@@ -809,6 +838,18 @@ export class ActionReview {
 }
 
 const FEE_TARGET_BLOCKS = 1;
+
+const FEE_ROUNDS = 4;
+
+const FEE = /(?<![\w.$])fee(?![\w.])/;
+
+function namesFee(action: Action): boolean {
+	return asArray(action.node.outputs).some((output) => {
+		const amount = asRecord(output)?.amount_sat;
+
+		return typeof amount === "string" && FEE.test(amount);
+	});
+}
 
 type ResolvedIssuances = {
 	issuances: PlannedIssuance[];

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { estimateFeeSats } from "../fee";
 import type { ManifestReview } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
@@ -10,6 +11,7 @@ import {
 	PUBKEY,
 	refused,
 	reviewed,
+	TXID,
 	utxo,
 	WALLET_SCRIPT,
 } from "./reviewForTests";
@@ -358,5 +360,40 @@ describe("what an action requires of an input beyond where its money comes from"
 			}),
 			{ fundingUtxos: [utxo("1000000", FUNDING_TXID, { scriptPubKeyHex: WALLET_SCRIPT })] },
 		);
+	});
+});
+
+describe("the network fee an amount names", () => {
+	const sweep = p2pk.editedAction("Receive", (receive) => {
+		receive.inputs = [(receive.inputs as Document[])[0]];
+		receive.outputs = [
+			{
+				amount_sat: "inputs.p2pk_in.amount_sat - fee",
+				destination: "wallet",
+				id: "received_out",
+			},
+		];
+	});
+	const swept = () =>
+		reviewed(
+			sweep.request("Receive", {
+				params: { pubkey: PUBKEY },
+				state: { utxos: [{ txid: TXID, utxo_type: "p2pk_output", vout: 0 }] },
+			}),
+		);
+
+	test("is the fee the transaction it settles on costs", async () => {
+		const shape = { covenantInputs: 1, issuingInputs: 0, outputs: 1, walletInputs: 0 };
+
+		expect((await swept()).estimatedFeeSats).toBe(estimateFeeSats(shape, 1000));
+	});
+
+	test("so the covenant's funds leave less exactly that fee, and nothing is drawn from the wallet", async () => {
+		const review = await swept();
+
+		expect(review.outputs.map((output) => output.sats)).toEqual([
+			50_000n - review.estimatedFeeSats,
+		]);
+		expect(review.selected).toEqual([]);
 	});
 });
