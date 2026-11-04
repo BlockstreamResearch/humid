@@ -1,0 +1,1000 @@
+import { baseUnits } from "../chain/baseUnits";
+import type { Outpoint } from "../chain/outpoint";
+import { byOutpoint, outpointKey } from "../chain/outpoint";
+import { confirmationModel, type ReviewedPlan } from "../confirmation";
+import {
+	checkCovenantOnChain,
+	type CovenantDerivation,
+	deriveCovenantAddress,
+} from "../covenants/covenant";
+import { covenantHashFrom } from "../covenants/covenantHash";
+import { declaredParamTypes } from "../covenants/declaredTypes";
+import {
+	type CreatedInstance,
+	createsInstance,
+	resolveCreatedInstance,
+	statedCreatedFields,
+} from "../covenants/instance";
+import { asArray, asRecord } from "../document/json";
+import { type Action, type InstanceFile, Manifest, readInstance } from "../document/manifest";
+import type { ReferenceScope } from "../document/references";
+import { refuseUnsupported } from "../document/refuse";
+import { type CovenantSite, covenantSites } from "../document/sites";
+import {
+	type AssetLedger,
+	assetLedger,
+	type HeldValue,
+	resolveAsset,
+} from "../evaluation/assetLedger";
+import { resolveChangeBlinding } from "../evaluation/blinding";
+import {
+	actionHook,
+	inputHook,
+	inputHookScope,
+	runHook,
+	withHookValues,
+} from "../evaluation/hooks";
+import { type InputPlacement, type PlaceableInput, placeInputs } from "../evaluation/inputOrder";
+import {
+	checkRelativeTimelockPlacement,
+	type InputRule,
+	resolveInputRules,
+	transactionSequence,
+} from "../evaluation/inputRules";
+import {
+	declaredIssuance,
+	issuanceAttributes,
+	type PlannedIssuance,
+	resolveIssuance,
+} from "../evaluation/issuance";
+import { fillParameters } from "../evaluation/parameters";
+import { type PlannedSpend, planAction } from "../evaluation/plan";
+import { checkPositions, type StatedPosition } from "../evaluation/positions";
+import { resolveStaticWitnesses } from "../evaluation/witness";
+import { estimateFeeSats } from "../fee";
+import { Refusal } from "../refusal";
+import type { ParsedLiquidProcessCtParams } from "../request/request";
+import { resolveActionRequirements } from "../request/requirements";
+import { type AssetHoldings, type FundedAsset, fundAssets } from "./assetFunding";
+import { type SelectableUtxo, toSats } from "./coinSelection";
+import { CovenantUtxos } from "./covenantUtxos";
+import type {
+	AssetMovement,
+	CovenantFinding,
+	ManifestReview,
+	PlannedInput,
+	ReviewedCovenantInput,
+	ReviewedOutput,
+	ReviewInput,
+} from "./index";
+
+type PaidOutputs = {
+	at: Map<string, number>;
+	changeDeferred: boolean;
+	outputs: ReviewedOutput[];
+	returned: Map<string, bigint>;
+};
+
+type PlacedInputs = {
+	landedAt: (id: string) => number | undefined;
+	placement: InputPlacement<PlannedInput>;
+	selected: SelectableUtxo[];
+};
+
+export class ActionReview {
+	readonly #request: ParsedLiquidProcessCtParams;
+	readonly #input: ReviewInput;
+	readonly #manifest: Manifest;
+	readonly #deployment: InstanceFile;
+	readonly #action: Action;
+	readonly #includeDebugSymbols: boolean;
+	readonly #declaredTypes: Record<string, string>;
+	readonly #policyAsset: string;
+	readonly #pools = new Map<string, SelectableUtxo[]>();
+	readonly #inputs: Record<string, Record<string, unknown>> = {};
+	readonly #chainHeld: HeldValue[] = [];
+	readonly #covenants: CovenantFinding[] = [];
+	readonly #covenantInputs: ReviewedCovenantInput[] = [];
+	#scope: ReferenceScope;
+
+	private constructor(request: ParsedLiquidProcessCtParams, input: ReviewInput) {
+		this.#request = request;
+		this.#input = input;
+		this.#manifest = new Manifest(request.manifest);
+		this.#deployment = readInstance(request.instance);
+		this.#policyAsset = input.policyAsset.trim().toLowerCase();
+
+		const unsupported = refuseUnsupported(this.#manifest, {
+			...(input.compilerVersion === undefined ? {} : { compilerVersion: input.compilerVersion }),
+			contractSources: request.contractSources,
+		});
+
+		if (unsupported) {
+			throw unsupported;
+		}
+
+		const action = this.#manifest.action(request.action);
+
+		if (!action) {
+			throw new Refusal(
+				`The manifest declares no action named "${request.action}".`,
+				"no-such-action",
+			);
+		}
+
+		this.#action = action;
+		this.#includeDebugSymbols = this.#manifest.includeDebugSymbols;
+
+		const fields = this.#deployment.fields;
+		const params = fillParameters(action, request.params, {
+			instance: fields,
+			params: request.params,
+		});
+		const malformed = malformedDeclaration(action);
+
+		if (malformed) {
+			throw new Refusal(malformed);
+		}
+
+		const { missing } = resolveActionRequirements({ ...request, params }, this.#manifest, action);
+
+		if (missing.length > 0) {
+			const named = missing
+				.map((entry) => (entry.keys ? `${entry.reason} (${entry.keys.join(", ")})` : entry.reason))
+				.join(" ");
+
+			throw new Refusal(`This request cannot be built. ${named}`, "incomplete-request");
+		}
+
+		const stated = createsInstance(action)
+			? statedCreatedFields(action, { instance: fields, params })
+			: {};
+
+		this.#declaredTypes = declaredParamTypes(this.#manifest, action);
+		this.#scope = { inputs: this.#inputs, instance: { ...fields, ...stated }, params };
+	}
+
+	static run(request: ParsedLiquidProcessCtParams, input: ReviewInput): Promise<ManifestReview> {
+		return new ActionReview(request, input).#run();
+	}
+
+	async #run(): Promise<ManifestReview> {
+		await this.#spendCovenants();
+
+		const issued = resolveIssuances(this.#action, {
+			covenantInputs: this.#covenantInputs,
+			holdings: (asset) => this.#holdings(asset),
+			inputs: this.#inputs,
+			policyAsset: this.#input.policyAsset,
+			scope: this.#scope,
+		});
+
+		this.#scope = runActionHooks(this.#action, this.#scope);
+
+		const created = this.#createInstance();
+
+		await this.#createCovenants();
+		this.#attachWitnessValues();
+
+		const plan = planAction(this.#action, this.#scope);
+		const rules = resolveInputRules(this.#action, this.#scope);
+		const sequence = transactionSequence(rules);
+		const feeRateSatsPerKvb = await this.#feeRate();
+		const ledger = this.#ledger(plan, issued);
+		const networkChange = plan.outputs.filter(
+			(planned, at) => planned.target.kind === "change" && ledger.outputs[at] === this.#policyAsset,
+		);
+
+		this.#refuseHiddenPayments(plan);
+
+		const funded = this.#fund(ledger, rules, issued, feeRateSatsPerKvb);
+		const paid = this.#payOutputs(plan, ledger, funded);
+		const placed = this.#placeInputs(ledger, funded, rules, sequence);
+
+		this.#checkPositions(placed, paid, networkChange.length);
+
+		const change = resolveChangeBlinding(
+			networkChange[0]?.blinding ?? {
+				blinding: "open",
+				decidedBy: "spendable-change",
+				overrode: "chain",
+			},
+			placed.selected.some((utxo) => utxo.confidential === true),
+		);
+		const estimatedFeeSats = estimateFeeSats(
+			{
+				covenantInputs: this.#covenantInputs.length,
+				issuingInputs: issued.issuances.length,
+				outputs: paid.outputs.length,
+				walletInputs: placed.selected.length,
+			},
+			feeRateSatsPerKvb,
+		);
+		const locktimeHeight =
+			this.#covenantInputs.length > 0 && this.#input.readChainTip
+				? await this.#input.readChainTip().catch(() => undefined)
+				: undefined;
+
+		const reviewed: ReviewedPlan = {
+			action: this.#request.action,
+			...(this.#action.boundTo === undefined ? {} : { boundTo: this.#action.boundTo }),
+			changeBlinded: change.blinding === "blinded",
+			...(paid.changeDeferred ? { changeDeferred: true } : {}),
+			...(change.blinding === "blinded"
+				? { changeBlindedBy: change.decidedBy }
+				: change.overrode === undefined
+					? {}
+					: { changeOverrode: change.overrode }),
+			covenantInputs: this.#covenantInputs,
+			covenants: this.#covenants,
+			...(created === undefined ? {} : { createdInstance: created }),
+			estimatedFeeSats,
+			feeRateSatsPerKvb,
+			inputOrder: placed.placement.order,
+			issuances: issued.issuances,
+			...(locktimeHeight === undefined ? {} : { locktimeHeight }),
+			movements: this.#movements(ledger, paid.returned, estimatedFeeSats),
+			outputs: paid.outputs,
+			policyAsset: this.#policyAsset,
+			protocol: this.#manifest.protocol ?? "",
+			selected: placed.selected,
+			...(sequence === undefined ? {} : { sequence }),
+		};
+
+		return {
+			...reviewed,
+			confirmation: confirmationModel(reviewed, this.#manifest, this.#action, {
+				accountLabel: this.#input.accountLabel,
+				policyAsset: this.#input.policyAsset,
+				scope: this.#scope,
+			}),
+		};
+	}
+
+	#holdings(asset: string): SelectableUtxo[] {
+		const existing = this.#pools.get(asset);
+
+		if (existing) {
+			return existing;
+		}
+
+		const pool =
+			asset === this.#policyAsset
+				? this.#input.fundingUtxos
+				: (this.#input.holdingsOf?.(asset) ?? []);
+
+		this.#pools.set(asset, pool);
+
+		return pool;
+	}
+
+	#sites(role: CovenantSite["role"]): CovenantSite[] {
+		return covenantSites(this.#action.node).filter((site) => site.role === role);
+	}
+
+	#derive(site: CovenantSite): Promise<CovenantDerivation> {
+		return deriveCovenantAddress(this.#manifest, {
+			compile: this.#input.compile,
+			...(this.#input.covenantParamTypes === undefined
+				? {}
+				: { covenantParamTypes: this.#input.covenantParamTypes }),
+			contractSources: this.#request.contractSources,
+			declaredTypes: this.#declaredTypes,
+			includeDebugSymbols: this.#includeDebugSymbols,
+			network: this.#input.network,
+			scope: this.#scope,
+			utxoType: site.utxoType,
+			wiring: site.wiring,
+		});
+	}
+
+	async #spendCovenants(): Promise<void> {
+		const utxos = new CovenantUtxos(this.#request.state, this.#deployment.providedInputs);
+
+		for (const site of this.#sites("spent")) {
+			// oxlint-disable-next-line no-await-in-loop
+			const derived = await this.#derive(site);
+			const asset = Refusal.attempt(() =>
+				resolveAsset(site.asset, `input ${site.id}`, {
+					policyAsset: this.#input.policyAsset,
+					scope: this.#scope,
+				}),
+			);
+			const outpoint = utxos.claim(site.id, site.utxoType, asset);
+			// oxlint-disable-next-line no-await-in-loop
+			const onChain = await this.#readTxOut(outpoint);
+
+			checkCovenantOnChain(derived, onChain.scriptPubKeyHex);
+
+			if (onChain.amountSats === undefined || onChain.rawAssetId === undefined) {
+				throw new Refusal(
+					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} did not come back with an ` +
+						"explicit amount and asset, so this wallet cannot say what it holds. It will not " +
+						"assume a balance for an output it is about to spend.",
+					"unbuildable-utxo-type",
+				);
+			}
+
+			if (!site.id) {
+				throw new Refusal(
+					`The ${site.utxoType} this action spends holds ${onChain.amountSats} of ` +
+						`${onChain.rawAssetId}, and the manifest gives that input no id, so this wallet ` +
+						"cannot account for what it brings.",
+				);
+			}
+
+			const held = baseUnits(onChain.amountSats);
+
+			if (held === undefined) {
+				throw new Refusal(
+					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} came back holding ` +
+						`${JSON.stringify(onChain.amountSats)}, which is not an amount this wallet can read. ` +
+						"It will not spend an output it cannot say the value of.",
+					"unbuildable-utxo-type",
+				);
+			}
+
+			this.#inputs[site.id] = { amount_sat: held, asset: onChain.rawAssetId };
+			this.#chainHeld.push({ asset: onChain.rawAssetId, id: site.id, sats: held });
+			this.#covenantInputs.push({
+				argumentsJson: derived.argumentsJson,
+				extraLeavesJson: derived.extraLeavesJson,
+				id: site.id,
+				includeDebugSymbols: derived.includeDebugSymbols,
+				...(site.signatureWitness === undefined ? {} : { signatureWitness: site.signatureWitness }),
+				source: derived.source,
+				txOutHex: onChain.txOutHex,
+				txid: outpoint.txid,
+				utxoType: site.utxoType,
+				vout: outpoint.vout,
+			});
+			this.#covenants.push({ ...derived, role: "spent", verified: "matches-chain" });
+		}
+	}
+
+	async #readTxOut(outpoint: Outpoint) {
+		try {
+			return await this.#input.readTxOut(outpoint);
+		} catch (error) {
+			throw new Refusal(
+				`Could not read what is at ${outpoint.txid}:${outpoint.vout}: ${String(error)}`,
+				"chain-read-failed",
+			);
+		}
+	}
+
+	#createInstance(): CreatedInstance | undefined {
+		if (!createsInstance(this.#action)) {
+			return undefined;
+		}
+
+		const created = resolveCreatedInstance(this.#action, {
+			contractSources: this.#request.contractSources,
+			hashCovenant: covenantHashFrom(this.#input.scriptPubKeyOf, this.#includeDebugSymbols),
+			scope: this.#scope,
+		});
+
+		this.#scope = { ...this.#scope, instance: { ...this.#scope.instance, ...created.fields } };
+
+		return created;
+	}
+
+	async #createCovenants(): Promise<void> {
+		for (const site of this.#sites("created")) {
+			// oxlint-disable-next-line no-await-in-loop
+			const derived = await this.#derive(site);
+
+			this.#covenants.push({ ...derived, role: "created", verified: "not-yet-onchain" });
+		}
+	}
+
+	#attachWitnessValues(): void {
+		const stated = resolveStaticWitnesses(this.#action, this.#scope);
+
+		for (const covenant of this.#covenantInputs) {
+			const values = stated.get(covenant.id);
+
+			if (values && values.length > 0) {
+				covenant.witnessValues = values;
+			}
+		}
+	}
+
+	async #feeRate(): Promise<number> {
+		let rate: number;
+
+		try {
+			rate = await this.#input.readFeeRate(FEE_TARGET_BLOCKS);
+		} catch (error) {
+			throw new Refusal(
+				`The wallet could not establish a fee rate, so it will not build this: ${String(error)}`,
+				"no-fee-rate",
+			);
+		}
+
+		if (!Number.isFinite(rate) || rate < 0) {
+			throw new Refusal(
+				`The wallet was given ${rate} as a fee rate, which is not a rate anything ` +
+					"can be charged at. It will not build a transaction it cannot price.",
+				"no-fee-rate",
+			);
+		}
+
+		return rate;
+	}
+
+	#ledger(plan: PlannedSpend, issued: ResolvedIssuances): AssetLedger {
+		return assetLedger(this.#action, plan.outputs, {
+			held: [
+				...this.#chainHeld,
+				...issued.issuances.map((issuance) => ({
+					asset: issuance.asset,
+					created: true as const,
+					id: issuance.inputId,
+					sats: issuance.assetAmountSats,
+				})),
+			],
+			policyAsset: this.#input.policyAsset,
+			scope: this.#scope,
+		});
+	}
+
+	#refuseHiddenPayments(plan: PlannedSpend): void {
+		const foreign = plan.outputs.find(
+			(planned) =>
+				planned.blinding.blinding === "blinded" &&
+				planned.target.kind !== "change" &&
+				planned.target.kind !== "wallet",
+		);
+
+		if (foreign) {
+			throw new Refusal(
+				`The output ${foreign.id || "(unnamed)"} must hide what it carries and pays somewhere ` +
+					"this wallet holds no blinding key for.",
+				"unimplemented-construct",
+			);
+		}
+	}
+
+	#fund(
+		ledger: AssetLedger,
+		rules: InputRule[],
+		issued: ResolvedIssuances,
+		feeRateSatsPerKvb: number,
+	): FundedAsset[] {
+		const pinFor = new Map<string, string>();
+
+		for (const rule of rules) {
+			if (rule.fromAddress !== undefined) {
+				pinFor.set(rule.id, rule.fromAddress);
+			}
+		}
+
+		const fundedInput = new Set(ledger.walletInputs.map((wallet) => wallet.id));
+
+		for (const [id, script] of pinFor) {
+			if (!fundedInput.has(id)) {
+				throw new Refusal(
+					`This action requires input ${id} to be funded from ${script}, and that input is ` +
+						"not one this wallet funds out of its own outputs.",
+				);
+			}
+		}
+
+		const pinnedAsset = new Map<string, { id: string; script: string }>();
+
+		for (const wallet of ledger.walletInputs) {
+			const script = pinFor.get(wallet.id);
+
+			if (script === undefined) {
+				continue;
+			}
+
+			const already = pinnedAsset.get(wallet.asset);
+
+			if (already && !sameScript(already.script, script)) {
+				throw new Refusal(
+					`This action requires input ${already.id} to be funded from ${already.script} and ` +
+						`input ${wallet.id} from ${script}, and both are funded in ${wallet.asset} out of ` +
+						"one selection. This wallet cannot fund one run of outputs from two places.",
+					"no-funds-at-signing-address",
+				);
+			}
+
+			pinnedAsset.set(wallet.asset, { id: wallet.id, script });
+		}
+
+		const pinnedHoldings: AssetHoldings = (asset) => {
+			const pin = pinnedAsset.get(asset);
+
+			return pin === undefined
+				? this.#holdings(asset)
+				: this.#holdings(asset).filter((utxo) =>
+						sameScript(utxo.scriptPubKeyHex ?? "", pin.script),
+					);
+		};
+
+		for (const [asset, pin] of pinnedAsset) {
+			const committed = issued.reserved.some((held) => held.asset === asset);
+
+			if (pinnedHoldings(asset).length === 0 && !committed) {
+				throw new Refusal(
+					`This action must fund input ${pin.id} from ${pin.script}, and this wallet holds ` +
+						`nothing in ${asset} there.`,
+					"no-funds-at-signing-address",
+				);
+			}
+		}
+
+		const misplaced = issued.reserved.find((held) => {
+			const script = pinFor.get(held.inputId);
+
+			return script !== undefined && !sameScript(held.utxo.scriptPubKeyHex ?? "", script);
+		});
+
+		if (misplaced) {
+			throw new Refusal(
+				`This action must fund input ${misplaced.inputId} from ` +
+					`${pinFor.get(misplaced.inputId) ?? ""}, and the output it issues an asset from is not ` +
+					"there.",
+				"no-funds-at-signing-address",
+			);
+		}
+
+		return fundAssets(ledger.entries, {
+			feeSats: BigInt(Math.ceil(feeRateSatsPerKvb)),
+			headroomSats: 0n,
+			holdings: pinnedHoldings,
+			policyAsset: this.#input.policyAsset,
+			reserved: issued.reserved,
+		});
+	}
+
+	#payOutputs(plan: PlannedSpend, ledger: AssetLedger, funded: FundedAsset[]): PaidOutputs {
+		const fundedFor = new Map(funded.map((entry) => [entry.asset, entry]));
+		const covenantScripts = new Map(
+			this.#covenants.map((found) => [found.utxoType, found.scriptPubKeyHex]),
+		);
+		const paid: PaidOutputs = {
+			at: new Map(),
+			changeDeferred: false,
+			outputs: [],
+			returned: new Map(),
+		};
+		const changePaid = new Set<string>();
+
+		for (const [at, planned] of plan.outputs.entries()) {
+			const asset = ledger.outputs[at] ?? this.#policyAsset;
+			const blinding = {
+				blinded: planned.blinding.blinding === "blinded",
+				decidedBy: planned.blinding.decidedBy,
+			};
+
+			if (planned.target.kind === "change") {
+				const surplus =
+					asset === this.#policyAsset || changePaid.has(asset)
+						? 0n
+						: (fundedFor.get(asset)?.changeSats ?? 0n);
+
+				if (surplus <= 0n) {
+					paid.changeDeferred ||= asset === this.#policyAsset;
+
+					continue;
+				}
+
+				changePaid.add(asset);
+				paid.at.set(planned.id, paid.outputs.length);
+				paid.outputs.push({
+					asset,
+					...blinding,
+					id: planned.id,
+					...(planned.blinding.overrode === undefined
+						? {}
+						: { overrode: planned.blinding.overrode }),
+					sats: surplus,
+					scriptPubKeyHex: this.#input.walletScriptPubKeyHex,
+				});
+
+				continue;
+			}
+
+			if (planned.sats === undefined) {
+				continue;
+			}
+
+			const scriptPubKeyHex =
+				planned.target.kind === "covenant"
+					? covenantScripts.get(planned.target.utxoType)
+					: planned.target.kind === "data"
+						? planned.target.hex
+						: this.#input.walletScriptPubKeyHex;
+
+			if (!scriptPubKeyHex) {
+				throw new Refusal(
+					`Output ${planned.id} pays a covenant the wallet did not verify.`,
+					"covenant-mismatch",
+				);
+			}
+
+			if (planned.target.kind === "wallet") {
+				paid.returned.set(asset, (paid.returned.get(asset) ?? 0n) + planned.sats);
+			}
+
+			paid.at.set(planned.id, paid.outputs.length);
+			paid.outputs.push({
+				asset,
+				...blinding,
+				id: planned.id,
+				sats: planned.sats,
+				scriptPubKeyHex,
+			});
+		}
+
+		return paid;
+	}
+
+	#placeInputs(
+		ledger: AssetLedger,
+		funded: FundedAsset[],
+		rules: InputRule[],
+		sequence: number | undefined,
+	): PlacedInputs {
+		const fundedFor = new Map(funded.map((entry) => [entry.asset, entry]));
+		const fundedOrder = [
+			...new Set([
+				...ledger.walletInputs.map((wallet) => wallet.asset),
+				...funded.map((entry) => entry.asset),
+			]),
+		];
+		const creditedWith = new Map<string, string>();
+		const fundedWith = new Map<string, string>();
+		const walletRuns = new Map<string, PlannedInput[]>();
+
+		for (const wallet of ledger.walletInputs) {
+			const credited = creditedWith.get(wallet.asset);
+
+			if (credited !== undefined) {
+				fundedWith.set(wallet.id, credited);
+
+				continue;
+			}
+
+			creditedWith.set(wallet.asset, wallet.id);
+			walletRuns.set(
+				wallet.id,
+				(fundedFor.get(wallet.asset)?.selected ?? []).map((utxo) => ({
+					source: "wallet" as const,
+					utxo,
+				})),
+			);
+		}
+
+		const placeable: PlaceableInput<PlannedInput>[] = [];
+
+		for (const declared of asArray(this.#action.node.inputs).map((entry) => asRecord(entry))) {
+			if (!declared) {
+				continue;
+			}
+
+			const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
+			const covenant = this.#covenantInputs.find((candidate) => candidate.id === id);
+			const wanted = statedIndex(declared.required_index);
+
+			placeable.push({
+				id,
+				slots: covenant ? [{ covenant, source: "covenant" }] : (walletRuns.get(id) ?? []),
+				...(wanted === undefined ? {} : { stated: wanted }),
+			});
+		}
+
+		const undeclared = fundedOrder
+			.filter((asset) => !creditedWith.has(asset))
+			.flatMap((asset) => fundedFor.get(asset)?.selected ?? []);
+
+		if (undeclared.length > 0) {
+			placeable.push({ slots: undeclared.map((utxo) => ({ source: "wallet" as const, utxo })) });
+		}
+
+		const placement = placeInputs(placeable);
+
+		checkRelativeTimelockPlacement(
+			sequence,
+			rules,
+			placement.order.map((planned) =>
+				planned.source === "covenant" ? { declaredBy: planned.covenant.id } : {},
+			),
+		);
+
+		return {
+			landedAt: (id) => {
+				const own = placement.at.get(id);
+
+				if (own !== undefined) {
+					return own;
+				}
+
+				const credited = fundedWith.get(id);
+				const start = credited === undefined ? undefined : placement.at.get(credited);
+
+				return start === undefined
+					? undefined
+					: start + (walletRuns.get(credited ?? "")?.length ?? 0);
+			},
+			placement,
+			selected: fundedOrder.flatMap((asset) => fundedFor.get(asset)?.selected ?? []),
+		};
+	}
+
+	#checkPositions(placed: PlacedInputs, paid: PaidOutputs, networkChange: number): void {
+		const positions: StatedPosition[] = [];
+
+		for (const entry of asArray(this.#action.node.inputs)) {
+			const declared = asRecord(entry);
+
+			if (!declared || declared.required_index === undefined) {
+				continue;
+			}
+
+			const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
+			const wanted = statedIndex(declared.required_index);
+
+			if (wanted === undefined) {
+				throw new Refusal(
+					`Input ${id} states a position of ${JSON.stringify(declared.required_index)}, which is not a place in a transaction.`,
+					"unbuildable-position",
+				);
+			}
+
+			positions.push({
+				at: placed.landedAt(id) ?? placed.placement.order.length,
+				id,
+				kind: "input",
+				stated: wanted,
+			});
+		}
+
+		for (const entry of asArray(this.#action.node.outputs)) {
+			const declared = asRecord(entry);
+
+			if (!declared || declared.required_index === undefined) {
+				continue;
+			}
+
+			const id = typeof declared.id === "string" ? declared.id : undefined;
+			const wanted = statedIndex(declared.required_index);
+
+			if (wanted === undefined) {
+				throw new Refusal(
+					`Output ${id ?? "(unnamed)"} states a position of ${JSON.stringify(declared.required_index)}, which is not a place in a transaction.`,
+					"unbuildable-position",
+				);
+			}
+
+			if (id === undefined) {
+				throw new Refusal(
+					`This action states a position for an output the manifest gives no id, so this ` +
+						"wallet cannot say which output it is or where it landed.",
+					"unbuildable-position",
+				);
+			}
+
+			positions.push({
+				at: paid.at.get(id) ?? paid.outputs.length,
+				id,
+				kind: "output",
+				stated: wanted,
+			});
+		}
+
+		checkPositions(positions, {
+			inputs: placed.placement.order.length,
+			outputs: paid.outputs.length + Math.min(networkChange, 1),
+		});
+	}
+
+	#movements(
+		ledger: AssetLedger,
+		returned: Map<string, bigint>,
+		estimatedFeeSats: bigint,
+	): AssetMovement[] {
+		return ledger.entries.map((entry) => ({
+			asset: entry.asset,
+			sats:
+				entry.held -
+				entry.needed +
+				(returned.get(entry.asset) ?? 0n) -
+				(entry.asset === this.#policyAsset ? estimatedFeeSats : 0n),
+		}));
+	}
+}
+
+const FEE_TARGET_BLOCKS = 1;
+
+type ResolvedIssuances = {
+	issuances: PlannedIssuance[];
+	reserved: { asset: string; inputId: string; utxo: SelectableUtxo }[];
+};
+
+function resolveIssuances(
+	action: Action,
+	context: {
+		covenantInputs: ReviewedCovenantInput[];
+		holdings: AssetHoldings;
+		inputs: Record<string, Record<string, unknown>>;
+		policyAsset: string;
+		scope: ReferenceScope;
+	},
+): ResolvedIssuances {
+	const issuances: PlannedIssuance[] = [];
+	const reserved: { asset: string; inputId: string; utxo: SelectableUtxo }[] = [];
+	const policyAsset = context.policyAsset.trim().toLowerCase();
+	const pools = new Map<string, SelectableUtxo[]>();
+	const taken = new Set<string>();
+
+	const candidatesIn = (asset: string): SelectableUtxo[] => {
+		const existing = pools.get(asset);
+
+		if (existing) {
+			return existing;
+		}
+
+		const ordered = byOutpoint(context.holdings(asset).filter((utxo) => utxo.spendable)).toSorted(
+			(one, other) => bySize(toSats(one.amount), toSats(other.amount), asset === policyAsset),
+		);
+
+		pools.set(asset, ordered);
+
+		return ordered;
+	};
+
+	const spareIn = (asset: string): SelectableUtxo | undefined =>
+		candidatesIn(asset).find((utxo) => !taken.has(outpointKey(utxo)));
+
+	for (const entry of asArray(action.node.inputs)) {
+		const declared = asRecord(entry);
+		const issuance = declared && declaredIssuance(declared);
+
+		if (!declared || !issuance) {
+			continue;
+		}
+
+		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
+
+		const asset = resolveAsset(declared.asset, `input ${id}`, {
+			policyAsset: context.policyAsset,
+			scope: context.scope,
+		});
+
+		const covenant = context.covenantInputs.find((candidate) => candidate.id === id);
+
+		if (covenant) {
+			const outpoint = { txid: covenant.txid, vout: covenant.vout };
+			const key = outpointKey(outpoint);
+
+			if (taken.has(key)) {
+				throw new Refusal(
+					`Input ${id} issues an asset from ${outpoint.txid}:${outpoint.vout}, which ` +
+						"another input of this transaction already issues from. One output cannot " +
+						"create two assets.",
+				);
+			}
+
+			const issuedHere = resolveIssuance({ declared: issuance, id, outpoint }, context.scope);
+
+			taken.add(key);
+			issuances.push(issuedHere);
+			context.inputs[id] = { ...context.inputs[id], ...issuanceAttributes(issuedHere) };
+
+			continue;
+		}
+
+		const funding = spareIn(asset);
+
+		if (!funding) {
+			throw new Refusal(
+				`Input ${id} issues an asset, which needs one of this wallet's own outputs in ` +
+					`${asset} to derive it from, and there is none left to use.`,
+				"shortfall",
+			);
+		}
+
+		const resolved = resolveIssuance(
+			{ declared: issuance, id, outpoint: { txid: funding.txid, vout: funding.vout } },
+			context.scope,
+		);
+
+		taken.add(outpointKey(funding));
+		reserved.push({ asset, inputId: id, utxo: funding });
+		issuances.push(resolved);
+		context.inputs[id] = { ...context.inputs[id], ...issuanceAttributes(resolved) };
+	}
+
+	return { issuances, reserved };
+}
+
+function bySize(left: bigint, right: bigint, smallestFirst: boolean): number {
+	if (left === right) {
+		return 0;
+	}
+
+	return left > right === smallestFirst ? 1 : -1;
+}
+
+function runActionHooks(action: Action, scope: ReferenceScope): ReferenceScope {
+	let running = scope;
+
+	for (const entry of asArray(action.node.inputs)) {
+		const declared = asRecord(entry);
+
+		if (!declared) {
+			continue;
+		}
+
+		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
+		const hook = inputHook(declared);
+
+		if (hook.kind === "malformed") {
+			throw new Refusal(`Input ${id}: ${hook.reason}`);
+		}
+
+		if (hook.kind === "absent") {
+			continue;
+		}
+
+		running = withHookValues(
+			running,
+			runHook(hook.set, inputHookScope(running, running.inputs?.[id] ?? {})),
+		);
+	}
+
+	const hook = actionHook(action);
+
+	if (hook.kind === "malformed") {
+		throw new Refusal(`${action.name}: ${hook.reason}`);
+	}
+
+	return hook.kind === "absent" ? running : withHookValues(running, runHook(hook.set, running));
+}
+
+function sameScript(one: string, other: string): boolean {
+	return one.trim().toLowerCase() === other.trim().toLowerCase();
+}
+
+function statedIndex(declared: unknown): number | undefined {
+	return typeof declared === "number" && Number.isSafeInteger(declared) ? declared : undefined;
+}
+
+function malformedDeclaration(action: Action): string | undefined {
+	const node = action.node;
+
+	for (const key of ["inputs", "outputs"] as const) {
+		if (node[key] !== undefined && !Array.isArray(node[key])) {
+			return `${action.name} declares ${key} as something other than a list, so this wallet cannot read what it declares.`;
+		}
+
+		for (const [at, entry] of asArray(node[key]).entries()) {
+			if (!asRecord(entry)) {
+				return `${action.name} declares ${key} ${at} as something this wallet cannot read.`;
+			}
+		}
+	}
+
+	if (node.params !== undefined && !asRecord(node.params)) {
+		return `${action.name} declares params as something other than a set of parameters, so this wallet cannot fill any of them.`;
+	}
+
+	for (const entry of asArray(node.inputs)) {
+		const input = asRecord(entry) ?? {};
+		const id = typeof input.id === "string" ? input.id : "(unnamed)";
+
+		if (input.witnesses !== undefined && !asRecord(input.witnesses)) {
+			return `Input ${id} declares witnesses this wallet cannot read.`;
+		}
+
+		if (input.issuance !== undefined && !asRecord(input.issuance)) {
+			return `Input ${id} declares an issuance this wallet cannot read.`;
+		}
+	}
+
+	return undefined;
+}
