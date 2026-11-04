@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import multiassetManifest from "../__fixtures__/multiasset.manifest.json";
+import multiassetManifest from "../__fixtures__/multiasset/txmanifest.json";
 import { findAction, type NormalisedAction, normaliseManifest } from "../document/normalise";
 import { assetLedger, type HeldValue, resolveAsset } from "./assetLedger";
 import { planAction } from "./plan";

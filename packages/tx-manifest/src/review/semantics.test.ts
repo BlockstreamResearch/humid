@@ -1,23 +1,28 @@
 import { describe, expect, test } from "bun:test";
 
 import type { ManifestReview } from "../index";
+import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
 	COMPILED,
 	type Document,
-	editedAction,
+	Fixture,
 	FUNDING_TXID,
-	payRequest,
 	PUBKEY,
 	refused,
 	reviewed,
 	utxo,
 	WALLET_SCRIPT,
-} from "./harness";
+} from "./reviewForTests";
 
-const payDocument = (edit: (pay: Document) => void) => editedAction("Pay", edit);
+const p2pk = Fixture.load("p2pk");
+
+const pay = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+	p2pk.request("Pay", { params: { amount_sat: 1000, pubkey: PUBKEY }, ...overrides });
+
+const payDocument = (edit: (pay: Document) => void) => p2pk.editedAction("Pay", edit).manifest;
 
 const payWith = (manifest: Document, params?: Record<string, unknown>) =>
-	payRequest(params === undefined ? { manifest } : { manifest, params });
+	pay(params === undefined ? { manifest } : { manifest, params });
 const reviewedPay = (manifest: Document, params?: Record<string, unknown>) =>
 	reviewed(payWith(manifest, params));
 const refusedPay = (manifest: Document, params?: Record<string, unknown>) =>
@@ -206,7 +211,7 @@ describe("state an output covenant commits to", () => {
 			},
 		];
 
-		await reviewed(payRequest({ manifest }), {
+		await reviewed(pay({ manifest }), {
 			compile: (asked) => {
 				seen.push(asked.extraLeavesJson);
 
@@ -347,7 +352,7 @@ describe("what an action requires of an input beyond where its money comes from"
 		});
 
 		await reviewed(
-			payRequest({
+			pay({
 				manifest,
 				params: { amount_sat: 1000, borrower: WALLET_SCRIPT, pubkey: PUBKEY },
 			}),

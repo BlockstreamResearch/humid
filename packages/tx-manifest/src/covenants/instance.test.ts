@@ -1,21 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 
-import mutualJson from "../__fixtures__/mutual.manifest.json";
-import vaultletJson from "../__fixtures__/vaultlet.manifest.json";
 import { findAction, type NormalisedAction, normaliseManifest } from "../document/normalise";
+import { Fixture } from "../review/reviewForTests";
 import { COVENANT_HASH_SEED, covenantHashFrom, ITERATION_BOUND } from "./covenantHash";
 import { createsInstance, resolveCreatedInstance } from "./instance";
 
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const ASSET = `a0${"00".repeat(30)}0a`;
 
-const SOURCES = Object.fromEntries(
-	["vault", "reserve", "guard", "left", "right"].map((name) => [
-		`./${name}.simf`,
-		readFileSync(new URL(`../__fixtures__/contracts/${name}.simf`, import.meta.url), "utf8"),
-	]),
-);
+const VAULTLET = Fixture.load("vaultlet");
+const MUTUAL = Fixture.load("mutual");
+const SOURCES = { ...VAULTLET.contractSources, ...MUTUAL.contractSources };
 
 function recordingCompiler(debugSymbols = false) {
 	const calls: {
@@ -40,8 +35,8 @@ function recordingCompiler(debugSymbols = false) {
 	};
 }
 
-const vaultlet = normaliseManifest(vaultletJson as unknown as Record<string, unknown>);
-const mutual = normaliseManifest(mutualJson as unknown as Record<string, unknown>);
+const vaultlet = normaliseManifest(VAULTLET.manifest);
+const mutual = normaliseManifest(MUTUAL.manifest);
 
 function actionNamed(manifest: typeof vaultlet, name: string): NormalisedAction {
 	const found = findAction(manifest, name);

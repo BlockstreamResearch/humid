@@ -147,7 +147,10 @@ function lookUp(
 		}
 
 		case "instance": {
-			return read(scope.instance, reference.name, "instance");
+			const fromParams =
+				!(reference.name in (scope.instance ?? {})) && reference.name in scope.params;
+
+			return read(fromParams ? scope.params : scope.instance, reference.name, "instance");
 		}
 
 		case "params": {
@@ -256,6 +259,7 @@ export function instanceReferences(
 	const created = new Set(
 		Object.keys(asRecord(asRecord(action.node.create_instance)?.fields) ?? {}),
 	);
+	const params = asRecord(action.node.params) ?? {};
 
 	return actionReferences(manifest, action).filter((occurrence) => {
 		const reference = parseReference(occurrence.text);
@@ -265,7 +269,7 @@ export function instanceReferences(
 		}
 
 		if (reference.form === "instance") {
-			return true;
+			return !(reference.name in params);
 		}
 
 		return (

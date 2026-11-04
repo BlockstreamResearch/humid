@@ -276,6 +276,18 @@ describe("when a deployment's field values are needed", () => {
 		expect(missing).toEqual([]);
 	});
 
+	test("an action reading its own parameter as a field needs no instance file", () => {
+		const { required } = templateAction(
+			{
+				outputs: [{ amount_sat: "instance.tip", destination: "wallet", id: "out" }],
+				params: { tip: { type: "u64" } },
+			},
+			{ tip: 1 },
+		);
+
+		expect(required).not.toContain("instance");
+	});
+
 	test("but a field its create_instance does not produce is still read from one", () => {
 		const { required } = templateAction({
 			create_instance: { fields: { RESERVE_HASH: { simf: "./r.simf", type: "tapleaf" } } },

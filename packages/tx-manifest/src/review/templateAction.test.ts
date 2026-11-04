@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 
-import mutualManifest from "../__fixtures__/mutual.manifest.json";
-import vaultlet from "../__fixtures__/vaultlet.manifest.json";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
 	asRefusal,
@@ -12,29 +9,26 @@ import {
 	DERIVED,
 	DERIVED_SCRIPT,
 	type Document,
-	edited,
 	ELSEWHERE_SCRIPT,
+	Fixture,
 	POLICY_ASSET,
 	PUBKEY,
 	review,
 	type ReviewDependencies,
 	TXID,
 	WALLET_SCRIPT,
-} from "./harness";
+} from "./reviewForTests";
 
 const ASSET_STATED = `a0${"00".repeat(30)}0a`;
 const ASSET_COMMITTED = `0a${"00".repeat(30)}a0`;
 const RESERVE_HASH = "cc".repeat(32);
 const VAULT_PATH = "./vault.simf";
 
-const SOURCES = Object.fromEntries(
-	["vault", "reserve", "guard", "left", "right"].map((name) => [
-		`./${name}.simf`,
-		readFileSync(new URL(`../__fixtures__/contracts/${name}.simf`, import.meta.url), "utf8"),
-	]),
-);
+const vaultlet = Fixture.load("vaultlet");
+const mutual = Fixture.load("mutual");
+const SOURCES = { ...vaultlet.contractSources, ...mutual.contractSources };
 
-const VAULTLET = vaultlet as unknown as Document;
+const VAULTLET = vaultlet.manifest;
 const DEBUG_VAULTLET = { ...VAULTLET, simplicity_hl: { debug_symbols: true } };
 
 const DEPLOYMENT = {
@@ -201,7 +195,7 @@ describe("the constructor of the same template", () => {
 	});
 
 	test("works out a field the document computes rather than recording its text", async () => {
-		const manifest = edited(VAULTLET, (copy) => {
+		const { manifest } = vaultlet.edited((copy) => {
 			const templates = copy.contract_templates as Record<string, { actions: Document }>;
 			const created = (templates.vaultlet_contract!.actions.OpenVault as Document)
 				.create_instance as { fields: Document };
@@ -258,7 +252,7 @@ describe("what a review still refuses", () => {
 	test("a deployment whose covenant hashes never settle", async () => {
 		const { compiled, result } = vaultletReview({
 			action: "Knot",
-			manifest: mutualManifest as unknown as Document,
+			manifest: mutual.manifest,
 		});
 		const refusal = asRefusal(await result);
 

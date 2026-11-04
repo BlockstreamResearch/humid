@@ -31,6 +31,21 @@ describe("the namespaces a reference can name", () => {
 		});
 	});
 
+	test("reads an action parameter as a field where the deployment has no such field", () => {
+		expect(resolveReference("instance.amount_sat", "amount", SCOPE)).toMatchObject({
+			ok: true,
+			value: "1000",
+		});
+	});
+
+	test("but a field the deployment has wins over a parameter of the same name", () => {
+		const scope = { instance: { TIMEOUT: "900000" }, params: { TIMEOUT: "1" } };
+
+		expect(resolveReference("instance.TIMEOUT", "amount", scope)).toMatchObject({
+			value: "900000",
+		});
+	});
+
 	test("reads a bare name as a parameter", () => {
 		expect(resolveReference("amount_sat", "amount", SCOPE)).toMatchObject({ value: "1000" });
 	});

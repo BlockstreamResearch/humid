@@ -291,7 +291,7 @@ describe("lending_v3", () => {
 		}
 	});
 
-	test("each action reviews against an offer, except where it reads a parameter as a field", async () => {
+	test("each action reviews against an offer", async () => {
 		const outcomes = {
 			AcceptOffer: await lending.outcome("AcceptOffer", {
 				holdings: nfts,
@@ -316,6 +316,7 @@ describe("lending_v3", () => {
 			}),
 			CreateFactory: await lending.outcome("CreateFactory"),
 			CreateOffer: await lending.outcome("CreateOffer", {
+				holdings: { [terms.FACTORY_ASSET_ID ?? ""]: "1" },
 				instance: { FACTORY_ASSET_ID: terms.FACTORY_ASSET_ID ?? "" },
 				spends: [
 					{ amount: "1", asset: terms.FACTORY_ASSET_ID ?? "", utxoType: "issuance_factory" },
@@ -332,8 +333,8 @@ describe("lending_v3", () => {
 			AcceptOffer: "reviewed",
 			CancelOffer: "reviewed",
 			ClaimPrincipal: "reviewed",
-			CreateFactory: "document-fault",
-			CreateOffer: "document-fault",
+			CreateFactory: "reviewed",
+			CreateOffer: "reviewed",
 			RepayLoan: "reviewed",
 		});
 	});

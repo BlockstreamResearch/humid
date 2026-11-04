@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import manifestJson from "../__fixtures__/vaultlet.manifest.json";
+import manifestJson from "../__fixtures__/vaultlet/txmanifest.json";
 import { findAction, normaliseManifest } from "../document/normalise";
 import { deriveCovenantAddress } from "./covenant";
 import { declaredParamTypes } from "./declaredTypes";
@@ -22,7 +22,7 @@ const INSTANCE = {
 const DECLARED = { SLOT_COUNT: "u8", WITH_BURN: "bool" };
 
 const SOURCE = readFileSync(
-	new URL("../__fixtures__/contracts/vault.simf", import.meta.url),
+	new URL("../__fixtures__/vaultlet/vault.simf", import.meta.url),
 	"utf8",
 );
 

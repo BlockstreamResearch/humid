@@ -2,21 +2,32 @@ import { describe, expect, test } from "bun:test";
 
 import { estimateFeeSats } from "../fee";
 import { toShownConfirmation } from "../index";
+import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
 	ACCOUNT,
 	DERIVED,
 	type Document,
-	editedAction,
-	P2PK,
-	payRequest,
+	Fixture,
 	POLICY_ASSET,
 	PUBKEY,
-	receiveRequest,
 	reviewed,
-} from "./harness";
+	TXID,
+} from "./reviewForTests";
 
-const receive = (manifest: Document = P2PK) => reviewed(receiveRequest({ manifest }));
-const shown = async (manifest?: Document) => (await receive(manifest)).confirmation;
+const p2pk = Fixture.load("p2pk");
+
+const pay = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+	p2pk.request("Pay", { params: { amount_sat: 1000, pubkey: PUBKEY }, ...overrides });
+
+const receive = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+	p2pk.request("Receive", {
+		params: { pubkey: PUBKEY },
+		state: { utxos: [{ txid: TXID, utxo_type: "p2pk_output", vout: 0 }] },
+		...overrides,
+	});
+
+const received = (manifest: Document = p2pk.manifest) => reviewed(receive({ manifest }));
+const shown = async (manifest?: Document) => (await received(manifest)).confirmation;
 
 describe("what the wallet established for itself", () => {
 	test("names which account is acting, because the wallet chose it implicitly", async () => {
@@ -31,7 +42,7 @@ describe("what the wallet established for itself", () => {
 	});
 
 	test("and that figure is what this shape costs at the rate it read", async () => {
-		const result = await receive();
+		const result = await received();
 
 		expect(result.confirmation.feeSats.value).toBe(result.estimatedFeeSats);
 		expect(result.estimatedFeeSats).toBe(
@@ -60,13 +71,13 @@ describe("what the wallet established for itself", () => {
 	});
 
 	test("and that change is the covenant's holding back, less what the fee takes", async () => {
-		const result = await receive();
+		const result = await received();
 
 		expect(result.confirmation.netEffect[0]?.sats.value).toBe(50_000n - result.estimatedFeeSats);
 	});
 
 	test("and reads as an outgoing figure when the action pays a covenant", async () => {
-		const result = await reviewed(payRequest());
+		const result = await reviewed(pay());
 
 		expect(result.confirmation.netEffect[0]?.sats.value).toBe(-1000n - result.estimatedFeeSats);
 	});
@@ -79,7 +90,7 @@ describe("what the wallet established for itself", () => {
 	});
 
 	test("and says so plainly about one it did not", async () => {
-		const result = await reviewed(payRequest());
+		const result = await reviewed(pay());
 
 		expect(result.confirmation.covenants[0]?.verified).toMatchObject({
 			origin: "computed",
@@ -99,9 +110,9 @@ describe("what the dapp merely said", () => {
 	});
 
 	test("the action's intent is the dapp's, with its references filled in", async () => {
-		const manifest = editedAction("Receive", (action) => {
+		const manifest = p2pk.editedAction("Receive", (action) => {
 			action.intent = "spend to {params.pubkey:short}";
-		});
+		}).manifest;
 
 		expect((await shown(manifest)).summary).toMatchObject({
 			origin: "dapp",
@@ -122,7 +133,7 @@ describe("what the dapp merely said", () => {
 });
 
 function confidentialAt(at: number, confidential: boolean | undefined): Document {
-	return editedAction("Receive", (action) => {
+	return p2pk.editedAction("Receive", (action) => {
 		const output = (action.outputs as Document[])[at]!;
 
 		if (confidential === undefined) {
@@ -130,7 +141,7 @@ function confidentialAt(at: number, confidential: boolean | undefined): Document
 		} else {
 			output.confidential = confidential;
 		}
-	});
+	}).manifest;
 }
 
 const saying = (confidential: boolean | undefined) => confidentialAt(0, confidential);
@@ -171,9 +182,9 @@ describe("what a person is told about a blinded amount", () => {
 
 function changeSaying(confidential: boolean | undefined | "absent"): Document {
 	return confidential === "absent"
-		? editedAction("Receive", (action) => {
+		? p2pk.editedAction("Receive", (action) => {
 				(action.outputs as Document[]).pop();
-			})
+			}).manifest
 		: confidentialAt(1, confidential);
 }
 
@@ -227,7 +238,7 @@ describe("what a person is told about an amount this wallet published", () => {
 
 describe("the model as it crosses to a surface", () => {
 	test("writes every amount as a decimal string", async () => {
-		const result = await receive();
+		const result = await received();
 		const crossed = toShownConfirmation(result.confirmation);
 
 		expect(crossed.feeSats.value).toBe(result.estimatedFeeSats.toString());
@@ -237,13 +248,13 @@ describe("the model as it crosses to a surface", () => {
 	});
 
 	test("and survives the encoding the bus actually uses", async () => {
-		const crossed = toShownConfirmation((await receive()).confirmation);
+		const crossed = toShownConfirmation((await received()).confirmation);
 
 		expect(JSON.parse(JSON.stringify(crossed)).account.value).toBe(ACCOUNT);
 	});
 
 	test("keeping each value's origin, which is the whole reason it is carried", async () => {
-		const crossed = toShownConfirmation((await receive()).confirmation);
+		const crossed = toShownConfirmation((await received()).confirmation);
 
 		expect(crossed.feeSats.origin).toBe("computed");
 		expect(crossed.netEffect[0]?.sats.origin).toBe("computed");
@@ -253,7 +264,7 @@ describe("the model as it crosses to a surface", () => {
 
 describe("what the confirmation says a contract is", () => {
 	test("carries the contract's own hashes beside the address its funds sit at", async () => {
-		const result = await receive();
+		const result = await received();
 
 		expect(result.confirmation.covenants).not.toHaveLength(0);
 
@@ -266,7 +277,7 @@ describe("what the confirmation says a contract is", () => {
 	});
 
 	test("and says both were worked out here rather than taken from the dapp", async () => {
-		const result = await receive();
+		const result = await received();
 
 		for (const row of result.confirmation.covenants) {
 			expect(row.cmr.origin).toBe("computed");

@@ -1,6 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
-import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
 import type { ReadTxOut } from "../chain/chainRead";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import type { SelectableUtxo } from "./coinSelection";
@@ -27,19 +26,67 @@ export const ELSEWHERE_SCRIPT = `5120${"22".repeat(32)}`;
 export const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 export const COVENANT_TXOUT = `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`;
 
-export const P2PK_PATH = "./p2pk.simf";
-export const P2PK_SOURCE = readFileSync(
-	new URL("../__fixtures__/p2pk/p2pk.simf", import.meta.url),
-	"utf8",
-);
-export const P2PK = p2pkManifest as unknown as Document;
-
 export const COMPILED = {
 	address: DERIVED,
 	cmr: "cc".repeat(32),
 	scriptPubKeyHex: DERIVED_SCRIPT,
 	tapleafHash: "1e".repeat(32),
 };
+
+export class Fixture {
+	private constructor(
+		readonly manifest: Document,
+		readonly contractSources: Record<string, string>,
+	) {}
+
+	static load(name: string): Fixture {
+		const at = new URL(`../__fixtures__/${name}/`, import.meta.url);
+		const read = (file: string) => readFileSync(new URL(file, at), "utf8");
+
+		return new Fixture(
+			JSON.parse(read("txmanifest.json")),
+			Object.fromEntries(
+				readdirSync(at)
+					.filter((file) => file.endsWith(".simf"))
+					.map((file) => [`./${file}`, read(file)]),
+			),
+		);
+	}
+
+	action(name: string): Document {
+		return structuredClone((this.manifest.actions as Record<string, Document>)[name] ?? {});
+	}
+
+	source(path: string): string {
+		return this.contractSources[path] ?? "";
+	}
+
+	edited(edit: (manifest: Document) => void): Fixture {
+		const manifest = structuredClone(this.manifest);
+
+		edit(manifest);
+
+		return new Fixture(manifest, this.contractSources);
+	}
+
+	editedAction(name: string, edit: (action: Document) => void): Fixture {
+		return this.edited((manifest) => edit((manifest.actions as Record<string, Document>)[name]!));
+	}
+
+	request(
+		action: string,
+		overrides: Partial<ParsedLiquidProcessCtParams> = {},
+	): ParsedLiquidProcessCtParams {
+		return {
+			action,
+			broadcast: false,
+			contractSources: this.contractSources,
+			manifest: this.manifest,
+			params: {},
+			...overrides,
+		};
+	}
+}
 
 export function utxo(
 	amount: string,
@@ -71,46 +118,6 @@ export function dependencies(overrides: Partial<ReviewDependencies> = {}): Revie
 		walletScriptPubKeyHex: WALLET_SCRIPT,
 		...overrides,
 	};
-}
-
-export function payRequest(
-	overrides: Partial<ParsedLiquidProcessCtParams> = {},
-): ParsedLiquidProcessCtParams {
-	return {
-		action: "Pay",
-		broadcast: false,
-		contractSources: { [P2PK_PATH]: P2PK_SOURCE },
-		manifest: P2PK,
-		params: { amount_sat: 1000, pubkey: PUBKEY },
-		...overrides,
-	};
-}
-
-export function receiveRequest(
-	overrides: Partial<ParsedLiquidProcessCtParams> = {},
-): ParsedLiquidProcessCtParams {
-	return payRequest({
-		action: "Receive",
-		params: { pubkey: PUBKEY },
-		state: { utxos: [{ txid: TXID, utxo_type: "p2pk_output", vout: 0 }] },
-		...overrides,
-	});
-}
-
-export function edited(document: Document, edit: (copy: Document) => void): Document {
-	const copy = structuredClone(document);
-
-	edit(copy);
-
-	return copy;
-}
-
-export function actionOf(document: Document, name: string): Document {
-	return (document.actions as Record<string, Document>)[name] ?? {};
-}
-
-export function editedAction(name: string, edit: (action: Document) => void, document = P2PK) {
-	return edited(document, (copy) => edit(actionOf(copy, name)));
 }
 
 export function review(

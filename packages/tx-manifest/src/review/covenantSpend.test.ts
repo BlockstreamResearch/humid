@@ -1,35 +1,44 @@
 import { describe, expect, test } from "bun:test";
 
+import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
-	actionOf,
 	COVENANT_TXOUT,
 	type Document,
-	editedAction,
+	Fixture,
 	FUNDING_TXID,
-	P2PK,
-	P2PK_SOURCE,
-	payRequest,
 	POLICY_ASSET,
 	PUBKEY,
-	receiveRequest,
 	refused,
 	reviewed,
 	TXID,
-} from "./harness";
+} from "./reviewForTests";
 
-const receiveInputs = () => structuredClone(actionOf(P2PK, "Receive").inputs) as Document[];
+const P2PK_PATH = "./p2pk.simf";
+const p2pk = Fixture.load("p2pk");
+
+const pay = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+	p2pk.request("Pay", { params: { amount_sat: 1000, pubkey: PUBKEY }, ...overrides });
+
+const receive = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+	p2pk.request("Receive", {
+		params: { pubkey: PUBKEY },
+		state: { utxos: [{ txid: TXID, utxo_type: "p2pk_output", vout: 0 }] },
+		...overrides,
+	});
+
+const receiveInputs = () => structuredClone(p2pk.action("Receive").inputs) as Document[];
 
 function withReceive(inputs: unknown[], outputs?: unknown[]): Document {
-	return editedAction("Receive", (action) => {
+	return p2pk.editedAction("Receive", (action) => {
 		action.inputs = inputs;
 
 		if (outputs !== undefined) {
 			action.outputs = outputs;
 		}
-	});
+	}).manifest;
 }
 
-const spending = (manifest: Document = P2PK) => receiveRequest({ manifest });
+const spending = (manifest: Document = p2pk.manifest) => receive({ manifest });
 
 describe("what the review carries out about a covenant it will spend", () => {
 	test("carries the exact source, arguments, leaves and mode it checked against the chain", async () => {
@@ -42,7 +51,7 @@ describe("what the review carries out about a covenant it will spend", () => {
 				id: "p2pk_in",
 				includeDebugSymbols: false,
 				signatureWitness: "SIGNATURE",
-				source: P2PK_SOURCE,
+				source: p2pk.source(P2PK_PATH),
 				txOutHex: COVENANT_TXOUT,
 				txid: TXID,
 				utxoType: "p2pk_output",
@@ -131,7 +140,7 @@ describe("the transaction-level facts a covenant spend needs", () => {
 	});
 
 	test("declares none for an action that spends no covenant", async () => {
-		const review = await reviewed(payRequest(), { readChainTip: async () => 3_210_987 });
+		const review = await reviewed(pay(), { readChainTip: async () => 3_210_987 });
 
 		expect(review.locktimeHeight).toBeUndefined();
 	});
@@ -332,7 +341,7 @@ describe("which covenant output each input spends", () => {
 	});
 
 	test("spends the output the instance file pins, without a state file", async () => {
-		const request = receiveRequest({
+		const request = receive({
 			instance: { provided_inputs: { p2pk_in: { txid: "a".repeat(64), vout: 0 } } },
 			state: undefined,
 		});

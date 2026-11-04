@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import p2pk from "../__fixtures__/p2pk/txmanifest.json";
-import vaultlet from "../__fixtures__/vaultlet.manifest.json";
+import vaultlet from "../__fixtures__/vaultlet/txmanifest.json";
 import { declaredFields, findAction, normaliseInstance, normaliseManifest } from "./normalise";
 
 const VAULTLET = normaliseManifest(vaultlet as unknown as Record<string, unknown>);

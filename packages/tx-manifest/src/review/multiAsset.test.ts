@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import multiassetManifest from "../__fixtures__/multiasset.manifest.json";
 import { deriveNewIssuance } from "../chain/issuance";
 import { estimateFeeSats } from "../fee";
 import { reviewManifestAction } from "../index";
@@ -12,16 +11,16 @@ import {
 	COVENANT_TXOUT,
 	DERIVED_SCRIPT,
 	dependencies,
+	Fixture,
 	FUNDING_TXID,
-	P2PK_PATH,
-	P2PK_SOURCE,
 	POLICY_ASSET,
 	PUBKEY,
 	utxo,
 	WALLET_SCRIPT,
-} from "./harness";
+} from "./reviewForTests";
 
-const MANIFEST = multiassetManifest as unknown as Record<string, unknown>;
+const multiasset = Fixture.load("multiasset");
+const MANIFEST = multiasset.manifest;
 const TOKEN = "ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2";
 const TOKEN_TXID = "d".repeat(64);
 
@@ -30,14 +29,10 @@ const deps = dependencies({
 });
 
 function request(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
-	return {
-		action: "PayToken",
-		broadcast: false,
-		contractSources: { [P2PK_PATH]: P2PK_SOURCE },
-		manifest: MANIFEST,
+	return multiasset.request("PayToken", {
 		params: { amount_sat: 1000, fee_sat: 700, pubkey: PUBKEY, token: TOKEN },
 		...overrides,
-	} satisfies ParsedLiquidProcessCtParams;
+	});
 }
 
 function pay(

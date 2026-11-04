@@ -1,30 +1,41 @@
 import { describe, expect, test } from "bun:test";
 
 import type { RejectToken } from "../document/refuse";
+import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
 	COVENANT_TXOUT,
 	DERIVED_SCRIPT,
 	type Document,
-	edited,
-	editedAction,
-	P2PK,
-	payRequest,
+	Fixture,
 	POLICY_ASSET,
-	receiveRequest,
+	PUBKEY,
 	refused,
 	reviewed,
-} from "./harness";
+	TXID,
+} from "./reviewForTests";
+
+const p2pk = Fixture.load("p2pk");
+
+const pay = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+	p2pk.request("Pay", { params: { amount_sat: 1000, pubkey: PUBKEY }, ...overrides });
+
+const receive = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+	p2pk.request("Receive", {
+		params: { pubkey: PUBKEY },
+		state: { utxos: [{ txid: TXID, utxo_type: "p2pk_output", vout: 0 }] },
+		...overrides,
+	});
 
 const payRefusal = async (edit: (pay: Document) => void) =>
-	refused(payRequest({ manifest: editedAction("Pay", edit) }));
+	refused(pay({ manifest: p2pk.editedAction("Pay", edit).manifest }));
 
 describe("what the document alone is refused for", () => {
 	test("a protocol for a chain this wallet does not build on", async () => {
-		const manifest = edited(P2PK, (copy) => {
+		const manifest = p2pk.edited((copy) => {
 			copy.chain = "bitcoin";
-		});
+		}).manifest;
 
-		expect((await refused(payRequest({ manifest }))).reject).toBe("foreign-chain");
+		expect((await refused(pay({ manifest }))).reject).toBe("foreign-chain");
 	});
 
 	test("a construct the format defines and this wallet does not implement", async () => {
@@ -46,36 +57,36 @@ describe("what the document alone is refused for", () => {
 	});
 
 	test("but not a comment, which decides nothing", async () => {
-		const manifest = editedAction("Pay", (pay) => {
+		const manifest = p2pk.editedAction("Pay", (pay) => {
 			pay.$comment = "written by a person";
-		});
+		}).manifest;
 
-		await reviewed(payRequest({ manifest }));
+		await reviewed(pay({ manifest }));
 	});
 
 	test("a build mode that is neither on nor off", async () => {
-		const manifest = edited(P2PK, (copy) => {
+		const manifest = p2pk.edited((copy) => {
 			copy.simplicity_hl = { debug_symbols: "maybe" };
-		});
+		}).manifest;
 
-		expect((await refused(payRequest({ manifest }))).reject).toBe("unreadable-build-mode");
+		expect((await refused(pay({ manifest }))).reject).toBe("unreadable-build-mode");
 	});
 
 	test("a compiler other than the one this wallet ships", async () => {
-		const refusal = await refused(payRequest(), { compilerVersion: "0.7.1" });
+		const refusal = await refused(pay(), { compilerVersion: "0.7.1" });
 
 		expect(refusal.reject).toBe("foreign-compiler");
 	});
 
 	test("a witness this wallet cannot produce", async () => {
-		const manifest = editedAction("Receive", (receive) => {
+		const manifest = p2pk.editedAction("Receive", (receive) => {
 			const inputs = receive.inputs as Document[];
 			const witnesses = inputs[0]?.witnesses as Record<string, Document>;
 
 			(witnesses.SIGNATURE ?? {}).type = "PedersenProof";
-		});
+		}).manifest;
 
-		expect((await refused(receiveRequest({ manifest }))).reject).toBe("unproducible-witness");
+		expect((await refused(receive({ manifest }))).reject).toBe("unproducible-witness");
 	});
 
 	test("an asset the wallet could not establish", async () => {
@@ -94,7 +105,7 @@ describe("a fee rate", () => {
 		["below zero", -1],
 	] as const) {
 		test(`${what} is refused`, async () => {
-			const refusal = await refused(payRequest(), { readFeeRate: async () => rate });
+			const refusal = await refused(pay(), { readFeeRate: async () => rate });
 
 			expect(refusal.reject).toBe("no-fee-rate");
 			expect(refusal.reason).toContain(String(rate));
@@ -102,9 +113,7 @@ describe("a fee rate", () => {
 	}
 
 	test("of zero is a rate, and is built at", async () => {
-		expect((await reviewed(payRequest(), { readFeeRate: async () => 0 })).feeRateSatsPerKvb).toBe(
-			0,
-		);
+		expect((await reviewed(pay(), { readFeeRate: async () => 0 })).feeRateSatsPerKvb).toBe(0);
 	});
 });
 
@@ -257,7 +266,7 @@ describe("what the chain reader says an output holds", () => {
 		"99999999999999999999999999",
 	]) {
 		test(`${JSON.stringify(amountSats)} is refused rather than converted`, async () => {
-			const refusal = await refused(receiveRequest(), {
+			const refusal = await refused(receive(), {
 				readTxOut: async () => ({
 					amountSats,
 					rawAssetId: POLICY_ASSET,

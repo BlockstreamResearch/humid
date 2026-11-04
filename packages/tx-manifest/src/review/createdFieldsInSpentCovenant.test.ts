@@ -1,26 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 
-import manifest from "../__fixtures__/lending_v3/txmanifest.json";
-import { COMPILED, POLICY_ASSET, review } from "./harness";
+import { COMPILED, Fixture, POLICY_ASSET, review } from "./reviewForTests";
 
-const contractSources = Object.fromEntries(
-	[...JSON.stringify(manifest).matchAll(/"(\.\/[a-z_]+\.simf)"/g)].map(([, path]) => [
-		path,
-		readFileSync(new URL(`../__fixtures__/lending_v3/${path}`, import.meta.url), "utf8"),
-	]),
-);
+const lending = Fixture.load("lending_v3");
 
 async function argumentsCompiledFor(source: string): Promise<Record<string, unknown>[]> {
 	const compiled: Record<string, unknown>[] = [];
 
 	await review(
-		{
-			action: "CreateOffer",
-			broadcast: false,
-			contractSources,
+		lending.request("CreateOffer", {
 			instance: { instance: { fields: { FACTORY_ASSET_ID: "fa".repeat(32) } } },
-			manifest,
 			params: {
 				COLLATERAL_AMOUNT: "30000",
 				COLLATERAL_ASSET_ID: POLICY_ASSET,
@@ -32,7 +21,7 @@ async function argumentsCompiledFor(source: string): Promise<Record<string, unkn
 				PROTOCOL_FEE_KEEPER_ASSET_ID: "38".repeat(32),
 			},
 			state: { utxos: [{ txid: "b".repeat(64), utxo_type: "issuance_factory", vout: 0 }] },
-		} as never,
+		}),
 		{
 			compile: (asked) => {
 				if (asked.source === source) {
@@ -56,7 +45,7 @@ async function argumentsCompiledFor(source: string): Promise<Record<string, unkn
 
 describe("a spent covenant compiled from a field of the deployment the action creates", () => {
 	test("CreateOffer compiles the issuance factory from the count its create_instance states", async () => {
-		const compiled = await argumentsCompiledFor(contractSources["./issuance_factory.simf"]!);
+		const compiled = await argumentsCompiledFor(lending.source("./issuance_factory.simf"));
 
 		expect(compiled[0]?.ISSUING_UTXOS_COUNT).toEqual({ type: "u8", value: "2" });
 	});
