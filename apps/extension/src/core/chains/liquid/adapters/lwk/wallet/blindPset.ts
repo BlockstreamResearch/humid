@@ -41,12 +41,6 @@ export function blindPset(lwk: LwkWasmModule, wollet: Wollet, pset: Pset): Pset 
 			return [`${outpoint.txid().toString()}:${outpoint.vout()}`, utxo] as const;
 		}),
 	);
-	if (
-		inputs.every((input) => owned.has(`${input.previousTxid().toString()}:${input.previousVout()}`))
-	) {
-		return wollet.blind(pset);
-	}
-
 	if ([...global.keys()].some((key) => key.startsWith("fc047073657400"))) {
 		throw invalid("PSETs with existing blinding contributions are not supported.");
 	}
@@ -91,17 +85,25 @@ export function blindPset(lwk: LwkWasmModule, wollet: Wollet, pset: Pset): Pset 
 		needsHydration = true;
 	}
 	if (needsHydration) {
-		for (const output of outputs) hydrated = hydrated.addOutput(output);
-		const hydratedBytes = Buffer.from(hydrated.build().toString(), "base64");
-		const hydratedReader = new PsetReader(hydratedBytes);
+		const hydratedReader = new PsetReader(Buffer.from(hydrated.build().toString(), "base64"));
 		hydratedReader.map();
+		const hydratedInputs = inputs.map(() => hydratedReader.map());
 		const prepared = new lwk.Pset(
-			Buffer.concat([
-				original.subarray(0, globalEnd),
-				hydratedBytes.subarray(hydratedReader.offset),
-			]).toString("base64"),
+			writePsetMaps({
+				global,
+				inputs: inputMaps.map((map, index) =>
+					map.has("01")
+						? map
+						: new Map([
+								...map,
+								...[...hydratedInputs[index]].filter(([key]) =>
+									["01", "fc04707365740e"].includes(key),
+								),
+							]),
+				),
+				outputs: outputMaps,
+			}),
 		);
-		prepared.combine(pset);
 		return blindPset(lwk, wollet, prepared);
 	}
 
@@ -141,6 +143,33 @@ function invalid(message: string) {
 		undefined,
 		WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST,
 	);
+}
+
+export type PsetMaps = {
+	global: Map<string, Buffer>;
+	inputs: Map<string, Buffer>[];
+	outputs: Map<string, Buffer>[];
+};
+
+function compactSize(length: number): Buffer {
+	if (length < 253) return Buffer.from([length]);
+	const encoded = Buffer.alloc(length <= 0xffff ? 3 : 5);
+	encoded[0] = encoded.length === 3 ? 253 : 254;
+	if (encoded.length === 3) encoded.writeUInt16LE(length, 1);
+	else encoded.writeUInt32LE(length, 1);
+	return encoded;
+}
+
+export function writePsetMaps(maps: PsetMaps): string {
+	const buffers: Buffer[] = [Buffer.from("70736574ff", "hex")];
+	for (const map of [maps.global, ...maps.inputs, ...maps.outputs]) {
+		for (const [key, value] of map) {
+			const keyBytes = Buffer.from(key, "hex");
+			buffers.push(compactSize(keyBytes.length), keyBytes, compactSize(value.length), value);
+		}
+		buffers.push(Buffer.alloc(1));
+	}
+	return Buffer.concat(buffers).toString("base64");
 }
 
 export class PsetReader {

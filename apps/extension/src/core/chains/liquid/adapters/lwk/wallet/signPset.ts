@@ -14,8 +14,10 @@ import type {
 import type { LiquidSignPsetReview } from "../../../domain/pset/types";
 import { type LwkWasmModule, loadLwkWasm } from "../loadLwkWasm";
 import { getSyncWorkerClient } from "../sync-worker/createSyncWorkerClient";
-import { blindPset, PsetReader } from "./blindPset";
+import { blindPset, type PsetMaps, PsetReader, writePsetMaps } from "./blindPset";
 import { getLwkImplementation } from "./getLwkImplementation";
+
+const SIGHASH_ALL = 1;
 
 export async function blindAndInspectPset(
 	account: LiquidWalletAccount,
@@ -118,7 +120,7 @@ function inspectPset(lwk: LwkWasmModule, wollet: Wollet, pset: Pset): LiquidSign
 			pset: pset.toString(),
 			inputs: inputs.map((input, index) => ({
 				index,
-				sighashType: input.sighash(),
+				sighashType: input.sighash() ?? SIGHASH_ALL,
 			})),
 			fees: Array.from(fees.entries() as Map<string, bigint>, ([asset, amount]) => ({
 				asset,
@@ -177,7 +179,10 @@ export async function signPset(
 		// sign and finalize consume their input, including when they throw.
 		const signingPset = pset;
 		pset = undefined;
-		pset = implementation.signer.sign(signingPset);
+		pset = implementation.signer.signWithOptions(
+			signingPset,
+			lwk.SignOptions.dangerousAllowAnySighash(),
+		);
 
 		const overSignedInputIndex = readInputSignatures(pset).findIndex(
 			(signatures, index) =>
@@ -253,12 +258,6 @@ function readInputSignatures(pset: Pset) {
 	}
 }
 
-type PsetMaps = {
-	global: Map<string, Buffer>;
-	inputs: Map<string, Buffer>[];
-	outputs: Map<string, Buffer>[];
-};
-
 function readPsetMaps(pset: Pset): PsetMaps {
 	const bytes = Buffer.from(pset.toString(), "base64");
 	const reader = new PsetReader(bytes);
@@ -276,24 +275,4 @@ function readPsetMaps(pset: Pset): PsetMaps {
 		for (const input of inputs) input.free();
 		for (const output of outputs) output.free();
 	}
-}
-
-function writePsetMaps(maps: PsetMaps): string {
-	const compactSize = (length: number): Buffer => {
-		if (length < 253) return Buffer.from([length]);
-		const encoded = Buffer.alloc(length <= 0xffff ? 3 : 5);
-		encoded[0] = encoded.length === 3 ? 253 : 254;
-		if (encoded.length === 3) encoded.writeUInt16LE(length, 1);
-		else encoded.writeUInt32LE(length, 1);
-		return encoded;
-	};
-	const buffers: Buffer[] = [Buffer.from("70736574ff", "hex")];
-	for (const map of [maps.global, ...maps.inputs, ...maps.outputs]) {
-		for (const [key, value] of map) {
-			const keyBytes = Buffer.from(key, "hex");
-			buffers.push(compactSize(keyBytes.length), keyBytes, compactSize(value.length), value);
-		}
-		buffers.push(Buffer.alloc(1));
-	}
-	return Buffer.concat(buffers).toString("base64");
 }

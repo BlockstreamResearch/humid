@@ -1,3 +1,7 @@
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, concatBytes, utf8ToBytes } from "@noble/hashes/utils.js";
+import type { DerivationPath } from "lwk_wasm";
+
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcInvalidParamsError,
@@ -50,13 +54,17 @@ export async function signMessage(
 	const implementation = getLwkImplementation(account);
 
 	try {
-		const signedMessage = implementation.signer.signMessageAtPath(params.message, path);
+		const signature = Uint8Array.from(
+			atob(implementation.signer.signMessage(params.message, path)),
+			(char) => char.charCodeAt(0),
+		);
+		const recoveryId = (signature[0] - 27) & 3;
 
 		return {
 			address,
-			messageHash: signedMessage.messageHash,
+			messageHash: bytesToHex(signedMessageHash(params.message)),
 			protocol: LIQUID_SIGN_MESSAGE_PROTOCOLS.ECDSA,
-			signature: signedMessage.signature,
+			signature: bytesToHex(concatBytes(signature.subarray(1), Uint8Array.of(recoveryId))),
 			signatureEncoding: LIQUID_SIGN_MESSAGE_SIGNATURE_ENCODINGS.HEX_RECOVERABLE_ECDSA_65,
 		};
 	} catch {
@@ -71,13 +79,13 @@ export async function signMessage(
 async function resolveMessageSigningPath(
 	account: LiquidWalletAccount,
 	params: ParsedLiquidSignMessageParams,
-): Promise<{ address: string; path: Uint32Array }> {
+): Promise<{ address: string; path: DerivationPath }> {
 	const lwk = await loadLwkWasm();
 	const implementation = getLwkImplementation(account);
 
 	try {
-		const address = new lwk.Address(params.address);
-		const path = implementation.wollet.addressFullPathFor(address, SIGN_MESSAGE_ADDRESS_SCAN_LIMIT);
+		const address = lwk.Address.parse(params.address, implementation.network);
+		const path = findDerivationPath(implementation.wollet, address);
 
 		return {
 			address: address.toString(),
@@ -93,4 +101,36 @@ async function resolveMessageSigningPath(
 			WALLET_RPC_ERROR_REASONS.INVALID_MESSAGE_SIGNING_REQUEST,
 		);
 	}
+}
+
+type Wollet = ReturnType<typeof getLwkImplementation>["wollet"];
+type Address = InstanceType<Awaited<ReturnType<typeof loadLwkWasm>>["Address"]>;
+
+function findDerivationPath(wollet: Wollet, address: Address): DerivationPath {
+	const script = address.scriptPubkey().toString();
+	for (const derive of [(i: number) => wollet.address(i), (i: number) => wollet.change(i)]) {
+		for (let index = 0; index <= SIGN_MESSAGE_ADDRESS_SCAN_LIMIT; index++) {
+			const derived = derive(index);
+			if (derived.address().scriptPubkey().toString() === script) {
+				const path = derived.derivationPath();
+				if (path) return path;
+			}
+		}
+	}
+	throw new Error("Address does not belong to this wallet within the scanned range");
+}
+
+function signedMessageHash(message: string): Uint8Array {
+	const prefix = utf8ToBytes("\x18Bitcoin Signed Message:\n");
+	const body = utf8ToBytes(message);
+	return sha256(sha256(concatBytes(prefix, compactSize(body.length), body)));
+}
+
+function compactSize(length: number): Uint8Array {
+	if (length < 0xfd) return Uint8Array.of(length);
+	if (length <= 0xffff) return Uint8Array.of(0xfd, length & 0xff, length >> 8);
+	const bytes = new Uint8Array(5);
+	bytes[0] = 0xfe;
+	new DataView(bytes.buffer).setUint32(1, length, true);
+	return bytes;
 }

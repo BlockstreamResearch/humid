@@ -262,9 +262,6 @@ let walletUtxos: {
 }[] = [];
 let walletTransactions: (Pick<WalletTransaction, "txid" | "tx"> &
 	Partial<Pick<WalletTransaction, "inputs" | "outputs">>)[] = [];
-let nativeBlindingSource = "";
-let nativeBlindingResult: Lwk.Pset | undefined;
-let nativeBlindingError: Error | undefined;
 Object.assign(wollet, {
 	address: (index: number) => {
 		expect(index).toBe(0);
@@ -272,19 +269,13 @@ Object.assign(wollet, {
 	},
 	utxos: () => walletUtxos,
 	transactions: () => walletTransactions,
-	blind: (pset: Lwk.Pset) => {
-		nativeBlindingSource = pset.toString();
-		if (nativeBlindingError) throw nativeBlindingError;
-		if (!nativeBlindingResult) throw new Error("Unexpected native blinding call");
-		return nativeBlindingResult;
-	},
 });
 
 const account = {
 	implementation: {
 		wollet,
 		signer: {
-			sign: (pset: Lwk.Pset) => {
+			signWithOptions: (pset: Lwk.Pset) => {
 				signedSource = pset.toString();
 				return signerTransform ? signerTransform(pset) : pset;
 			},
@@ -339,7 +330,17 @@ function fixture(
 
 function withWitness(pset: Lwk.Pset) {
 	const bytes = Buffer.from(pset.toString(), "base64");
-	const utxo = Buffer.from(lwk.TxOut.fromExplicit(script, asset, 50_000n).toBytes());
+	const value = Buffer.alloc(8);
+	value.writeBigUInt64BE(50_000n);
+	const scriptBytes = Buffer.from(script.bytes());
+	const utxo = Buffer.concat([
+		Buffer.from([1]),
+		Buffer.from(asset.toString(), "hex").toReversed(),
+		Buffer.from([1]),
+		value,
+		Buffer.from([0, scriptBytes.length]),
+		scriptBytes,
+	]);
 	const offset = bytes.indexOf(Buffer.concat([Buffer.from([1, 1, utxo.length]), utxo]));
 	expect(offset).toBeGreaterThan(4);
 	return new lwk.Pset(
@@ -470,9 +471,6 @@ beforeEach(() => {
 	signerTransform = undefined;
 	walletUtxos = [];
 	walletTransactions = [];
-	nativeBlindingSource = "";
-	nativeBlindingResult = undefined;
-	nativeBlindingError = undefined;
 });
 
 describe("mixed-input PSET signing", () => {
@@ -504,38 +502,6 @@ describe("mixed-input PSET signing", () => {
 		signerTransform = (pset) => withSignature(pset, 2);
 
 		expect((await sign(prepared)).pset).toBe(withSignature(prepared, 2).toString());
-	});
-
-	test("delegates wallet-only funding to the native LWK blinder", async () => {
-		nativeBlindingResult = new lwk.Pset((await sign(fixture())).pset);
-		const original = fixture();
-		ownFixtureInputs(original);
-		signedSource = "";
-
-		const result = await sign(original);
-
-		expect(nativeBlindingSource).toBe(original.toString());
-		expect(result.pset).toBe(nativeBlindingResult.toString());
-		expect(signedSource).toBe(nativeBlindingResult.toString());
-	});
-
-	test("lets native LWK hydrate wallet-only outpoint requests", async () => {
-		nativeBlindingResult = new lwk.Pset((await sign(fixture())).pset);
-		const original = fixture(10_000n, undefined, true, true);
-		ownFixtureInputs(original);
-
-		expect((await sign(original)).pset).toBe(nativeBlindingResult.toString());
-		expect(nativeBlindingSource).toBe(original.toString());
-	});
-
-	test("does not fall back when native wallet blinding fails", async () => {
-		const original = fixture();
-		ownFixtureInputs(original);
-		nativeBlindingError = new Error("Native blinding failed");
-
-		await expect(sign(original)).rejects.toThrow(nativeBlindingError);
-		expect(nativeBlindingSource).toBe(original.toString());
-		expect(signedSource).toBe("");
 	});
 
 	test("blinds explicit foreign inputs and preserves global metadata", async () => {
@@ -573,7 +539,6 @@ describe("mixed-input PSET signing", () => {
 		ownFixtureInputs(prepared);
 		const result = await sign(prepared);
 		expect(result.pset).toBe(prepared.toString());
-		expect(nativeBlindingSource).toBe("");
 	});
 
 	test("preserves completed blinding with zero indices on explicit outputs", async () => {
@@ -664,7 +629,6 @@ describe("mixed-input PSET signing", () => {
 
 		expect(result.inputs()[2].previousScriptPubkey()?.toString()).toBe(script.toString());
 		expect(result.extractTx().outputs[2].unblind(blindingKey).value()).toBe(9_000n);
-		expect(nativeBlindingSource).toBe("");
 		expect(
 			Buffer.from(result.toString(), "base64").includes(Buffer.from("0103047b000000", "hex")),
 		).toBe(true);
