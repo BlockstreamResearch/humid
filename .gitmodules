@@ -1,7 +1,6 @@
 [submodule "lwk"]
 	path = lwk
-	url = https://github.com/lilbonekit/lwk.git
-	branch = feature/shared-humid-fork
+	url = https://github.com/Blockstream/lwk.git
 [submodule "smplx"]
 	path = smplx
 	url = https://github.com/BlockstreamResearch/smplx.git
