@@ -335,7 +335,7 @@ function withWitness(pset: Lwk.Pset) {
 	const scriptBytes = Buffer.from(script.bytes());
 	const utxo = Buffer.concat([
 		Buffer.from([1]),
-		Buffer.from(asset.toString(), "hex").reverse(),
+		Buffer.from(asset.toString(), "hex").toReversed(),
 		Buffer.from([1]),
 		value,
 		Buffer.from([0, scriptBytes.length]),

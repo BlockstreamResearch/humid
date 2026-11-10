@@ -151,15 +151,16 @@ export type PsetMaps = {
 	outputs: Map<string, Buffer>[];
 };
 
+function compactSize(length: number): Buffer {
+	if (length < 253) return Buffer.from([length]);
+	const encoded = Buffer.alloc(length <= 0xffff ? 3 : 5);
+	encoded[0] = encoded.length === 3 ? 253 : 254;
+	if (encoded.length === 3) encoded.writeUInt16LE(length, 1);
+	else encoded.writeUInt32LE(length, 1);
+	return encoded;
+}
+
 export function writePsetMaps(maps: PsetMaps): string {
-	const compactSize = (length: number): Buffer => {
-		if (length < 253) return Buffer.from([length]);
-		const encoded = Buffer.alloc(length <= 0xffff ? 3 : 5);
-		encoded[0] = encoded.length === 3 ? 253 : 254;
-		if (encoded.length === 3) encoded.writeUInt16LE(length, 1);
-		else encoded.writeUInt32LE(length, 1);
-		return encoded;
-	};
 	const buffers: Buffer[] = [Buffer.from("70736574ff", "hex")];
 	for (const map of [maps.global, ...maps.inputs, ...maps.outputs]) {
 		for (const [key, value] of map) {
