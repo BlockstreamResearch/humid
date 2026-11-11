@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import { estimateFeeSats } from "../fee";
 import { toShownConfirmation } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
@@ -12,6 +11,7 @@ import {
 	PUBKEY,
 	reviewed,
 	TXID,
+	sizedFee,
 } from "./reviewForTests";
 
 const p2pk = Fixture.load("p2pk");
@@ -41,21 +41,11 @@ describe("what the wallet established for itself", () => {
 		expect(model.feeSats.origin).toBe("computed");
 	});
 
-	test("and that figure is what this shape costs at the rate it read", async () => {
+	test("and that figure is what the transaction it settles on costs at the rate it read", async () => {
 		const result = await received();
 
 		expect(result.confirmation.feeSats.value).toBe(result.estimatedFeeSats);
-		expect(result.estimatedFeeSats).toBe(
-			estimateFeeSats(
-				{
-					programInputs: 1,
-					issuingInputs: 0,
-					outputs: result.outputs.length,
-					walletInputs: result.selected.length,
-				},
-				result.feeRateSatsPerKvb,
-			),
-		);
+		expect(result.estimatedFeeSats).toBe(sizedFee(result, result.feeRateSatsPerKvb));
 	});
 
 	test("names the asset the network charges its fee in, canonically", async () => {
@@ -199,7 +189,7 @@ describe("what a person is told about an amount this wallet published", () => {
 	test("naming the network's own default, which is what the whole corpus leaves it to", async () => {
 		expect(await published(changeSaying(undefined))).toEqual([
 			{
-				id: "change",
+				id: "fee_change",
 				reason:
 					"nothing says otherwise and this network blinds an output by default, and this " +
 					"wallet publishes it anyway so your next action can spend those funds",
@@ -210,7 +200,7 @@ describe("what a person is told about an amount this wallet published", () => {
 	test("naming the protocol's own word when it asked for blinded change outright", async () => {
 		expect(await published(changeSaying(true))).toEqual([
 			{
-				id: "change",
+				id: "fee_change",
 				reason:
 					"this protocol asks for it to be blinded, and this wallet publishes it anyway so " +
 					"your next action can spend those funds",

@@ -1,12 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { type ManifestReview, computed, fromDapp } from "@humid/tx-manifest";
+import { type ManifestReview, Refusal, computed, fromDapp } from "@humid/tx-manifest";
 
-import {
-	type AssembledTransaction,
-	type AssemblingBuilder,
-	assembleReviewedTransaction,
-} from "./assembleReviewedTransaction";
+import { type AssemblingBuilder, assembleReviewedTransaction } from "./assembleReviewedTransaction";
 
 const PROGRAM_SCRIPT = `5120${"11".repeat(32)}`;
 const PROGRAM_BUILD = {
@@ -19,70 +15,14 @@ const PROGRAM_BUILD = {
 	tapleafHash: "1e".repeat(32),
 };
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
-const CHANGE_SCRIPT = `0014${"44".repeat(20)}`;
 const ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-const CONFIDENTIAL_VALUE = `08${"44".repeat(32)}`;
-const CONFIDENTIAL_ASSET = `0a${"33".repeat(32)}`;
-const NONCE = `02${"55".repeat(32)}`;
-
-function txIn({
-	issuance,
-	txid,
-	vout,
-}: {
-	issuance?: boolean;
-	txid: string;
-	vout: number;
-}): string {
-	const reversed = (txid.match(/../g) ?? []).toReversed().join("");
-	const marked = (issuance ? vout | 0x80_00_00_00 : vout) >>> 0;
-	const index = (marked.toString(16).padStart(8, "0").match(/../g) ?? []).toReversed().join("");
-	const declared = issuance ? `${"00".repeat(32)}${"aa".repeat(32)}${"01".padEnd(18, "0")}00` : "";
-
-	return `${reversed}${index}00ffffffff${declared}`;
-}
-
-function outputBytes(
-	scriptHex: string,
-	{ asset = ASSET, blinded = false, sats = 1000n } = {},
-): string {
-	const length = (scriptHex.length / 2).toString(16).padStart(2, "0");
-
-	if (blinded) {
-		return `${CONFIDENTIAL_ASSET}${CONFIDENTIAL_VALUE}${NONCE}${length}${scriptHex}`;
-	}
-
-	const reversed = (asset.match(/../g) ?? []).toReversed().join("");
-
-	return `01${reversed}01${sats.toString(16).padStart(16, "0")}00${length}${scriptHex}`;
-}
-
-const FEE_OUT = outputBytes("", { sats: 300n });
-const PROGRAM_OUT = outputBytes(PROGRAM_SCRIPT, { sats: 50_000n });
-const CHANGE_OUT = outputBytes(CHANGE_SCRIPT, { sats: 900n });
-const RECEIVED_OUT = outputBytes(WALLET_SCRIPT, { sats: 50_000n });
 const PROGRAM_TXID = "e".repeat(64);
 const SIGNING_PATH = "0/0";
-
-function signedHex(spends: Parameters<typeof txIn>[0][], outs: string[]): string {
-	const inputCount = spends.length.toString(16).padStart(2, "0");
-	const outputCount = outs.length.toString(16).padStart(2, "0");
-
-	return `0200000000${inputCount}${spends.map((spend) => txIn(spend)).join("")}${outputCount}${outs.join("")}00000000`;
-}
-
-function signed(
-	spends: Parameters<typeof txIn>[0][] = [{ txid: "c".repeat(64), vout: 0 }],
-	outs: string[] = [PROGRAM_OUT, CHANGE_OUT, FEE_OUT],
-): AssembledTransaction {
-	return { feeSats: 300n, hex: signedHex(spends, outs), txid: "f".repeat(64) };
-}
-
-const SIGNED: AssembledTransaction = signed();
+const BLINDING_KEY = `02${"55".repeat(32)}`;
+const SIGNED = { feeSats: 300n, hex: "00", txid: "f".repeat(64) };
 const TXOUT_HEX = `01${"49".repeat(32)}0100000000000186a000160014${"00".repeat(20)}`;
 
 type Recorded = {
-	changes: { blindingKey: string | null | undefined; script: string }[];
 	programs: {
 		argumentsJson: string | undefined;
 		derivationPath: string | undefined;
@@ -141,9 +81,6 @@ const plannedIssuance = () => ({
 function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): SmplxModule {
 	return {
 		TransactionBuilder: class {
-			addChange(script: string, blindingKey?: string | null) {
-				recorded.changes.push({ blindingKey, script });
-			}
 			addOutput(script: string, sats: bigint, asset: string, blindingKey?: string | null) {
 				recorded.outputs.push({ asset, blindingKey, sats, script });
 			}
@@ -306,8 +243,6 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 				verified: "not-yet-onchain",
 			},
 		],
-		changeBlinded: false,
-		changeOverrode: "chain",
 		estimatedFeeSats: 344n,
 		feeRateSatsPerKvb: 1000,
 		issuances: [],
@@ -329,13 +264,8 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 	};
 }
 
-function subject(
-	overrides: Partial<ManifestReview> = {},
-	finalize = () => SIGNED,
-	extra: { blindingPublicKeyHex?: string; reports?: Partial<typeof ISSUED> } = {},
-) {
-	const recorded: Recorded = {
-		changes: [],
+function emptyRecord(): Recorded {
+	return {
 		programs: [],
 		freed: 0,
 		freedReports: 0,
@@ -345,18 +275,42 @@ function subject(
 		sequences: [],
 		spends: [],
 	};
+}
+
+type Attempt = { ok: false; reason: string; reject: string } | { ok: true; transaction: unknown };
+
+function attempt(run: () => unknown): Attempt {
+	try {
+		return { ok: true, transaction: run() };
+	} catch (error) {
+		if (error instanceof Refusal) {
+			return { ok: false, reason: error.reason, reject: error.reject };
+		}
+
+		throw error;
+	}
+}
+
+function subject(
+	overrides: Partial<ManifestReview> = {},
+	finish: (builder: AssemblingBuilder) => unknown = () => SIGNED,
+	extra: { blindingPublicKeyHex?: string; reports?: Partial<typeof ISSUED> } = {},
+) {
+	const recorded = emptyRecord();
 
 	return {
-		assemble: () =>
-			assembleReviewedTransaction(review(overrides), {
-				...(extra.blindingPublicKeyHex === undefined
-					? {}
-					: { blindingPublicKeyHex: extra.blindingPublicKeyHex }),
-				changeScriptPubKeyHex: CHANGE_SCRIPT,
-				finalize,
-				signingDerivationPath: SIGNING_PATH,
-				smplx: substitute(recorded, extra.reports),
-			}),
+		assemble: async () =>
+			attempt(() =>
+				assembleReviewedTransaction(
+					review(overrides),
+					{
+						blindingPublicKeyHex: extra.blindingPublicKeyHex ?? BLINDING_KEY,
+						signingDerivationPath: SIGNING_PATH,
+						smplx: substitute(recorded, extra.reports),
+					},
+					finish,
+				),
+			),
 		recorded,
 	};
 }
@@ -392,37 +346,19 @@ describe("assembleReviewedTransaction", () => {
 		}
 	});
 
-	test("returns change to the script the caller named, and to nothing else", async () => {
-		const { assemble, recorded } = subject();
-
-		await assemble();
-
-		expect(recorded.changes).toEqual([{ blindingKey: undefined, script: CHANGE_SCRIPT }]);
-	});
-
-	test("passes no blinding key with the change", async () => {
-		const { assemble, recorded } = subject();
-
-		await assemble();
-
-		expect(recorded.changes[0]?.blindingKey).toBeUndefined();
-	});
-
-	test("hands the finalizer the rate the review established, and returns what it made", async () => {
-		const rates: number[] = [];
-		const { assemble } = subject({}, ((_builder: AssemblingBuilder, rate: number) => {
-			rates.push(rate);
+	test("hands the finisher the builder it assembled, and returns what the finisher made", async () => {
+		const handed: AssemblingBuilder[] = [];
+		const { assemble } = subject({}, (builder) => {
+			handed.push(builder);
 
 			return SIGNED;
-		}) as () => AssembledTransaction);
+		});
 
-		const result = await assemble();
-
-		expect(rates).toEqual([1000]);
-		expect(result).toEqual({ ok: true, transaction: SIGNED });
+		expect(await assemble()).toEqual({ ok: true, transaction: SIGNED });
+		expect(handed).toHaveLength(1);
 	});
 
-	test("signs nothing itself: the finalizer is the only thing that finishes a transaction", async () => {
+	test("signs nothing itself: the finisher is the only thing that finishes a transaction", async () => {
 		let finalized = 0;
 		const { assemble } = subject({}, () => {
 			finalized += 1;
@@ -444,7 +380,7 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.freed).toBe(1);
 		});
 
-		test("releases the builder when the finalizer fails", async () => {
+		test("releases the builder when the finisher fails", async () => {
 			const { assemble, recorded } = subject({}, () => {
 				throw new Error("could not balance");
 			});
@@ -460,67 +396,23 @@ describe("assembleReviewedTransaction", () => {
 		});
 
 		test("releases the builder when an output the module will not take throws", async () => {
-			const recorded: Recorded = {
-				changes: [],
-				programs: [],
-				freed: 0,
-				freedReports: 0,
-				issues: [],
-				locktimes: [],
-				outputs: [],
-				sequences: [],
-				spends: [],
-			};
+			const recorded = emptyRecord();
 			const smplx = substitute(recorded);
 
 			smplx.TransactionBuilder.prototype.addOutput = () => {
 				throw new Error("Invalid script: Odd number of digits");
 			};
 
-			const result = await assembleReviewedTransaction(review(), {
-				changeScriptPubKeyHex: CHANGE_SCRIPT,
-				finalize: () => SIGNED,
-				signingDerivationPath: SIGNING_PATH,
-				smplx,
-			});
+			const result = attempt(() =>
+				assembleReviewedTransaction(
+					review(),
+					{ blindingPublicKeyHex: BLINDING_KEY, signingDerivationPath: SIGNING_PATH, smplx },
+					() => SIGNED,
+				),
+			);
 
-			expect(result).toMatchObject({ ok: false });
+			expect(result).toMatchObject({ ok: false, reject: "built-something-else" });
 			expect(recorded.freed).toBe(1);
-		});
-
-		test("releases the builder when the change script is refused", async () => {
-			const recorded: Recorded = {
-				changes: [],
-				programs: [],
-				freed: 0,
-				freedReports: 0,
-				issues: [],
-				locktimes: [],
-				outputs: [],
-				sequences: [],
-				spends: [],
-			};
-			let finalized = 0;
-			const smplx = substitute(recorded);
-
-			smplx.TransactionBuilder.prototype.addChange = () => {
-				throw new Error("Invalid script: Odd number of digits");
-			};
-
-			const result = await assembleReviewedTransaction(review(), {
-				changeScriptPubKeyHex: "tex1q_wallet",
-				finalize: () => {
-					finalized += 1;
-
-					return SIGNED;
-				},
-				signingDerivationPath: SIGNING_PATH,
-				smplx,
-			});
-
-			expect(result).toMatchObject({ ok: false });
-			expect(recorded.freed).toBe(1);
-			expect(finalized).toBe(0);
 		});
 	});
 
@@ -562,14 +454,7 @@ describe("assembleReviewedTransaction", () => {
 			],
 			...overrides,
 		});
-		const spent = () =>
-			signed(
-				[
-					{ txid: PROGRAM_TXID, vout: 1 },
-					{ txid: "c".repeat(64), vout: 0 },
-				],
-				[RECEIVED_OUT, CHANGE_OUT, FEE_OUT],
-			);
+		const spent = () => SIGNED;
 
 		test("hands the module everything the review verified the program under", async () => {
 			const { assemble, recorded } = subject(spendingPlan(), spent);
@@ -639,14 +524,7 @@ describe("assembleReviewedTransaction", () => {
 						{ program: programInput, source: "program" },
 					],
 				}),
-				() =>
-					signed(
-						[
-							{ txid: "c".repeat(64), vout: 0 },
-							{ txid: PROGRAM_TXID, vout: 1 },
-						],
-						[RECEIVED_OUT, CHANGE_OUT, FEE_OUT],
-					),
+				() => SIGNED,
 			);
 
 			expect(await assemble()).toMatchObject({ ok: true });
@@ -660,7 +538,7 @@ describe("assembleReviewedTransaction", () => {
 					inputOrder: [{ program: programInput, source: "program" }],
 					selected: [],
 				}),
-				() => signed([{ txid: PROGRAM_TXID, vout: 1 }], [RECEIVED_OUT, CHANGE_OUT, FEE_OUT]),
+				() => SIGNED,
 			);
 
 			expect(await assemble()).toMatchObject({ ok: true });
@@ -695,9 +573,7 @@ describe("assembleReviewedTransaction", () => {
 		});
 
 		test("releases the builder whatever the module hands back", async () => {
-			const { assemble, recorded } = subject(spendingPlan(), () =>
-				signed([{ txid: "c".repeat(64), vout: 0 }], [RECEIVED_OUT, CHANGE_OUT, FEE_OUT]),
-			);
+			const { assemble, recorded } = subject(spendingPlan(), () => SIGNED);
 
 			await assemble();
 
@@ -709,14 +585,7 @@ describe("assembleReviewedTransaction", () => {
 				spendingPlan({
 					issuances: [{ ...plannedIssuance(), outpoint: { txid: PROGRAM_TXID, vout: 1 } }],
 				}),
-				() =>
-					signed(
-						[
-							{ issuance: true, txid: PROGRAM_TXID, vout: 1 },
-							{ txid: "c".repeat(64), vout: 0 },
-						],
-						[RECEIVED_OUT, CHANGE_OUT, FEE_OUT],
-					),
+				() => SIGNED,
 			);
 
 			expect(await assemble()).toMatchObject({ ok: true });
@@ -729,14 +598,6 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.issues).toEqual([]);
 			expect(recorded.freedReports).toBe(1);
 		});
-	});
-
-	test("builds an action whose only output is the change it pays", async () => {
-		const { assemble, recorded } = subject({ changeDeferred: true, outputs: [] });
-
-		expect(await assemble()).toMatchObject({ ok: true });
-		expect(recorded.outputs).toEqual([]);
-		expect(recorded.changes).toEqual([{ blindingKey: undefined, script: CHANGE_SCRIPT }]);
 	});
 
 	describe("what it will not build", () => {
@@ -944,7 +805,6 @@ describe("assembleReviewedTransaction", () => {
 	});
 
 	describe("blinding", () => {
-		const BLINDING_KEY = `02${"55".repeat(32)}`;
 		const blindedAndOpen = {
 			outputs: [
 				{
@@ -977,44 +837,6 @@ describe("assembleReviewedTransaction", () => {
 				{ asset: ASSET, blindingKey: BLINDING_KEY, sats: 10n, script: WALLET_SCRIPT },
 				{ asset: ASSET, blindingKey: undefined, sats: 50_000n, script: PROGRAM_SCRIPT },
 			]);
-		});
-
-		test("passes no key for change the review returns in the open", async () => {
-			const { assemble, recorded } = subject({}, () => SIGNED, {
-				blindingPublicKeyHex: BLINDING_KEY,
-			});
-
-			await assemble();
-
-			expect(recorded.changes).toEqual([{ blindingKey: undefined, script: CHANGE_SCRIPT }]);
-		});
-
-		test("and passes it for change the review says must be blinded", async () => {
-			const { assemble, recorded } = subject({ changeBlinded: true }, () => SIGNED, {
-				blindingPublicKeyHex: BLINDING_KEY,
-			});
-
-			await assemble();
-
-			expect(recorded.changes).toEqual([{ blindingKey: BLINDING_KEY, script: CHANGE_SCRIPT }]);
-		});
-
-		test("refuses a blinded output it was given no key for, building nothing", async () => {
-			const { assemble, recorded } = subject(blindedAndOpen);
-
-			const result = await assemble();
-
-			expect(result).toMatchObject({ ok: false });
-			expect(recorded.freed).toBe(0);
-			expect(recorded.outputs).toEqual([]);
-
-			if (!result.ok) {
-				expect(result.reason).toContain("paid_out");
-			}
-		});
-
-		test("and refuses blinded change it was given no key for", async () => {
-			expect(await subject({ changeBlinded: true }).assemble()).toMatchObject({ ok: false });
 		});
 	});
 });

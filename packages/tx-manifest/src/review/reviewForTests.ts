@@ -10,6 +10,7 @@ import {
 	reviewManifestAction,
 	type ReviewManifestActionResult,
 	type ReviewRefusal,
+	type TransactionDraft,
 } from "./index";
 
 export type ReviewDependencies = Parameters<typeof reviewManifestAction>[1];
@@ -106,10 +107,17 @@ export function chainHolding(scriptPubKeyHex = DERIVED_SCRIPT, amountSats = "500
 	});
 }
 
+export function sizedFee(draft: TransactionDraft, feeRateSatsPerKvb: number): bigint {
+	const vsize = 100 + 100 * draft.inputOrder.length + 50 * draft.outputs.length;
+
+	return BigInt(Math.ceil((vsize * feeRateSatsPerKvb) / 1000));
+}
+
 export function dependencies(overrides: Partial<ReviewDependencies> = {}): ReviewDependencies {
 	return {
 		accountLabel: ACCOUNT,
 		compile: () => COMPILED,
+		estimateFee: sizedFee,
 		fundingUtxos: [utxo("1000000")],
 		network: "liquid",
 		policyAsset: POLICY_ASSET,

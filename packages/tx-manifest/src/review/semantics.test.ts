@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import { estimateFeeSats } from "../fee";
 import type { ManifestReview } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
@@ -14,6 +13,7 @@ import {
 	TXID,
 	utxo,
 	WALLET_SCRIPT,
+	sizedFee,
 } from "./reviewForTests";
 
 const p2pk = Fixture.load("p2pk");
@@ -383,9 +383,9 @@ describe("the network fee an amount names", () => {
 		);
 
 	test("is the fee the transaction it settles on costs", async () => {
-		const shape = { programInputs: 1, issuingInputs: 0, outputs: 1, walletInputs: 0 };
+		const review = await swept();
 
-		expect((await swept()).estimatedFeeSats).toBe(estimateFeeSats(shape, 1000));
+		expect(review.estimatedFeeSats).toBe(sizedFee(review, 1000));
 	});
 
 	test("so the program's funds leave less exactly that fee, and nothing is drawn from the wallet", async () => {

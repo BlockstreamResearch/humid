@@ -147,7 +147,6 @@ function smplxSubstitute(log: Journal) {
 		constructor() {
 			log.taken.push("builder");
 		}
-		addChange() {}
 		addProgramInput(
 			txid: string,
 			vout: number,
@@ -190,7 +189,10 @@ function smplxSubstitute(log: Journal) {
 		scriptPubKeyHex() {
 			return SIGNER_SCRIPT;
 		}
-		finalizeStrict() {
+		static estimateStrictFee() {
+			return FEE_SATS;
+		}
+		finalizeStrictFee() {
 			log.taken.push("signed");
 
 			return {
@@ -513,7 +515,7 @@ describe("what it holds, and for how long", () => {
 		const log = journal();
 		const module = smplxSubstitute(log);
 
-		module.Signer.prototype.finalizeStrict = () => {
+		module.Signer.prototype.finalizeStrictFee = () => {
 			throw new Error("could not balance the transaction");
 		};
 
@@ -526,6 +528,26 @@ describe("what it holds, and for how long", () => {
 		await expect(method(payRequest(), context(log))).rejects.toThrow();
 		expect(log.freed).toContain("signer");
 		expect(log.freed).toContain("builder");
+	});
+
+	test("refuses a signed transaction that pays a fee other than the one shown", async () => {
+		const module = smplxSubstitute(journal());
+		const finalize = module.Signer.prototype.finalizeStrictFee;
+
+		module.Signer.prototype.finalizeStrictFee = function (
+			this: InstanceType<typeof module.Signer>,
+		) {
+			return { ...finalize.call(this), feeSats: FEE_SATS + 1n };
+		};
+
+		const { data, log } = await failing(payRequest(), {
+			dependencies: {
+				loadSmplx: (async () => module) as unknown as LiquidProcessCtDependencies["loadSmplx"],
+			},
+		});
+
+		expect(data).toMatchObject({ reject: "built-something-else" });
+		expect(log.broadcasts).toEqual([]);
 	});
 
 	test("keeps no handle on the mnemonic once the call that used it has returned", async () => {
@@ -561,7 +583,7 @@ describe("spending a program, end to end", () => {
 	const receiveTransaction = (outputs: string[]) =>
 		transaction([txIn(PROGRAM_TXID, 0), txIn(FUNDING_TXID, 0)], outputs);
 
-	test("carries the program and the wallet's fee input into the builder", async () => {
+	test("carries the program and the wallet's fee input into the builder it signs", async () => {
 		const log = journal();
 
 		log.finalizedHex = receiveTransaction([
@@ -573,19 +595,18 @@ describe("spending a program, end to end", () => {
 		const method = createProcessLiquidConfidentialTransaction(dependencies(log));
 		const result = (await method(receiveRequest(false), context(log))) as LiquidProcessCtResult;
 
-		expect(log.programInputs).toEqual([
-			{
-				signatureWitness: "SIGNATURE",
-				source: SOURCE,
-				txOutHex: PROGRAM_TXOUT,
-				txid: PROGRAM_TXID,
-				vout: 0,
-			},
-		]);
-
-		expect(log.walletInputs).toEqual([
-			{ txOutHex: explicitUtxo.txOut, txid: FUNDING_TXID, vout: 0 },
-		]);
+		expect(log.programInputs.at(-1)).toEqual({
+			signatureWitness: "SIGNATURE",
+			source: SOURCE,
+			txOutHex: PROGRAM_TXOUT,
+			txid: PROGRAM_TXID,
+			vout: 0,
+		});
+		expect(log.walletInputs.at(-1)).toEqual({
+			txOutHex: explicitUtxo.txOut,
+			txid: FUNDING_TXID,
+			vout: 0,
+		});
 
 		expect(result).toMatchObject({
 			broadcast: false,

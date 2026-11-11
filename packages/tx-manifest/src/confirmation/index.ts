@@ -80,35 +80,21 @@ export function confirmationModel(
 }
 
 function blindedAmounts(review: ReviewedPlan): BlindedAmount[] {
-	const blinded = review.outputs
+	return review.outputs
 		.filter((output) => output.blinded)
 		.map((output) => ({
 			decidedBy: computed(word(output.decidedBy)),
 			id: fromDapp(output.id),
 		}));
-
-	return review.changeBlindedBy === undefined
-		? blinded
-		: [...blinded, { decidedBy: computed(word(review.changeBlindedBy)), id: computed("change") }];
 }
 
 function publishedAmounts(review: ReviewedPlan): PublishedAmount[] {
-	const published = review.outputs
-		.filter((output) => output.overrode !== undefined)
+	return review.outputs
+		.filter((output) => !output.blinded && output.overrode !== undefined)
 		.map((output) => ({
 			id: fromDapp(output.id),
 			reason: computed(describePublishedChange(output.overrode)),
 		}));
-
-	return review.changeOverrode === undefined
-		? published
-		: [
-				...published,
-				{
-					id: computed("change"),
-					reason: computed(describePublishedChange(review.changeOverrode)),
-				},
-			];
 }
 
 function word(decidedBy: BlindingDecision["decidedBy"] | undefined): string {

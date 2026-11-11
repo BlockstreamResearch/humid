@@ -168,16 +168,14 @@ describe("a template action against a deployment that exists", () => {
 	});
 
 	test("resolves the output's amount from the deployment rather than from the request", async () => {
-		expect((await reviewedAs(withdraw())).outputs).toEqual([
-			{
-				asset: POLICY_ASSET,
-				blinded: true,
-				decidedBy: "chain",
-				id: "withdrawn",
-				sats: 50_000n,
-				scriptPubKeyHex: WALLET_SCRIPT,
-			},
-		]);
+		expect((await reviewedAs(withdraw())).outputs[0]).toEqual({
+			asset: POLICY_ASSET,
+			blinded: true,
+			decidedBy: "chain",
+			id: "withdrawn",
+			sats: 50_000n,
+			scriptPubKeyHex: WALLET_SCRIPT,
+		});
 	});
 
 	test("carries no deployment, since it only spends what exists", async () => {

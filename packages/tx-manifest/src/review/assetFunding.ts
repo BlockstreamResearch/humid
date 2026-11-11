@@ -13,7 +13,6 @@ export type FundedAsset = {
 
 export type AssetFundingContext = {
 	feeSats: bigint;
-	headroomSats: bigint;
 	holdings: AssetHoldings;
 	policyAsset: string;
 	reserved: { asset: string; utxo: SelectableUtxo }[];
@@ -40,7 +39,7 @@ export function fundAssets(entries: AssetEntry[], context: AssetFundingContext):
 				.holdings(entry.asset)
 				.filter((utxo) => !committed.has(outpointKey(utxo)));
 			const selection = Refusal.amend(
-				() => selectCoins(pool, outstanding, isPolicy ? context.headroomSats : 0n),
+				() => selectCoins(pool, outstanding),
 				(reason) => (isPolicy ? reason : shortOf(entry.asset, outstanding, pool)),
 			);
 
@@ -63,7 +62,7 @@ export function fundAssets(entries: AssetEntry[], context: AssetFundingContext):
 
 		funded.push({
 			asset: entry.asset,
-			changeSats: isPolicy ? 0n : surplus,
+			changeSats: surplus,
 			selected,
 		});
 	}

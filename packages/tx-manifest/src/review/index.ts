@@ -50,12 +50,21 @@ export type AssetMovement = {
 	sats: bigint;
 };
 
-export type ManifestReview = {
+export type TransactionDraft = {
 	action: string;
-	changeBlinded: boolean;
-	changeDeferred?: boolean;
-	changeBlindedBy?: BlindingWord;
-	changeOverrode?: BlindingWord;
+	inputOrder: PlannedInput[];
+	issuances: PlannedIssuance[];
+	locktimeHeight?: number;
+	outputs: ReviewedOutput[];
+	sequence?: number;
+};
+
+export type EstimateFee = (
+	draft: TransactionDraft,
+	feeRateSatsPerKvb: number,
+) => bigint | Promise<bigint>;
+
+export type ManifestReview = TransactionDraft & {
 	boundTo?: string;
 	confirmation: ConfirmationModel;
 	programs: ProgramFinding[];
@@ -63,12 +72,7 @@ export type ManifestReview = {
 	createdInstance?: CreatedInstance;
 	estimatedFeeSats: bigint;
 	feeRateSatsPerKvb: number;
-	issuances: PlannedIssuance[];
-	inputOrder: PlannedInput[];
-	locktimeHeight?: number;
-	sequence?: number;
 	movements: AssetMovement[];
-	outputs: ReviewedOutput[];
 	policyAsset: string;
 	protocol: string;
 	selected: SelectableUtxo[];
@@ -86,6 +90,7 @@ export type ReviewInput = {
 	accountLabel: string;
 	compile: CompileProgram;
 	compilerVersion?: string;
+	estimateFee: EstimateFee;
 	programParamTypes?: ProgramParamTypesOf;
 	fundingUtxos: SelectableUtxo[];
 	holdingsOf?: AssetHoldings;

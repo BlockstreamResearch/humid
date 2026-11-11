@@ -7,6 +7,7 @@ import {
 	type ParsedLiquidProcessCtParams,
 	parseLiquidProcessCtParams,
 	type ReadFeeRate,
+	Refusal,
 	type ReadTxOut,
 	reviewManifestAction,
 	type SelectableUtxo,
@@ -43,6 +44,8 @@ export type LiquidProcessCtResult = {
 };
 
 const EXTERNAL_CHAIN = 0;
+
+const SIZING_BLINDING_KEY = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 
 const SMPLX_NETWORKS: Record<string, string> = {
 	mainnet: "liquid",
@@ -102,66 +105,68 @@ export const createProcessLiquidConfidentialTransaction = (
 			const account = await dependencies.resolveAccount(context);
 			const smplx = await dependencies.loadSmplx();
 
-			const assembled = await dependencies.withMnemonic(
-				{
-					...(account.accountGroupIndex === undefined
-						? {}
-						: { accountGroupIndex: account.accountGroupIndex }),
-					chain: context.chain,
-					keyManagerState: context.keyManagerState,
-					...(account.keySourceId === undefined ? {} : { keySourceId: account.keySourceId }),
-				},
-				async (mnemonic) => {
-					const signer = new smplx.Signer(mnemonic, network);
+			const signed = await refusedAsRpcError(() =>
+				dependencies.withMnemonic(
+					{
+						...(account.accountGroupIndex === undefined
+							? {}
+							: { accountGroupIndex: account.accountGroupIndex }),
+						chain: context.chain,
+						keyManagerState: context.keyManagerState,
+						...(account.keySourceId === undefined ? {} : { keySourceId: account.keySourceId }),
+					},
+					async (mnemonic) => {
+						const signer = new smplx.Signer(mnemonic, network);
 
-					try {
-						return await assembleReviewedTransaction(review, {
-							blindingPublicKeyHex: signer.blindingPublicKey(),
-							changeScriptPubKeyHex: signer.scriptPubKeyHex(),
-							finalize: (builder, feeRateSatsPerKvb) => {
-								const result = signer.finalizeStrict(
-									builder as InstanceType<typeof smplx.TransactionBuilder>,
-									feeRateSatsPerKvb,
-								);
+						try {
+							return assembleReviewedTransaction(
+								review,
+								{
+									blindingPublicKeyHex: signer.blindingPublicKey(),
+									signingDerivationPath: signingDerivationPathOf(context, account),
+									smplx,
+								},
+								(builder) => {
+									const result = signer.finalizeStrictFee(builder, review.feeRateSatsPerKvb);
 
-								try {
-									return { feeSats: result.feeSats, hex: result.hex, txid: result.txid };
-								} finally {
-									result.free();
-								}
-							},
-							signingDerivationPath: signingDerivationPathOf(context, account),
-							smplx,
-						});
-					} finally {
-						signer.free();
-					}
-				},
+									try {
+										return { feeSats: result.feeSats, hex: result.hex, txid: result.txid };
+									} finally {
+										result.free();
+									}
+								},
+							);
+						} finally {
+							signer.free();
+						}
+					},
+				),
 			);
 
-			if (!assembled.ok) {
+			if (signed.feeSats !== review.estimatedFeeSats) {
 				throw new WalletRpcInvalidParamsError(
-					assembled.reason,
-					{ reject: assembled.reject },
+					`The signed transaction pays a fee of ${signed.feeSats} sats, and the fee shown ` +
+						`was ${review.estimatedFeeSats} sats.`,
+					{ reject: "built-something-else" },
 					WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
 				);
 			}
 
-			const { feeSats, hex, txid } = assembled.transaction;
-			const signed = { feeSats: feeSats.toString(), transactionHex: hex, txid };
+			const { feeSats, hex, txid } = signed;
+			const result = { feeSats: feeSats.toString(), transactionHex: hex, txid };
 			const deployment =
 				review.createdInstance === undefined ? {} : { deployment: review.createdInstance.fields };
 
 			if (!params.broadcast) {
-				return { broadcast: false, ...deployment, ...signed };
+				return { broadcast: false, ...deployment, ...result };
 			}
 
 			const sent = await dependencies.broadcastTransaction({
 				chain: account.chain,
-				txHex: signed.transactionHex,
+				txHex: result.transactionHex,
 			});
 
-			return { broadcast: true, ...deployment, ...signed, txid: sent.txid };
+			return { broadcast: true, ...deployment, ...result, txid: sent.txid };
 		},
 		id: LIQUID_WALLET_RPC_METHODS.PROCESS_CONFIDENTIAL_TRANSACTION,
 		parse: parseRequest,
@@ -176,6 +181,16 @@ export const createProcessLiquidConfidentialTransaction = (
 				accountLabel: accountLabelOf(context, account),
 				compile: createSmplxProgramCompiler(smplx),
 				compilerVersion: SMPLX_COMPILER_VERSION,
+				estimateFee: (draft, feeRateSatsPerKvb) =>
+					assembleReviewedTransaction(
+						draft,
+						{
+							blindingPublicKeyHex: SIZING_BLINDING_KEY,
+							signingDerivationPath: signingDerivationPathOf(context, account),
+							smplx,
+						},
+						(builder) => smplx.Signer.estimateStrictFee(builder, network, feeRateSatsPerKvb),
+					),
 				programParamTypes: createSmplxProgramParamTypes(smplx),
 				fundingUtxos: fundable(context, account, account.rawPolicyAssetId),
 				holdingsOf: (asset) => fundable(context, account, asset),
@@ -203,6 +218,22 @@ export const createProcessLiquidConfidentialTransaction = (
 	});
 
 export const processLiquidConfidentialTransaction = createProcessLiquidConfidentialTransaction();
+
+async function refusedAsRpcError<T>(run: () => Promise<T>): Promise<T> {
+	try {
+		return await run();
+	} catch (error) {
+		if (error instanceof Refusal) {
+			throw new WalletRpcInvalidParamsError(
+				error.reason,
+				{ reject: error.reject },
+				WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
+			);
+		}
+
+		throw error;
+	}
+}
 
 function parseRequest(params: unknown): ParsedLiquidProcessCtParams {
 	const parsed = parseLiquidProcessCtParams(params);

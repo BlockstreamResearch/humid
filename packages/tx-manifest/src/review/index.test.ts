@@ -14,6 +14,7 @@ import {
 	reviewed,
 	TXID,
 	utxo,
+	WALLET_SCRIPT,
 } from "./reviewForTests";
 
 const P2PK_PATH = "./p2pk.simf";
@@ -162,22 +163,24 @@ describe("what a request must carry", () => {
 
 describe("the transaction a review settles", () => {
 	test("pays the program output the script it derived, not the address it is shown as", async () => {
-		expect((await reviewed(pay())).outputs).toEqual([
-			{
-				asset: POLICY_ASSET,
-				blinded: false,
-				decidedBy: "unblindable",
-				id: "p2pk_out",
-				sats: 1000n,
-				scriptPubKeyHex: DERIVED_SCRIPT,
-			},
-		]);
+		expect((await reviewed(pay())).outputs[0]).toEqual({
+			asset: POLICY_ASSET,
+			blinded: false,
+			decidedBy: "unblindable",
+			id: "p2pk_out",
+			sats: 1000n,
+			scriptPubKeyHex: DERIVED_SCRIPT,
+		});
 	});
 
-	test("plans no output for the change the action declares", async () => {
+	test("returns what is left after the fee through the change output the action declares", async () => {
 		const review = await reviewed(pay());
 
-		expect(review.outputs.map((output) => output.id)).not.toContain("change_out");
+		expect(review.outputs[1]).toMatchObject({
+			id: "change_out",
+			sats: 1_000_000n - 1000n - review.estimatedFeeSats,
+			scriptPubKeyHex: WALLET_SCRIPT,
+		});
 	});
 
 	test("selects the wallet's own outputs to fund the action, and reports the rate it pays", async () => {

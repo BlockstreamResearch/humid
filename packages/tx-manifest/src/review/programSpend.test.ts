@@ -288,18 +288,16 @@ describe("an action whose only output is change", () => {
 		id: "received_out",
 	};
 
-	test("leaves the change to the builder", async () => {
+	test("returns what is left after the fee through the change output the action declares", async () => {
 		const review = await reviewed(spending(withReceive(receiveInputs(), [changeOut])));
 
-		expect(review.outputs).toEqual([]);
-		expect(review.changeDeferred).toBe(true);
+		expect(review.outputs.map((output) => output.id)).toEqual(["fee_change"]);
 	});
 
-	test("defers nothing where the action declares no change", async () => {
+	test("and adds a change output of its own where the action declares none", async () => {
 		const review = await reviewed(spending(withReceive(receiveInputs(), [receivedOut])));
 
-		expect(review.outputs.map((output) => output.id)).toEqual(["received_out"]);
-		expect(review.changeDeferred).toBeUndefined();
+		expect(review.outputs.map((output) => output.id)).toEqual(["received_out", "change"]);
 	});
 });
 

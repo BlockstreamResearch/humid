@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { deriveNewIssuance } from "../chain/issuance";
-import { estimateFeeSats } from "../fee";
-import { reviewManifestAction } from "../index";
+import { type ManifestReview, reviewManifestAction } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import type { SelectableUtxo } from "./coinSelection";
 import {
@@ -17,6 +16,7 @@ import {
 	PUBKEY,
 	utxo,
 	WALLET_SCRIPT,
+	sizedFee,
 } from "./reviewForTests";
 
 const multiasset = Fixture.load("multiasset");
@@ -27,6 +27,9 @@ const TOKEN_TXID = "d".repeat(64);
 const deps = dependencies({
 	readTxOut: async () => ({ scriptPubKeyHex: DERIVED_SCRIPT, txOutHex: PROGRAM_TXOUT }),
 });
+
+const changeOf = (review: ManifestReview) =>
+	review.outputs.find((output) => output.id === "change_out");
 
 function request(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
 	return multiasset.request("PayToken", {
@@ -70,7 +73,7 @@ describe("an action that moves two assets", () => {
 	test("plans an exact change output for the asset that is not the network's own", async () => {
 		const review = asReview(await pay());
 
-		expect(review.outputs).toEqual([
+		expect(review.outputs.slice(0, 3)).toEqual([
 			{
 				asset: TOKEN,
 				blinded: false,
@@ -99,10 +102,14 @@ describe("an action that moves two assets", () => {
 		]);
 	});
 
-	test("and leaves the network asset's change to the builder", async () => {
+	test("and returns the network asset's change after the fee", async () => {
 		const review = asReview(await pay());
 
-		expect(review.outputs.map((output) => output.id)).not.toContain("change_out");
+		expect(review.outputs[3]).toMatchObject({
+			asset: POLICY_ASSET,
+			id: "change_out",
+			sats: 1_000_000n - 700n - review.estimatedFeeSats,
+		});
 	});
 
 	test("shows one line per asset on the confirmation, and never one line for both", async () => {
@@ -231,21 +238,23 @@ describe("an action that creates an asset", () => {
 		expect(issuance?.inputId).toBe("mint_in");
 	});
 
-	test("prices the input that creates the asset as an issuing one", async () => {
-		const review = asReview(await mint());
+	test("prices the transaction with the issuance in the transaction", async () => {
+		const priced: number[] = [];
 
-		const shape = {
-			programInputs: 0,
-			outputs: review.outputs.length,
-			walletInputs: review.selected.length,
-		};
+		await reviewManifestAction(
+			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
+			{
+				...deps,
+				estimateFee: (draft, rate) => {
+					priced.push(draft.issuances.length);
 
-		expect(review.estimatedFeeSats).toBe(
-			estimateFeeSats({ ...shape, issuingInputs: 1 }, review.feeRateSatsPerKvb),
+					return sizedFee(draft, rate);
+				},
+			},
 		);
-		expect(review.estimatedFeeSats).toBeGreaterThan(
-			estimateFeeSats({ ...shape, issuingInputs: 0 }, review.feeRateSatsPerKvb),
-		);
+
+		expect(priced.length).toBeGreaterThan(0);
+		expect(priced.every((count) => count === 1)).toBe(true);
 	});
 
 	test("shows the created asset and the money it cost as separate lines", async () => {
@@ -361,15 +370,14 @@ describe("an action that creates an asset", () => {
 				{
 					...deps,
 					fundingUtxos: [
-						utxo("500", "a".repeat(64), { confidential: true }),
-						{ ...utxo("500", "a".repeat(64), { confidential: true }) },
+						utxo("100", "a".repeat(64), { confidential: true }),
+						{ ...utxo("100", "a".repeat(64), { confidential: true }) },
 					],
 				},
 			),
 		);
 
 		expect(refusal.reject).toBe("shortfall");
-		expect(refusal.reason).toContain("500");
 		expect(refusal.reason).not.toContain("cannot spend");
 	});
 
@@ -538,8 +546,7 @@ describe("what each output does with the value it carries", () => {
 			}),
 		);
 
-		expect(review.changeBlinded).toBe(false);
-		expect(review.changeOverrode).toBe("output");
+		expect(changeOf(review)).toMatchObject({ blinded: false, overrode: "output" });
 		expect(review.outputs.find((output) => output.id === "token_change")).toMatchObject({
 			blinded: false,
 			decidedBy: "spendable-change",
@@ -554,8 +561,8 @@ describe("what each output does with the value it carries", () => {
 			}),
 		);
 
-		expect(review.changeBlinded).toBe(false);
-		expect(review.changeOverrode).toBeUndefined();
+		expect(changeOf(review)?.blinded).toBe(false);
+		expect(changeOf(review)?.overrode).toBeUndefined();
 	});
 
 	test("and says the same about change nothing says anything about", async () => {
@@ -566,8 +573,7 @@ describe("what each output does with the value it carries", () => {
 			),
 		);
 
-		expect(minted.changeBlinded).toBe(false);
-		expect(minted.changeOverrode).toBe("chain");
+		expect(changeOf(minted)).toMatchObject({ blinded: false, overrode: "chain" });
 	});
 });
 
@@ -585,9 +591,7 @@ describe("change when the wallet funds an action from a blinded output", () => {
 				decidedBy: row.decidedBy.value,
 				id: row.id.value,
 			})),
-			changeBlinded: result.changeBlinded,
-			changeBlindedBy: result.changeBlindedBy,
-			changeOverrode: result.changeOverrode,
+			change: changeOf(result),
 			publishedAmounts: result.confirmation.publishedAmounts.map((row) => ({
 				id: row.id.value,
 				reason: row.reason.value,
@@ -602,12 +606,10 @@ describe("change when the wallet funds an action from a blinded output", () => {
 					decidedBy:
 						"this action spends a blinded amount, and the network accepts that only if " +
 						"something it pays out is blinded too",
-					id: "change",
+					id: "change_out",
 				},
 			],
-			changeBlinded: true,
-			changeBlindedBy: "confidential-input",
-			changeOverrode: undefined,
+			change: expect.objectContaining({ blinded: true, decidedBy: "confidential-input" }),
 			publishedAmounts: [],
 		});
 	});
@@ -615,12 +617,10 @@ describe("change when the wallet funds an action from a blinded output", () => {
 	test("and publishes it for the next action when every input is open", async () => {
 		expect(await mintFundedFrom(false)).toEqual({
 			blindedAmounts: [],
-			changeBlinded: false,
-			changeBlindedBy: undefined,
-			changeOverrode: "chain",
+			change: expect.objectContaining({ blinded: false, overrode: "chain" }),
 			publishedAmounts: [
 				{
-					id: "change",
+					id: "change_out",
 					reason:
 						"nothing says otherwise and this network blinds an output by default, and this " +
 						"wallet publishes it anyway so your next action can spend those funds",
@@ -1033,15 +1033,16 @@ describe("a document that names one surplus twice", () => {
 		);
 	}
 
-	test("in the network's own asset, leaves the one change output to the builder", async () => {
+	test("in the network's own asset, pays that surplus once, into the first change output", async () => {
 		const single = asReview(await policyChanges({ withoutTokenChange: true }));
 		const twice = asReview(await policyChanges());
 
-		expect(twice.outputs.map((output) => [output.id, output.asset, output.sats])).toEqual([
-			["token_out", POLICY_ASSET, 1000n],
-			["p2pk_out", POLICY_ASSET, 700n],
+		expect(twice.outputs.map((output) => [output.id, output.asset])).toEqual([
+			["token_out", POLICY_ASSET],
+			["p2pk_out", POLICY_ASSET],
+			["token_change", POLICY_ASSET],
 		]);
-		expect(twice.outputs).toEqual(single.outputs);
+		expect(twice.outputs[2]?.sats).toBe(single.outputs[2]?.sats);
 	});
 
 	test.each([

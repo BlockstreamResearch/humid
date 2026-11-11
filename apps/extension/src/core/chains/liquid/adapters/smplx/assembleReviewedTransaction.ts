@@ -1,12 +1,11 @@
-import type { ManifestReview, RejectToken, StaticWitness } from "@humid/tx-manifest";
+import {
+	type ManifestReview,
+	Refusal,
+	type StaticWitness,
+	type TransactionDraft,
+} from "@humid/tx-manifest";
 
 import type { SmplxWasmModule } from "./loadSmplxWasm";
-
-export type AssembledTransaction = {
-	feeSats: bigint;
-	hex: string;
-	txid: string;
-};
 
 export type AssembledIssuanceReport = {
 	assetId: string;
@@ -17,7 +16,7 @@ export type AssembledIssuanceReport = {
 
 export type AssemblingBuilder = Pick<
 	InstanceType<SmplxWasmModule["TransactionBuilder"]>,
-	"addChange" | "addOutput" | "addInput" | "free"
+	"addOutput" | "addInput" | "free"
 > & {
 	addProgramInput: (
 		txid: string,
@@ -60,122 +59,73 @@ export type AssemblingBuilder = Pick<
 	) => AssembledIssuanceReport;
 };
 
-export type FinalizeTransaction = (
-	builder: AssemblingBuilder,
-	feeRateSatsPerKvb: number,
-) => AssembledTransaction | Promise<AssembledTransaction>;
-
-export type AssembleResult =
-	| { ok: false; reason: string; reject: RejectToken }
-	| { ok: true; transaction: AssembledTransaction };
-
-export async function assembleReviewedTransaction(
-	review: ManifestReview,
+export function assembleReviewedTransaction<Builder extends AssemblingBuilder, Finished>(
+	draft: TransactionDraft,
 	input: {
-		blindingPublicKeyHex?: string;
-		changeScriptPubKeyHex: string;
-		finalize: FinalizeTransaction;
+		blindingPublicKeyHex: string;
 		signingDerivationPath: string;
-		smplx: { TransactionBuilder: new () => AssemblingBuilder };
+		smplx: { TransactionBuilder: new () => Builder };
 	},
-): Promise<AssembleResult> {
-	if (review.inputOrder.length === 0) {
-		return {
-			ok: false,
-			reason: `"${review.action}" has nothing funding it.`,
-			reject: "shortfall",
-		};
+	finish: (builder: Builder) => Finished,
+): Finished {
+	if (draft.inputOrder.length === 0) {
+		throw new Refusal(`"${draft.action}" has nothing funding it.`, "shortfall");
 	}
 
-	// Policy-asset change is paid by `builder.addChange()` below, not through `outputs`.
-	if (review.outputs.length === 0 && !review.changeDeferred) {
-		return {
-			ok: false,
-			reason: `"${review.action}" pays nothing, so there is nothing to build.`,
-			reject: "document-fault",
-		};
+	if (draft.outputs.length === 0) {
+		throw new Refusal(`"${draft.action}" pays nothing, so there is nothing to build.`);
 	}
 
-	const unblindable = review.outputs.find((output) => output.blinded);
+	const issuing = new Map<string, TransactionDraft["issuances"][number]>();
 
-	if (unblindable && input.blindingPublicKeyHex === undefined) {
-		return {
-			ok: false,
-			reason:
-				`The output ${unblindable.id || "(unnamed)"} must hide what it carries, and no ` +
-				"blinding key was supplied to hide it with.",
-			reject: "unimplemented-construct",
-		};
-	}
-
-	if (review.changeBlinded && input.blindingPublicKeyHex === undefined) {
-		return {
-			ok: false,
-			reason: `"${review.action}" returns change that must hide what it carries, and no blinding key was supplied to hide it with.`,
-			reject: "unimplemented-construct",
-		};
-	}
-
-	const issuing = new Map<string, ManifestReview["issuances"][number]>();
-
-	for (const issuance of review.issuances) {
+	for (const issuance of draft.issuances) {
 		const key = outpointKey(issuance.outpoint);
 
 		if (issuing.has(key)) {
-			return {
-				ok: false,
-				reason:
-					`Input ${issuance.inputId} issues an asset from ${issuance.outpoint.txid}:` +
+			throw new Refusal(
+				`Input ${issuance.inputId} issues an asset from ${issuance.outpoint.txid}:` +
 					`${issuance.outpoint.vout}, which another input of this transaction already ` +
 					"issues from. One output cannot create two assets.",
-				reject: "document-fault",
-			};
+			);
 		}
 
 		issuing.set(key, issuance);
 	}
 
 	const spending = new Set(
-		review.inputOrder.map((planned) =>
+		draft.inputOrder.map((planned) =>
 			outpointKey(planned.source === "program" ? planned.program : planned.utxo),
 		),
 	);
-	const stranded = review.issuances.find(
+	const stranded = draft.issuances.find(
 		(issuance) => !spending.has(outpointKey(issuance.outpoint)),
 	);
 
 	if (stranded) {
-		return {
-			ok: false,
-			reason:
-				`Input ${stranded.inputId} issues an asset from an output this transaction does not ` +
+		throw new Refusal(
+			`Input ${stranded.inputId} issues an asset from an output this transaction does not ` +
 				"spend, so the asset would never exist.",
-			reject: "document-fault",
-		};
+		);
 	}
 
-	if (spending.size !== review.inputOrder.length) {
-		return {
-			ok: false,
-			reason: `"${review.action}" spends one of its outputs more than once.`,
-			reject: "document-fault",
-		};
+	if (spending.size !== draft.inputOrder.length) {
+		throw new Refusal(`"${draft.action}" spends one of its outputs more than once.`);
 	}
 
 	const builder = new input.smplx.TransactionBuilder();
 
 	try {
-		if (review.locktimeHeight !== undefined) {
-			builder.setLocktimeHeight(review.locktimeHeight);
+		if (draft.locktimeHeight !== undefined) {
+			builder.setLocktimeHeight(draft.locktimeHeight);
 		}
 
-		if (review.sequence !== undefined) {
-			builder.setSequence(review.sequence);
+		if (draft.sequence !== undefined) {
+			builder.setSequence(draft.sequence);
 		}
 
 		const placed = new Set<string>();
 
-		for (const planned of review.inputOrder) {
+		for (const planned of draft.inputOrder) {
 			const key =
 				planned.source === "program" ? outpointKey(planned.program) : outpointKey(planned.utxo);
 			const issuance = issuing.get(key);
@@ -227,11 +177,7 @@ export async function assembleReviewedTransaction(
 			}
 
 			const { utxo } = planned;
-			const unsignable = refuseUnsignable(utxo);
-
-			if (unsignable) {
-				return unsignable;
-			}
+			refuseUnsignable(utxo);
 
 			if (!issuance) {
 				builder.addInput(
@@ -259,19 +205,16 @@ export async function assembleReviewedTransaction(
 				.free();
 		}
 
-		const missed = review.issuances.find((issuance) => !placed.has(outpointKey(issuance.outpoint)));
+		const missed = draft.issuances.find((issuance) => !placed.has(outpointKey(issuance.outpoint)));
 
 		if (missed) {
-			return {
-				ok: false,
-				reason:
-					`Input ${missed.inputId} issues an asset from an output this transaction does not ` +
+			throw new Refusal(
+				`Input ${missed.inputId} issues an asset from an output this transaction does not ` +
 					"spend, so the asset would never exist.",
-				reject: "document-fault",
-			};
+			);
 		}
 
-		for (const output of review.outputs) {
+		for (const output of draft.outputs) {
 			builder.addOutput(
 				output.scriptPubKeyHex,
 				output.sats,
@@ -280,49 +223,41 @@ export async function assembleReviewedTransaction(
 			);
 		}
 
-		builder.addChange(
-			input.changeScriptPubKeyHex,
-			review.changeBlinded ? input.blindingPublicKeyHex : undefined,
-		);
-
-		const transaction = await input.finalize(builder, review.feeRateSatsPerKvb);
-
-		return { ok: true, transaction };
+		return finish(builder);
 	} catch (error) {
-		return {
-			ok: false,
-			reason: `This transaction could not be assembled: ${String(error)}`,
-			reject: "built-something-else",
-		};
+		if (error instanceof Refusal) {
+			throw error;
+		}
+
+		throw new Refusal(
+			`This transaction could not be assembled: ${String(error)}`,
+			"built-something-else",
+		);
 	} finally {
 		builder.free();
 	}
 }
 
-function refuseUnsignable(utxo: ManifestReview["selected"][number]): AssembleResult | undefined {
+function refuseUnsignable(utxo: ManifestReview["selected"][number]): void {
 	const at = `${utxo.txid}:${utxo.vout}`;
 
 	if (!utxo.confidential) {
-		return undefined;
+		return;
 	}
 
 	if (utxo.blindingSecretsJson === undefined) {
-		return {
-			ok: false,
-			reason: `This wallet holds ${at} blinded but did not say what it unblinds to, so it cannot be spent.`,
-			reject: "built-something-else",
-		};
+		throw new Refusal(
+			`This wallet holds ${at} blinded but did not say what it unblinds to, so it cannot be spent.`,
+			"built-something-else",
+		);
 	}
 
 	if (utxo.derivationPath === undefined) {
-		return {
-			ok: false,
-			reason: `This wallet did not say which key spends ${at}, so it cannot be signed.`,
-			reject: "built-something-else",
-		};
+		throw new Refusal(
+			`This wallet did not say which key spends ${at}, so it cannot be signed.`,
+			"built-something-else",
+		);
 	}
-
-	return undefined;
 }
 
 function witnessValuesJson(values: StaticWitness[] | undefined): string | undefined {

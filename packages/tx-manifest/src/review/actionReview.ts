@@ -13,7 +13,7 @@ import {
 	type HeldValue,
 	resolveAsset,
 } from "../evaluation/assetLedger";
-import { resolveChangeBlinding } from "../evaluation/blinding";
+import { type BlindingDecision, resolveChangeBlinding } from "../evaluation/blinding";
 import {
 	actionHook,
 	inputHook,
@@ -38,7 +38,6 @@ import { fillParameters } from "../evaluation/parameters";
 import { type PlannedSpend, planAction } from "../evaluation/plan";
 import { checkPositions, type StatedPosition } from "../evaluation/positions";
 import { resolveStaticWitnesses } from "../evaluation/witness";
-import { estimateFeeSats } from "../fee";
 import { declaredParamTypes } from "../programs/declaredTypes";
 import {
 	type CreatedInstance,
@@ -65,12 +64,13 @@ import type {
 	ReviewedProgramInput,
 	ReviewedOutput,
 	ReviewInput,
+	TransactionDraft,
 } from "./index";
 import { ProgramUtxos } from "./programUtxos";
 
 type PaidOutputs = {
 	at: Map<string, number>;
-	changeDeferred: boolean;
+	droppedSats: bigint;
 	outputs: ReviewedOutput[];
 	returned: Map<string, bigint>;
 };
@@ -176,63 +176,51 @@ export class ActionReview {
 		await this.#createPrograms();
 		this.#attachWitnessValues();
 
-		this.#scope = { ...this.#scope, fee: 0n };
+		this.#scope = { ...this.#scope, fee: MIN_FEE_SATS };
 		planAction(this.#action, this.#scope);
 
 		const rules = resolveInputRules(this.#action, this.#scope);
 		const sequence = transactionSequence(rules);
 		const feeRateSatsPerKvb = await this.#feeRate();
-		let settled = this.#settle(issued, rules, sequence, feeRateSatsPerKvb);
-
-		for (
-			let round = 1;
-			round < FEE_ROUNDS && settled.feeSats > (this.#scope.fee ?? 0n);
-			round += 1
-		) {
-			this.#scope = { ...this.#scope, fee: settled.feeSats };
-			settled = this.#settle(issued, rules, sequence, feeRateSatsPerKvb);
-		}
-
-		const { ledger, networkChange, paid, placed } = settled;
-		const reserved = this.#scope.fee ?? 0n;
-		const estimatedFeeSats = settled.feeSats > reserved ? settled.feeSats : reserved;
-		const change = resolveChangeBlinding(
-			networkChange[0]?.blinding ?? {
-				blinding: "open",
-				decidedBy: "spendable-change",
-				overrode: "chain",
-			},
-			placed.selected.some((utxo) => utxo.confidential === true),
-		);
 		const locktimeHeight =
 			this.#programInputs.length > 0 && this.#input.readChainTip
 				? await this.#input.readChainTip().catch(() => undefined)
 				: undefined;
+		const timing = {
+			...(locktimeHeight === undefined ? {} : { locktimeHeight }),
+			...(sequence === undefined ? {} : { sequence }),
+		};
+		let settled = await this.#settle(issued, rules, timing, feeRateSatsPerKvb);
+
+		for (let round = 1; settled.feeSats > (this.#scope.fee ?? 0n); round += 1) {
+			if (round === FEE_ROUNDS) {
+				throw new Refusal(
+					`The fee for "${this.#request.action}" kept rising as this wallet funded the ` +
+						"action, so the wallet cannot say what the transaction costs.",
+					"built-something-else",
+				);
+			}
+
+			this.#scope = { ...this.#scope, fee: settled.feeSats };
+			// oxlint-disable-next-line no-await-in-loop
+			settled = await this.#settle(issued, rules, timing, feeRateSatsPerKvb);
+		}
+
+		const { draft, ledger, paid, placed } = settled;
+		const estimatedFeeSats = (this.#scope.fee ?? 0n) + paid.droppedSats;
 
 		const reviewed: ReviewedPlan = {
-			action: this.#request.action,
+			...draft,
 			...(this.#action.boundTo === undefined ? {} : { boundTo: this.#action.boundTo }),
-			changeBlinded: change.blinding === "blinded",
-			...(paid.changeDeferred ? { changeDeferred: true } : {}),
-			...(change.blinding === "blinded"
-				? { changeBlindedBy: change.decidedBy }
-				: change.overrode === undefined
-					? {}
-					: { changeOverrode: change.overrode }),
 			programInputs: this.#programInputs,
 			programs: this.#programs,
 			...(created === undefined ? {} : { createdInstance: created }),
 			estimatedFeeSats,
 			feeRateSatsPerKvb,
-			inputOrder: placed.placement.order,
-			issuances: issued.issuances,
-			...(locktimeHeight === undefined ? {} : { locktimeHeight }),
 			movements: this.#movements(ledger, paid.returned, estimatedFeeSats),
-			outputs: paid.outputs,
 			policyAsset: this.#policyAsset,
 			protocol: this.#manifest.protocol ?? "",
 			selected: placed.selected,
-			...(sequence === undefined ? {} : { sequence }),
 		};
 
 		return {
@@ -245,37 +233,47 @@ export class ActionReview {
 		};
 	}
 
-	#settle(
+	async #settle(
 		issued: ResolvedIssuances,
 		rules: InputRule[],
-		sequence: number | undefined,
+		timing: Pick<TransactionDraft, "locktimeHeight" | "sequence">,
 		feeRateSatsPerKvb: number,
 	) {
 		const plan = planAction(this.#action, this.#scope);
 		const ledger = this.#ledger(plan, issued);
-		const networkChange = plan.outputs.filter(
-			(planned, at) => planned.target.kind === "change" && ledger.outputs[at] === this.#policyAsset,
-		);
 
 		this.#refuseHiddenPayments(plan);
 
-		const funded = this.#fund(ledger, rules, issued, feeRateSatsPerKvb);
+		const funded = this.#fund(ledger, rules, issued);
 		const paid = this.#payOutputs(plan, ledger, funded);
-		const placed = this.#placeInputs(ledger, funded, rules, sequence);
+		const placed = this.#placeInputs(ledger, funded, rules, timing.sequence);
 
-		this.#checkPositions(placed, paid, networkChange.length);
+		this.#checkPositions(placed, paid);
 
-		const feeSats = estimateFeeSats(
-			{
-				programInputs: this.#programInputs.length,
-				issuingInputs: issued.issuances.length,
-				outputs: paid.outputs.length,
-				walletInputs: placed.selected.length,
-			},
-			feeRateSatsPerKvb,
-		);
+		const draft: TransactionDraft = {
+			action: this.#request.action,
+			inputOrder: placed.placement.order,
+			issuances: issued.issuances,
+			outputs: paid.outputs,
+			...timing,
+		};
 
-		return { feeSats, ledger, networkChange, paid, placed };
+		return { draft, feeSats: await this.#estimate(draft, feeRateSatsPerKvb), ledger, paid, placed };
+	}
+
+	async #estimate(draft: TransactionDraft, feeRateSatsPerKvb: number): Promise<bigint> {
+		try {
+			return await this.#input.estimateFee(draft, feeRateSatsPerKvb);
+		} catch (error) {
+			if (error instanceof Refusal) {
+				throw error;
+			}
+
+			throw new Refusal(
+				`This wallet could not price "${draft.action}": ${String(error)}`,
+				"built-something-else",
+			);
+		}
 	}
 
 	#holdings(asset: string): SelectableUtxo[] {
@@ -483,12 +481,7 @@ export class ActionReview {
 		}
 	}
 
-	#fund(
-		ledger: AssetLedger,
-		rules: InputRule[],
-		issued: ResolvedIssuances,
-		feeRateSatsPerKvb: number,
-	): FundedAsset[] {
+	#fund(ledger: AssetLedger, rules: InputRule[], issued: ResolvedIssuances): FundedAsset[] {
 		const pinFor = new Map<string, string>();
 
 		for (const rule of rules) {
@@ -569,10 +562,7 @@ export class ActionReview {
 		}
 
 		return fundAssets(ledger.entries, {
-			feeSats: namesFee(this.#action)
-				? (this.#scope.fee ?? 0n)
-				: BigInt(Math.ceil(feeRateSatsPerKvb)),
-			headroomSats: 0n,
+			feeSats: this.#scope.fee ?? 0n,
 			holdings: pinnedHoldings,
 			policyAsset: this.#input.policyAsset,
 			reserved: issued.reserved,
@@ -580,49 +570,56 @@ export class ActionReview {
 	}
 
 	#payOutputs(plan: PlannedSpend, ledger: AssetLedger, funded: FundedAsset[]): PaidOutputs {
-		const fundedFor = new Map(funded.map((entry) => [entry.asset, entry]));
+		const changeFor = new Map(funded.map((entry) => [entry.asset, entry.changeSats]));
+		const spendsConfidential = funded.some((entry) =>
+			entry.selected.some((utxo) => utxo.confidential === true),
+		);
 		const programScripts = new Map(
 			this.#programs.map((found) => [found.utxoType, found.scriptPubKeyHex]),
 		);
 		const paid: PaidOutputs = {
 			at: new Map(),
-			changeDeferred: false,
+			droppedSats: 0n,
 			outputs: [],
 			returned: new Map(),
 		};
-		const changePaid = new Set<string>();
+
+		const payChange = (asset: string, id: string, planned: BlindingDecision) => {
+			const sats = changeFor.get(asset) ?? 0n;
+
+			changeFor.delete(asset);
+
+			if (sats <= 0n) {
+				return;
+			}
+
+			const isPolicy = asset === this.#policyAsset;
+
+			if (isPolicy && sats < DUST_SATS) {
+				paid.droppedSats = sats;
+
+				return;
+			}
+
+			const blinding = isPolicy ? resolveChangeBlinding(planned, spendsConfidential) : planned;
+
+			paid.at.set(id, paid.outputs.length);
+			paid.outputs.push({
+				asset,
+				blinded: blinding.blinding === "blinded",
+				decidedBy: blinding.decidedBy,
+				id,
+				...(blinding.overrode === undefined ? {} : { overrode: blinding.overrode }),
+				sats,
+				scriptPubKeyHex: this.#input.walletScriptPubKeyHex,
+			});
+		};
 
 		for (const [at, planned] of plan.outputs.entries()) {
 			const asset = ledger.outputs[at] ?? this.#policyAsset;
-			const blinding = {
-				blinded: planned.blinding.blinding === "blinded",
-				decidedBy: planned.blinding.decidedBy,
-			};
 
 			if (planned.target.kind === "change") {
-				const surplus =
-					asset === this.#policyAsset || changePaid.has(asset)
-						? 0n
-						: (fundedFor.get(asset)?.changeSats ?? 0n);
-
-				if (surplus <= 0n) {
-					paid.changeDeferred ||= asset === this.#policyAsset;
-
-					continue;
-				}
-
-				changePaid.add(asset);
-				paid.at.set(planned.id, paid.outputs.length);
-				paid.outputs.push({
-					asset,
-					...blinding,
-					id: planned.id,
-					...(planned.blinding.overrode === undefined
-						? {}
-						: { overrode: planned.blinding.overrode }),
-					sats: surplus,
-					scriptPubKeyHex: this.#input.walletScriptPubKeyHex,
-				});
+				payChange(asset, planned.id, planned.blinding);
 
 				continue;
 			}
@@ -652,11 +649,16 @@ export class ActionReview {
 			paid.at.set(planned.id, paid.outputs.length);
 			paid.outputs.push({
 				asset,
-				...blinding,
+				blinded: planned.blinding.blinding === "blinded",
+				decidedBy: planned.blinding.decidedBy,
 				id: planned.id,
 				sats: planned.sats,
 				scriptPubKeyHex,
 			});
+		}
+
+		for (const asset of changeFor.keys()) {
+			payChange(asset, "change", UNDECLARED_CHANGE);
 		}
 
 		return paid;
@@ -754,7 +756,7 @@ export class ActionReview {
 		};
 	}
 
-	#checkPositions(placed: PlacedInputs, paid: PaidOutputs, networkChange: number): void {
+	#checkPositions(placed: PlacedInputs, paid: PaidOutputs): void {
 		const positions: StatedPosition[] = [];
 
 		for (const entry of asArray(this.#action.node.inputs)) {
@@ -817,7 +819,7 @@ export class ActionReview {
 
 		checkPositions(positions, {
 			inputs: placed.placement.order.length,
-			outputs: paid.outputs.length + Math.min(networkChange, 1),
+			outputs: paid.outputs.length,
 		});
 	}
 
@@ -841,15 +843,15 @@ const FEE_TARGET_BLOCKS = 1;
 
 const FEE_ROUNDS = 4;
 
-const FEE = /(?<![\w.$])fee(?![\w.])/;
+const MIN_FEE_SATS = 10n;
 
-function namesFee(action: Action): boolean {
-	return asArray(action.node.outputs).some((output) => {
-		const amount = asRecord(output)?.amount_sat;
+const DUST_SATS = 22n;
 
-		return typeof amount === "string" && FEE.test(amount);
-	});
-}
+const UNDECLARED_CHANGE: BlindingDecision = {
+	blinding: "open",
+	decidedBy: "spendable-change",
+	overrode: "chain",
+};
 
 type ResolvedIssuances = {
 	issuances: PlannedIssuance[];

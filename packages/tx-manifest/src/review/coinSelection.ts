@@ -15,16 +15,11 @@ export type SelectableUtxo = {
 
 export type CoinSelection = { selected: SelectableUtxo[]; totalSats: bigint };
 
-export function selectCoins(
-	available: SelectableUtxo[],
-	targetSats: bigint,
-	headroomSats: bigint,
-): CoinSelection {
-	if (targetSats <= 0n) {
+export function selectCoins(available: SelectableUtxo[], needed: bigint): CoinSelection {
+	if (needed <= 0n) {
 		throw new Refusal("Nothing to fund.", "shortfall");
 	}
 
-	const needed = targetSats + headroomSats;
 	const spendable = byOutpoint(available.filter((utxo) => utxo.spendable)).toSorted(byLargestFirst);
 
 	const selected: SelectableUtxo[] = [];

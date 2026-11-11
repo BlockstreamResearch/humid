@@ -3,12 +3,15 @@ import { readdirSync, readFileSync } from "node:fs";
 
 import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
 import {
+	type EstimateFee,
 	isRefusal,
 	type ManifestReview,
 	type ParsedLiquidProcessCtParams,
 	reviewManifestAction,
+	type TransactionDraft,
 } from "@humid/tx-manifest";
 
+import { assembleReviewedTransaction } from "./assembleReviewedTransaction";
 import {
 	createSmplxProgramCompiler,
 	createSmplxProgramParamTypes,
@@ -18,8 +21,14 @@ import { smplx } from "./smplxWasmForTests";
 
 const NETWORK = "liquidtestnet";
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+const SIGNER = new smplx.Signer(
+	"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+	NETWORK,
+);
+const KEY = SIGNER.schnorrPublicKey().slice(-64);
+const WALLET_SCRIPT = SIGNER.scriptPubKeyHex();
 const PLENTY = "100000000";
+const CHAIN_TIP = 3_000_000;
 const FIXTURES = new URL(
 	"../../../../../../../../packages/tx-manifest/src/__fixtures__/",
 	import.meta.url,
@@ -43,6 +52,7 @@ class ReferenceExample {
 	constructor(
 		readonly name: string,
 		private readonly template?: string,
+		private readonly estimateFee: EstimateFee = simplexFee,
 	) {
 		const at = new URL(`${name}/`, FIXTURES);
 		const read = (path: string) => readFileSync(new URL(path, at), "utf8");
@@ -103,20 +113,27 @@ class ReferenceExample {
 					return compiled;
 				},
 				compilerVersion: SMPLX_COMPILER_VERSION,
+				estimateFee: this.estimateFee,
 				programParamTypes: createSmplxProgramParamTypes(smplx),
 				fundingUtxos: [wallet(POLICY_ASSET, PLENTY)],
 				holdingsOf: (asset) => [wallet(asset, request.holdings?.[asset] ?? PLENTY)],
 				network: NETWORK,
 				policyAsset: POLICY_ASSET,
+				readChainTip: async () => CHAIN_TIP,
 				readFeeRate: async () => 100,
-				readTxOut: async ({ txid }) => ({
-					amountSats: held.get(txid)?.amount ?? PLENTY,
-					rawAssetId: held.get(txid)?.asset ?? POLICY_ASSET,
-					scriptPubKeyHex: lastScript,
-					txOutHex: "00",
-				}),
+				readTxOut: async ({ txid }) => {
+					const amountSats = held.get(txid)?.amount ?? PLENTY;
+					const rawAssetId = held.get(txid)?.asset ?? POLICY_ASSET;
+
+					return {
+						amountSats,
+						rawAssetId,
+						scriptPubKeyHex: lastScript,
+						txOutHex: explicitTxOut(lastScript, rawAssetId, amountSats),
+					};
+				},
 				scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, NETWORK),
-				walletScriptPubKeyHex: `0014${"33".repeat(20)}`,
+				walletScriptPubKeyHex: WALLET_SCRIPT,
 			},
 		);
 	}
@@ -143,7 +160,49 @@ function outpoint(at: number): string {
 }
 
 function wallet(asset: string, amount: string) {
-	return { amount, spendable: true, txOut: "00", txid: asset, vout: 1 };
+	return {
+		amount,
+		spendable: true,
+		txOut: explicitTxOut(WALLET_SCRIPT, asset, amount),
+		txid: asset,
+		vout: 1,
+	};
+}
+
+function explicitTxOut(script: string, asset: string, sats: string): string {
+	const internal = (asset.match(/../g) ?? []).toReversed().join("");
+	const length = (script.length / 2).toString(16).padStart(2, "0");
+
+	return `01${internal}01${BigInt(sats).toString(16).padStart(16, "0")}00${length}${script}`;
+}
+
+function simplexFee(draft: TransactionDraft, feeRateSatsPerKvb: number): bigint {
+	return built(draft, (builder) =>
+		smplx.Signer.estimateStrictFee(builder, NETWORK, feeRateSatsPerKvb),
+	);
+}
+
+function built<Finished>(
+	draft: TransactionDraft,
+	finish: (builder: InstanceType<typeof smplx.TransactionBuilder>) => Finished,
+): Finished {
+	return assembleReviewedTransaction(
+		draft,
+		{ blindingPublicKeyHex: SIGNER.blindingPublicKey(), signingDerivationPath: "0/0", smplx },
+		finish,
+	);
+}
+
+function signedFee(review: ManifestReview): bigint {
+	const signed = built(review, (builder) =>
+		SIGNER.finalizeStrictFee(builder, review.feeRateSatsPerKvb),
+	);
+
+	try {
+		return signed.feeSats;
+	} finally {
+		signed.free();
+	}
 }
 
 describe("p2pk", () => {
@@ -165,10 +224,21 @@ describe("p2pk", () => {
 
 		expect(programs.map((found) => found.verified)).toEqual(["matches-chain"]);
 	});
+
+	test("Pay and Receive sign, paying exactly the fee the review shows", async () => {
+		const pay = await p2pk.reviewed("Pay", { params: { amount_sat: 1000, pubkey: KEY } });
+		const receive = await p2pk.reviewed("Receive", {
+			params: { pubkey: KEY },
+			spends: [{ amount: "50000", asset: POLICY_ASSET, utxoType: "p2pk_output" }],
+		});
+
+		expect(signedFee(pay)).toBe(pay.estimatedFeeSats);
+		expect(signedFee(receive)).toBe(receive.estimatedFeeSats);
+	});
 });
 
 describe("last_will", () => {
-	const lastWill = new ReferenceExample("last_will", "last_will_contract");
+	const lastWill = new ReferenceExample("last_will", "last_will_contract", () => 500n);
 	const keys = { COLD_PUB_KEY: KEY, HOT_PUB_KEY: KEY, INHERITOR_PUB_KEY: KEY };
 
 	async function will() {
@@ -229,14 +299,17 @@ describe("dex", () => {
 		const outcomes = {
 			ClaimPayout: await dex.outcome("ClaimPayout", {
 				instance,
+				params: { MAKER_PUB_KEY: KEY },
 				spends: [{ amount: "2000", asset: POLICY_ASSET, utxoType: "maker_payout" }],
 			}),
 			Refund: await dex.outcome("Refund", {
 				instance,
+				params: { MAKER_PUB_KEY: KEY },
 				spends: [{ ...locked, utxoType: "tessera_offer" }],
 			}),
 			Settle: await dex.outcome("Settle", {
 				instance,
+				params: { MAKER_PUB_KEY: KEY },
 				spends: [{ ...locked, utxoType: "tessera_offer" }],
 			}),
 		};
@@ -246,7 +319,7 @@ describe("dex", () => {
 });
 
 describe("lending_v3", () => {
-	const lending = new ReferenceExample("lending_v3", "lending_contract");
+	const lending = new ReferenceExample("lending_v3", "lending_contract", () => 500n);
 	const zero = "00".repeat(32);
 	const borrowerNft = "ab".repeat(32);
 	const lenderNft = "cd".repeat(32);

@@ -28,7 +28,6 @@ const CHANGE = { blinded: true, id: "token_change" };
 function fund(entries: AssetEntry[], holdings: Record<string, SelectableUtxo[]>, feeSats = 500n) {
 	return fundAssets(entries, {
 		feeSats,
-		headroomSats: 0n,
 		holdings: (asset) => holdings[asset] ?? [],
 		policyAsset: POLICY,
 		reserved: [],
@@ -55,13 +54,13 @@ describe("funding an action asset by asset", () => {
 		fund([entry(TOKEN, 400n, { change: CHANGE })], { [TOKEN]: [utxo("400")] }, 500n);
 	});
 
-	test("returns the exact surplus of every asset but the network's own", () => {
+	test("returns the exact surplus of every asset, net of the fee in the network's own", () => {
 		const result = fund([entry(POLICY, 0n), entry(TOKEN, 1000n, { change: CHANGE })], {
 			[POLICY]: [utxo("9000")],
 			[TOKEN]: [utxo("1500")],
 		});
 
-		expect(result.map((funded) => funded.changeSats)).toEqual([0n, 500n]);
+		expect(result.map((funded) => funded.changeSats)).toEqual([8500n, 500n]);
 	});
 
 	test("counts what the transaction already brings before asking the wallet for anything", () => {
@@ -116,8 +115,8 @@ describe("when one asset cannot be funded", () => {
 		expect(result.reject).toBe("document-fault");
 	});
 
-	test("and the same surplus in the network's own asset is not, because the fee takes the surplus", () => {
-		fund([entry(POLICY, 1000n)], { [POLICY]: [utxo("9000")] });
+	test("and the same surplus in the network's own asset is not, because the wallet returns the surplus as change", () => {
+		expect(fund([entry(POLICY, 1000n)], { [POLICY]: [utxo("9000")] })[0]?.changeSats).toBe(7500n);
 	});
 });
 
@@ -127,7 +126,6 @@ describe("an output already committed to for an issuance", () => {
 	function withReserved(entries: AssetEntry[], holdings: Record<string, SelectableUtxo[]>) {
 		return fundAssets(entries, {
 			feeSats: 0n,
-			headroomSats: 0n,
 			holdings: (asset) => holdings[asset] ?? [],
 			policyAsset: POLICY,
 			reserved: [{ asset: TOKEN, utxo: reserved }],
