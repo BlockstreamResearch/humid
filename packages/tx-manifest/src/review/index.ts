@@ -26,6 +26,7 @@ export type ReviewedProgramInput = {
 	source: string;
 	txOutHex: string;
 	txid: string;
+	unusedWitnesses?: string[];
 	utxoType: string;
 	vout: number;
 	witnessValues?: StaticWitness[];

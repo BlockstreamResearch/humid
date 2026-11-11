@@ -238,7 +238,7 @@ describe("p2pk", () => {
 });
 
 describe("last_will", () => {
-	const lastWill = new ReferenceExample("last_will", "last_will_contract", () => 500n);
+	const lastWill = new ReferenceExample("last_will", "last_will_contract");
 	const keys = { COLD_PUB_KEY: KEY, HOT_PUB_KEY: KEY, INHERITOR_PUB_KEY: KEY };
 
 	async function will() {
@@ -264,6 +264,17 @@ describe("last_will", () => {
 
 			expect(estimatedFeeSats).toBeGreaterThan(0n);
 			expect(outputs.map((output) => output.sats)).toEqual([50_000n - estimatedFeeSats]);
+		}
+	});
+
+	test("ColdBreak and Refresh sign, leaving the unused signature aside, at exactly the fee shown", async () => {
+		const instance = await will();
+
+		for (const action of ["ColdBreak", "Refresh"]) {
+			// oxlint-disable-next-line no-await-in-loop
+			const review = await lastWill.reviewed(action, { instance, spends });
+
+			expect(signedFee(review)).toBe(review.estimatedFeeSats);
 		}
 	});
 

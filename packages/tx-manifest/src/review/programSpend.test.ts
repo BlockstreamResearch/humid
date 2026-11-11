@@ -45,6 +45,24 @@ function withReceive(inputs: unknown[], outputs?: unknown[], allowChange?: strin
 const spending = (manifest: Document = p2pk.manifest) => receive({ manifest });
 
 describe("what the review carries out about a program it will spend", () => {
+	test("carries the witnesses the spend leaves unused, by name", async () => {
+		const inputs = receiveInputs();
+		const program = inputs[0] as Record<string, unknown>;
+
+		inputs[0] = {
+			...program,
+			witnesses: { ...(program.witnesses as Record<string, unknown>), OTHER_SIG: "unused" },
+		};
+
+		const review = await reviewed(spending(withReceive(inputs)));
+
+		expect(review.programInputs[0]?.unusedWitnesses).toEqual(["OTHER_SIG"]);
+	});
+
+	test("and carries none where the spend uses every witness", async () => {
+		expect((await reviewed(spending())).programInputs[0]?.unusedWitnesses).toBeUndefined();
+	});
+
 	test("carries the exact source, arguments, leaves and mode it checked against the chain", async () => {
 		const review = await reviewed(spending());
 

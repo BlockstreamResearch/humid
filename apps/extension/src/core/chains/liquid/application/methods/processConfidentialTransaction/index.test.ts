@@ -170,6 +170,7 @@ function smplxSubstitute(log: Journal) {
 		}
 		setLocktimeHeight() {}
 		setSequence() {}
+		setUnusedWitnesses() {}
 		free() {
 			log.freed.push("builder");
 		}

@@ -5,6 +5,7 @@ export type ProgramSite = {
 	id: string;
 	role: "created" | "spent";
 	signatureWitness?: string;
+	unusedWitnesses?: string[];
 	utxoType: string;
 	wiring: Record<string, unknown>;
 };
@@ -16,7 +17,9 @@ export function programSites(action: Record<string, unknown>): ProgramSite[] {
 		const site = programReference(asRecord(entry)?.utxo_source);
 
 		if (site) {
-			const signatureWitness = walletSignatureWitness(asRecord(entry)?.witnesses);
+			const witnesses = asRecord(asRecord(entry)?.witnesses) ?? {};
+			const signatureWitness = walletSignatureWitness(witnesses);
+			const unusedWitnesses = Object.keys(witnesses).filter((name) => witnesses[name] === "unused");
 
 			sites.push({
 				...site,
@@ -24,6 +27,7 @@ export function programSites(action: Record<string, unknown>): ProgramSite[] {
 				id: identifierOf(entry),
 				role: "spent",
 				...(signatureWitness === undefined ? {} : { signatureWitness }),
+				...(unusedWitnesses.length === 0 ? {} : { unusedWitnesses }),
 			});
 		}
 	}
@@ -56,8 +60,8 @@ function programReference(
 	return { utxoType, wiring: asRecord(record?.compile_params) ?? {} };
 }
 
-function walletSignatureWitness(declared: unknown): string | undefined {
-	for (const [name, entry] of Object.entries(asRecord(declared) ?? {})) {
+function walletSignatureWitness(declared: Record<string, unknown>): string | undefined {
+	for (const [name, entry] of Object.entries(declared)) {
 		const witness = asRecord(entry);
 
 		if (witness?.type === "Signature" && asRecord(witness.source)?.type === "wallet") {

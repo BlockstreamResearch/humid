@@ -374,6 +374,7 @@ export class ActionReview {
 				source: derived.source,
 				txOutHex: onChain.txOutHex,
 				txid: outpoint.txid,
+				...(site.unusedWitnesses === undefined ? {} : { unusedWitnesses: site.unusedWitnesses }),
 				utxoType: site.utxoType,
 				vout: outpoint.vout,
 			});

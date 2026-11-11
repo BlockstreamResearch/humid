@@ -47,6 +47,7 @@ export type AssemblingBuilder = Pick<
 	) => AssembledIssuanceReport;
 	setLocktimeHeight: (height: number) => void;
 	setSequence: (sequence: number) => void;
+	setUnusedWitnesses: (inputIndex: number, names: string[]) => void;
 	addIssuanceInput: (
 		txid: string,
 		vout: number,
@@ -125,7 +126,7 @@ export function assembleReviewedTransaction<Builder extends AssemblingBuilder, F
 
 		const placed = new Set<string>();
 
-		for (const planned of draft.inputOrder) {
+		for (const [index, planned] of draft.inputOrder.entries()) {
 			const key =
 				planned.source === "program" ? outpointKey(planned.program) : outpointKey(planned.utxo);
 			const issuance = issuing.get(key);
@@ -138,7 +139,25 @@ export function assembleReviewedTransaction<Builder extends AssemblingBuilder, F
 				const { program } = planned;
 				const witness = witnessValuesJson(program.witnessValues);
 
-				if (!issuance) {
+				if (issuance) {
+					builder
+						.addProgramIssuanceInput(
+							program.txid,
+							program.vout,
+							program.txOutHex,
+							program.source,
+							program.argumentsJson,
+							witness,
+							program.signatureWitness,
+							issuance.assetAmountSats,
+							issuance.inflationAmountSats,
+							undefined,
+							program.extraLeavesJson,
+							program.includeDebugSymbols,
+							input.signingDerivationPath,
+						)
+						.free();
+				} else {
 					builder.addProgramInput(
 						program.txid,
 						program.vout,
@@ -151,27 +170,11 @@ export function assembleReviewedTransaction<Builder extends AssemblingBuilder, F
 						program.includeDebugSymbols,
 						input.signingDerivationPath,
 					);
-
-					continue;
 				}
 
-				builder
-					.addProgramIssuanceInput(
-						program.txid,
-						program.vout,
-						program.txOutHex,
-						program.source,
-						program.argumentsJson,
-						witness,
-						program.signatureWitness,
-						issuance.assetAmountSats,
-						issuance.inflationAmountSats,
-						undefined,
-						program.extraLeavesJson,
-						program.includeDebugSymbols,
-						input.signingDerivationPath,
-					)
-					.free();
+				if (program.unusedWitnesses) {
+					builder.setUnusedWitnesses(index, program.unusedWitnesses);
+				}
 
 				continue;
 			}

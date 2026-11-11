@@ -57,6 +57,7 @@ type Recorded = {
 	locktimes: number[];
 	sequences: number[];
 	spends: { txOut: string; txid: string; vout: number }[];
+	unused: { inputIndex: number; names: string[] }[];
 };
 
 const ISSUED = {
@@ -186,6 +187,9 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 			setSequence(sequence: number) {
 				recorded.sequences.push(sequence);
 			}
+			setUnusedWitnesses(inputIndex: number, names: string[]) {
+				recorded.unused.push({ inputIndex, names });
+			}
 			free() {
 				recorded.freed += 1;
 			}
@@ -274,6 +278,7 @@ function emptyRecord(): Recorded {
 		outputs: [],
 		sequences: [],
 		spends: [],
+		unused: [],
 	};
 }
 
@@ -550,6 +555,28 @@ describe("assembleReviewedTransaction", () => {
 			const { assemble } = subject(spendingPlan({ inputOrder: [], selected: [] }));
 
 			expect(await assemble()).toMatchObject({ ok: false });
+		});
+
+		test("zero-fills the witnesses the spend leaves unused, at the program's own input", async () => {
+			const { assemble, recorded } = subject(
+				spendingPlan({
+					inputOrder: [
+						{ source: "wallet", utxo: WALLET_UTXO },
+						{ program: { ...programInput, unusedWitnesses: ["HOT_SIG"] }, source: "program" },
+					],
+				}),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.unused).toEqual([{ inputIndex: 1, names: ["HOT_SIG"] }]);
+		});
+
+		test("leaves every witness as stated where the spend uses them all", async () => {
+			const { assemble, recorded } = subject(spendingPlan());
+
+			await assemble();
+
+			expect(recorded.unused).toEqual([]);
 		});
 
 		test("declares the locktime and the sequence the plan carries", async () => {
