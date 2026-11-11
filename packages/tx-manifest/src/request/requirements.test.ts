@@ -306,6 +306,23 @@ describe("when a deployment's field values are needed", () => {
 		expect(required).toContain("instance");
 	});
 
+	test("a free action reading a deployment's field is satisfied by a value the request supplies", () => {
+		const { missing } = requirements({
+			action: "Free",
+			contractSources: { [SOURCE_PATH]: "fn main() {}" },
+			manifest: {
+				actions: {
+					Free: {
+						outputs: [{ amount_sat: "instance.AMOUNT", destination: "wallet", id: "out" }],
+					},
+				},
+			},
+			params: { AMOUNT: "1" },
+		});
+
+		expect(missing).toEqual([]);
+	});
+
 	test("a free action reading a deployment is unsatisfiable rather than short a file", () => {
 		const { missing, required } = requirements({
 			action: "Free",

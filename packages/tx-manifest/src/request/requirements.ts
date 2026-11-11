@@ -1,6 +1,6 @@
 import { asRecord } from "../document/json";
 import { type Action, type Manifest, readInstance } from "../document/manifest";
-import { instanceReferences } from "../document/references";
+import { instanceReferences, parseReference } from "../document/references";
 import { programSites, namedUtxoTypes } from "../document/sites";
 import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./request";
 
@@ -48,13 +48,19 @@ export function resolveActionRequirements(
 
 	if (reads.length > 0) {
 		if (declared.boundTo === undefined) {
-			missing.push({
-				part: "instance",
-				keys: reads.map((occurrence) => occurrence.at),
-				reason:
-					`The action "${declared.name}" reads a deployment's field values and is declared ` +
-					"outside any template, so there is no deployment for it to read.",
-			});
+			const unsupplied = reads.filter(
+				(occurrence) => !((parseReference(occurrence.text)?.name ?? "") in request.params),
+			);
+
+			if (unsupplied.length > 0) {
+				missing.push({
+					part: "instance",
+					keys: unsupplied.map((occurrence) => occurrence.at),
+					reason:
+						`The action "${declared.name}" reads a deployment's field values and is declared ` +
+						"outside any template, so there is no deployment for it to read.",
+				});
+			}
 		} else {
 			required.push("instance");
 

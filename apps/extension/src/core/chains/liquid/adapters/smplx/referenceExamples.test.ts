@@ -414,9 +414,12 @@ describe("lending_v3", () => {
 describe("lending_v2", () => {
 	const lending = new ReferenceExample("lending_v2");
 
-	test("Prepare signs, paying exactly the fee the review shows", async () => {
-		const review = await lending.reviewed("Prepare");
+	test("Prepare and PrepareLender sign, paying exactly the fee the review shows", async () => {
+		for (const action of ["Prepare", "PrepareLender"]) {
+			// oxlint-disable-next-line no-await-in-loop
+			const review = await lending.reviewed(action);
 
-		expect(signedFee(review)).toBe(review.estimatedFeeSats);
+			expect(signedFee(review)).toBe(review.estimatedFeeSats);
+		}
 	});
 });
