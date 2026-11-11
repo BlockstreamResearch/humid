@@ -126,10 +126,8 @@ export class ActionReview {
 		this.#includeDebugSymbols = this.#manifest.includeDebugSymbols;
 
 		const fields = this.#deployment.fields;
-		const params = fillParameters(action, request.params, {
-			instance: fields,
-			params: request.params,
-		});
+		const supplied = withoutDeployedFields(action, request.params, fields);
+		const params = fillParameters(action, supplied, { instance: fields, params: supplied });
 		const malformed = malformedDeclaration(action);
 
 		if (malformed) {
@@ -997,6 +995,18 @@ function runActionHooks(action: Action, scope: ReferenceScope): ReferenceScope {
 	}
 
 	return hook.kind === "absent" ? running : withHookValues(running, runHook(hook.set, running));
+}
+
+function withoutDeployedFields(
+	action: Action,
+	supplied: Record<string, unknown>,
+	fields: Record<string, unknown>,
+): Record<string, unknown> {
+	const declared = asRecord(action.node.params) ?? {};
+
+	return Object.fromEntries(
+		Object.entries(supplied).filter(([name]) => name in declared || !(name in fields)),
+	);
 }
 
 function sameScript(one: string, other: string): boolean {

@@ -126,6 +126,20 @@ describe("a template action against a deployment that exists", () => {
 		});
 	});
 
+	test("compiles against the deployment's field, not a request value the action does not declare", async () => {
+		const { compiled, result } = vaultletReview({
+			...withdraw(),
+			params: { OWNER_PUB_KEY: "ee".repeat(32) },
+		});
+
+		await result;
+
+		expect(JSON.parse(compiled[0]?.argumentsJson ?? "{}").OWNER_PUB_KEY).toEqual({
+			type: "Pubkey",
+			value: `0x${PUBKEY}`,
+		});
+	});
+
 	test("checks what it rebuilt against the chain, carrying out exactly what it compiled", async () => {
 		const { compiled, result } = vaultletReview(withdraw());
 		const { programs } = asReview(await result);

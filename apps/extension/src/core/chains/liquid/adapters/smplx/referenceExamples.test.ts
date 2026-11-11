@@ -299,17 +299,14 @@ describe("dex", () => {
 		const outcomes = {
 			ClaimPayout: await dex.outcome("ClaimPayout", {
 				instance,
-				params: { MAKER_PUB_KEY: KEY },
 				spends: [{ amount: "2000", asset: POLICY_ASSET, utxoType: "maker_payout" }],
 			}),
 			Refund: await dex.outcome("Refund", {
 				instance,
-				params: { MAKER_PUB_KEY: KEY },
 				spends: [{ ...locked, utxoType: "tessera_offer" }],
 			}),
 			Settle: await dex.outcome("Settle", {
 				instance,
-				params: { MAKER_PUB_KEY: KEY },
 				spends: [{ ...locked, utxoType: "tessera_offer" }],
 			}),
 		};
