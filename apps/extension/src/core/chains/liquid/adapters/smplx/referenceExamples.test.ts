@@ -10,10 +10,10 @@ import {
 } from "@humid/tx-manifest";
 
 import {
-	createSmplxCovenantCompiler,
-	createSmplxCovenantParamTypes,
+	createSmplxProgramCompiler,
+	createSmplxProgramParamTypes,
 	createSmplxScriptPubKeyCompiler,
-} from "./compileCovenantWithSmplx";
+} from "./compileProgramWithSmplx";
 import { smplx } from "./smplxWasmForTests";
 
 const NETWORK = "liquidtestnet";
@@ -64,7 +64,7 @@ class ReferenceExample {
 		const spends = request.spends ?? [];
 		const held = new Map(spends.map((spend, at) => [outpoint(at), spend]));
 		let lastScript = "";
-		const compile = createSmplxCovenantCompiler(smplx);
+		const compile = createSmplxProgramCompiler(smplx);
 
 		return reviewManifestAction(
 			{
@@ -103,7 +103,7 @@ class ReferenceExample {
 					return compiled;
 				},
 				compilerVersion: SMPLX_COMPILER_VERSION,
-				covenantParamTypes: createSmplxCovenantParamTypes(smplx),
+				programParamTypes: createSmplxProgramParamTypes(smplx),
 				fundingUtxos: [wallet(POLICY_ASSET, PLENTY)],
 				holdingsOf: (asset) => [wallet(asset, request.holdings?.[asset] ?? PLENTY)],
 				network: NETWORK,
@@ -149,21 +149,21 @@ function wallet(asset: string, amount: string) {
 describe("p2pk", () => {
 	const p2pk = new ReferenceExample("p2pk");
 
-	test("Pay locks funds in a covenant the compiler builds", async () => {
-		const { covenants } = await p2pk.reviewed("Pay", { params: { amount_sat: 1000, pubkey: KEY } });
+	test("Pay locks funds in a program the compiler builds", async () => {
+		const { programs } = await p2pk.reviewed("Pay", { params: { amount_sat: 1000, pubkey: KEY } });
 
-		expect(covenants.map(({ role, verified }) => ({ role, verified }))).toEqual([
+		expect(programs.map(({ role, verified }) => ({ role, verified }))).toEqual([
 			{ role: "created", verified: "not-yet-onchain" },
 		]);
 	});
 
-	test("Receive spends that covenant once the chain holds the funds", async () => {
-		const { covenants } = await p2pk.reviewed("Receive", {
+	test("Receive spends that program once the chain holds the funds", async () => {
+		const { programs } = await p2pk.reviewed("Receive", {
 			params: { pubkey: KEY },
 			spends: [{ amount: "50000", asset: POLICY_ASSET, utxoType: "p2pk_output" }],
 		});
 
-		expect(covenants.map((found) => found.verified)).toEqual(["matches-chain"]);
+		expect(programs.map((found) => found.verified)).toEqual(["matches-chain"]);
 	});
 });
 
@@ -273,7 +273,7 @@ describe("lending_v3", () => {
 	const nfts = { [borrowerNft]: "1", [lenderNft]: "1" };
 
 	test("the issuance factory compiles to the script the deployed indexer tracks", () => {
-		const factory = new smplx.Covenant(
+		const factory = new smplx.Program(
 			lending.source("./issuance_factory.simf"),
 			JSON.stringify({
 				ISSUING_UTXOS_COUNT: { type: "u8", value: "2" },
@@ -284,7 +284,7 @@ describe("lending_v3", () => {
 		);
 
 		try {
-			expect(factory.scriptPubKeyHex(NETWORK)).toBe(
+			expect(factory.scriptPubkey(NETWORK)).toBe(
 				"5120456881785cc7d561caaa059e02f1a2823066bd860423996bea3e92c621bb064b",
 			);
 		} finally {

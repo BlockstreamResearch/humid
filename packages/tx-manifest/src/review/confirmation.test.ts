@@ -48,7 +48,7 @@ describe("what the wallet established for itself", () => {
 		expect(result.estimatedFeeSats).toBe(
 			estimateFeeSats(
 				{
-					covenantInputs: 1,
+					programInputs: 1,
 					issuingInputs: 0,
 					outputs: result.outputs.length,
 					walletInputs: result.selected.length,
@@ -70,33 +70,33 @@ describe("what the wallet established for itself", () => {
 		expect(model.netEffect[0]?.sats.origin).toBe("computed");
 	});
 
-	test("and that change is the covenant's holding back, less what the fee takes", async () => {
+	test("and that change is the program's holding back, less what the fee takes", async () => {
 		const result = await received();
 
 		expect(result.confirmation.netEffect[0]?.sats.value).toBe(50_000n - result.estimatedFeeSats);
 	});
 
-	test("and reads as an outgoing figure when the action pays a covenant", async () => {
+	test("and reads as an outgoing figure when the action pays a program", async () => {
 		const result = await reviewed(pay());
 
 		expect(result.confirmation.netEffect[0]?.sats.value).toBe(-1000n - result.estimatedFeeSats);
 	});
 
-	test("marks a covenant it compared against the chain as checked", async () => {
-		const [covenant] = (await shown()).covenants;
+	test("marks a program it compared against the chain as checked", async () => {
+		const [program] = (await shown()).programs;
 
-		expect(covenant?.verified).toMatchObject({ origin: "computed", value: true });
-		expect(covenant?.address).toMatchObject({ origin: "verified", value: DERIVED });
+		expect(program?.verified).toMatchObject({ origin: "computed", value: true });
+		expect(program?.address).toMatchObject({ origin: "verified", value: DERIVED });
 	});
 
 	test("and says so plainly about one it did not", async () => {
 		const result = await reviewed(pay());
 
-		expect(result.confirmation.covenants[0]?.verified).toMatchObject({
+		expect(result.confirmation.programs[0]?.verified).toMatchObject({
 			origin: "computed",
 			value: false,
 		});
-		expect(result.confirmation.covenants[0]?.address.origin).toBe("computed");
+		expect(result.confirmation.programs[0]?.address.origin).toBe("computed");
 	});
 });
 
@@ -124,8 +124,8 @@ describe("what the dapp merely said", () => {
 		expect((await shown()).summary).toBeUndefined();
 	});
 
-	test("and so is its word for what kind of output a covenant is", async () => {
-		expect((await shown()).covenants[0]?.utxoType).toMatchObject({
+	test("and so is its word for what kind of output a program is", async () => {
+		expect((await shown()).programs[0]?.utxoType).toMatchObject({
 			origin: "dapp",
 			value: "p2pk_output",
 		});
@@ -266,9 +266,9 @@ describe("what the confirmation says a contract is", () => {
 	test("carries the contract's own hashes beside the address its funds sit at", async () => {
 		const result = await received();
 
-		expect(result.confirmation.covenants).not.toHaveLength(0);
+		expect(result.confirmation.programs).not.toHaveLength(0);
 
-		for (const row of result.confirmation.covenants) {
+		for (const row of result.confirmation.programs) {
 			expect(row.cmr.value).toHaveLength(64);
 			expect(row.tapleafHash.value).toHaveLength(64);
 			expect(row.cmr.value).not.toBe(row.tapleafHash.value);
@@ -279,7 +279,7 @@ describe("what the confirmation says a contract is", () => {
 	test("and says both were worked out here rather than taken from the dapp", async () => {
 		const result = await received();
 
-		for (const row of result.confirmation.covenants) {
+		for (const row of result.confirmation.programs) {
 			expect(row.cmr.origin).toBe("computed");
 			expect(row.tapleafHash.origin).toBe("computed");
 		}

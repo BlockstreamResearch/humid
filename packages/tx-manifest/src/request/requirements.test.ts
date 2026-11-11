@@ -117,7 +117,7 @@ describe("which parameters the request must fill", () => {
 	});
 });
 
-describe("wallet inputs and covenant inputs", () => {
+describe("wallet inputs and program inputs", () => {
 	function ask(action: Record<string, unknown>) {
 		return requirements({
 			action: "Open",
@@ -135,19 +135,19 @@ describe("wallet inputs and covenant inputs", () => {
 		);
 	});
 
-	test("an input spent from a covenant does", () => {
+	test("an input spent from a program does", () => {
 		expect(ask({ inputs: [{ id: "held", utxo_source: { utxo_type: "v" } }] }).required).toContain(
 			"state",
 		);
 	});
 
-	test("creating a covenant does not, because there is nothing yet to locate", () => {
+	test("creating a program does not, because there is nothing yet to locate", () => {
 		expect(
 			ask({ outputs: [{ destination: { utxo_type: "v" }, id: "made" }] }).required,
 		).not.toContain("state");
 	});
 
-	test("a covenant an output creates still needs its contract source", () => {
+	test("a program an output creates still needs its contract source", () => {
 		const { required } = ask({ outputs: [{ destination: { utxo_type: "v" }, id: "made" }] });
 
 		expect(required).toContain("contractSources");

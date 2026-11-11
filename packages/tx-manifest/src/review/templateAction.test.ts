@@ -68,7 +68,7 @@ function vaultletReview(
 
 				return COMPILED;
 			},
-			covenantParamTypes: () => ({ SLOT_COUNT: "u8", WITH_BURN: "bool" }),
+			programParamTypes: () => ({ SLOT_COUNT: "u8", WITH_BURN: "bool" }),
 			scriptPubKeyOf: ({ argumentsJson, includeDebugSymbols, source }) => {
 				hashed.push({ includeDebugSymbols, source });
 
@@ -112,7 +112,7 @@ describe("a template action against a deployment that exists", () => {
 		expect((await reviewedAs(withdraw())).boundTo).toBe("vaultlet_contract");
 	});
 
-	test("rebuilds its covenant from the deployment's own fields, at the template's declared types", async () => {
+	test("rebuilds its program from the deployment's own fields, at the template's declared types", async () => {
 		const { compiled, result } = vaultletReview(withdraw());
 
 		await result;
@@ -128,10 +128,10 @@ describe("a template action against a deployment that exists", () => {
 
 	test("checks what it rebuilt against the chain, carrying out exactly what it compiled", async () => {
 		const { compiled, result } = vaultletReview(withdraw());
-		const { covenants } = asReview(await result);
+		const { programs } = asReview(await result);
 		const [asked] = compiled;
 
-		expect(covenants).toEqual([
+		expect(programs).toEqual([
 			{
 				address: DERIVED,
 				argumentsJson: asked?.argumentsJson ?? "",
@@ -153,7 +153,7 @@ describe("a template action against a deployment that exists", () => {
 		const { result } = vaultletReview(withdraw(), { readTxOut: chainHolding(ELSEWHERE_SCRIPT) });
 		const refusal = asRefusal(await result);
 
-		expect(refusal.reject).toBe("covenant-mismatch");
+		expect(refusal.reject).toBe("program-mismatch");
 		expect(refusal.reason).toContain("not the contract the site");
 	});
 
@@ -214,8 +214,8 @@ describe("the constructor of the same template", () => {
 		);
 	});
 
-	test("reports the covenant it creates as one with nothing yet to compare against", async () => {
-		expect((await reviewedAs(openVault())).covenants.map((found) => found.verified)).toEqual([
+	test("reports the program it creates as one with nothing yet to compare against", async () => {
+		expect((await reviewedAs(openVault())).programs.map((found) => found.verified)).toEqual([
 			"not-yet-onchain",
 		]);
 	});
@@ -234,7 +234,7 @@ describe("the constructor of the same template", () => {
 		expect(asked).toBe(0);
 	});
 
-	test("derives the covenant it creates from the deployment it worked out", async () => {
+	test("derives the program it creates from the deployment it worked out", async () => {
 		const { compiled, result } = vaultletReview(openVault());
 		const { createdInstance } = asReview(await result);
 		const vault = compiled.findLast((call) => call.source === SOURCES[VAULT_PATH]);
@@ -249,7 +249,7 @@ describe("the constructor of the same template", () => {
 });
 
 describe("what a review still refuses", () => {
-	test("a deployment whose covenant hashes never settle", async () => {
+	test("a deployment whose program hashes never settle", async () => {
 		const { compiled, result } = vaultletReview({
 			action: "Knot",
 			manifest: mutual.manifest,
@@ -261,8 +261,8 @@ describe("what a review still refuses", () => {
 		expect(compiled).toHaveLength(0);
 	});
 
-	test("a covenant wired to a value when nothing says what the contract declares", async () => {
-		const { result } = vaultletReview(withdraw(), { covenantParamTypes: undefined });
+	test("a program wired to a value when nothing says what the contract declares", async () => {
+		const { result } = vaultletReview(withdraw(), { programParamTypes: undefined });
 
 		expect(asRefusal(await result).reject).toBe("document-fault");
 	});
@@ -309,10 +309,10 @@ describe("the build mode a document declares", () => {
 		);
 	});
 
-	test("and is reported on every covenant the review establishes", async () => {
-		const { covenants } = await reviewedAs(withdraw(DEBUG_VAULTLET));
+	test("and is reported on every program the review establishes", async () => {
+		const { programs } = await reviewedAs(withdraw(DEBUG_VAULTLET));
 
-		expect(covenants.map((found) => found.includeDebugSymbols)).toEqual([true]);
+		expect(programs.map((found) => found.includeDebugSymbols)).toEqual([true]);
 	});
 
 	test("a mode that cannot be read refuses before any contract is compiled", async () => {
@@ -348,7 +348,7 @@ describe("when a compiler fails", () => {
 		expect(refusal.reason).toContain("not bytes");
 	});
 
-	test("a covenant compiler that throws becomes a refusal naming the contract", async () => {
+	test("a program compiler that throws becomes a refusal naming the contract", async () => {
 		const { result } = vaultletReview(withdraw(), {
 			compile: () => {
 				throw new Error("wasm module not loaded");

@@ -81,7 +81,7 @@ export function ProcessCtCard() {
 
 			{spending ? (
 				<TextAreaField
-					label='State file — which covenant outputs exist: {"utxos":[{"utxo_type":"p2pk_output","txid":"…","vout":0}]}'
+					label='State file — which program outputs exist: {"utxos":[{"utxo_type":"p2pk_output","txid":"…","vout":0}]}'
 					onChange={setStateFile}
 					value={stateFile}
 				/>

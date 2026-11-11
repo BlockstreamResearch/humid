@@ -10,47 +10,47 @@ describe("smplx wasm module", () => {
 		expect(smplx.sdkVersion()).toBe("0.2.0");
 	});
 
-	test("compiles a covenant to the same CMR as a native build", () => {
-		const covenant = new smplx.Covenant(PROBE_SOURCE);
+	test("compiles a program to the same CMR as a native build", () => {
+		const program = new smplx.Program(PROBE_SOURCE);
 
-		expect(covenant.commitmentMerkleRoot()).toBe(PROBE_CMR);
-		covenant.free();
+		expect(program.cmr()).toBe(PROBE_CMR);
+		program.free();
 	});
 
-	test("derives a covenant address", () => {
-		const covenant = new smplx.Covenant(PROBE_SOURCE);
+	test("derives a program address", () => {
+		const program = new smplx.Program(PROBE_SOURCE);
 
-		expect(covenant.address("liquid-testnet").startsWith("tex1p")).toBe(true);
-		covenant.free();
+		expect(program.trAddress("liquid-testnet").startsWith("tex1p")).toBe(true);
+		program.free();
 	});
 
 	test("reports the script an output pays, as hex, beside the address", () => {
-		const covenant = new smplx.Covenant(PROBE_SOURCE);
+		const program = new smplx.Program(PROBE_SOURCE);
 
-		expect(covenant.scriptPubKeyHex("liquid-testnet")).toMatch(/^(?:[0-9a-f]{2})+$/);
-		covenant.free();
+		expect(program.scriptPubkey("liquid-testnet")).toMatch(/^(?:[0-9a-f]{2})+$/);
+		program.free();
 	});
 
 	test("derives a different address on a different network from the same source", () => {
-		const testnet = new smplx.Covenant(PROBE_SOURCE);
-		const mainnet = new smplx.Covenant(PROBE_SOURCE);
+		const testnet = new smplx.Program(PROBE_SOURCE);
+		const mainnet = new smplx.Program(PROBE_SOURCE);
 
-		expect(testnet.address("liquid-testnet")).not.toBe(mainnet.address("liquid"));
+		expect(testnet.trAddress("liquid-testnet")).not.toBe(mainnet.trAddress("liquid"));
 		testnet.free();
 		mainnet.free();
 	});
 
 	test("refuses a source that does not compile", () => {
-		const covenant = new smplx.Covenant("fn main() { this is not simplicityhl }");
+		const program = new smplx.Program("fn main() { this is not simplicityhl }");
 
-		expect(() => covenant.commitmentMerkleRoot()).toThrow();
+		expect(() => program.cmr()).toThrow();
 	});
 
 	test("rejects an unknown network by name", () => {
-		const covenant = new smplx.Covenant(PROBE_SOURCE);
+		const program = new smplx.Program(PROBE_SOURCE);
 
-		expect(() => covenant.address("not-a-network")).toThrow();
-		covenant.free();
+		expect(() => program.trAddress("not-a-network")).toThrow();
+		program.free();
 	});
 });
 
@@ -77,7 +77,7 @@ describe("transaction assembly", () => {
 	test("takes a wallet input as an outpoint plus the output it spends", () => {
 		const builder = new smplx.TransactionBuilder();
 
-		builder.addWalletInput(TXID, 0, TXOUT_HEX);
+		builder.addInput(TXID, 0, TXOUT_HEX);
 
 		expect(builder.inputCount()).toBe(1);
 		builder.free();
@@ -95,7 +95,7 @@ describe("transaction assembly", () => {
 	test("refuses a txid that is not one", () => {
 		const builder = new smplx.TransactionBuilder();
 
-		expect(() => builder.addWalletInput("nope", 0, TXOUT_HEX)).toThrow();
+		expect(() => builder.addInput("nope", 0, TXOUT_HEX)).toThrow();
 		expect(builder.inputCount()).toBe(0);
 		builder.free();
 	});
@@ -103,7 +103,7 @@ describe("transaction assembly", () => {
 	test("refuses an output encoding it cannot parse", () => {
 		const builder = new smplx.TransactionBuilder();
 
-		expect(() => builder.addWalletInput(TXID, 0, "abcd")).toThrow();
+		expect(() => builder.addInput(TXID, 0, "abcd")).toThrow();
 		expect(builder.inputCount()).toBe(0);
 		builder.free();
 	});
@@ -145,7 +145,7 @@ describe("a wallet input that creates an asset", () => {
 		const builder = new smplx.TransactionBuilder();
 
 		try {
-			const report = builder.addWalletIssuanceInput(
+			const report = builder.addIssuanceInput(
 				ISSUED_FROM,
 				0,
 				TXOUT_HEX,
@@ -156,8 +156,8 @@ describe("a wallet input that creates an asset", () => {
 
 			try {
 				expect(report.assetId).toBe(TETHER);
-				expect(report.entropy).toBe(TETHER_ENTROPY);
-				expect(report.reissuanceTokenId).toBe(TETHER_TOKEN);
+				expect(report.assetEntropy).toBe(TETHER_ENTROPY);
+				expect(report.inflationAssetId).toBe(TETHER_TOKEN);
 			} finally {
 				report.free();
 			}
@@ -173,20 +173,13 @@ describe("a wallet input that creates an asset", () => {
 			const builder = new smplx.TransactionBuilder();
 
 			try {
-				const report = builder.addWalletIssuanceInput(
-					ISSUED_FROM,
-					0,
-					TXOUT_HEX,
-					1000n,
-					0n,
-					contract,
-				);
+				const report = builder.addIssuanceInput(ISSUED_FROM, 0, TXOUT_HEX, 1000n, 0n, contract);
 
 				try {
 					return {
 						asset: report.assetId,
-						entropy: report.entropy,
-						token: report.reissuanceTokenId,
+						entropy: report.assetEntropy,
+						token: report.inflationAssetId,
 					};
 				} finally {
 					report.free();

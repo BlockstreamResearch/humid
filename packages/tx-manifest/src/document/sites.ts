@@ -1,6 +1,6 @@
 import { asArray, asRecord } from "./json";
 
-export type CovenantSite = {
+export type ProgramSite = {
 	asset?: unknown;
 	id: string;
 	role: "created" | "spent";
@@ -9,11 +9,11 @@ export type CovenantSite = {
 	wiring: Record<string, unknown>;
 };
 
-export function covenantSites(action: Record<string, unknown>): CovenantSite[] {
-	const sites: CovenantSite[] = [];
+export function programSites(action: Record<string, unknown>): ProgramSite[] {
+	const sites: ProgramSite[] = [];
 
 	for (const entry of asArray(action.inputs)) {
-		const site = covenantReference(asRecord(entry)?.utxo_source);
+		const site = programReference(asRecord(entry)?.utxo_source);
 
 		if (site) {
 			const signatureWitness = walletSignatureWitness(asRecord(entry)?.witnesses);
@@ -29,7 +29,7 @@ export function covenantSites(action: Record<string, unknown>): CovenantSite[] {
 	}
 
 	for (const entry of asArray(action.outputs)) {
-		const site = covenantReference(asRecord(entry)?.destination);
+		const site = programReference(asRecord(entry)?.destination);
 
 		if (site) {
 			sites.push({ ...site, id: identifierOf(entry), role: "created" });
@@ -40,10 +40,10 @@ export function covenantSites(action: Record<string, unknown>): CovenantSite[] {
 }
 
 export function namedUtxoTypes(action: Record<string, unknown>): string[] {
-	return [...new Set(covenantSites(action).map((site) => site.utxoType))];
+	return [...new Set(programSites(action).map((site) => site.utxoType))];
 }
 
-function covenantReference(
+function programReference(
 	value: unknown,
 ): { utxoType: string; wiring: Record<string, unknown> } | undefined {
 	const record = asRecord(value);

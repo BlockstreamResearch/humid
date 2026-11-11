@@ -1,10 +1,10 @@
 import { Refusal } from "../refusal";
 import { encodeCompileParam, type EncodedParam } from "./paramEncoding";
 
-export type CovenantParamTypes = Record<string, string>;
+export type ProgramParamTypes = Record<string, string>;
 
 export type DeclaringContract = {
-	declares: CovenantParamTypes;
+	declares: ProgramParamTypes;
 	source: string;
 };
 
@@ -19,7 +19,7 @@ const CONTRACT_TYPES: Record<string, string> = {
 const UNENCODABLE: Record<string, string> = {
 	u256:
 		"a thirty-two byte value's byte order is not decided by its width. An asset id is " +
-		"committed in the reverse of how it is written and a covenant hash is not, and a " +
+		"committed in the reverse of how it is written and a program hash is not, and a " +
 		"contract declares both as u256 — so a name, which carries the format's own type, can " +
 		"be encoded here and a bare value cannot",
 };

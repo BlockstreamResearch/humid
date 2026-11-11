@@ -198,7 +198,7 @@ describe("the assignments an action runs before anything is built", () => {
 	});
 });
 
-describe("state an output covenant commits to", () => {
+describe("state an output program commits to", () => {
 	async function leavesPaid(debt: string) {
 		const seen: string[] = [];
 		const manifest = payDocument((pay) => {
@@ -224,13 +224,13 @@ describe("state an output covenant commits to", () => {
 		return seen.map((json) => JSON.parse(json) as string[]);
 	}
 
-	test("can be set by a hook, and the created covenant commits to what it set", async () => {
+	test("can be set by a hook, and the created program commits to what it set", async () => {
 		expect(await leavesPaid("params.amount_sat * 2")).toEqual([
 			[`${"00".repeat(24)}00000000000007d0`],
 		]);
 	});
 
-	test("so a hook that sets a different value moves the covenant's state too", async () => {
+	test("so a hook that sets a different value moves the program's state too", async () => {
 		expect(await leavesPaid("params.amount_sat * 3")).toEqual([
 			[`${"00".repeat(24)}0000000000000bb8`],
 		]);
@@ -383,12 +383,12 @@ describe("the network fee an amount names", () => {
 		);
 
 	test("is the fee the transaction it settles on costs", async () => {
-		const shape = { covenantInputs: 1, issuingInputs: 0, outputs: 1, walletInputs: 0 };
+		const shape = { programInputs: 1, issuingInputs: 0, outputs: 1, walletInputs: 0 };
 
 		expect((await swept()).estimatedFeeSats).toBe(estimateFeeSats(shape, 1000));
 	});
 
-	test("so the covenant's funds leave less exactly that fee, and nothing is drawn from the wallet", async () => {
+	test("so the program's funds leave less exactly that fee, and nothing is drawn from the wallet", async () => {
 		const review = await swept();
 
 		expect(review.outputs.map((output) => output.sats)).toEqual([

@@ -18,7 +18,7 @@ const TOKEN = "aa".repeat(32);
 const MODEL: ShownConfirmation = {
 	account: computed("liquid:testnet account 0"),
 	action: fromDapp("Receive"),
-	covenants: [
+	programs: [
 		{
 			address: verified("tex1p_derived"),
 			cmr: computed("cc".repeat(32)),
@@ -134,21 +134,21 @@ describe("the payload this surface accepts", () => {
 		).toBe(false);
 	});
 
-	test("refuses a covenant row that does not carry its type or its verdict", () => {
+	test("refuses a program row that does not carry its type or its verdict", () => {
 		expect(
 			isProcessCtConfirmationData(
-				payload(spoiled("covenants", [{ address: verified("tex1p"), verified: computed(true) }])),
+				payload(spoiled("programs", [{ address: verified("tex1p"), verified: computed(true) }])),
 			),
 		).toBe(false);
 		expect(
 			isProcessCtConfirmationData(
-				payload(spoiled("covenants", [{ address: verified("tex1p"), utxoType: fromDapp("p2pk") }])),
+				payload(spoiled("programs", [{ address: verified("tex1p"), utxoType: fromDapp("p2pk") }])),
 			),
 		).toBe(false);
 		expect(
 			isProcessCtConfirmationData(
 				payload(
-					spoiled("covenants", [
+					spoiled("programs", [
 						{ address: verified("tex1p"), utxoType: fromDapp("p2pk"), verified: computed("yes") },
 					]),
 				),
@@ -274,10 +274,10 @@ describe("what the screen says", () => {
 		expect(html).toContain("checked by this wallet against the network");
 	});
 
-	test("says a covenant it could not compare is not onchain yet", () => {
+	test("says a program it could not compare is not onchain yet", () => {
 		const html = markup({
 			...MODEL,
-			covenants: [
+			programs: [
 				{
 					address: computed("tex1p_derived"),
 					cmr: computed("cc".repeat(32)),
@@ -292,7 +292,7 @@ describe("what the screen says", () => {
 		expect(html).toContain("worked out by this wallet");
 	});
 
-	test("names what the protocol calls each covenant, as the dapp's word", () => {
+	test("names what the protocol calls each program, as the dapp's word", () => {
 		const html = markup();
 		const utxoType = html.indexOf("p2pk_output");
 

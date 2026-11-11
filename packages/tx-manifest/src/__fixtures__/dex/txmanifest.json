@@ -6,7 +6,7 @@
   "description": "Tessera — a keyless atomic swap offer on Liquid, the primitive a Mosaik DEX is built from. One UTXO is one all-or-nothing offer: it holds asset A and is spendable by ANYONE who pays AMOUNT_B of ASSET_B to the maker (Settle), or, after TIMEOUT, by anyone who returns asset A to the maker (Refund). No signature on either path — the covenant is pure transaction introspection, and the maker is identified only by a scriptPubKey hash. Modelled as a class: one instance per offer.",
   "chain": "liquid",
   "requires": ["simplicity"],
-  "simplicity_hl": { "version": "0.8.0" },
+  "simplicity_hl": { "version": "0.9.0" },
   "utxo_types": {
     "tessera_offer": {
       "description": "The offer UTXO: holds OFFER_AMOUNT of the maker's asset A, spendable via the keyless Settle or Refund paths. Its address commits to the four offer terms (ASSET_B, AMOUNT_B, MAKER_SPK, TIMEOUT) plus MAX_FEE — so the terms cannot change once funded. It does NOT commit to asset A or its amount: the covenant never inspects them on the settle path (see the note in tessera.simf), which is why OFFER_ASSET_ID/OFFER_AMOUNT are instance fields but not compile params.",

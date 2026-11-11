@@ -15,8 +15,8 @@ describe("an output's blinding", () => {
 		expect(resolveBlinding({})).toEqual({ blinding: "blinded", decidedBy: "chain" });
 	});
 
-	test("is open for a covenant or an OP_RETURN whatever the output says", () => {
-		expect(resolveBlinding({ declared: true, unblindable: "covenant" })).toEqual({
+	test("is open for a program or an OP_RETURN whatever the output says", () => {
+		expect(resolveBlinding({ declared: true, unblindable: "program" })).toEqual({
 			blinding: "open",
 			decidedBy: "unblindable",
 		});

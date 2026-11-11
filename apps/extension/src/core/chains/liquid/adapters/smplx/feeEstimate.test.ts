@@ -14,7 +14,7 @@ const POLICY_IN_TXOUT = "499a818545f6bae39fc03b637f2a4e1e64e590cac1bc3a6f6d71aa4
 
 const TOLERANCE_VBYTES = 4n;
 
-const COVENANT_INPUT_VBYTES = 87n;
+const PROGRAM_INPUT_VBYTES = 87n;
 
 type Shape = TransactionShape & { blinded: number };
 
@@ -28,7 +28,7 @@ function txOutPayingTheSigner(scriptPubKeyHex: string, sats: number): string {
 }
 
 function measure(declared: Shape): bigint {
-	const signer = new smplx.WalletSigner(PHRASE, "liquidtestnet");
+	const signer = new smplx.Signer(PHRASE, "liquidtestnet");
 
 	try {
 		const script = signer.scriptPubKeyHex();
@@ -37,7 +37,7 @@ function measure(declared: Shape): bigint {
 
 		try {
 			for (let index = 0; index < declared.walletInputs; index += 1) {
-				builder.addWalletInput(
+				builder.addInput(
 					`${index.toString(16).padStart(2, "0")}${"ee".repeat(31)}`,
 					0,
 					txOutPayingTheSigner(script, 100_000),
@@ -57,7 +57,7 @@ function measure(declared: Shape): bigint {
 
 			builder.addChange(script, declared.blinded > 0 ? blindingKey : undefined);
 
-			return signer.estimateFee(builder, RATE_SATS_PER_KVB);
+			return signer.estimateStrict(builder, RATE_SATS_PER_KVB);
 		} finally {
 			builder.free();
 		}
@@ -67,7 +67,7 @@ function measure(declared: Shape): bigint {
 }
 
 function shape(walletInputs: number, outputs: number, blinded: number): Shape {
-	return { blinded, covenantInputs: 0, issuingInputs: 0, outputs, walletInputs };
+	return { blinded, programInputs: 0, issuingInputs: 0, outputs, walletInputs };
 }
 
 describe("what the fee estimate says a transaction weighs, against what one weighs", () => {
@@ -112,31 +112,31 @@ describe("what blinding an output costs, measured", () => {
 	});
 });
 
-describe("what a covenant input weighs, against the flat figure charged for one", () => {
-	function measureCovenant(source: string, witnessJson?: string): bigint {
-		const signer = new smplx.WalletSigner(PHRASE, "liquidtestnet");
+describe("what a program input weighs, against the flat figure charged for one", () => {
+	function measureProgram(source: string, witnessJson?: string): bigint {
+		const signer = new smplx.Signer(PHRASE, "liquidtestnet");
 
 		try {
 			const script = signer.scriptPubKeyHex();
-			const covenant = new smplx.Covenant(source, undefined, undefined, false);
-			const covenantScript = covenant.scriptPubKeyHex("liquidtestnet");
+			const program = new smplx.Program(source, undefined, undefined, false);
+			const programScript = program.scriptPubkey("liquidtestnet");
 
-			covenant.free();
+			program.free();
 
 			const builder = new smplx.TransactionBuilder();
 
 			try {
-				builder.addWalletInput(
+				builder.addInput(
 					"ee".repeat(32),
 					0,
 					txOutPayingTheSigner(script, 100_000),
 					undefined,
 					undefined,
 				);
-				builder.addCovenantInput(
+				builder.addProgramInput(
 					"dd".repeat(32),
 					0,
-					txOutPayingTheSigner(covenantScript, 50_000),
+					txOutPayingTheSigner(programScript, 50_000),
 					source,
 					undefined,
 					witnessJson,
@@ -147,7 +147,7 @@ describe("what a covenant input weighs, against the flat figure charged for one"
 				builder.addOutput(script, 1000n, POLICY, undefined);
 				builder.addChange(script, undefined);
 
-				return signer.estimateFee(builder, RATE_SATS_PER_KVB) - measure(shape(1, 1, 0));
+				return signer.estimateStrict(builder, RATE_SATS_PER_KVB) - measure(shape(1, 1, 0));
 			} finally {
 				builder.free();
 			}
@@ -157,20 +157,20 @@ describe("what a covenant input weighs, against the flat figure charged for one"
 	}
 
 	test("a contract that does nothing costs less than the flat figure", () => {
-		const measured = measureCovenant("fn main() { }");
+		const measured = measureProgram("fn main() { }");
 
 		expect(measured).toBeGreaterThan(0n);
-		expect(measured).toBeLessThanOrEqual(COVENANT_INPUT_VBYTES);
+		expect(measured).toBeLessThanOrEqual(PROGRAM_INPUT_VBYTES);
 	});
 
 	test("and so does one that compares two witnesses", () => {
-		const measured = measureCovenant(
+		const measured = measureProgram(
 			"fn main() { assert!(jet::eq_32(witness::A, witness::B)); }",
 			JSON.stringify({ A: { type: "u32", value: "1" }, B: { type: "u32", value: "1" } }),
 		);
 
 		expect(measured).toBeGreaterThan(0n);
-		expect(measured).toBeLessThanOrEqual(COVENANT_INPUT_VBYTES);
+		expect(measured).toBeLessThanOrEqual(PROGRAM_INPUT_VBYTES);
 	});
 });
 

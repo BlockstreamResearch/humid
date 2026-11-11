@@ -3,59 +3,49 @@ import type { reviewManifestAction } from "@humid/tx-manifest";
 import type { SmplxWasmModule } from "./loadSmplxWasm";
 
 type ReviewInput = Parameters<typeof reviewManifestAction>[1];
-type CompileCovenant = ReviewInput["compile"];
-type CovenantParamTypesOf = NonNullable<ReviewInput["covenantParamTypes"]>;
+type CompileProgram = ReviewInput["compile"];
+type ProgramParamTypesOf = NonNullable<ReviewInput["programParamTypes"]>;
 type CompileScriptPubKey = ReviewInput["scriptPubKeyOf"];
 
-export function createSmplxCovenantCompiler(
-	smplx: Pick<SmplxWasmModule, "Covenant">,
-): CompileCovenant {
+export function createSmplxProgramCompiler(
+	smplx: Pick<SmplxWasmModule, "Program">,
+): CompileProgram {
 	return ({ argumentsJson, extraLeavesJson, includeDebugSymbols, network, source }) => {
-		const covenant = new smplx.Covenant(
-			source,
-			argumentsJson,
-			extraLeavesJson,
-			includeDebugSymbols,
-		);
+		const program = new smplx.Program(source, argumentsJson, extraLeavesJson, includeDebugSymbols);
 
 		try {
 			return {
-				address: covenant.address(network),
-				cmr: covenant.commitmentMerkleRoot(),
-				scriptPubKeyHex: covenant.scriptPubKeyHex(network),
-				tapleafHash: covenant.tapleafHash(),
+				address: program.trAddress(network),
+				cmr: program.cmr(),
+				scriptPubKeyHex: program.scriptPubkey(network),
+				tapleafHash: program.tapleafHash(),
 			};
 		} finally {
-			covenant.free();
+			program.free();
 		}
 	};
 }
 
 export function createSmplxScriptPubKeyCompiler(
-	smplx: Pick<SmplxWasmModule, "Covenant">,
+	smplx: Pick<SmplxWasmModule, "Program">,
 	network: string,
 ): CompileScriptPubKey {
 	return ({ argumentsJson, extraLeavesJson, includeDebugSymbols, source }) => {
-		const covenant = new smplx.Covenant(
-			source,
-			argumentsJson,
-			extraLeavesJson,
-			includeDebugSymbols,
-		);
+		const program = new smplx.Program(source, argumentsJson, extraLeavesJson, includeDebugSymbols);
 
 		try {
-			return covenant.scriptPubKeyHex(network);
+			return program.scriptPubkey(network);
 		} finally {
-			covenant.free();
+			program.free();
 		}
 	};
 }
 
-export function createSmplxCovenantParamTypes(
-	smplx: Pick<SmplxWasmModule, "covenantParameterTypes">,
-): CovenantParamTypesOf {
+export function createSmplxProgramParamTypes(
+	smplx: Pick<SmplxWasmModule, "programArgumentTypes">,
+): ProgramParamTypesOf {
 	return (source) => {
-		const answered: unknown = JSON.parse(smplx.covenantParameterTypes(source));
+		const answered: unknown = JSON.parse(smplx.programArgumentTypes(source));
 
 		if (typeof answered !== "object" || answered === null || Array.isArray(answered)) {
 			throw new TypeError(

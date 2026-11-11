@@ -31,7 +31,7 @@ function encode(declared: unknown[], instance: Record<string, string> = {}) {
 }
 
 function compiled(leaves?: string[]) {
-	const covenant = new smplx.Covenant(
+	const program = new smplx.Program(
 		SOURCE,
 		undefined,
 		leaves === undefined ? undefined : JSON.stringify(leaves),
@@ -40,12 +40,12 @@ function compiled(leaves?: string[]) {
 
 	try {
 		return {
-			address: covenant.address(NETWORK),
-			cmr: covenant.commitmentMerkleRoot(),
-			tapleafHash: covenant.tapleafHash(),
+			address: program.trAddress(NETWORK),
+			cmr: program.cmr(),
+			tapleafHash: program.tapleafHash(),
 		};
 	} finally {
-		covenant.free();
+		program.free();
 	}
 }
 

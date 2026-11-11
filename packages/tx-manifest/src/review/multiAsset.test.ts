@@ -8,7 +8,7 @@ import type { SelectableUtxo } from "./coinSelection";
 import {
 	asRefusal,
 	asReview,
-	COVENANT_TXOUT,
+	PROGRAM_TXOUT,
 	DERIVED_SCRIPT,
 	dependencies,
 	Fixture,
@@ -25,7 +25,7 @@ const TOKEN = "ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2"
 const TOKEN_TXID = "d".repeat(64);
 
 const deps = dependencies({
-	readTxOut: async () => ({ scriptPubKeyHex: DERIVED_SCRIPT, txOutHex: COVENANT_TXOUT }),
+	readTxOut: async () => ({ scriptPubKeyHex: DERIVED_SCRIPT, txOutHex: PROGRAM_TXOUT }),
 });
 
 function request(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
@@ -235,7 +235,7 @@ describe("an action that creates an asset", () => {
 		const review = asReview(await mint());
 
 		const shape = {
-			covenantInputs: 0,
+			programInputs: 0,
 			outputs: review.outputs.length,
 			walletInputs: review.selected.length,
 		};
@@ -483,7 +483,7 @@ describe("what each output does with the value it carries", () => {
 		});
 	});
 
-	test("and silence means blinded, which a wallet output can be and a covenant's cannot", async () => {
+	test("and silence means blinded, which a wallet output can be and a program's cannot", async () => {
 		const review = asReview(
 			await documentSaying((document) => {
 				delete outputsOf(document)[0]!.confidential;
@@ -497,7 +497,7 @@ describe("what each output does with the value it carries", () => {
 		});
 	});
 
-	test("a covenant output is open whatever it says", async () => {
+	test("a program output is open whatever it says", async () => {
 		const review = asReview(
 			await documentSaying((document) => {
 				outputsOf(document)[1]!.confidential = true;
@@ -630,7 +630,7 @@ describe("change when the wallet funds an action from a blinded output", () => {
 	});
 });
 
-describe("a covenant that does not state what it holds", () => {
+describe("a program that does not state what it holds", () => {
 	function spendReading(
 		txOut: { amountSats?: string; rawAssetId?: string },
 		options: { asset?: string; named?: boolean } = {},
@@ -667,7 +667,7 @@ describe("a covenant that does not state what it holds", () => {
 				readTxOut: async () => ({
 					...txOut,
 					scriptPubKeyHex: DERIVED_SCRIPT,
-					txOutHex: COVENANT_TXOUT,
+					txOutHex: PROGRAM_TXOUT,
 				}),
 			},
 		);
@@ -882,7 +882,7 @@ describe("an action that pins an input to one address", () => {
 
 		inputs.push({
 			from_address: "params.borrower",
-			id: "covenant_in",
+			id: "program_in",
 			utxo_source: { utxo_type: "p2pk_output" },
 		});
 
@@ -905,7 +905,7 @@ describe("an action that pins an input to one address", () => {
 						amountSats: "10000",
 						rawAssetId: POLICY_ASSET,
 						scriptPubKeyHex: DERIVED_SCRIPT,
-						txOutHex: COVENANT_TXOUT,
+						txOutHex: PROGRAM_TXOUT,
 					}),
 					fundingUtxos: [utxo("1000000", FUNDING_TXID)],
 					holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),
@@ -914,7 +914,7 @@ describe("an action that pins an input to one address", () => {
 		);
 
 		expect(refusal.reject).toBe("document-fault");
-		expect(refusal.reason).toContain("covenant_in");
+		expect(refusal.reason).toContain("program_in");
 	});
 
 	test("refuses an issuance derived from an output outside that input's own pin", async () => {

@@ -7,7 +7,7 @@ export { createEsploraFeeRateReader, createEsploraTxOutReader } from "./chain/ch
 export {
 	type ManifestReview,
 	type PlannedInput,
-	type ReviewedCovenantInput,
+	type ReviewedProgramInput,
 	isRefusal,
 	reviewManifestAction,
 } from "./review";
@@ -18,7 +18,7 @@ export { type ShownConfirmation, describeOrigin, toShownConfirmation } from "./c
 export { type Provenanced, computed, fromDapp, verified } from "./confirmation/provenance";
 
 export { type TransactionShape, estimateFeeSats, estimateVsize } from "./fee";
-export { type EncodeStateLeavesResult, encodeStateLeaves } from "./covenants/stateLeaves";
+export { type EncodeStateLeavesResult, encodeStateLeaves } from "./programs/stateLeaves";
 export type { SelectableUtxo } from "./review/coinSelection";
 
 export {

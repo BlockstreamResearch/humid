@@ -3,7 +3,7 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
 import { Refusal } from "../refusal";
 
-export const COVENANT_HASH_SEED = "0".repeat(64);
+export const PROGRAM_HASH_SEED = "0".repeat(64);
 
 export const ITERATION_BOUND = 8;
 
@@ -14,16 +14,16 @@ export type CompileScriptPubKey = (input: {
 	source: string;
 }) => string;
 
-export type HashCovenant = (input: {
+export type HashProgram = (input: {
 	argumentsJson: string;
 	extraLeavesJson: string;
 	source: string;
 }) => string;
 
-export function covenantHashFrom(
+export function programHashFrom(
 	compile: CompileScriptPubKey,
 	includeDebugSymbols: boolean,
-): HashCovenant {
+): HashProgram {
 	return ({ argumentsJson, extraLeavesJson, source }) => {
 		let scriptPubKeyHex: string;
 
@@ -42,7 +42,7 @@ export function covenantHashFrom(
 
 		if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) {
 			throw new Refusal(
-				"the compiler did not return a scriptPubKey. A covenant's hash is the hash of its " +
+				"the compiler did not return a scriptPubKey. A program's hash is the hash of its " +
 					"locking script's bytes, and what came back is not bytes.",
 			);
 		}

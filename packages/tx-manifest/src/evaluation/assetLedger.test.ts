@@ -140,7 +140,7 @@ describe("reading one action as a statement about several assets", () => {
 		expect(refusalOf(() => ledgerOf({ ...PARAMS, token: undefined })).reject).toBe("foreign-asset");
 	});
 
-	test("refuses a covenant input the chain says holds a different asset", () => {
+	test("refuses a program input the chain says holds a different asset", () => {
 		const action: Action = {
 			isConstructor: false,
 			name: "Spend",

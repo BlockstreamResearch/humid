@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { RejectToken } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
-	COVENANT_TXOUT,
+	PROGRAM_TXOUT,
 	DERIVED_SCRIPT,
 	type Document,
 	Fixture,
@@ -271,7 +271,7 @@ describe("what the chain reader says an output holds", () => {
 					amountSats,
 					rawAssetId: POLICY_ASSET,
 					scriptPubKeyHex: DERIVED_SCRIPT,
-					txOutHex: COVENANT_TXOUT,
+					txOutHex: PROGRAM_TXOUT,
 				}),
 			});
 

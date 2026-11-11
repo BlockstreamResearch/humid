@@ -5,8 +5,8 @@ import manifestJson from "../__fixtures__/vaultlet/txmanifest.json";
 import { Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
-import { type CovenantParamTypesOf, deriveCovenantAddress } from "./covenant";
 import { declaredParamTypes } from "./declaredTypes";
+import { type ProgramParamTypesOf, deriveProgramAddress } from "./program";
 
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const ASSET_STATED = `a0${"00".repeat(30)}0a`;
@@ -30,7 +30,7 @@ const SOURCE = readFileSync(
 
 const manifest = new Manifest(manifestJson as unknown as Record<string, unknown>);
 
-function derive(input: { covenantParamTypes?: CovenantParamTypesOf; scope?: ReferenceScope } = {}) {
+function derive(input: { programParamTypes?: ProgramParamTypesOf; scope?: ReferenceScope } = {}) {
 	const action = manifest.action("Withdraw");
 
 	if (!action) {
@@ -38,7 +38,7 @@ function derive(input: { covenantParamTypes?: CovenantParamTypesOf; scope?: Refe
 	}
 
 	const calls: { argumentsJson: string; source: string }[] = [];
-	const derived = deriveCovenantAddress(manifest, {
+	const derived = deriveProgramAddress(manifest, {
 		compile: ({ argumentsJson, source }) => {
 			calls.push({ argumentsJson, source });
 
@@ -49,9 +49,9 @@ function derive(input: { covenantParamTypes?: CovenantParamTypesOf; scope?: Refe
 				tapleafHash: "1e".repeat(32),
 			};
 		},
-		...(input.covenantParamTypes === undefined
+		...(input.programParamTypes === undefined
 			? {}
-			: { covenantParamTypes: input.covenantParamTypes }),
+			: { programParamTypes: input.programParamTypes }),
 		contractSources: { "./vault.simf": SOURCE },
 		declaredTypes: declaredParamTypes(manifest, action),
 		includeDebugSymbols: false,
@@ -64,9 +64,9 @@ function derive(input: { covenantParamTypes?: CovenantParamTypesOf; scope?: Refe
 	return { calls, derived };
 }
 
-describe("the vault covenant", () => {
+describe("the vault program", () => {
 	test("is built with a count and a flag typed by its contract, not by how they look", async () => {
-		const { calls, derived } = derive({ covenantParamTypes: () => DECLARED });
+		const { calls, derived } = derive({ programParamTypes: () => DECLARED });
 
 		await derived;
 
@@ -80,7 +80,7 @@ describe("the vault covenant", () => {
 	});
 
 	test("and from the contract source the request supplied, not one of its own", async () => {
-		const { calls, derived } = derive({ covenantParamTypes: () => DECLARED });
+		const { calls, derived } = derive({ programParamTypes: () => DECLARED });
 
 		await derived;
 
@@ -89,7 +89,7 @@ describe("the vault covenant", () => {
 });
 
 describe("what it refuses rather than getting wrong", () => {
-	test("the same covenant, when nothing says what the contract declares", async () => {
+	test("the same program, when nothing says what the contract declares", async () => {
 		const { calls, derived } = derive();
 
 		await expect(derived).rejects.toThrow(Refusal);
@@ -98,7 +98,7 @@ describe("what it refuses rather than getting wrong", () => {
 
 	test("a contract whose declarations cannot be read at all", async () => {
 		const { calls, derived } = derive({
-			covenantParamTypes: () => {
+			programParamTypes: () => {
 				throw new Error("not a program");
 			},
 		});
@@ -107,10 +107,10 @@ describe("what it refuses rather than getting wrong", () => {
 		expect(calls).toHaveLength(0);
 	});
 
-	test("a deployment missing a field the covenant is built from", async () => {
+	test("a deployment missing a field the program is built from", async () => {
 		const { RESERVE_COV_HASH: _absent, ...short } = INSTANCE;
 		const { derived } = derive({
-			covenantParamTypes: () => DECLARED,
+			programParamTypes: () => DECLARED,
 			scope: { instance: short, params: {} },
 		});
 

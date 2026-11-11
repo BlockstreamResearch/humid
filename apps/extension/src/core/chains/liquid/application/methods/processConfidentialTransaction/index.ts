@@ -20,10 +20,10 @@ import { toScriptPubKeyHex } from "../../../adapters/lwk/wallet/toScriptPubKeyHe
 import { withAccountMnemonic } from "../../../adapters/lwk/wallet/withAccountMnemonic";
 import { assembleReviewedTransaction } from "../../../adapters/smplx/assembleReviewedTransaction";
 import {
-	createSmplxCovenantParamTypes,
-	createSmplxCovenantCompiler,
+	createSmplxProgramParamTypes,
+	createSmplxProgramCompiler,
 	createSmplxScriptPubKeyCompiler,
-} from "../../../adapters/smplx/compileCovenantWithSmplx";
+} from "../../../adapters/smplx/compileProgramWithSmplx";
 import { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
@@ -112,14 +112,14 @@ export const createProcessLiquidConfidentialTransaction = (
 					...(account.keySourceId === undefined ? {} : { keySourceId: account.keySourceId }),
 				},
 				async (mnemonic) => {
-					const signer = new smplx.WalletSigner(mnemonic, network);
+					const signer = new smplx.Signer(mnemonic, network);
 
 					try {
 						return await assembleReviewedTransaction(review, {
 							blindingPublicKeyHex: signer.blindingPublicKey(),
 							changeScriptPubKeyHex: signer.scriptPubKeyHex(),
 							finalize: (builder, feeRateSatsPerKvb) => {
-								const result = signer.finalizeTransaction(
+								const result = signer.finalizeStrict(
 									builder as InstanceType<typeof smplx.TransactionBuilder>,
 									feeRateSatsPerKvb,
 								);
@@ -174,9 +174,9 @@ export const createProcessLiquidConfidentialTransaction = (
 
 			const result = await reviewManifestAction(params, {
 				accountLabel: accountLabelOf(context, account),
-				compile: createSmplxCovenantCompiler(smplx),
+				compile: createSmplxProgramCompiler(smplx),
 				compilerVersion: SMPLX_COMPILER_VERSION,
-				covenantParamTypes: createSmplxCovenantParamTypes(smplx),
+				programParamTypes: createSmplxProgramParamTypes(smplx),
 				fundingUtxos: fundable(context, account, account.rawPolicyAssetId),
 				holdingsOf: (asset) => fundable(context, account, asset),
 				network,

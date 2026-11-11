@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
-	COVENANT_TXOUT,
+	PROGRAM_TXOUT,
 	type Document,
 	Fixture,
 	FUNDING_TXID,
@@ -40,11 +40,11 @@ function withReceive(inputs: unknown[], outputs?: unknown[]): Document {
 
 const spending = (manifest: Document = p2pk.manifest) => receive({ manifest });
 
-describe("what the review carries out about a covenant it will spend", () => {
+describe("what the review carries out about a program it will spend", () => {
 	test("carries the exact source, arguments, leaves and mode it checked against the chain", async () => {
 		const review = await reviewed(spending());
 
-		expect(review.covenantInputs).toEqual([
+		expect(review.programInputs).toEqual([
 			{
 				argumentsJson: JSON.stringify({ PUB_KEY: { type: "Pubkey", value: `0x${PUBKEY}` } }),
 				extraLeavesJson: "[]",
@@ -52,7 +52,7 @@ describe("what the review carries out about a covenant it will spend", () => {
 				includeDebugSymbols: false,
 				signatureWitness: "SIGNATURE",
 				source: p2pk.source(P2PK_PATH),
-				txOutHex: COVENANT_TXOUT,
+				txOutHex: PROGRAM_TXOUT,
 				txid: TXID,
 				utxoType: "p2pk_output",
 				vout: 0,
@@ -61,18 +61,18 @@ describe("what the review carries out about a covenant it will spend", () => {
 	});
 
 	test("names the witness a signature must fill, from the document's own declaration", async () => {
-		expect((await reviewed(spending())).covenantInputs[0]?.signatureWitness).toBe("SIGNATURE");
+		expect((await reviewed(spending())).programInputs[0]?.signatureWitness).toBe("SIGNATURE");
 	});
 
 	test("names no signature witness where the document declares none", async () => {
 		const inputs = receiveInputs();
-		const covenantInput = inputs[0];
+		const programInput = inputs[0];
 
-		delete covenantInput?.witnesses;
+		delete programInput?.witnesses;
 
 		const review = await reviewed(spending(withReceive(inputs)));
 
-		expect(review.covenantInputs[0]?.signatureWitness).toBeUndefined();
+		expect(review.programInputs[0]?.signatureWitness).toBeUndefined();
 	});
 
 	test("carries a stated witness value through without reading the value", async () => {
@@ -91,20 +91,20 @@ describe("what the review carries out about a covenant it will spend", () => {
 
 		const review = await reviewed(spending(withReceive(inputs)));
 
-		expect(review.covenantInputs[0]?.witnessValues).toEqual([
+		expect(review.programInputs[0]?.witnessValues).toEqual([
 			{ name: "BRANCH", simplicityType: "Either<(), ()>", value: "Left(())" },
 		]);
 	});
 });
 
 describe("the order the transaction's inputs are built in", () => {
-	test("is the order the action declares them, covenant and wallet alike", async () => {
+	test("is the order the action declares them, program and wallet alike", async () => {
 		const review = await reviewed(spending());
 
-		expect(review.inputOrder.map((planned) => planned.source)).toEqual(["covenant", "wallet"]);
+		expect(review.inputOrder.map((planned) => planned.source)).toEqual(["program", "wallet"]);
 		expect(review.inputOrder[0]).toEqual({
-			covenant: review.covenantInputs[0]!,
-			source: "covenant",
+			program: review.programInputs[0]!,
+			source: "program",
 		});
 		expect(review.inputOrder[1]).toEqual({
 			source: "wallet",
@@ -120,7 +120,7 @@ describe("the order the transaction's inputs are built in", () => {
 
 		const review = await reviewed(spending(withReceive(inputs)));
 
-		expect(review.inputOrder.map((planned) => planned.source)).toEqual(["wallet", "covenant"]);
+		expect(review.inputOrder.map((planned) => planned.source)).toEqual(["wallet", "program"]);
 	});
 
 	test("reports the wallet's own outputs separately from the order", async () => {
@@ -132,14 +132,14 @@ describe("the order the transaction's inputs are built in", () => {
 	});
 });
 
-describe("the transaction-level facts a covenant spend needs", () => {
-	test("declares the chain's height as a locktime when a covenant is spent", async () => {
+describe("the transaction-level facts a program spend needs", () => {
+	test("declares the chain's height as a locktime when a program is spent", async () => {
 		const review = await reviewed(spending(), { readChainTip: async () => 3_210_987 });
 
 		expect(review.locktimeHeight).toBe(3_210_987);
 	});
 
-	test("declares none for an action that spends no covenant", async () => {
+	test("declares none for an action that spends no program", async () => {
 		const review = await reviewed(pay(), { readChainTip: async () => 3_210_987 });
 
 		expect(review.locktimeHeight).toBeUndefined();
@@ -153,7 +153,7 @@ describe("the transaction-level facts a covenant spend needs", () => {
 		});
 
 		expect(review.locktimeHeight).toBeUndefined();
-		expect(review.covenantInputs).toHaveLength(1);
+		expect(review.programInputs).toHaveLength(1);
 	});
 
 	test("carries the one sequence the action declares", async () => {
@@ -170,7 +170,7 @@ describe("the transaction-level facts a covenant spend needs", () => {
 		expect((await reviewed(spending())).sequence).toBeUndefined();
 	});
 
-	test("carries a relative timelock where the covenant input is the only input", async () => {
+	test("carries a relative timelock where the program input is the only input", async () => {
 		const inputs = receiveInputs();
 
 		inputs[0] = { ...inputs[0], sequence: { relative_blocks: 10 } };
@@ -203,7 +203,7 @@ describe("the transaction-level facts a covenant spend needs", () => {
 	});
 });
 
-describe("a covenant input that issues an asset", () => {
+describe("a program input that issues an asset", () => {
 	const issuingDocument = () => {
 		const inputs = receiveInputs();
 
@@ -234,7 +234,7 @@ describe("a covenant input that issues an asset", () => {
 		]);
 	};
 
-	test("derives the asset from the covenant's own outpoint, not one of the wallet's", async () => {
+	test("derives the asset from the program's own outpoint, not one of the wallet's", async () => {
 		const review = await reviewed(spending(issuingDocument()));
 
 		expect(review.issuances).toHaveLength(1);
@@ -249,18 +249,18 @@ describe("a covenant input that issues an asset", () => {
 		expect(review.selected.some((utxo) => utxo.txid === TXID)).toBe(false);
 	});
 
-	test("appears in the order as the covenant, at the covenant's outpoint", async () => {
+	test("appears in the order as the program, at the program's outpoint", async () => {
 		const review = await reviewed(spending(issuingDocument()));
 		const planned = review.inputOrder.find(
-			(entry) => entry.source === "covenant" && entry.covenant.id === "p2pk_in",
+			(entry) => entry.source === "program" && entry.program.id === "p2pk_in",
 		);
 
 		expect(planned).toBeDefined();
-		expect(planned?.source === "covenant" && planned.covenant.txid).toBe(TXID);
-		expect(planned?.source === "covenant" && planned.covenant.vout).toBe(0);
+		expect(planned?.source === "program" && planned.program.txid).toBe(TXID);
+		expect(planned?.source === "program" && planned.program.vout).toBe(0);
 		expect(review.issuances[0]?.outpoint).toEqual({
-			txid: planned?.source === "covenant" ? planned.covenant.txid : "",
-			vout: planned?.source === "covenant" ? planned.covenant.vout : -1,
+			txid: planned?.source === "program" ? planned.program.txid : "",
+			vout: planned?.source === "program" ? planned.program.vout : -1,
 		});
 	});
 
@@ -276,7 +276,7 @@ describe("a covenant input that issues an asset", () => {
 describe("an action whose only output is change", () => {
 	const changeOut = {
 		asset: "lbtc",
-		description: "Everything the covenant held, back to your wallet.",
+		description: "Everything the program held, back to your wallet.",
 		destination: "change",
 		id: "fee_change",
 	};
@@ -303,8 +303,8 @@ describe("an action whose only output is change", () => {
 	});
 });
 
-describe("which covenant output each input spends", () => {
-	const twoCovenants = () => {
+describe("which program output each input spends", () => {
+	const twoPrograms = () => {
 		const inputs = receiveInputs();
 
 		return withReceive([inputs[0], { ...inputs[0], id: "p2pk_in_2" }, inputs[1]]);
@@ -316,11 +316,11 @@ describe("which covenant output each input spends", () => {
 		...(asset === undefined ? {} : { asset }),
 	});
 	const spent = (review: Awaited<ReturnType<typeof reviewed>>) =>
-		review.covenantInputs.map((covenant) => covenant.txid[0]);
+		review.programInputs.map((program) => program.txid[0]);
 
 	test("gives two inputs of one type two different outputs", async () => {
 		const request = {
-			...spending(twoCovenants()),
+			...spending(twoPrograms()),
 			state: { utxos: [listed(TXID), listed("a".repeat(64))] },
 		};
 
@@ -328,7 +328,7 @@ describe("which covenant output each input spends", () => {
 	});
 
 	test("refuses where the state lists fewer outputs than the inputs spending them", async () => {
-		expect((await refused(spending(twoCovenants()))).reject).toBe("no-utxo-to-spend");
+		expect((await refused(spending(twoPrograms()))).reject).toBe("no-utxo-to-spend");
 	});
 
 	test("prefers an output listed in the asset the input spends", async () => {
@@ -352,7 +352,7 @@ describe("which covenant output each input spends", () => {
 	test("refuses two inputs pinned to one output", async () => {
 		const pin = { txid: TXID, vout: 0 };
 		const request = {
-			...spending(twoCovenants()),
+			...spending(twoPrograms()),
 			instance: { provided_inputs: { p2pk_in: pin, p2pk_in_2: pin } },
 		};
 		expect((await refused(request)).reject).toBe("document-fault");

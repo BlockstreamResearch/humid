@@ -25,7 +25,7 @@ export const DERIVED = "tex1p_derived";
 export const DERIVED_SCRIPT = `5120${"11".repeat(32)}`;
 export const ELSEWHERE_SCRIPT = `5120${"22".repeat(32)}`;
 export const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
-export const COVENANT_TXOUT = `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`;
+export const PROGRAM_TXOUT = `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`;
 
 export const COMPILED = {
 	address: DERIVED,
@@ -102,7 +102,7 @@ export function chainHolding(scriptPubKeyHex = DERIVED_SCRIPT, amountSats = "500
 		amountSats,
 		rawAssetId: POLICY_ASSET,
 		scriptPubKeyHex,
-		txOutHex: COVENANT_TXOUT,
+		txOutHex: PROGRAM_TXOUT,
 	});
 }
 

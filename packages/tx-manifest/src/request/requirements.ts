@@ -1,7 +1,7 @@
 import { asRecord } from "../document/json";
 import { type Action, type Manifest, readInstance } from "../document/manifest";
 import { instanceReferences } from "../document/references";
-import { covenantSites, namedUtxoTypes } from "../document/sites";
+import { programSites, namedUtxoTypes } from "../document/sites";
 import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./request";
 
 export function resolveActionRequirements(
@@ -72,14 +72,14 @@ export function resolveActionRequirements(
 
 	const pinned = readInstance(request.instance).providedInputs;
 
-	if (covenantSites(action).some((site) => site.role === "spent" && !(site.id in pinned))) {
+	if (programSites(action).some((site) => site.role === "spent" && !(site.id in pinned))) {
 		required.push("state");
 
 		if (!request.state) {
 			missing.push({
 				part: "state",
 				reason:
-					"The action spends a covenant UTXO that the instance file does not pin, so the state file has to locate one.",
+					"The action spends a program UTXO that the instance file does not pin, so the state file has to locate one.",
 			});
 		}
 	}

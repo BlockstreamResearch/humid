@@ -22,7 +22,7 @@ describe("the constructs a document declares", () => {
 		]);
 	});
 
-	test("look inside a covenant reference, where a binding changes the address", () => {
+	test("look inside a program reference, where a binding changes the address", () => {
 		const declared = findings({
 			actions: { Pay: { outputs: [{ destination: { args: {}, utxo_type: "t" }, id: "o" }] } },
 		});

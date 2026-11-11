@@ -12,7 +12,7 @@ export type PlannedOutput = {
 	sats?: bigint;
 	target:
 		| { kind: "change" }
-		| { kind: "covenant"; utxoType: string }
+		| { kind: "program"; utxoType: string }
 		| { kind: "data"; hex: string }
 		| { kind: "wallet" };
 };
@@ -43,8 +43,8 @@ export function planAction(action: Action, scope: ReferenceScope): PlannedSpend 
 		const blinding = resolveBlinding({
 			declared: output.confidential,
 			...(target.kind === "change" ? { change: true } : {}),
-			...(target.kind === "covenant"
-				? { unblindable: "covenant" as const }
+			...(target.kind === "program"
+				? { unblindable: "program" as const }
 				: target.kind === "data"
 					? { unblindable: "data" as const }
 					: {}),
@@ -99,7 +99,7 @@ function resolveTarget(
 	const utxoType = record?.utxo_type;
 
 	if (typeof utxoType === "string") {
-		return { kind: "covenant", utxoType };
+		return { kind: "program", utxoType };
 	}
 
 	if (record?.type !== "op_return") {

@@ -21,7 +21,7 @@ const SITES = {
 		outputs: READ,
 		params: READ,
 	},
-	covenantReference: {
+	programReference: {
 		args: UNIMPLEMENTED,
 		compile_params: READ,
 		if: UNIMPLEMENTED,
@@ -211,7 +211,7 @@ function walkSites(manifest: Manifest, visit: SiteVisitor): void {
 				at(
 					`${entryAt} / ${kind === "input" ? "utxo_source" : "destination"}`,
 					entry?.[kind === "input" ? "utxo_source" : "destination"],
-					"covenantReference",
+					"programReference",
 				);
 
 				for (const [name, witness] of Object.entries(asRecord(entry?.witnesses) ?? {})) {

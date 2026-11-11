@@ -43,7 +43,7 @@ async function argumentsCompiledFor(source: string): Promise<Record<string, unkn
 	return compiled;
 }
 
-describe("a spent covenant compiled from a field of the deployment the action creates", () => {
+describe("a spent program compiled from a field of the deployment the action creates", () => {
 	test("CreateOffer compiles the issuance factory from the count its create_instance states", async () => {
 		const compiled = await argumentsCompiledFor(lending.source("./issuance_factory.simf"));
 

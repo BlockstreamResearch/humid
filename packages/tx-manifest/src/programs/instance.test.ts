@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { type Action, Manifest } from "../document/manifest";
 import { Fixture, refusalOf } from "../review/reviewForTests";
-import { COVENANT_HASH_SEED, covenantHashFrom, ITERATION_BOUND } from "./covenantHash";
 import { createsInstance, resolveCreatedInstance } from "./instance";
+import { PROGRAM_HASH_SEED, programHashFrom, ITERATION_BOUND } from "./programHash";
 
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const ASSET = `a0${"00".repeat(30)}0a`;
@@ -22,7 +22,7 @@ function recordingCompiler(debugSymbols = false) {
 
 	return {
 		calls,
-		hashCovenant: covenantHashFrom(
+		hashProgram: programHashFrom(
 			({ argumentsJson, extraLeavesJson, includeDebugSymbols, source }) => {
 				calls.push({ argumentsJson, extraLeavesJson, includeDebugSymbols, source });
 
@@ -57,13 +57,13 @@ const PARAMS = {
 };
 
 function open(params: Record<string, unknown> = PARAMS) {
-	const { calls, hashCovenant } = recordingCompiler();
+	const { calls, hashProgram } = recordingCompiler();
 
 	return {
 		calls,
 		result: resolveCreatedInstance(OPEN_VAULT, {
 			contractSources: SOURCES,
-			hashCovenant,
+			hashProgram,
 			scope: { params },
 		}),
 	};
@@ -96,13 +96,13 @@ describe("a chain of fields that each read the one before", () => {
 	}
 
 	function settleChain() {
-		const { calls, hashCovenant } = recordingCompiler();
+		const { calls, hashProgram } = recordingCompiler();
 
 		return {
 			calls,
 			result: resolveCreatedInstance(chained(), {
 				contractSources: SOURCES,
-				hashCovenant,
+				hashProgram,
 				scope: { params: PARAMS },
 			}),
 		};
@@ -125,13 +125,13 @@ describe("a chain of fields that each read the one before", () => {
 
 		expect(new Set(hashes).size).toBe(LINKS);
 		expect(hashes.every((hash) => hash?.length === 64)).toBe(true);
-		expect(hashes.some((hash) => hash === COVENANT_HASH_SEED)).toBe(false);
+		expect(hashes.some((hash) => hash === PROGRAM_HASH_SEED)).toBe(false);
 	});
 });
 
 function leafyWith(
 	extraLeaves: unknown[],
-	hashCovenant: ReturnType<typeof recordingCompiler>["hashCovenant"],
+	hashProgram: ReturnType<typeof recordingCompiler>["hashProgram"],
 ) {
 	return resolveCreatedInstance(
 		{
@@ -145,12 +145,12 @@ function leafyWith(
 				},
 			},
 		},
-		{ contractSources: SOURCES, hashCovenant, scope: { params: { TIMEOUT: "900000" } } },
+		{ contractSources: SOURCES, hashProgram, scope: { params: { TIMEOUT: "900000" } } },
 	);
 }
 
 function leafy(extraLeaves: unknown[]) {
-	return leafyWith(extraLeaves, recordingCompiler().hashCovenant);
+	return leafyWith(extraLeaves, recordingCompiler().hashProgram);
 }
 
 describe("which actions create a deployment", () => {
@@ -171,7 +171,7 @@ describe("the deployment a constructor creates", () => {
 		});
 	});
 
-	test("and the covenant hashes nothing but a compiler could produce", () => {
+	test("and the program hashes nothing but a compiler could produce", () => {
 		const { result } = open();
 
 		expect(result.fields.RESERVE_COV_HASH).toHaveLength(64);
@@ -192,7 +192,7 @@ describe("the deployment a constructor creates", () => {
 		});
 	});
 
-	test("builds each covenant at the types the document declares beside the values", () => {
+	test("builds each program at the types the document declares beside the values", () => {
 		const { calls } = open();
 		const reserve = calls.find((call) => call.source === SOURCES["./reserve.simf"]);
 
@@ -205,10 +205,10 @@ describe("the deployment a constructor creates", () => {
 
 describe("the mode the document states its contracts were built in", () => {
 	test("is passed to the compiler that takes each hash", () => {
-		const { calls, hashCovenant } = recordingCompiler(true);
+		const { calls, hashProgram } = recordingCompiler(true);
 		resolveCreatedInstance(OPEN_VAULT, {
 			contractSources: SOURCES,
-			hashCovenant,
+			hashProgram,
 			scope: { params: PARAMS },
 		});
 
@@ -218,10 +218,10 @@ describe("the mode the document states its contracts were built in", () => {
 
 	test("and changes the hashes the deployment records", () => {
 		const plain = open().result;
-		const { hashCovenant } = recordingCompiler(true);
+		const { hashProgram } = recordingCompiler(true);
 		const debug = resolveCreatedInstance(OPEN_VAULT, {
 			contractSources: SOURCES,
-			hashCovenant,
+			hashProgram,
 			scope: { params: PARAMS },
 		});
 
@@ -239,7 +239,7 @@ describe("when the compiler cannot produce a hash", () => {
 	function computing(compile: () => string) {
 		return resolveCreatedInstance(OPEN_VAULT, {
 			contractSources: SOURCES,
-			hashCovenant: covenantHashFrom(compile, false),
+			hashProgram: programHashFrom(compile, false),
 			scope: { params: PARAMS },
 		});
 	}
@@ -288,15 +288,15 @@ const dependant = (spelling: string): Action => ({
 	},
 });
 
-describe("a covenant hash that names another through the deployment", () => {
+describe("a program hash that names another through the deployment", () => {
 	function settle(spelling: string) {
-		const { calls, hashCovenant } = recordingCompiler();
+		const { calls, hashProgram } = recordingCompiler();
 
 		return {
 			calls,
 			result: resolveCreatedInstance(dependant(spelling), {
 				contractSources: SOURCES,
-				hashCovenant,
+				hashProgram,
 				scope: { params: PARAMS },
 			}),
 		};
@@ -314,7 +314,7 @@ describe("a covenant hash that names another through the deployment", () => {
 		expect(JSON.parse(guard?.argumentsJson ?? "{}")).toEqual({
 			RESERVE_COV_HASH: { type: "u256", value: `0x${result.fields.RESERVE_COV_HASH}` },
 		});
-		expect(result.fields.RESERVE_COV_HASH).not.toBe(COVENANT_HASH_SEED);
+		expect(result.fields.RESERVE_COV_HASH).not.toBe(PROGRAM_HASH_SEED);
 	});
 
 	test("and identically to the bare name the same reading is also written as", () => {
@@ -322,7 +322,7 @@ describe("a covenant hash that names another through the deployment", () => {
 	});
 
 	test("without hiding the deployment the request supplied", () => {
-		const { hashCovenant } = recordingCompiler();
+		const { hashProgram } = recordingCompiler();
 		const result = resolveCreatedInstance(
 			{
 				isConstructor: true,
@@ -341,7 +341,7 @@ describe("a covenant hash that names another through the deployment", () => {
 			},
 			{
 				contractSources: SOURCES,
-				hashCovenant,
+				hashProgram,
 				scope: { instance: { OLD_HASH: "ab".repeat(32) }, params: {} },
 			},
 		);
@@ -358,11 +358,11 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 	});
 
 	test("a contract whose source was not supplied", () => {
-		const { hashCovenant } = recordingCompiler();
+		const { hashProgram } = recordingCompiler();
 		const result = refusalOf(() =>
 			resolveCreatedInstance(OPEN_VAULT, {
 				contractSources: { "./reserve.simf": SOURCES["./reserve.simf"] ?? "" },
-				hashCovenant,
+				hashProgram,
 				scope: { params: PARAMS },
 			}),
 		);
@@ -371,11 +371,11 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 	});
 
 	test("a pair of hashes that never settle, saying which fields and after how many rounds", () => {
-		const { hashCovenant } = recordingCompiler();
+		const { hashProgram } = recordingCompiler();
 		const result = refusalOf(() =>
 			resolveCreatedInstance(actionNamed(mutual, "Knot"), {
 				contractSources: SOURCES,
-				hashCovenant,
+				hashProgram,
 				scope: { params: {} },
 			}),
 		);
@@ -387,7 +387,7 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 	});
 
 	test("a field computed by something this runtime does not implement", () => {
-		const { hashCovenant } = recordingCompiler();
+		const { hashProgram } = recordingCompiler();
 		const result = refusalOf(() =>
 			resolveCreatedInstance(
 				{
@@ -395,7 +395,7 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 					name: "Odd",
 					node: { create_instance: { fields: { X: { compute: "contract", simf: "./a.simf" } } } },
 				},
-				{ contractSources: SOURCES, hashCovenant, scope: { params: {} } },
+				{ contractSources: SOURCES, hashProgram, scope: { params: {} } },
 			),
 		);
 
@@ -439,8 +439,8 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 
 describe("the state a contract's address commits to", () => {
 	function hashOf(extraLeaves: unknown[]) {
-		const { calls, hashCovenant } = recordingCompiler();
-		const result = leafyWith(extraLeaves, hashCovenant);
+		const { calls, hashProgram } = recordingCompiler();
+		const result = leafyWith(extraLeaves, hashProgram);
 
 		return { calls, result };
 	}

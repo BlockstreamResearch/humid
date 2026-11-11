@@ -1,27 +1,23 @@
 import type { ReadChainTip, ReadFeeRate, ReadTxOut } from "../chain/chainRead";
 import type { ConfirmationModel } from "../confirmation";
-import type {
-	CompileCovenant,
-	CovenantDerivation,
-	CovenantParamTypesOf,
-} from "../covenants/covenant";
-import type { CompileScriptPubKey } from "../covenants/covenantHash";
-import type { CreatedInstance } from "../covenants/instance";
 import type { BlindingWord } from "../evaluation/blinding";
 import type { PlannedIssuance } from "../evaluation/issuance";
 import type { StaticWitness } from "../evaluation/witness";
+import type { CreatedInstance } from "../programs/instance";
+import type { CompileProgram, ProgramDerivation, ProgramParamTypesOf } from "../programs/program";
+import type { CompileScriptPubKey } from "../programs/programHash";
 import { type RejectToken, Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { ActionReview } from "./actionReview";
 import type { AssetHoldings } from "./assetFunding";
 import type { SelectableUtxo } from "./coinSelection";
 
-export type CovenantFinding = CovenantDerivation & {
+export type ProgramFinding = ProgramDerivation & {
 	role: "created" | "spent";
 	verified: "matches-chain" | "not-yet-onchain";
 };
 
-export type ReviewedCovenantInput = {
+export type ReviewedProgramInput = {
 	argumentsJson: string;
 	extraLeavesJson: string;
 	id: string;
@@ -36,7 +32,7 @@ export type ReviewedCovenantInput = {
 };
 
 export type PlannedInput =
-	| { covenant: ReviewedCovenantInput; source: "covenant" }
+	| { program: ReviewedProgramInput; source: "program" }
 	| { source: "wallet"; utxo: SelectableUtxo };
 
 export type ReviewedOutput = {
@@ -62,8 +58,8 @@ export type ManifestReview = {
 	changeOverrode?: BlindingWord;
 	boundTo?: string;
 	confirmation: ConfirmationModel;
-	covenants: CovenantFinding[];
-	covenantInputs: ReviewedCovenantInput[];
+	programs: ProgramFinding[];
+	programInputs: ReviewedProgramInput[];
 	createdInstance?: CreatedInstance;
 	estimatedFeeSats: bigint;
 	feeRateSatsPerKvb: number;
@@ -88,9 +84,9 @@ export function isRefusal(result: ReviewManifestActionResult): result is ReviewR
 
 export type ReviewInput = {
 	accountLabel: string;
-	compile: CompileCovenant;
+	compile: CompileProgram;
 	compilerVersion?: string;
-	covenantParamTypes?: CovenantParamTypesOf;
+	programParamTypes?: ProgramParamTypesOf;
 	fundingUtxos: SelectableUtxo[];
 	holdingsOf?: AssetHoldings;
 	network: string;

@@ -4,7 +4,7 @@ import { Refusal } from "../refusal";
 
 type ListedUtxo = Outpoint & { asset?: string; utxoType: unknown };
 
-export class CovenantUtxos {
+export class ProgramUtxos {
 	readonly #claimed = new Set<string>();
 	readonly #listed: ListedUtxo[];
 	readonly #pinned: Record<string, unknown>;

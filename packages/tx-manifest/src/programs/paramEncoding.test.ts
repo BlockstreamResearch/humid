@@ -12,7 +12,7 @@ describe("the fixed-width types", () => {
 		expect(encode("pubkey", KEY)).toEqual({ type: "Pubkey", value: `0x${KEY}` });
 	});
 
-	test("a covenant hash is thirty-two bytes and is not turned round", () => {
+	test("a program hash is thirty-two bytes and is not turned round", () => {
 		const hash = `ab${"00".repeat(30)}cd`;
 
 		expect(encode("bytes32", hash)).toMatchObject({ value: `0x${hash}` });

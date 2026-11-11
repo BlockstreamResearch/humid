@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import manifestJson from "../__fixtures__/lending_v3/txmanifest.json";
 import { Manifest } from "../document/manifest";
 import { Refusal } from "../refusal";
-import { deriveCovenantAddress } from "./covenant";
+import { deriveProgramAddress } from "./program";
 
 const manifest = new Manifest(manifestJson as unknown as Record<string, unknown>);
 
@@ -45,7 +45,7 @@ const DECLARED: Record<string, string> = {
 
 async function leavesOf(utxoType: string, instance: Record<string, string> = INSTANCE) {
 	const seen: string[] = [];
-	const derived = deriveCovenantAddress(manifest, {
+	const derived = deriveProgramAddress(manifest, {
 		compile: (asked) => {
 			seen.push(asked.extraLeavesJson);
 

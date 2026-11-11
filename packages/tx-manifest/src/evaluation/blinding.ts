@@ -13,7 +13,7 @@ export type BlindingDecision = {
 	overrode?: BlindingWord;
 };
 
-export type UnblindableTarget = "covenant" | "data";
+export type UnblindableTarget = "program" | "data";
 
 export function resolveBlinding(input: {
 	change?: boolean;

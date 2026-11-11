@@ -92,7 +92,7 @@ function refuseUnbuildableUtxoType(manifest: Manifest): Refusal | undefined {
 
 		if (scriptType !== undefined && scriptType !== "simplicity") {
 			return new Refusal(
-				`The ${name} contract is a ${String(scriptType)} script, and this wallet builds Simplicity covenants.`,
+				`The ${name} contract is a ${String(scriptType)} script, and this wallet builds Simplicity programs.`,
 				"unbuildable-utxo-type",
 			);
 		}

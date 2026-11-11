@@ -3,29 +3,29 @@ import type { Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
 import { resolveCompileParams } from "./compileParams";
-import type { CovenantParamTypes } from "./covenantParamTypes";
+import type { ProgramParamTypes } from "./programParamTypes";
 import { stateLeavesOf } from "./stateLeaves";
 
-export type CompiledCovenant = {
+export type CompiledProgram = {
 	address: string;
 	cmr: string;
 	scriptPubKeyHex: string;
 	tapleafHash: string;
 };
 
-export type CompileCovenant = (input: {
+export type CompileProgram = (input: {
 	argumentsJson: string;
 	extraLeavesJson: string;
 	includeDebugSymbols: boolean;
 	network: string;
 	source: string;
-}) => Promise<CompiledCovenant> | CompiledCovenant;
+}) => Promise<CompiledProgram> | CompiledProgram;
 
-export type CovenantParamTypesOf = (
+export type ProgramParamTypesOf = (
 	source: string,
-) => Promise<CovenantParamTypes> | CovenantParamTypes;
+) => Promise<ProgramParamTypes> | ProgramParamTypes;
 
-export type CovenantDerivation = {
+export type ProgramDerivation = {
 	address: string;
 	argumentsJson: string;
 	cmr: string;
@@ -38,11 +38,11 @@ export type CovenantDerivation = {
 	utxoType: string;
 };
 
-export async function deriveCovenantAddress(
+export async function deriveProgramAddress(
 	manifest: Manifest,
 	input: {
-		compile: CompileCovenant;
-		covenantParamTypes?: CovenantParamTypesOf;
+		compile: CompileProgram;
+		programParamTypes?: ProgramParamTypesOf;
 		contractSources: Record<string, string>;
 		declaredTypes: Record<string, string>;
 		includeDebugSymbols: boolean;
@@ -51,7 +51,7 @@ export async function deriveCovenantAddress(
 		utxoType: string;
 		wiring: Record<string, unknown>;
 	},
-): Promise<CovenantDerivation> {
+): Promise<ProgramDerivation> {
 	const declared = manifest.utxoType(input.utxoType);
 
 	if (!declared) {
@@ -73,11 +73,11 @@ export async function deriveCovenantAddress(
 
 	const wiring = { ...asRecord(script?.compile_params), ...input.wiring };
 
-	let declaring: { declares: CovenantParamTypes; source: string } | undefined;
+	let declaring: { declares: ProgramParamTypes; source: string } | undefined;
 
-	if (input.covenantParamTypes) {
+	if (input.programParamTypes) {
 		try {
-			declaring = { declares: await input.covenantParamTypes(source), source: sourcePath };
+			declaring = { declares: await input.programParamTypes(source), source: sourcePath };
 		} catch (error) {
 			throw new Refusal(`The contract at ${sourcePath} did not compile: ${String(error)}`);
 		}
@@ -119,8 +119,8 @@ export async function deriveCovenantAddress(
 	}
 }
 
-export function checkCovenantOnChain(
-	derivation: CovenantDerivation,
+export function checkProgramOnChain(
+	derivation: ProgramDerivation,
 	onChainScriptPubKeyHex: string,
 ): void {
 	if (derivation.scriptPubKeyHex.toLowerCase() !== onChainScriptPubKeyHex.toLowerCase()) {
@@ -128,7 +128,7 @@ export function checkCovenantOnChain(
 			`The ${derivation.utxoType} contract rebuilds to ${derivation.address}, ` +
 				"but the funds are locked by a different contract. " +
 				"This is not the contract the site described.",
-			"covenant-mismatch",
+			"program-mismatch",
 		);
 	}
 }

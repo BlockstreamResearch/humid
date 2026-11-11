@@ -22,7 +22,7 @@ function scope(params: Record<string, unknown>): ReferenceScope {
 }
 
 describe("planAction", () => {
-	test("resolves the covenant amount from the request's parameters", () => {
+	test("resolves the program amount from the request's parameters", () => {
 		const plan = planAction(PAY, scope({ amount_sat: 50_000, pubkey: PUBKEY }));
 
 		expect(plan.fundingSats).toBe(50_000n);
@@ -30,7 +30,7 @@ describe("planAction", () => {
 			blinding: { blinding: "open", decidedBy: "unblindable" },
 			id: "p2pk_out",
 			sats: 50_000n,
-			target: { kind: "covenant", utxoType: "p2pk_output" },
+			target: { kind: "program", utxoType: "p2pk_output" },
 		});
 	});
 

@@ -22,7 +22,7 @@ export function checkPositions(
 		throw new Refusal(
 			`The ${position.kind} ${position.id} must be ${position.kind} ` +
 				`${describe(position.stated, total)} of this transaction, and this wallet would put it ` +
-				`at ${position.at}. A covenant reads positions, so a transaction built in another ` +
+				`at ${position.at}. A program reads positions, so a transaction built in another ` +
 				"order is one the network rejects after it has been signed.",
 			"unbuildable-position",
 		);

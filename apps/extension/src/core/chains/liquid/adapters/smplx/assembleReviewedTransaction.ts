@@ -10,35 +10,35 @@ export type AssembledTransaction = {
 
 export type AssembledIssuanceReport = {
 	assetId: string;
-	entropy: string;
+	assetEntropy: string;
 	free: () => void;
-	reissuanceTokenId: string;
+	inflationAssetId: string;
 };
 
 export type AssemblingBuilder = Pick<
 	InstanceType<SmplxWasmModule["TransactionBuilder"]>,
-	"addChange" | "addOutput" | "addWalletInput" | "free"
+	"addChange" | "addOutput" | "addInput" | "free"
 > & {
-	addCovenantInput: (
+	addProgramInput: (
 		txid: string,
 		vout: number,
 		txOutHex: string,
 		source: string,
 		argumentsJson?: string,
 		witnessJson?: string,
-		signatureWitness?: string,
+		programSignature?: string,
 		extraLeavesJson?: string,
 		includeDebugSymbols?: boolean,
 		derivationPath?: string,
 	) => void;
-	addCovenantIssuanceInput: (
+	addProgramIssuanceInput: (
 		txid: string,
 		vout: number,
 		txOutHex: string,
 		source: string,
 		argumentsJson: string | undefined,
 		witnessJson: string | undefined,
-		signatureWitness: string | undefined,
+		programSignature: string | undefined,
 		assetAmountSats: bigint,
 		inflationAmountSats: bigint,
 		issuerContractHex: string | undefined,
@@ -48,7 +48,7 @@ export type AssemblingBuilder = Pick<
 	) => AssembledIssuanceReport;
 	setLocktimeHeight: (height: number) => void;
 	setSequence: (sequence: number) => void;
-	addWalletIssuanceInput: (
+	addIssuanceInput: (
 		txid: string,
 		vout: number,
 		txOutHex: string,
@@ -137,7 +137,7 @@ export async function assembleReviewedTransaction(
 
 	const spending = new Set(
 		review.inputOrder.map((planned) =>
-			outpointKey(planned.source === "covenant" ? planned.covenant : planned.utxo),
+			outpointKey(planned.source === "program" ? planned.program : planned.utxo),
 		),
 	);
 	const stranded = review.issuances.find(
@@ -177,28 +177,28 @@ export async function assembleReviewedTransaction(
 
 		for (const planned of review.inputOrder) {
 			const key =
-				planned.source === "covenant" ? outpointKey(planned.covenant) : outpointKey(planned.utxo);
+				planned.source === "program" ? outpointKey(planned.program) : outpointKey(planned.utxo);
 			const issuance = issuing.get(key);
 
 			if (issuance) {
 				placed.add(key);
 			}
 
-			if (planned.source === "covenant") {
-				const { covenant } = planned;
-				const witness = witnessValuesJson(covenant.witnessValues);
+			if (planned.source === "program") {
+				const { program } = planned;
+				const witness = witnessValuesJson(program.witnessValues);
 
 				if (!issuance) {
-					builder.addCovenantInput(
-						covenant.txid,
-						covenant.vout,
-						covenant.txOutHex,
-						covenant.source,
-						covenant.argumentsJson,
+					builder.addProgramInput(
+						program.txid,
+						program.vout,
+						program.txOutHex,
+						program.source,
+						program.argumentsJson,
 						witness,
-						covenant.signatureWitness,
-						covenant.extraLeavesJson,
-						covenant.includeDebugSymbols,
+						program.signatureWitness,
+						program.extraLeavesJson,
+						program.includeDebugSymbols,
 						input.signingDerivationPath,
 					);
 
@@ -206,19 +206,19 @@ export async function assembleReviewedTransaction(
 				}
 
 				builder
-					.addCovenantIssuanceInput(
-						covenant.txid,
-						covenant.vout,
-						covenant.txOutHex,
-						covenant.source,
-						covenant.argumentsJson,
+					.addProgramIssuanceInput(
+						program.txid,
+						program.vout,
+						program.txOutHex,
+						program.source,
+						program.argumentsJson,
 						witness,
-						covenant.signatureWitness,
+						program.signatureWitness,
 						issuance.assetAmountSats,
 						issuance.inflationAmountSats,
 						undefined,
-						covenant.extraLeavesJson,
-						covenant.includeDebugSymbols,
+						program.extraLeavesJson,
+						program.includeDebugSymbols,
 						input.signingDerivationPath,
 					)
 					.free();
@@ -234,7 +234,7 @@ export async function assembleReviewedTransaction(
 			}
 
 			if (!issuance) {
-				builder.addWalletInput(
+				builder.addInput(
 					utxo.txid,
 					utxo.vout,
 					utxo.txOut,
@@ -246,7 +246,7 @@ export async function assembleReviewedTransaction(
 			}
 
 			builder
-				.addWalletIssuanceInput(
+				.addIssuanceInput(
 					utxo.txid,
 					utxo.vout,
 					utxo.txOut,

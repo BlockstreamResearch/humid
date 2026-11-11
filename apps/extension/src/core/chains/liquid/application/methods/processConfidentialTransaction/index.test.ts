@@ -24,12 +24,12 @@ const SOURCE = readFileSync(
 );
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-const COVENANT_SCRIPT = `5120${"11".repeat(32)}`;
+const PROGRAM_SCRIPT = `5120${"11".repeat(32)}`;
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 const SIGNER_SCRIPT = `0014${"77".repeat(20)}`;
 const BLINDING_KEY = `02${"88".repeat(32)}`;
 const FUNDING_TXID = "c".repeat(64);
-const COVENANT_TXID = "e".repeat(64);
+const PROGRAM_TXID = "e".repeat(64);
 const SIGNED_TXID = "f".repeat(64);
 const SENT_TXID = "a".repeat(64);
 const FEE_SATS = 344n;
@@ -65,7 +65,7 @@ function transaction(inputs: string[], outputs: string[]): string {
 
 const SIGNED_HEX = transaction(
 	[txIn(FUNDING_TXID, 0)],
-	[txOut(COVENANT_SCRIPT, 1000n), txOut(SIGNER_SCRIPT, 998_656n), txOut("", FEE_SATS)],
+	[txOut(PROGRAM_SCRIPT, 1000n), txOut(SIGNER_SCRIPT, 998_656n), txOut("", FEE_SATS)],
 );
 
 const explicitUtxo = {
@@ -81,12 +81,12 @@ const explicitUtxo = {
 	vout: 0,
 };
 
-const COVENANT_HELD_SATS = 50_000n;
-const COVENANT_TXOUT = txOut(COVENANT_SCRIPT, COVENANT_HELD_SATS);
+const PROGRAM_HELD_SATS = 50_000n;
+const PROGRAM_TXOUT = txOut(PROGRAM_SCRIPT, PROGRAM_HELD_SATS);
 
 type Journal = {
 	broadcasts: { txHex: string }[];
-	covenantInputs: {
+	programInputs: {
 		signatureWitness: string | undefined;
 		source: string;
 		txOutHex: string;
@@ -105,7 +105,7 @@ type Journal = {
 function journal(): Journal {
 	return {
 		broadcasts: [],
-		covenantInputs: [],
+		programInputs: [],
 		finalizedHex: SIGNED_HEX,
 		freed: [],
 		mnemonicHeldAfter: false,
@@ -117,29 +117,29 @@ function journal(): Journal {
 }
 
 function smplxSubstitute(log: Journal) {
-	class Covenant {
+	class Program {
 		constructor(
 			readonly source: string,
 			readonly argumentsJson?: string,
 			readonly extraLeavesJson?: string,
 			readonly includeDebugSymbols?: boolean,
 		) {
-			log.taken.push("covenant");
+			log.taken.push("program");
 		}
-		address() {
+		trAddress() {
 			return "tex1p_derived";
 		}
-		commitmentMerkleRoot() {
+		cmr() {
 			return "cc".repeat(32);
 		}
-		scriptPubKeyHex() {
-			return COVENANT_SCRIPT;
+		scriptPubkey() {
+			return PROGRAM_SCRIPT;
 		}
 		tapleafHash() {
 			return "1e".repeat(32);
 		}
 		free() {
-			log.freed.push("covenant");
+			log.freed.push("program");
 		}
 	}
 
@@ -148,7 +148,7 @@ function smplxSubstitute(log: Journal) {
 			log.taken.push("builder");
 		}
 		addChange() {}
-		addCovenantInput(
+		addProgramInput(
 			txid: string,
 			vout: number,
 			txOutHex: string,
@@ -157,16 +157,16 @@ function smplxSubstitute(log: Journal) {
 			_witnessJson?: string,
 			signatureWitness?: string,
 		) {
-			log.covenantInputs.push({ signatureWitness, source, txOutHex, txid, vout });
+			log.programInputs.push({ signatureWitness, source, txOutHex, txid, vout });
 		}
-		addCovenantIssuanceInput() {
+		addProgramIssuanceInput() {
 			throw new Error("not reached");
 		}
 		addOutput() {}
-		addWalletInput(txid: string, vout: number, txOutHex: string) {
+		addInput(txid: string, vout: number, txOutHex: string) {
 			log.walletInputs.push({ txOutHex, txid, vout });
 		}
-		addWalletIssuanceInput() {
+		addIssuanceInput() {
 			throw new Error("not reached");
 		}
 		setLocktimeHeight() {}
@@ -176,7 +176,7 @@ function smplxSubstitute(log: Journal) {
 		}
 	}
 
-	class WalletSigner {
+	class Signer {
 		constructor(
 			readonly mnemonic: string,
 			readonly network: string,
@@ -190,7 +190,7 @@ function smplxSubstitute(log: Journal) {
 		scriptPubKeyHex() {
 			return SIGNER_SCRIPT;
 		}
-		finalizeTransaction() {
+		finalizeStrict() {
 			log.taken.push("signed");
 
 			return {
@@ -208,10 +208,10 @@ function smplxSubstitute(log: Journal) {
 	}
 
 	return {
-		Covenant,
-		covenantParameterTypes: () => JSON.stringify({ PUB_KEY: "Pubkey" }),
+		Program,
+		programArgumentTypes: () => JSON.stringify({ PUB_KEY: "Pubkey" }),
 		TransactionBuilder,
-		WalletSigner,
+		Signer,
 	};
 }
 
@@ -283,8 +283,8 @@ function dependencies(
 		readTxOut: () => async () => ({
 			amountSats: "50000",
 			rawAssetId: POLICY_ASSET,
-			scriptPubKeyHex: COVENANT_SCRIPT,
-			txOutHex: COVENANT_TXOUT,
+			scriptPubKeyHex: PROGRAM_SCRIPT,
+			txOutHex: PROGRAM_TXOUT,
 		}),
 		resolveAccount: (async () =>
 			account()) as unknown as LiquidProcessCtDependencies["resolveAccount"],
@@ -327,7 +327,7 @@ const receiveRequest = (broadcast = false) => ({
 	contractSources: { [SOURCE_PATH]: SOURCE },
 	manifest: p2pkManifest,
 	params: { pubkey: PUBKEY },
-	state: { utxos: [{ txid: COVENANT_TXID, utxo_type: "p2pk_output", vout: 0 }] },
+	state: { utxos: [{ txid: PROGRAM_TXID, utxo_type: "p2pk_output", vout: 0 }] },
 });
 
 async function run(
@@ -464,19 +464,19 @@ describe("what it refuses, and how", () => {
 		expect(data).toMatchObject({ reason: "invalid_manifest_request", reject: "no-utxo-to-spend" });
 	});
 
-	test("refuses when the chain says something else is at the covenant's outpoint", async () => {
+	test("refuses when the chain says something else is at the program's outpoint", async () => {
 		const { data } = await failing(receiveRequest(), {
 			dependencies: {
 				readTxOut: () => async () => ({
 					amountSats: "50000",
 					rawAssetId: POLICY_ASSET,
 					scriptPubKeyHex: `0014${"99".repeat(20)}`,
-					txOutHex: COVENANT_TXOUT,
+					txOutHex: PROGRAM_TXOUT,
 				}),
 			},
 		});
 
-		expect(data).toMatchObject({ reject: "covenant-mismatch" });
+		expect(data).toMatchObject({ reject: "program-mismatch" });
 	});
 
 	test("refuses a network the contract module does not support", async () => {
@@ -513,7 +513,7 @@ describe("what it holds, and for how long", () => {
 		const log = journal();
 		const module = smplxSubstitute(log);
 
-		module.WalletSigner.prototype.finalizeTransaction = () => {
+		module.Signer.prototype.finalizeStrict = () => {
 			throw new Error("could not balance the transaction");
 		};
 
@@ -557,11 +557,11 @@ describe("what it holds, and for how long", () => {
 	});
 });
 
-describe("spending a covenant, end to end", () => {
+describe("spending a program, end to end", () => {
 	const receiveTransaction = (outputs: string[]) =>
-		transaction([txIn(COVENANT_TXID, 0), txIn(FUNDING_TXID, 0)], outputs);
+		transaction([txIn(PROGRAM_TXID, 0), txIn(FUNDING_TXID, 0)], outputs);
 
-	test("carries the covenant and the wallet's fee input into the builder", async () => {
+	test("carries the program and the wallet's fee input into the builder", async () => {
 		const log = journal();
 
 		log.finalizedHex = receiveTransaction([
@@ -573,12 +573,12 @@ describe("spending a covenant, end to end", () => {
 		const method = createProcessLiquidConfidentialTransaction(dependencies(log));
 		const result = (await method(receiveRequest(false), context(log))) as LiquidProcessCtResult;
 
-		expect(log.covenantInputs).toEqual([
+		expect(log.programInputs).toEqual([
 			{
 				signatureWitness: "SIGNATURE",
 				source: SOURCE,
-				txOutHex: COVENANT_TXOUT,
-				txid: COVENANT_TXID,
+				txOutHex: PROGRAM_TXOUT,
+				txid: PROGRAM_TXID,
 				vout: 0,
 			},
 		]);

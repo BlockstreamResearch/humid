@@ -4,7 +4,7 @@
   "manifest_version": "0.3.1",
   "protocol": "simplicity-lending",
   "requires": ["simplicity"],
-  "simplicity_hl": { "version": "0.8.0", "debug_symbols": true },
+  "simplicity_hl": { "version": "0.9.0", "debug_symbols": true },
   "description": "lending_v3 — the redesigned 'issuance factory' lending protocol, wire-compatible with the deployed simplicity-lending indexer/site (odev branch). Phase 3a models factory creation: a persistent issuance_factory covenant plus the wallet-held auth NFT, from which many lending offers are later minted.",
   "utxo_types": {
     "issuance_factory": {

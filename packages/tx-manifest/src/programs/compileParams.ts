@@ -1,12 +1,12 @@
 import { parseReference, type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
-import { type DeclaringContract, encodeContractLiteral } from "./covenantParamTypes";
 import {
 	encodeCompileParam,
 	type EncodedParam,
 	encodesDeclaredType,
 	unencodableReason,
 } from "./paramEncoding";
+import { type DeclaringContract, encodeContractLiteral } from "./programParamTypes";
 
 export type ContractArguments = Record<string, EncodedParam>;
 
@@ -27,7 +27,7 @@ export function resolveCompileParams(
 		let found: unknown;
 
 		try {
-			found = resolveCovenantReference(reference, scope);
+			found = resolveProgramReference(reference, scope);
 		} catch (error) {
 			if (!(error instanceof Refusal)) {
 				throw error;
@@ -61,7 +61,7 @@ export function resolveCompileParams(
 	return resolved;
 }
 
-function resolveCovenantReference(reference: string, scope: ReferenceScope): unknown {
+function resolveProgramReference(reference: string, scope: ReferenceScope): unknown {
 	try {
 		return resolveReference(reference, "compileParam", scope).value;
 	} catch (error) {

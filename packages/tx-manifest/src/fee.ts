@@ -4,12 +4,12 @@ const PER_WALLET_INPUT = 69n;
 
 const PER_OUTPUT = 67n;
 
-const PER_COVENANT_INPUT = 87n;
+const PER_PROGRAM_INPUT = 87n;
 
 const PER_ISSUING_INPUT = 74n;
 
 export type TransactionShape = {
-	covenantInputs: number;
+	programInputs: number;
 	issuingInputs: number;
 	outputs: number;
 	walletInputs: number;
@@ -20,7 +20,7 @@ export function estimateVsize(shape: TransactionShape): bigint {
 		BASE_VSIZE +
 		PER_WALLET_INPUT * BigInt(shape.walletInputs) +
 		PER_OUTPUT * BigInt(shape.outputs) +
-		PER_COVENANT_INPUT * BigInt(shape.covenantInputs) +
+		PER_PROGRAM_INPUT * BigInt(shape.programInputs) +
 		PER_ISSUING_INPUT * BigInt(shape.issuingInputs)
 	);
 }

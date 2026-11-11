@@ -2,24 +2,11 @@ import { baseUnits } from "../chain/baseUnits";
 import type { Outpoint } from "../chain/outpoint";
 import { byOutpoint, outpointKey } from "../chain/outpoint";
 import { confirmationModel, type ReviewedPlan } from "../confirmation";
-import {
-	checkCovenantOnChain,
-	type CovenantDerivation,
-	deriveCovenantAddress,
-} from "../covenants/covenant";
-import { covenantHashFrom } from "../covenants/covenantHash";
-import { declaredParamTypes } from "../covenants/declaredTypes";
-import {
-	type CreatedInstance,
-	createsInstance,
-	resolveCreatedInstance,
-	statedCreatedFields,
-} from "../covenants/instance";
 import { asArray, asRecord } from "../document/json";
 import { type Action, type InstanceFile, Manifest, readInstance } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { refuseUnsupported } from "../document/refuse";
-import { type CovenantSite, covenantSites } from "../document/sites";
+import { type ProgramSite, programSites } from "../document/sites";
 import {
 	type AssetLedger,
 	assetLedger,
@@ -52,21 +39,34 @@ import { type PlannedSpend, planAction } from "../evaluation/plan";
 import { checkPositions, type StatedPosition } from "../evaluation/positions";
 import { resolveStaticWitnesses } from "../evaluation/witness";
 import { estimateFeeSats } from "../fee";
+import { declaredParamTypes } from "../programs/declaredTypes";
+import {
+	type CreatedInstance,
+	createsInstance,
+	resolveCreatedInstance,
+	statedCreatedFields,
+} from "../programs/instance";
+import {
+	checkProgramOnChain,
+	type ProgramDerivation,
+	deriveProgramAddress,
+} from "../programs/program";
+import { programHashFrom } from "../programs/programHash";
 import { Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { resolveActionRequirements } from "../request/requirements";
 import { type AssetHoldings, type FundedAsset, fundAssets } from "./assetFunding";
 import { type SelectableUtxo, toSats } from "./coinSelection";
-import { CovenantUtxos } from "./covenantUtxos";
 import type {
 	AssetMovement,
-	CovenantFinding,
+	ProgramFinding,
 	ManifestReview,
 	PlannedInput,
-	ReviewedCovenantInput,
+	ReviewedProgramInput,
 	ReviewedOutput,
 	ReviewInput,
 } from "./index";
+import { ProgramUtxos } from "./programUtxos";
 
 type PaidOutputs = {
 	at: Map<string, number>;
@@ -93,8 +93,8 @@ export class ActionReview {
 	readonly #pools = new Map<string, SelectableUtxo[]>();
 	readonly #inputs: Record<string, Record<string, unknown>> = {};
 	readonly #chainHeld: HeldValue[] = [];
-	readonly #covenants: CovenantFinding[] = [];
-	readonly #covenantInputs: ReviewedCovenantInput[] = [];
+	readonly #programs: ProgramFinding[] = [];
+	readonly #programInputs: ReviewedProgramInput[] = [];
 	#scope: ReferenceScope;
 
 	private constructor(request: ParsedLiquidProcessCtParams, input: ReviewInput) {
@@ -159,10 +159,10 @@ export class ActionReview {
 	}
 
 	async #run(): Promise<ManifestReview> {
-		await this.#spendCovenants();
+		await this.#spendPrograms();
 
 		const issued = resolveIssuances(this.#action, {
-			covenantInputs: this.#covenantInputs,
+			programInputs: this.#programInputs,
 			holdings: (asset) => this.#holdings(asset),
 			inputs: this.#inputs,
 			policyAsset: this.#input.policyAsset,
@@ -173,7 +173,7 @@ export class ActionReview {
 
 		const created = this.#createInstance();
 
-		await this.#createCovenants();
+		await this.#createPrograms();
 		this.#attachWitnessValues();
 
 		this.#scope = { ...this.#scope, fee: 0n };
@@ -205,7 +205,7 @@ export class ActionReview {
 			placed.selected.some((utxo) => utxo.confidential === true),
 		);
 		const locktimeHeight =
-			this.#covenantInputs.length > 0 && this.#input.readChainTip
+			this.#programInputs.length > 0 && this.#input.readChainTip
 				? await this.#input.readChainTip().catch(() => undefined)
 				: undefined;
 
@@ -219,8 +219,8 @@ export class ActionReview {
 				: change.overrode === undefined
 					? {}
 					: { changeOverrode: change.overrode }),
-			covenantInputs: this.#covenantInputs,
-			covenants: this.#covenants,
+			programInputs: this.#programInputs,
+			programs: this.#programs,
 			...(created === undefined ? {} : { createdInstance: created }),
 			estimatedFeeSats,
 			feeRateSatsPerKvb,
@@ -267,7 +267,7 @@ export class ActionReview {
 
 		const feeSats = estimateFeeSats(
 			{
-				covenantInputs: this.#covenantInputs.length,
+				programInputs: this.#programInputs.length,
 				issuingInputs: issued.issuances.length,
 				outputs: paid.outputs.length,
 				walletInputs: placed.selected.length,
@@ -295,16 +295,16 @@ export class ActionReview {
 		return pool;
 	}
 
-	#sites(role: CovenantSite["role"]): CovenantSite[] {
-		return covenantSites(this.#action.node).filter((site) => site.role === role);
+	#sites(role: ProgramSite["role"]): ProgramSite[] {
+		return programSites(this.#action.node).filter((site) => site.role === role);
 	}
 
-	#derive(site: CovenantSite): Promise<CovenantDerivation> {
-		return deriveCovenantAddress(this.#manifest, {
+	#derive(site: ProgramSite): Promise<ProgramDerivation> {
+		return deriveProgramAddress(this.#manifest, {
 			compile: this.#input.compile,
-			...(this.#input.covenantParamTypes === undefined
+			...(this.#input.programParamTypes === undefined
 				? {}
-				: { covenantParamTypes: this.#input.covenantParamTypes }),
+				: { programParamTypes: this.#input.programParamTypes }),
 			contractSources: this.#request.contractSources,
 			declaredTypes: this.#declaredTypes,
 			includeDebugSymbols: this.#includeDebugSymbols,
@@ -315,8 +315,8 @@ export class ActionReview {
 		});
 	}
 
-	async #spendCovenants(): Promise<void> {
-		const utxos = new CovenantUtxos(this.#request.state, this.#deployment.providedInputs);
+	async #spendPrograms(): Promise<void> {
+		const utxos = new ProgramUtxos(this.#request.state, this.#deployment.providedInputs);
 
 		for (const site of this.#sites("spent")) {
 			// oxlint-disable-next-line no-await-in-loop
@@ -331,7 +331,7 @@ export class ActionReview {
 			// oxlint-disable-next-line no-await-in-loop
 			const onChain = await this.#readTxOut(outpoint);
 
-			checkCovenantOnChain(derived, onChain.scriptPubKeyHex);
+			checkProgramOnChain(derived, onChain.scriptPubKeyHex);
 
 			if (onChain.amountSats === undefined || onChain.rawAssetId === undefined) {
 				throw new Refusal(
@@ -363,7 +363,7 @@ export class ActionReview {
 
 			this.#inputs[site.id] = { amount_sat: held, asset: onChain.rawAssetId };
 			this.#chainHeld.push({ asset: onChain.rawAssetId, id: site.id, sats: held });
-			this.#covenantInputs.push({
+			this.#programInputs.push({
 				argumentsJson: derived.argumentsJson,
 				extraLeavesJson: derived.extraLeavesJson,
 				id: site.id,
@@ -375,7 +375,7 @@ export class ActionReview {
 				utxoType: site.utxoType,
 				vout: outpoint.vout,
 			});
-			this.#covenants.push({ ...derived, role: "spent", verified: "matches-chain" });
+			this.#programs.push({ ...derived, role: "spent", verified: "matches-chain" });
 		}
 	}
 
@@ -397,7 +397,7 @@ export class ActionReview {
 
 		const created = resolveCreatedInstance(this.#action, {
 			contractSources: this.#request.contractSources,
-			hashCovenant: covenantHashFrom(this.#input.scriptPubKeyOf, this.#includeDebugSymbols),
+			hashProgram: programHashFrom(this.#input.scriptPubKeyOf, this.#includeDebugSymbols),
 			scope: this.#scope,
 		});
 
@@ -406,23 +406,23 @@ export class ActionReview {
 		return created;
 	}
 
-	async #createCovenants(): Promise<void> {
+	async #createPrograms(): Promise<void> {
 		for (const site of this.#sites("created")) {
 			// oxlint-disable-next-line no-await-in-loop
 			const derived = await this.#derive(site);
 
-			this.#covenants.push({ ...derived, role: "created", verified: "not-yet-onchain" });
+			this.#programs.push({ ...derived, role: "created", verified: "not-yet-onchain" });
 		}
 	}
 
 	#attachWitnessValues(): void {
 		const stated = resolveStaticWitnesses(this.#action, this.#scope);
 
-		for (const covenant of this.#covenantInputs) {
-			const values = stated.get(covenant.id);
+		for (const program of this.#programInputs) {
+			const values = stated.get(program.id);
 
 			if (values && values.length > 0) {
-				covenant.witnessValues = values;
+				program.witnessValues = values;
 			}
 		}
 	}
@@ -581,8 +581,8 @@ export class ActionReview {
 
 	#payOutputs(plan: PlannedSpend, ledger: AssetLedger, funded: FundedAsset[]): PaidOutputs {
 		const fundedFor = new Map(funded.map((entry) => [entry.asset, entry]));
-		const covenantScripts = new Map(
-			this.#covenants.map((found) => [found.utxoType, found.scriptPubKeyHex]),
+		const programScripts = new Map(
+			this.#programs.map((found) => [found.utxoType, found.scriptPubKeyHex]),
 		);
 		const paid: PaidOutputs = {
 			at: new Map(),
@@ -632,16 +632,16 @@ export class ActionReview {
 			}
 
 			const scriptPubKeyHex =
-				planned.target.kind === "covenant"
-					? covenantScripts.get(planned.target.utxoType)
+				planned.target.kind === "program"
+					? programScripts.get(planned.target.utxoType)
 					: planned.target.kind === "data"
 						? planned.target.hex
 						: this.#input.walletScriptPubKeyHex;
 
 			if (!scriptPubKeyHex) {
 				throw new Refusal(
-					`Output ${planned.id} pays a covenant the wallet did not verify.`,
-					"covenant-mismatch",
+					`Output ${planned.id} pays a program the wallet did not verify.`,
+					"program-mismatch",
 				);
 			}
 
@@ -706,12 +706,12 @@ export class ActionReview {
 			}
 
 			const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
-			const covenant = this.#covenantInputs.find((candidate) => candidate.id === id);
+			const program = this.#programInputs.find((candidate) => candidate.id === id);
 			const wanted = statedIndex(declared.required_index);
 
 			placeable.push({
 				id,
-				slots: covenant ? [{ covenant, source: "covenant" }] : (walletRuns.get(id) ?? []),
+				slots: program ? [{ program, source: "program" }] : (walletRuns.get(id) ?? []),
 				...(wanted === undefined ? {} : { stated: wanted }),
 			});
 		}
@@ -730,7 +730,7 @@ export class ActionReview {
 			sequence,
 			rules,
 			placement.order.map((planned) =>
-				planned.source === "covenant" ? { declaredBy: planned.covenant.id } : {},
+				planned.source === "program" ? { declaredBy: planned.program.id } : {},
 			),
 		);
 
@@ -859,7 +859,7 @@ type ResolvedIssuances = {
 function resolveIssuances(
 	action: Action,
 	context: {
-		covenantInputs: ReviewedCovenantInput[];
+		programInputs: ReviewedProgramInput[];
 		holdings: AssetHoldings;
 		inputs: Record<string, Record<string, unknown>>;
 		policyAsset: string;
@@ -906,10 +906,10 @@ function resolveIssuances(
 			scope: context.scope,
 		});
 
-		const covenant = context.covenantInputs.find((candidate) => candidate.id === id);
+		const program = context.programInputs.find((candidate) => candidate.id === id);
 
-		if (covenant) {
-			const outpoint = { txid: covenant.txid, vout: covenant.vout };
+		if (program) {
+			const outpoint = { txid: program.txid, vout: program.vout };
 			const key = outpointKey(outpoint);
 
 			if (taken.has(key)) {

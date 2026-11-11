@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { refusalOf } from "../review/reviewForTests";
 import { checkRelativeTimelockPlacement, type InputRule, transactionSequence } from "./inputRules";
 
-const covenantInput = (id: string) => ({ declaredBy: id });
+const programInput = (id: string) => ({ declaredBy: id });
 
 const walletInput = () => ({});
 
@@ -42,7 +42,7 @@ describe("whether one sequence can carry a relative timelock faithfully", () => 
 	test("it can where the asking input is the only one in the transaction", () => {
 		const rules: InputRule[] = [{ id: "will_in", sequence: 25_920 }];
 
-		checkRelativeTimelockPlacement(25_920, rules, [covenantInput("will_in")]);
+		checkRelativeTimelockPlacement(25_920, rules, [programInput("will_in")]);
 	});
 
 	test("it can where every input in the transaction asks for the same wait", () => {
@@ -51,12 +51,12 @@ describe("whether one sequence can carry a relative timelock faithfully", () => 
 			{ id: "two_in", sequence: 144 },
 		];
 
-		checkRelativeTimelockPlacement(144, rules, [covenantInput("one_in"), covenantInput("two_in")]);
+		checkRelativeTimelockPlacement(144, rules, [programInput("one_in"), programInput("two_in")]);
 	});
 
 	test("it cannot where a wallet input would inherit the wait", () => {
 		const rules: InputRule[] = [{ id: "will_in", sequence: 25_920 }];
-		const placed = [covenantInput("will_in"), walletInput()];
+		const placed = [programInput("will_in"), walletInput()];
 		const { reason } = refusalOf(() => checkRelativeTimelockPlacement(25_920, rules, placed));
 
 		expect(reason).toContain("will_in");
@@ -65,16 +65,16 @@ describe("whether one sequence can carry a relative timelock faithfully", () => 
 
 	test("it counts every input that would inherit the wait", () => {
 		const rules: InputRule[] = [{ id: "will_in", sequence: 25_920 }];
-		const placed = [covenantInput("will_in"), walletInput(), walletInput()];
+		const placed = [programInput("will_in"), walletInput(), walletInput()];
 
 		expect(refusalOf(() => checkRelativeTimelockPlacement(25_920, rules, placed)).reason).toContain(
 			"2 other inputs would inherit that wait",
 		);
 	});
 
-	test("it cannot where a co-spent covenant input asked for nothing", () => {
+	test("it cannot where a co-spent program input asked for nothing", () => {
 		const rules: InputRule[] = [{ id: "locked_in", sequence: 144 }, { id: "open_in" }];
-		const placed = [covenantInput("locked_in"), covenantInput("open_in")];
+		const placed = [programInput("locked_in"), programInput("open_in")];
 
 		expect(refusalOf(() => checkRelativeTimelockPlacement(144, rules, placed)).reject).toBe(
 			"unimplemented-construct",
@@ -84,7 +84,7 @@ describe("whether one sequence can carry a relative timelock faithfully", () => 
 	test("a sequence with the timelock bit disabled constrains no input, so it carries", () => {
 		const rules: InputRule[] = [{ id: "will_in", sequence: 4_294_967_294 }];
 
-		checkRelativeTimelockPlacement(4_294_967_294, rules, [covenantInput("will_in"), walletInput()]);
+		checkRelativeTimelockPlacement(4_294_967_294, rules, [programInput("will_in"), walletInput()]);
 	});
 
 	test("an undeclared sequence carries whatever the inputs are", () => {

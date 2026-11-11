@@ -13,7 +13,7 @@ export type RejectToken =
 	| "no-such-action"
 	| "no-utxo-to-spend"
 	| "chain-read-failed"
-	| "covenant-mismatch"
+	| "program-mismatch"
 	| "no-fee-rate"
 	| "no-funds-at-signing-address"
 	| "shortfall"

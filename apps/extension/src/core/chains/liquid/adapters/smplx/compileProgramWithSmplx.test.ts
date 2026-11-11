@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-	createSmplxCovenantParamTypes,
-	createSmplxCovenantCompiler,
+	createSmplxProgramParamTypes,
+	createSmplxProgramCompiler,
 	createSmplxScriptPubKeyCompiler,
-} from "./compileCovenantWithSmplx";
+} from "./compileProgramWithSmplx";
 import type { SmplxWasmModule } from "./loadSmplxWasm";
 import { smplx } from "./smplxWasmForTests";
 
@@ -23,7 +23,7 @@ type Construction = [
 function recording(
 	answers: {
 		address?: () => string;
-		commitmentMerkleRoot?: () => string;
+		cmr?: () => string;
 		scriptPubKeyHex?: () => string;
 		tapleafHash?: () => string;
 	} = {},
@@ -34,15 +34,15 @@ function recording(
 	return {
 		built,
 		module: {
-			Covenant: class {
+			Program: class {
 				constructor(...construction: Construction) {
 					built.push(construction);
 				}
-				address() {
+				trAddress() {
 					return answers.address?.() ?? "tex1p_derived";
 				}
-				commitmentMerkleRoot() {
-					return answers.commitmentMerkleRoot?.() ?? CMR;
+				cmr() {
+					return answers.cmr?.() ?? CMR;
 				}
 				free() {
 					freed += 1;
@@ -50,20 +50,20 @@ function recording(
 				tapleafHash() {
 					return answers.tapleafHash?.() ?? TAPLEAF_HASH;
 				}
-				scriptPubKeyHex() {
+				scriptPubkey() {
 					return answers.scriptPubKeyHex?.() ?? SCRIPT;
 				}
 			},
-		} as unknown as Pick<SmplxWasmModule, "Covenant">,
+		} as unknown as Pick<SmplxWasmModule, "Program">,
 		released: () => freed,
 	};
 }
 
-describe("what a compiled covenant is reported as", () => {
+describe("what a compiled program is reported as", () => {
 	async function compiled() {
 		const { module } = recording();
 
-		return await createSmplxCovenantCompiler(module)({
+		return await createSmplxProgramCompiler(module)({
 			argumentsJson: "{}",
 			extraLeavesJson: "[]",
 			includeDebugSymbols: false,
@@ -89,11 +89,11 @@ describe("what a compiled covenant is reported as", () => {
 	});
 });
 
-describe("createSmplxCovenantCompiler", () => {
+describe("createSmplxProgramCompiler", () => {
 	test("forwards the source, the arguments, the leaves and the build mode", () => {
 		const { built, module } = recording();
 
-		createSmplxCovenantCompiler(module)({
+		createSmplxProgramCompiler(module)({
 			argumentsJson: '{"PUB_KEY":{"type":"Pubkey","value":"0x00"}}',
 			extraLeavesJson: "[]",
 			includeDebugSymbols: true,
@@ -108,7 +108,7 @@ describe("createSmplxCovenantCompiler", () => {
 
 	test("forwards the mode the review decided, not one of its own", () => {
 		const { built, module } = recording();
-		const compile = createSmplxCovenantCompiler(module);
+		const compile = createSmplxProgramCompiler(module);
 		const asked = {
 			argumentsJson: "{}",
 			extraLeavesJson: "[]",
@@ -123,10 +123,10 @@ describe("createSmplxCovenantCompiler", () => {
 	});
 
 	describe("what it releases", () => {
-		test("releases the covenant it compiled", () => {
+		test("releases the program it compiled", () => {
 			const { module, released } = recording();
 
-			createSmplxCovenantCompiler(module)({
+			createSmplxProgramCompiler(module)({
 				argumentsJson: "{}",
 				extraLeavesJson: "[]",
 				includeDebugSymbols: false,
@@ -137,7 +137,7 @@ describe("createSmplxCovenantCompiler", () => {
 			expect(released()).toBe(1);
 		});
 
-		test("releases the covenant when reading it throws", () => {
+		test("releases the program when reading it throws", () => {
 			const { module, released } = recording({
 				address: () => {
 					throw new Error("unknown network");
@@ -145,7 +145,7 @@ describe("createSmplxCovenantCompiler", () => {
 			});
 
 			expect(() =>
-				createSmplxCovenantCompiler(module)({
+				createSmplxProgramCompiler(module)({
 					argumentsJson: "{}",
 					extraLeavesJson: "[]",
 					includeDebugSymbols: false,
@@ -190,7 +190,7 @@ describe("createSmplxScriptPubKeyCompiler", () => {
 		expect(typeof answer).toBe("string");
 	});
 
-	test("releases the covenant, including when compiling it throws", () => {
+	test("releases the program, including when compiling it throws", () => {
 		const { module, released } = recording({
 			scriptPubKeyHex: () => {
 				throw new Error("did not compile");
@@ -213,9 +213,9 @@ describe("createSmplxScriptPubKeyCompiler", () => {
 });
 
 const answering = (answer: string) =>
-	createSmplxCovenantParamTypes({ covenantParameterTypes: () => answer });
+	createSmplxProgramParamTypes({ programArgumentTypes: () => answer });
 
-describe("createSmplxCovenantParamTypes", () => {
+describe("createSmplxProgramParamTypes", () => {
 	test("reads the types the compiler reports for a contract", () => {
 		expect(answering('{"SLOT_COUNT":"u8","WITH_BURN":"bool"}')(PROBE_SOURCE)).toEqual({
 			SLOT_COUNT: "u8",
@@ -230,8 +230,8 @@ describe("createSmplxCovenantParamTypes", () => {
 	test("passes the source through unchanged", () => {
 		const asked: string[] = [];
 
-		createSmplxCovenantParamTypes({
-			covenantParameterTypes: (source: string) => {
+		createSmplxProgramParamTypes({
+			programArgumentTypes: (source: string) => {
 				asked.push(source);
 
 				return "{}";
@@ -257,7 +257,7 @@ describe("createSmplxCovenantParamTypes", () => {
 });
 
 describe("against the module this wallet ships", () => {
-	const compile = createSmplxCovenantCompiler(smplx);
+	const compile = createSmplxProgramCompiler(smplx);
 	const asked = {
 		argumentsJson: "{}",
 		extraLeavesJson: "[]",
@@ -266,26 +266,26 @@ describe("against the module this wallet ships", () => {
 		source: PROBE_SOURCE,
 	};
 
-	test("reports both spellings of where a covenant is, from one compile", async () => {
+	test("reports both spellings of where a program is, from one compile", async () => {
 		const compiled = await compile(asked);
 
 		expect(compiled.address.startsWith("tex1p")).toBe(true);
 		expect(compiled.scriptPubKeyHex).toMatch(/^(?:[0-9a-f]{2})+$/);
 	});
 
-	test("agrees with what a covenant compiled on its own says", async () => {
+	test("agrees with what a program compiled on its own says", async () => {
 		const compiled = await compile(asked);
-		const covenant = new smplx.Covenant(PROBE_SOURCE, "{}", "[]", false);
+		const program = new smplx.Program(PROBE_SOURCE, "{}", "[]", false);
 
 		try {
-			expect(compiled.address).toBe(covenant.address("liquid-testnet"));
-			expect(compiled.scriptPubKeyHex).toBe(covenant.scriptPubKeyHex("liquid-testnet"));
+			expect(compiled.address).toBe(program.trAddress("liquid-testnet"));
+			expect(compiled.scriptPubKeyHex).toBe(program.scriptPubkey("liquid-testnet"));
 		} finally {
-			covenant.free();
+			program.free();
 		}
 	});
 
-	test("builds a different covenant in the other mode", async () => {
+	test("builds a different program in the other mode", async () => {
 		const plain = await compile(asked);
 		const debug = await compile({ ...asked, includeDebugSymbols: true });
 
@@ -293,19 +293,19 @@ describe("against the module this wallet ships", () => {
 	});
 
 	test("hashes the same script the full compile locks to", () => {
-		const covenant = new smplx.Covenant(PROBE_SOURCE, "{}", "[]", false);
+		const program = new smplx.Program(PROBE_SOURCE, "{}", "[]", false);
 
 		try {
 			expect(createSmplxScriptPubKeyCompiler(smplx, "liquid-testnet")(asked)).toBe(
-				covenant.scriptPubKeyHex("liquid-testnet"),
+				program.scriptPubkey("liquid-testnet"),
 			);
 		} finally {
-			covenant.free();
+			program.free();
 		}
 	});
 
 	test("reads what the module says a contract's parameters are", async () => {
-		const declared = await createSmplxCovenantParamTypes(smplx)(
+		const declared = await createSmplxProgramParamTypes(smplx)(
 			"fn main() { assert!(jet::eq_8(param::SLOTS, 2)); }",
 		);
 

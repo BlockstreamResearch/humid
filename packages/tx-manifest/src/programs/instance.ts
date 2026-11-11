@@ -4,7 +4,7 @@ import { type ReferenceScope, resolveReference } from "../document/references";
 import { computedValue, computesValue } from "../evaluation/computedValue";
 import { Refusal } from "../refusal";
 import { resolveCompileParams } from "./compileParams";
-import { COVENANT_HASH_SEED, type HashCovenant, ITERATION_BOUND } from "./covenantHash";
+import { PROGRAM_HASH_SEED, type HashProgram, ITERATION_BOUND } from "./programHash";
 import { stateLeavesOf } from "./stateLeaves";
 
 export type CreatedInstance = { fields: Record<string, string>; rounds: number };
@@ -48,7 +48,7 @@ export function resolveCreatedInstance(
 	action: Action,
 	input: {
 		contractSources: Record<string, string>;
-		hashCovenant: HashCovenant;
+		hashProgram: HashProgram;
 		scope: ReferenceScope;
 	},
 ): CreatedInstance {
@@ -112,7 +112,7 @@ export function resolveCreatedInstance(
 	const declaredTypes = fieldTypes(declared);
 	const ordered = inDependencyOrder(computed);
 	let values: Record<string, string> = Object.fromEntries(
-		computed.map(({ name }) => [name, COVENANT_HASH_SEED]),
+		computed.map(({ name }) => [name, PROGRAM_HASH_SEED]),
 	);
 
 	for (let round = 1; round <= ITERATION_BOUND; round += 1) {
@@ -130,7 +130,7 @@ export function resolveCreatedInstance(
 				() => {
 					const wiring = tapleafWiring(node);
 
-					return input.hashCovenant({
+					return input.hashProgram({
 						argumentsJson: JSON.stringify(
 							resolveCompileParams(
 								wiring.wiring,
@@ -161,7 +161,7 @@ export function resolveCreatedInstance(
 	}
 
 	throw new Refusal(
-		`The covenant hashes this deployment's fields compute never settle: ${computed
+		`The program hashes this deployment's fields compute never settle: ${computed
 			.map(({ name }) => name)
 			.join(", ")} still change after ${ITERATION_BOUND} rounds. ` +
 			"A deployment recorded from values that never agreed with themselves would locate " +

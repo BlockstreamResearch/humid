@@ -31,13 +31,13 @@ const receive = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
 
 const PUB_KEY_ARGUMENT = JSON.stringify({ PUB_KEY: { type: "Pubkey", value: `0x${PUBKEY}` } });
 
-describe("creating a covenant", () => {
-	test("reports the derived covenant as not yet onchain", async () => {
+describe("creating a program", () => {
+	test("reports the derived program as not yet onchain", async () => {
 		const review = await reviewed(pay());
 
 		expect(review.action).toBe("Pay");
 		expect(review.protocol).toBe("p2pk-simplicity");
-		expect(review.covenants).toEqual([
+		expect(review.programs).toEqual([
 			{
 				address: DERIVED,
 				argumentsJson: PUB_KEY_ARGUMENT,
@@ -84,11 +84,11 @@ describe("creating a covenant", () => {
 	});
 });
 
-describe("spending a covenant", () => {
+describe("spending a program", () => {
 	test("gets past verification when the rebuilt contract locks the funds that are there", async () => {
 		const review = await reviewed(receive());
 
-		expect(review.covenants.map((found) => found.verified)).toEqual(["matches-chain"]);
+		expect(review.programs.map((found) => found.verified)).toEqual(["matches-chain"]);
 		expect(review.outputs.find((output) => output.id === "received_out")?.sats).toBe(50_000n);
 	});
 
@@ -109,11 +109,11 @@ describe("spending a covenant", () => {
 	test("refuses when the funds are locked by something else", async () => {
 		const refusal = await refused(receive(), { readTxOut: chainHolding(ELSEWHERE_SCRIPT) });
 
-		expect(refusal.reject).toBe("covenant-mismatch");
+		expect(refusal.reject).toBe("program-mismatch");
 		expect(refusal.reason).toContain("p2pk_output");
 	});
 
-	test("refuses when the state file lists no such covenant", async () => {
+	test("refuses when the state file lists no such program", async () => {
 		expect((await refused(receive({ state: { utxos: [] } }))).reject).toBe("no-utxo-to-spend");
 	});
 
@@ -161,7 +161,7 @@ describe("what a request must carry", () => {
 });
 
 describe("the transaction a review settles", () => {
-	test("pays the covenant output the script it derived, not the address it is shown as", async () => {
+	test("pays the program output the script it derived, not the address it is shown as", async () => {
 		expect((await reviewed(pay())).outputs).toEqual([
 			{
 				asset: POLICY_ASSET,

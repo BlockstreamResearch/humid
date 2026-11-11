@@ -57,7 +57,7 @@ const UNENCODABLE: Record<string, string> = {
 		"format nor the compiler says which of the two a contract is meant to be built with",
 	bytes:
 		"a value of this type carries no width, and the compiler needs an exact one — the same " +
-		"bytes at two widths are two different covenants",
+		"bytes at two widths are two different programs",
 	string:
 		"the compiler has no string type, so there is nothing to encode a run of text into " +
 		"without choosing an encoding the format never states",

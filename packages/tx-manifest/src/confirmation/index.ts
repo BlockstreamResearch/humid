@@ -24,7 +24,7 @@ export type PublishedAmount = {
 	reason: Provenanced<string>;
 };
 
-export type CovenantRow = {
+export type ProgramRow = {
 	address: Provenanced<string>;
 	cmr: Provenanced<string>;
 	tapleafHash: Provenanced<string>;
@@ -35,7 +35,7 @@ export type CovenantRow = {
 export type ConfirmationModel = {
 	account: Provenanced<string>;
 	action: Provenanced<string>;
-	covenants: CovenantRow[];
+	programs: ProgramRow[];
 	feeAsset: Provenanced<string>;
 	feeSats: Provenanced<bigint>;
 	blindedAmounts: BlindedAmount[];
@@ -58,7 +58,7 @@ export function confirmationModel(
 	return {
 		account: computed(input.accountLabel),
 		action: fromDapp(review.action),
-		covenants: review.covenants.map((found) => ({
+		programs: review.programs.map((found) => ({
 			address:
 				found.verified === "matches-chain" ? verified(found.address) : computed(found.address),
 			cmr: computed(found.cmr),
