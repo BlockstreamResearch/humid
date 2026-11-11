@@ -10,13 +10,13 @@ export type InputRule = {
 	sequence?: number;
 };
 
-const MAX_RELATIVE_BLOCKS = 0xff_ff;
+const MAX_RELATIVE_UNITS = 0xff_ffn;
 
-const MAX_SEQUENCE = 0xff_ff_ff_ff;
+const MAX_SEQUENCE = 0xff_ff_ff_ffn;
 
-function wholeCount(value: number): bigint | undefined {
-	return Number.isSafeInteger(value) && value >= 0 ? BigInt(value) : undefined;
-}
+const TIME_BASED = 0x40_00_00;
+
+const SECONDS_PER_UNIT = 512n;
 
 export function resolveInputRules(action: Action, scope: ReferenceScope): InputRule[] {
 	const rules: InputRule[] = [];
@@ -51,37 +51,61 @@ export function resolveInputRules(action: Action, scope: ReferenceScope): InputR
 }
 
 function resolveSequence(declared: unknown, scope: ReferenceScope): number {
-	if (typeof declared === "number") {
-		if (!Number.isSafeInteger(declared) || declared < 0 || declared > MAX_SEQUENCE) {
+	const relative = asRecord(declared);
+
+	if (relative?.relative_blocks !== undefined) {
+		const blocks = wholeCount(relative.relative_blocks, "blocks", scope);
+
+		if (blocks > MAX_RELATIVE_UNITS) {
 			throw new Refusal(
-				`its sequence is ${declared}, which is not a number the sequence field holds.`,
+				`it asks to wait ${blocks} blocks, which a relative timelock cannot express.`,
 			);
 		}
 
-		return declared;
+		return Number(blocks);
 	}
 
-	const relative = asRecord(declared)?.relative_blocks;
+	if (relative?.relative_seconds !== undefined) {
+		const seconds = wholeCount(relative.relative_seconds, "seconds", scope);
+		const units = (seconds + SECONDS_PER_UNIT - 1n) / SECONDS_PER_UNIT;
 
-	if (relative === undefined) {
-		throw new Refusal("its sequence is neither a number nor a relative-blocks count.");
+		if (units > MAX_RELATIVE_UNITS) {
+			throw new Refusal(
+				`it asks to wait ${seconds} seconds, which a relative timelock cannot express.`,
+			);
+		}
+
+		return TIME_BASED | Number(units);
 	}
 
-	const counted = typeof relative === "number" ? wholeCount(relative) : undefined;
-
-	if (typeof relative === "number" && counted === undefined) {
-		throw new Refusal(`it asks to wait ${relative} blocks, which is not a number of blocks.`);
+	if (typeof declared !== "number" && typeof declared !== "string") {
+		throw new Refusal("its sequence is neither a number nor a relative timelock.");
 	}
 
-	const blocks = counted ?? evaluateExpression(String(relative), "expression", scope);
+	const raw = wholeCount(declared, "as its value", scope);
 
-	if (blocks < 0n || blocks > BigInt(MAX_RELATIVE_BLOCKS)) {
+	if (raw > MAX_SEQUENCE) {
+		throw new Refusal(`its sequence is ${raw}, which is not a number the sequence field holds.`);
+	}
+
+	return Number(raw);
+}
+
+function wholeCount(declared: unknown, unit: string, scope: ReferenceScope): bigint {
+	const counted =
+		typeof declared === "number"
+			? Number.isSafeInteger(declared) && declared >= 0
+				? BigInt(declared)
+				: undefined
+			: evaluateExpression(String(declared), "expression", scope);
+
+	if (counted === undefined || counted < 0n) {
 		throw new Refusal(
-			`it asks to wait ${blocks} blocks, which a relative timelock cannot express.`,
+			`its sequence asks for ${String(declared)} ${unit}, which is not a whole number.`,
 		);
 	}
 
-	return Number(blocks);
+	return counted;
 }
 
 function resolveFromAddress(declared: unknown, scope: ReferenceScope): string {
@@ -96,62 +120,4 @@ function resolveFromAddress(declared: unknown, scope: ReferenceScope): string {
 	}
 
 	return found;
-}
-
-const SEQUENCE_TIMELOCK_DISABLED_FROM = 0x8000_0000;
-
-export function transactionSequence(rules: InputRule[]): number | undefined {
-	const declared = rules.filter((rule) => rule.sequence !== undefined);
-	const first = declared[0];
-
-	if (first?.sequence === undefined) {
-		return undefined;
-	}
-
-	const disagreeing = declared.find((rule) => rule.sequence !== first.sequence);
-
-	if (disagreeing) {
-		throw new Refusal(
-			`Input ${first.id} asks for sequence ${first.sequence} and input ${disagreeing.id} for ` +
-				`${disagreeing.sequence}. This wallet sets one sequence for the whole transaction and ` +
-				"cannot give two inputs different ones.",
-			"unimplemented-construct",
-		);
-	}
-
-	return first.sequence;
-}
-
-export type PlacedInputOrigin = { declaredBy?: string };
-
-export function checkRelativeTimelockPlacement(
-	sequence: number | undefined,
-	rules: InputRule[],
-	placed: PlacedInputOrigin[],
-): void {
-	if (sequence === undefined || sequence >= SEQUENCE_TIMELOCK_DISABLED_FROM) {
-		return;
-	}
-
-	const asking = rules.filter((rule) => rule.sequence === sequence);
-	const asked = new Set(asking.map((rule) => rule.id));
-	const inheriting = placed.filter(
-		(origin) => origin.declaredBy === undefined || !asked.has(origin.declaredBy),
-	);
-
-	if (inheriting.length === 0) {
-		return;
-	}
-
-	const named = asking[0]?.id ?? "(unnamed)";
-	const one = inheriting.length === 1;
-
-	throw new Refusal(
-		`Input ${named} asks for a relative timelock (sequence ${sequence}), and this wallet sets ` +
-			`one sequence for the whole transaction. ${inheriting.length} other input` +
-			`${one ? "" : "s"} would inherit that wait, measured against ${one ? "its" : "their"} own ` +
-			`age rather than ${named}'s, so nothing would relay the transaction until every one ` +
-			"of them is that old as well.",
-		"unimplemented-construct",
-	);
 }

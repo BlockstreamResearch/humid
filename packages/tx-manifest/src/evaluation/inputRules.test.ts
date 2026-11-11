@@ -1,93 +1,44 @@
 import { describe, expect, test } from "bun:test";
 
+import type { Action } from "../document/manifest";
 import { refusalOf } from "../review/reviewForTests";
-import { checkRelativeTimelockPlacement, type InputRule, transactionSequence } from "./inputRules";
+import { resolveInputRules } from "./inputRules";
 
-const programInput = (id: string) => ({ declaredBy: id });
+function sequenceOf(sequence: unknown, params: Record<string, unknown> = {}) {
+	const action: Action = {
+		isConstructor: false,
+		name: "Act",
+		node: { inputs: [{ id: "a", sequence }] },
+	};
 
-const walletInput = () => ({});
+	return resolveInputRules(action, { params })[0]?.sequence;
+}
 
-describe("the one sequence this wallet sets for a whole transaction", () => {
-	test("is none where no input asks for one", () => {
-		expect(transactionSequence([{ id: "a" }, { id: "b" }])).toBeUndefined();
+describe("the sequence an input declares", () => {
+	test("is taken as written when the input states a number", () => {
+		expect(sequenceOf(4_294_967_294)).toBe(4_294_967_294);
 	});
 
-	test("is the value the inputs agree on", () => {
-		const rules: InputRule[] = [
-			{ id: "a", sequence: 4_294_967_294 },
-			{ id: "b" },
-			{ id: "c", sequence: 4_294_967_294 },
-		];
-
-		expect(transactionSequence(rules)).toBe(4_294_967_294);
+	test("is a block count when the input waits blocks", () => {
+		expect(sequenceOf({ relative_blocks: 25_920 })).toBe(25_920);
 	});
 
-	test("refuses where two inputs ask for different ones", () => {
-		const rules: InputRule[] = [
-			{ id: "a", sequence: 4_294_967_294 },
-			{ id: "b", sequence: 4_294_967_293 },
-		];
-		const refusal = refusalOf(() => transactionSequence(rules));
-
-		expect(refusal.reject).toBe("unimplemented-construct");
-		expect(refusal.reason).toContain("cannot give two inputs different ones");
+	test("is a count of 512-second units, rounded up and marked as time, when the input waits seconds", () => {
+		expect(sequenceOf({ relative_seconds: 1025 })).toBe(0x40_00_00 | 3);
 	});
 
-	test("carries a relative timelock rather than refusing it outright", () => {
-		expect(transactionSequence([{ id: "a", sequence: 10 }])).toBe(10);
-	});
-});
-
-describe("whether one sequence can carry a relative timelock faithfully", () => {
-	test("it can where the asking input is the only one in the transaction", () => {
-		const rules: InputRule[] = [{ id: "will_in", sequence: 25_920 }];
-
-		checkRelativeTimelockPlacement(25_920, rules, [programInput("will_in")]);
+	test("reads an expression the input waits on", () => {
+		expect(sequenceOf({ relative_blocks: "params.WAIT" }, { WAIT: "144" })).toBe(144);
 	});
 
-	test("it can where every input in the transaction asks for the same wait", () => {
-		const rules: InputRule[] = [
-			{ id: "one_in", sequence: 144 },
-			{ id: "two_in", sequence: 144 },
-		];
-
-		checkRelativeTimelockPlacement(144, rules, [programInput("one_in"), programInput("two_in")]);
-	});
-
-	test("it cannot where a wallet input would inherit the wait", () => {
-		const rules: InputRule[] = [{ id: "will_in", sequence: 25_920 }];
-		const placed = [programInput("will_in"), walletInput()];
-		const { reason } = refusalOf(() => checkRelativeTimelockPlacement(25_920, rules, placed));
-
-		expect(reason).toContain("will_in");
-		expect(reason).toContain("1 other input would inherit that wait");
-	});
-
-	test("it counts every input that would inherit the wait", () => {
-		const rules: InputRule[] = [{ id: "will_in", sequence: 25_920 }];
-		const placed = [programInput("will_in"), walletInput(), walletInput()];
-
-		expect(refusalOf(() => checkRelativeTimelockPlacement(25_920, rules, placed)).reason).toContain(
-			"2 other inputs would inherit that wait",
+	test("refuses a wait no relative timelock can express", () => {
+		expect(refusalOf(() => sequenceOf({ relative_blocks: 65_536 })).reason).toContain("65536");
+		expect(refusalOf(() => sequenceOf({ relative_seconds: 65_536 * 512 })).reject).toBe(
+			"document-fault",
 		);
 	});
 
-	test("it cannot where a co-spent program input asked for nothing", () => {
-		const rules: InputRule[] = [{ id: "locked_in", sequence: 144 }, { id: "open_in" }];
-		const placed = [programInput("locked_in"), programInput("open_in")];
-
-		expect(refusalOf(() => checkRelativeTimelockPlacement(144, rules, placed)).reject).toBe(
-			"unimplemented-construct",
-		);
-	});
-
-	test("a sequence with the timelock bit disabled constrains no input, so it carries", () => {
-		const rules: InputRule[] = [{ id: "will_in", sequence: 4_294_967_294 }];
-
-		checkRelativeTimelockPlacement(4_294_967_294, rules, [programInput("will_in"), walletInput()]);
-	});
-
-	test("an undeclared sequence carries whatever the inputs are", () => {
-		checkRelativeTimelockPlacement(undefined, [], [walletInput()]);
+	test("refuses a sequence of something other than a number or a wait", () => {
+		expect(refusalOf(() => sequenceOf({ forever: true })).reject).toBe("document-fault");
 	});
 });

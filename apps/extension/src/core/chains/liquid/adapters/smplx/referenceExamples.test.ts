@@ -278,10 +278,14 @@ describe("last_will", () => {
 		}
 	});
 
-	test("Inherit waits on a per-input sequence, which this wallet does not set yet", async () => {
-		expect(await lastWill.outcome("Inherit", { instance: await will(), spends })).toBe(
-			"unimplemented-construct",
-		);
+	test("Inherit signs, with the inheritance delay on the will and not on the fee input", async () => {
+		const review = await lastWill.reviewed("Inherit", { instance: await will(), spends });
+
+		expect(review.inputOrder.map((planned) => [planned.source, planned.sequence])).toEqual([
+			["program", 25_920],
+			["wallet", undefined],
+		]);
+		expect(signedFee(review)).toBe(review.estimatedFeeSats);
 	});
 });
 

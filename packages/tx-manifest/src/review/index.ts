@@ -33,8 +33,8 @@ export type ReviewedProgramInput = {
 };
 
 export type PlannedInput =
-	| { program: ReviewedProgramInput; source: "program" }
-	| { source: "wallet"; utxo: SelectableUtxo };
+	| { program: ReviewedProgramInput; sequence?: number; source: "program" }
+	| { sequence?: number; source: "wallet"; utxo: SelectableUtxo };
 
 export type ReviewedOutput = {
 	asset: string;
@@ -57,7 +57,6 @@ export type TransactionDraft = {
 	issuances: PlannedIssuance[];
 	locktimeHeight?: number;
 	outputs: ReviewedOutput[];
-	sequence?: number;
 };
 
 export type EstimateFee = (

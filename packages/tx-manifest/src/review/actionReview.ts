@@ -22,12 +22,7 @@ import {
 	withHookValues,
 } from "../evaluation/hooks";
 import { type InputPlacement, type PlaceableInput, placeInputs } from "../evaluation/inputOrder";
-import {
-	checkRelativeTimelockPlacement,
-	type InputRule,
-	resolveInputRules,
-	transactionSequence,
-} from "../evaluation/inputRules";
+import { type InputRule, resolveInputRules } from "../evaluation/inputRules";
 import {
 	declaredIssuance,
 	issuanceAttributes,
@@ -184,16 +179,9 @@ export class ActionReview {
 		planAction(this.#action, this.#scope);
 
 		const rules = resolveInputRules(this.#action, this.#scope);
-		const sequence = transactionSequence(rules);
 		const feeRateSatsPerKvb = await this.#feeRate();
-		const locktimeHeight =
-			this.#programInputs.length > 0 && this.#input.readChainTip
-				? await this.#input.readChainTip().catch(() => undefined)
-				: undefined;
-		const timing = {
-			...(locktimeHeight === undefined ? {} : { locktimeHeight }),
-			...(sequence === undefined ? {} : { sequence }),
-		};
+		const locktimeHeight = await this.#locktimeHeight();
+		const timing = locktimeHeight === undefined ? {} : { locktimeHeight };
 		let settled = await this.#settle(issued, rules, timing, feeRateSatsPerKvb);
 
 		for (let round = 1; settled.feeSats > (this.#scope.fee ?? 0n); round += 1) {
@@ -240,7 +228,7 @@ export class ActionReview {
 	async #settle(
 		issued: ResolvedIssuances,
 		rules: InputRule[],
-		timing: Pick<TransactionDraft, "locktimeHeight" | "sequence">,
+		timing: Pick<TransactionDraft, "locktimeHeight">,
 		feeRateSatsPerKvb: number,
 	) {
 		const plan = planAction(this.#action, this.#scope);
@@ -250,7 +238,7 @@ export class ActionReview {
 
 		const funded = this.#fund(ledger, rules, issued);
 		const paid = this.#payOutputs(plan, ledger, funded);
-		const placed = this.#placeInputs(ledger, funded, rules, timing.sequence);
+		const placed = this.#placeInputs(ledger, funded, rules);
 
 		this.#checkPositions(placed, paid);
 
@@ -379,6 +367,22 @@ export class ActionReview {
 				vout: outpoint.vout,
 			});
 			this.#programs.push({ ...derived, role: "spent", verified: "matches-chain" });
+		}
+	}
+
+	async #locktimeHeight(): Promise<number | undefined> {
+		if (this.#programInputs.length === 0 || !this.#input.readChainTip) {
+			return undefined;
+		}
+
+		try {
+			return await this.#input.readChainTip();
+		} catch (error) {
+			throw new Refusal(
+				`Could not read the chain's height, which a transaction spending a program is ` +
+					`locked to: ${String(error)}`,
+				"chain-read-failed",
+			);
 		}
 	}
 
@@ -670,12 +674,13 @@ export class ActionReview {
 		return paid;
 	}
 
-	#placeInputs(
-		ledger: AssetLedger,
-		funded: FundedAsset[],
-		rules: InputRule[],
-		sequence: number | undefined,
-	): PlacedInputs {
+	#placeInputs(ledger: AssetLedger, funded: FundedAsset[], rules: InputRule[]): PlacedInputs {
+		const sequenceOf = new Map(rules.map((rule) => [rule.id, rule.sequence]));
+		const withSequence = (id: string) => {
+			const sequence = sequenceOf.get(id);
+
+			return sequence === undefined ? {} : { sequence };
+		};
 		const fundedFor = new Map(funded.map((entry) => [entry.asset, entry]));
 		const fundedOrder = [
 			...new Set([
@@ -691,18 +696,28 @@ export class ActionReview {
 			const credited = creditedWith.get(wallet.asset);
 
 			if (credited !== undefined) {
+				if (sequenceOf.get(wallet.id) !== sequenceOf.get(credited)) {
+					throw new Refusal(
+						`Inputs ${credited} and ${wallet.id} are funded from one selection of this ` +
+							"wallet's outputs and ask for different sequences, so this wallet cannot " +
+							"say which of those outputs waits for which.",
+						"unimplemented-construct",
+					);
+				}
+
 				fundedWith.set(wallet.id, credited);
 
 				continue;
 			}
 
+			const waits = withSequence(wallet.id);
+
 			creditedWith.set(wallet.asset, wallet.id);
 			walletRuns.set(
 				wallet.id,
-				(fundedFor.get(wallet.asset)?.selected ?? []).map((utxo) => ({
-					source: "wallet" as const,
-					utxo,
-				})),
+				(fundedFor.get(wallet.asset)?.selected ?? []).map((utxo) =>
+					Object.assign({ source: "wallet" as const, utxo }, waits),
+				),
 			);
 		}
 
@@ -719,7 +734,9 @@ export class ActionReview {
 
 			placeable.push({
 				id,
-				slots: program ? [{ program, source: "program" }] : (walletRuns.get(id) ?? []),
+				slots: program
+					? [{ program, source: "program", ...withSequence(id) }]
+					: (walletRuns.get(id) ?? []),
 				...(wanted === undefined ? {} : { stated: wanted }),
 			});
 		}
@@ -733,14 +750,6 @@ export class ActionReview {
 		}
 
 		const placement = placeInputs(placeable);
-
-		checkRelativeTimelockPlacement(
-			sequence,
-			rules,
-			placement.order.map((planned) =>
-				planned.source === "program" ? { declaredBy: planned.program.id } : {},
-			),
-		);
 
 		return {
 			landedAt: (id) => {
@@ -859,12 +868,12 @@ const UNDECLARED_CHANGE: BlindingDecision = {
 	overrode: "chain",
 };
 
-const ALLOW_CHANGE = ["none", "lbtc_only", "any"];
+const ALLOW_CHANGE = new Set(["none", "lbtc_only", "any"]);
 
 function allowChange(action: Action): string {
 	const declared = action.node.allow_change ?? "none";
 
-	if (typeof declared !== "string" || !ALLOW_CHANGE.includes(declared)) {
+	if (typeof declared !== "string" || !ALLOW_CHANGE.has(declared)) {
 		throw new Refusal(
 			`${action.name} sets allow_change to ${JSON.stringify(declared)}, and the format ` +
 				'allows only "none", "lbtc_only" or "any".',

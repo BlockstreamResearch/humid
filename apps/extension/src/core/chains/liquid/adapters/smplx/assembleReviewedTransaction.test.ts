@@ -55,7 +55,7 @@ type Recorded = {
 		script: string;
 	}[];
 	locktimes: number[];
-	sequences: number[];
+	sequences: { inputIndex: number; sequence: number }[];
 	spends: { txOut: string; txid: string; vout: number }[];
 	unused: { inputIndex: number; names: string[] }[];
 };
@@ -184,8 +184,8 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 			setLocktimeHeight(height: number) {
 				recorded.locktimes.push(height);
 			}
-			setSequence(sequence: number) {
-				recorded.sequences.push(sequence);
+			setInputSequence(inputIndex: number, sequence: number) {
+				recorded.sequences.push({ inputIndex, sequence });
 			}
 			setUnusedWitnesses(inputIndex: number, names: string[]) {
 				recorded.unused.push({ inputIndex, names });
@@ -579,15 +579,21 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.unused).toEqual([]);
 		});
 
-		test("declares the locktime and the sequence the plan carries", async () => {
+		test("declares the locktime the plan carries, and each input's own sequence", async () => {
 			const { assemble, recorded } = subject(
-				spendingPlan({ locktimeHeight: 3_210_987, sequence: 4_294_967_294 }),
+				spendingPlan({
+					inputOrder: [
+						{ source: "wallet", utxo: WALLET_UTXO },
+						{ program: programInput, sequence: 25_920, source: "program" },
+					],
+					locktimeHeight: 3_210_987,
+				}),
 				spent,
 			);
 
 			expect(await assemble()).toMatchObject({ ok: true });
 			expect(recorded.locktimes).toEqual([3_210_987]);
-			expect(recorded.sequences).toEqual([4_294_967_294]);
+			expect(recorded.sequences).toEqual([{ inputIndex: 1, sequence: 25_920 }]);
 		});
 
 		test("declares neither where the plan carries neither", async () => {

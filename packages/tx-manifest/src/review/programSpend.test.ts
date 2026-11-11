@@ -167,29 +167,34 @@ describe("the transaction-level facts a program spend needs", () => {
 		expect(review.locktimeHeight).toBeUndefined();
 	});
 
-	test("builds without one rather than refusing when the tip cannot be read", async () => {
-		const review = await reviewed(spending(), {
+	test("refuses when the tip cannot be read, rather than building without a locktime", async () => {
+		const refusal = await refused(spending(), {
 			readChainTip: async () => {
 				throw new Error("404");
 			},
 		});
 
-		expect(review.locktimeHeight).toBeUndefined();
-		expect(review.programInputs).toHaveLength(1);
+		expect(refusal.reject).toBe("chain-read-failed");
+		expect(refusal.reason).toContain("404");
 	});
 
-	test("carries the one sequence the action declares", async () => {
+	test("carries the sequence the action declares on the input that declares it", async () => {
 		const inputs = receiveInputs();
 
 		inputs[0] = { ...inputs[0], sequence: 4_294_967_294 };
 
 		const review = await reviewed(spending(withReceive(inputs)));
 
-		expect(review.sequence).toBe(4_294_967_294);
+		expect(review.inputOrder.map((planned) => planned.sequence)).toEqual([
+			4_294_967_294,
+			undefined,
+		]);
 	});
 
 	test("carries none where the action declares none", async () => {
-		expect((await reviewed(spending())).sequence).toBeUndefined();
+		const review = await reviewed(spending());
+
+		expect(review.inputOrder.map((planned) => planned.sequence)).toEqual([undefined, undefined]);
 	});
 
 	test("carries a relative timelock where the program input is the only input", async () => {
@@ -208,20 +213,22 @@ describe("the transaction-level facts a program spend needs", () => {
 		];
 		const review = await reviewed(spending(withReceive([inputs[0]], outputs, "lbtc_only")));
 
-		expect(review.sequence).toBe(10);
+		expect(review.inputOrder.map((planned) => planned.sequence)).toEqual([10]);
 		expect(review.selected).toHaveLength(0);
 		expect(review.inputOrder).toHaveLength(1);
 	});
 
-	test("refuses a relative timelock a wallet fee input would inherit", async () => {
+	test("keeps a program input's relative timelock off the wallet's fee input", async () => {
 		const inputs = receiveInputs();
 
 		inputs[0] = { ...inputs[0], sequence: { relative_blocks: 10 } };
 
-		const refusal = await refused(spending(withReceive(inputs)));
+		const review = await reviewed(spending(withReceive(inputs)));
 
-		expect(refusal.reject).toBe("unimplemented-construct");
-		expect(refusal.reason).toContain("would inherit that wait");
+		expect(review.inputOrder.map((planned) => [planned.source, planned.sequence])).toEqual([
+			["program", 10],
+			["wallet", undefined],
+		]);
 	});
 });
 

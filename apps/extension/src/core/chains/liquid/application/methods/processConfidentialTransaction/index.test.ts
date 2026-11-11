@@ -169,7 +169,7 @@ function smplxSubstitute(log: Journal) {
 			throw new Error("not reached");
 		}
 		setLocktimeHeight() {}
-		setSequence() {}
+		setInputSequence() {}
 		setUnusedWitnesses() {}
 		free() {
 			log.freed.push("builder");

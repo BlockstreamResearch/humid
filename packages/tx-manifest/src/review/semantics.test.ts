@@ -322,8 +322,8 @@ describe("what an action requires of an input beyond where its money comes from"
 		);
 	});
 
-	test("but a relative timelock on a wallet input refuses", async () => {
-		const refusal = await refusedPay(
+	test("and a relative timelock on a wallet input waits on every output that funds the input", async () => {
+		const review = await reviewedPay(
 			payDocument((pay) => {
 				const inputs = pay.inputs as Document[];
 
@@ -331,8 +331,7 @@ describe("what an action requires of an input beyond where its money comes from"
 			}),
 		);
 
-		expect(refusal.reject).toBe("unimplemented-construct");
-		expect(refusal.reason).toContain("would inherit that wait");
+		expect(review.inputOrder.map((planned) => planned.sequence)).toEqual([10]);
 	});
 
 	test("an address the action pins funding to restricts what may fund the action", async () => {

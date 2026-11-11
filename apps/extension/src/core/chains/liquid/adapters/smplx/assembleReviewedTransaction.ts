@@ -46,7 +46,7 @@ export type AssemblingBuilder = Pick<
 		derivationPath?: string,
 	) => AssembledIssuanceReport;
 	setLocktimeHeight: (height: number) => void;
-	setSequence: (sequence: number) => void;
+	setInputSequence: (inputIndex: number, sequence: number) => void;
 	setUnusedWitnesses: (inputIndex: number, names: string[]) => void;
 	addIssuanceInput: (
 		txid: string,
@@ -118,10 +118,6 @@ export function assembleReviewedTransaction<Builder extends AssemblingBuilder, F
 	try {
 		if (draft.locktimeHeight !== undefined) {
 			builder.setLocktimeHeight(draft.locktimeHeight);
-		}
-
-		if (draft.sequence !== undefined) {
-			builder.setSequence(draft.sequence);
 		}
 
 		const placed = new Set<string>();
@@ -206,6 +202,12 @@ export function assembleReviewedTransaction<Builder extends AssemblingBuilder, F
 					utxo.derivationPath,
 				)
 				.free();
+		}
+
+		for (const [index, { sequence }] of draft.inputOrder.entries()) {
+			if (sequence !== undefined) {
+				builder.setInputSequence(index, sequence);
+			}
 		}
 
 		const missed = draft.issuances.find((issuance) => !placed.has(outpointKey(issuance.outpoint)));
