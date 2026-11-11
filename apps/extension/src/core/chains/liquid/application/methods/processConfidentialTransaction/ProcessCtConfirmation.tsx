@@ -61,6 +61,14 @@ export function isProcessCtConfirmationData(value: unknown): value is ProcessCtC
 			(row) => isRecord(row) && provenancedString(row.asset) && provenancedAmount(row.sats, SIGNED),
 		) &&
 		everyRow(
+			shown.payments,
+			(row) =>
+				isRecord(row) &&
+				provenancedString(row.address) &&
+				provenancedString(row.asset) &&
+				provenancedAmount(row.sats, UNSIGNED),
+		) &&
+		everyRow(
 			shown.programs,
 			(row) =>
 				isRecord(row) &&
@@ -186,6 +194,30 @@ export function ProcessCtConfirmation({
 							<span className="text-muted-foreground text-xs">
 								{describeOrigin(effect.sats.origin)}
 							</span>
+						</div>
+					);
+				})}
+
+				{shown.payments.map((payment, at) => {
+					const inFeeAsset = payment.asset.value === shown.feeAsset.value;
+
+					return (
+						<div className="flex flex-col gap-1" key={`${payment.address.value}:${at}`}>
+							<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+								Paid to
+							</span>
+							<span className="font-mono text-xs break-all">{payment.address.value}</span>
+							<span className="text-muted-foreground text-xs">
+								{describeOrigin(payment.address.origin)}
+							</span>
+							<span className="text-sm font-medium">
+								{inFeeAsset ? feeLine(payment.sats.value) : payment.sats.value}
+							</span>
+							{inFeeAsset ? null : (
+								<span className="text-muted-foreground text-xs break-all">
+									{payment.asset.value}
+								</span>
+							)}
 						</div>
 					);
 				})}

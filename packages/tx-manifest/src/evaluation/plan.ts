@@ -1,6 +1,6 @@
 import { asArray, asRecord } from "../document/json";
 import type { Action } from "../document/manifest";
-import { type ReferenceScope, resolveReference } from "../document/references";
+import { parseReference, type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
 import { type BlindingDecision, resolveBlinding } from "./blinding";
 import { evaluateExpression } from "./evaluate";
@@ -11,7 +11,9 @@ export type PlannedOutput = {
 	id: string;
 	sats?: bigint;
 	target:
+		| { address: string; kind: "address" }
 		| { kind: "change" }
+		| { kind: "fee" }
 		| { kind: "program"; utxoType: string }
 		| { kind: "data"; hex: string }
 		| { kind: "wallet" };
@@ -50,7 +52,7 @@ export function planAction(action: Action, scope: ReferenceScope): PlannedSpend 
 					: {}),
 		});
 
-		if (target.kind === "change") {
+		if (target.kind === "change" || target.kind === "fee") {
 			outputs.push({ blinding, id, target });
 
 			continue;
@@ -95,6 +97,16 @@ function resolveTarget(
 		return { kind: "wallet" };
 	}
 
+	if (typeof destination === "string") {
+		const address = textAt(destination, scope);
+
+		if (typeof address !== "string") {
+			throw new Refusal(`pays ${destination}, which does not resolve to an address.`);
+		}
+
+		return { address, kind: "address" };
+	}
+
 	const record = asRecord(destination);
 	const utxoType = record?.utxo_type;
 
@@ -102,7 +114,22 @@ function resolveTarget(
 		return { kind: "program", utxoType };
 	}
 
-	if (record?.type !== "op_return") {
+	if (record?.script_hash !== undefined) {
+		const hash =
+			typeof record.script_hash === "string" ? textAt(record.script_hash, scope) : undefined;
+
+		if (typeof hash !== "string" || !HASH.test(hash)) {
+			throw new Refusal("pays a script_hash that is not 32 bytes of hex.");
+		}
+
+		return { hex: `5120${hash.replace(/^0x/, "").toLowerCase()}`, kind: "data" };
+	}
+
+	if (record?.type === "fee") {
+		return { kind: "fee" };
+	}
+
+	if (record?.type !== "op_return" && record?.type !== "burn") {
 		throw new Refusal("pays somewhere this runtime does not resolve yet.");
 	}
 
@@ -124,6 +151,16 @@ function resolveTarget(
 	}
 
 	return { hex: opReturnScript(hex), kind: "data" };
+}
+
+const HASH = /^(0x)?[0-9a-fA-F]{64}$/;
+
+function textAt(text: string, scope: ReferenceScope): unknown {
+	const reference = parseReference(text);
+
+	return HASH.test(text) || (reference?.form !== "params" && reference?.form !== "instance")
+		? text
+		: resolveReference(text, "destination", scope).value;
 }
 
 function opReturnScript(payloadHex: string): string {

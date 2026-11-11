@@ -8,6 +8,7 @@ export {
 	type EstimateFee,
 	type ManifestReview,
 	type PlannedInput,
+	type ReadAddress,
 	type ReviewedProgramInput,
 	type TransactionDraft,
 	isRefusal,

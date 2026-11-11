@@ -16,6 +16,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { hexToBytes } from "@noble/hashes/utils.js";
 
 import { lwk } from "../lwk/lwkWasmForTests";
+import { addressReader } from "../lwk/wallet/readAddress";
 import { assembleReviewedTransaction } from "./assembleReviewedTransaction";
 import {
 	createSmplxProgramCompiler,
@@ -125,6 +126,7 @@ class ReferenceExample {
 					request.owned?.[asset] ?? [wallet(asset, request.holdings?.[asset] ?? PLENTY)],
 				network: NETWORK,
 				policyAsset: POLICY_ASSET,
+				readAddress: addressReader(lwk, lwk.Network.testnet()),
 				readChainTip: async () => CHAIN_TIP,
 				readFeeRate: async () => 100,
 				readTxOut: async ({ txid }) => {
@@ -290,6 +292,32 @@ describe("p2pk", () => {
 
 		expect(signedFee(pay)).toBe(pay.estimatedFeeSats);
 		expect(signedFee(receive)).toBe(receive.estimatedFeeSats);
+	});
+
+	test("Pay also pays another wallet's confidential address, blinded to that wallet, at the fee shown", async () => {
+		const theirs = new smplx.Signer(
+			"legal winner thank year wave sausage worth useful legal winner thank yellow",
+			NETWORK,
+		);
+		const paying = new ReferenceExample("p2pk");
+		const pay = (paying.manifest.actions as Record<string, { outputs: unknown[] }>).Pay;
+
+		pay?.outputs.unshift({
+			amount_sat: 500,
+			destination: "params.receiver",
+			id: "theirs_out",
+		});
+
+		const review = await paying.reviewed("Pay", {
+			params: { amount_sat: 1000, pubkey: KEY, receiver: theirs.confidentialAddress() },
+		});
+
+		expect(review.outputs[0]).toMatchObject({
+			blinded: true,
+			blindingPublicKeyHex: theirs.blindingPublicKey(),
+			scriptPubKeyHex: theirs.scriptPubKeyHex(),
+		});
+		expect(signedFee(review)).toBe(review.estimatedFeeSats);
 	});
 });
 

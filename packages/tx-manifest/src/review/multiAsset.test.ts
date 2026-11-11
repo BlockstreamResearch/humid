@@ -869,6 +869,40 @@ describe("an action that pins an input to one address", () => {
 		return document;
 	}
 
+	test("pins funding to the script of the address it names, not to the address's text", async () => {
+		const review = asReview(
+			await reviewManifestAction(
+				request({
+					manifest: pinned({ token_in: "params.borrower" }),
+					params: {
+						amount_sat: 1000,
+						borrower: "tlq1_borrower",
+						fee_sat: 700,
+						pubkey: PUBKEY,
+						token: TOKEN,
+					},
+				}),
+				{
+					...deps,
+					fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+					holdingsOf: (asset) =>
+						asset === TOKEN
+							? [
+									utxo("4000", TOKEN_TXID, { scriptPubKeyHex: OTHER_SCRIPT }),
+									utxo("4000", "e".repeat(64), { scriptPubKeyHex: BORROWER_SCRIPT }),
+								]
+							: [],
+					readAddress: (address) => ({
+						scriptPubKeyHex: address === "tlq1_borrower" ? BORROWER_SCRIPT : address,
+					}),
+				},
+			),
+		);
+
+		expect(review.selected.map((chosen) => chosen.txid)).toContain("e".repeat(64));
+		expect(review.selected.map((chosen) => chosen.txid)).not.toContain(TOKEN_TXID);
+	});
+
 	test("constrains only the asset that input funds, and leaves the others alone", async () => {
 		const review = asReview(
 			await reviewManifestAction(

@@ -235,8 +235,6 @@ export class ActionReview {
 		const plan = planAction(this.#action, this.#scope);
 		const ledger = this.#ledger(plan, issued);
 
-		this.#refuseHiddenPayments(plan);
-
 		const funded = this.#fund(ledger, rules, issued);
 		const paid = this.#payOutputs(plan, ledger, funded);
 		const placed = this.#placeInputs(ledger, funded, rules);
@@ -387,6 +385,16 @@ export class ActionReview {
 		}
 	}
 
+	#readAddress(address: string): ReturnType<ReviewInput["readAddress"]> {
+		try {
+			return this.#input.readAddress(address);
+		} catch (error) {
+			throw new Refusal(
+				`${address} is not an address this wallet can pay on ${this.#input.network}: ${String(error)}`,
+			);
+		}
+	}
+
 	async #readTxOut(outpoint: Outpoint) {
 		try {
 			return await this.#input.readTxOut(outpoint);
@@ -481,29 +489,12 @@ export class ActionReview {
 		});
 	}
 
-	#refuseHiddenPayments(plan: PlannedSpend): void {
-		const foreign = plan.outputs.find(
-			(planned) =>
-				planned.blinding.blinding === "blinded" &&
-				planned.target.kind !== "change" &&
-				planned.target.kind !== "wallet",
-		);
-
-		if (foreign) {
-			throw new Refusal(
-				`The output ${foreign.id || "(unnamed)"} must hide what it carries and pays somewhere ` +
-					"this wallet holds no blinding key for.",
-				"unimplemented-construct",
-			);
-		}
-	}
-
 	#fund(ledger: AssetLedger, rules: InputRule[], issued: ResolvedIssuances): FundedAsset[] {
 		const pinFor = new Map<string, string>();
 
 		for (const rule of rules) {
 			if (rule.fromAddress !== undefined) {
-				pinFor.set(rule.id, rule.fromAddress);
+				pinFor.set(rule.id, this.#readAddress(rule.fromAddress).scriptPubKeyHex);
 			}
 		}
 
@@ -643,6 +634,38 @@ export class ActionReview {
 			}
 
 			if (planned.sats === undefined) {
+				continue;
+			}
+
+			if (planned.target.kind === "address") {
+				const { blindingPublicKeyHex, scriptPubKeyHex } = this.#readAddress(planned.target.address);
+				const blinds = planned.blinding.blinding === "blinded";
+
+				if (
+					blinds &&
+					blindingPublicKeyHex === undefined &&
+					planned.blinding.decidedBy === "output"
+				) {
+					throw new Refusal(
+						`Output ${planned.id} must be blinded and pays ${planned.target.address}, ` +
+							"an address that carries no blinding key to blind it with.",
+					);
+				}
+
+				const blinded = blinds && blindingPublicKeyHex !== undefined;
+
+				paid.at.set(planned.id, paid.outputs.length);
+				paid.outputs.push({
+					address: planned.target.address,
+					asset,
+					blinded,
+					...(blinded ? { blindingPublicKeyHex } : {}),
+					decidedBy: blinded ? planned.blinding.decidedBy : "unblindable",
+					id: planned.id,
+					sats: planned.sats,
+					scriptPubKeyHex,
+				});
+
 				continue;
 			}
 

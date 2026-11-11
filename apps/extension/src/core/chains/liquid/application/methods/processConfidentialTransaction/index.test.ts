@@ -291,7 +291,7 @@ function dependencies(
 		}),
 		resolveAccount: (async () =>
 			account()) as unknown as LiquidProcessCtDependencies["resolveAccount"],
-		scriptPubKeyHexOf: async () => WALLET_SCRIPT,
+		readAddress: async () => () => ({ scriptPubKeyHex: WALLET_SCRIPT }),
 		withMnemonic: (async (
 			request: { accountGroupIndex?: number; keySourceId?: string },
 			use: (mnemonic: string) => unknown,

@@ -37,8 +37,10 @@ export type PlannedInput =
 	| { sequence?: number; source: "wallet"; utxo: SelectableUtxo };
 
 export type ReviewedOutput = {
+	address?: string;
 	asset: string;
 	blinded: boolean;
+	blindingPublicKeyHex?: string;
 	decidedBy: BlindingWord;
 	id: string;
 	overrode?: BlindingWord;
@@ -57,6 +59,11 @@ export type TransactionDraft = {
 	issuances: PlannedIssuance[];
 	locktimeHeight?: number;
 	outputs: ReviewedOutput[];
+};
+
+export type ReadAddress = (address: string) => {
+	blindingPublicKeyHex?: string;
+	scriptPubKeyHex: string;
 };
 
 export type EstimateFee = (
@@ -96,6 +103,7 @@ export type ReviewInput = {
 	holdingsOf?: AssetHoldings;
 	network: string;
 	policyAsset: string;
+	readAddress: ReadAddress;
 	readChainTip?: ReadChainTip;
 	readFeeRate: ReadFeeRate;
 	readTxOut: ReadTxOut;

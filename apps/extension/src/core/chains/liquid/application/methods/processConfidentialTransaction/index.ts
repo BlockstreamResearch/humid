@@ -6,6 +6,7 @@ import {
 	type ManifestReview,
 	type ParsedLiquidProcessCtParams,
 	parseLiquidProcessCtParams,
+	type ReadAddress,
 	type ReadFeeRate,
 	Refusal,
 	type ReadTxOut,
@@ -17,7 +18,9 @@ import {
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 
-import { toScriptPubKeyHex } from "../../../adapters/lwk/wallet/toScriptPubKeyHex";
+import { createLwkNetwork } from "../../../adapters/lwk/createLwkNetwork";
+import { loadLwkWasm } from "../../../adapters/lwk/loadLwkWasm";
+import { addressReader } from "../../../adapters/lwk/wallet/readAddress";
 import { withAccountMnemonic } from "../../../adapters/lwk/wallet/withAccountMnemonic";
 import { assembleReviewedTransaction } from "../../../adapters/smplx/assembleReviewedTransaction";
 import {
@@ -61,8 +64,8 @@ export type LiquidProcessCtDependencies = {
 	loadSmplx: typeof loadSmplxWasm;
 	readFeeRate: (chain: LiquidChainRecord) => ReadFeeRate;
 	readTxOut: (chain: LiquidChainRecord) => ReadTxOut;
+	readAddress: (chain: LiquidChainRecord) => Promise<ReadAddress>;
 	resolveAccount: typeof resolveDappAccount;
-	scriptPubKeyHexOf: (address: string) => Promise<string>;
 	withMnemonic: typeof withAccountMnemonic;
 };
 
@@ -76,8 +79,12 @@ export const liquidProcessCtDependencies: LiquidProcessCtDependencies = {
 	loadSmplx: loadSmplxWasm,
 	readFeeRate: (chain) => createEsploraFeeRateReader(chain.settings.backend),
 	readTxOut: (chain) => createEsploraTxOutReader(chain.settings.backend),
+	readAddress: async (chain) => {
+		const lwk = await loadLwkWasm();
+
+		return addressReader(lwk, createLwkNetwork(lwk, chain));
+	},
 	resolveAccount: resolveDappAccount,
-	scriptPubKeyHexOf: toScriptPubKeyHex,
 	withMnemonic: withAccountMnemonic,
 };
 
@@ -177,6 +184,7 @@ export const createProcessLiquidConfidentialTransaction = (
 
 			await context.walletBackend.syncAccount(account);
 
+			const readAddress = await dependencies.readAddress(context.chain);
 			const result = await reviewManifestAction(params, {
 				accountLabel: accountLabelOf(context, account),
 				compile: createSmplxProgramCompiler(smplx),
@@ -196,13 +204,13 @@ export const createProcessLiquidConfidentialTransaction = (
 				holdingsOf: (asset) => fundable(context, account, asset),
 				network,
 				policyAsset: account.rawPolicyAssetId,
+				readAddress,
 				readChainTip: async () => context.walletBackend.getTipHeight(account),
 				readFeeRate: dependencies.readFeeRate(context.chain),
 				readTxOut: dependencies.readTxOut(context.chain),
 				scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, network),
-				walletScriptPubKeyHex: await dependencies.scriptPubKeyHexOf(
-					context.walletBackend.getSigningAddress(account).address,
-				),
+				walletScriptPubKeyHex: readAddress(context.walletBackend.getSigningAddress(account).address)
+					.scriptPubKeyHex,
 			});
 
 			if (isRefusal(result)) {

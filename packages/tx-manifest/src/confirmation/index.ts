@@ -19,6 +19,12 @@ export type BlindedAmount = {
 	id: Provenanced<string>;
 };
 
+export type Payment = {
+	address: Provenanced<string>;
+	asset: Provenanced<string>;
+	sats: Provenanced<bigint>;
+};
+
 export type PublishedAmount = {
 	id: Provenanced<string>;
 	reason: Provenanced<string>;
@@ -40,6 +46,7 @@ export type ConfirmationModel = {
 	feeSats: Provenanced<bigint>;
 	blindedAmounts: BlindedAmount[];
 	netEffect: NetEffect[];
+	payments: Payment[];
 	protocol: Provenanced<string>;
 	publishedAmounts: PublishedAmount[];
 	summary?: Provenanced<string>;
@@ -73,6 +80,17 @@ export function confirmationModel(
 			asset: computed(movement.asset),
 			sats: computed(movement.sats),
 		})),
+		payments: review.outputs.flatMap((output) =>
+			output.address === undefined
+				? []
+				: [
+						{
+							address: fromDapp(output.address),
+							asset: computed(output.asset),
+							sats: computed(output.sats),
+						},
+					],
+		),
 		protocol: fromDapp(manifest.protocol ?? ""),
 		publishedAmounts: publishedAmounts(review),
 		...(summary === undefined ? {} : { summary: fromDapp(summary) }),
@@ -133,9 +151,12 @@ function intentOf(action: Action, scope: ReferenceScope): string | undefined {
 		: undefined;
 }
 
-export type ShownConfirmation = Omit<ConfirmationModel, "feeSats" | "netEffect"> & {
+type ShownAmount = { asset: Provenanced<string>; sats: Provenanced<string> };
+
+export type ShownConfirmation = Omit<ConfirmationModel, "feeSats" | "netEffect" | "payments"> & {
 	feeSats: Provenanced<string>;
-	netEffect: { asset: Provenanced<string>; sats: Provenanced<string> }[];
+	netEffect: ShownAmount[];
+	payments: (ShownAmount & { address: Provenanced<string> })[];
 };
 
 export function toShownConfirmation(model: ConfirmationModel): ShownConfirmation {
@@ -145,6 +166,11 @@ export function toShownConfirmation(model: ConfirmationModel): ShownConfirmation
 		netEffect: model.netEffect.map((effect) => ({
 			asset: effect.asset,
 			sats: map(effect.sats, (sats) => sats.toString()),
+		})),
+		payments: model.payments.map((payment) => ({
+			address: payment.address,
+			asset: payment.asset,
+			sats: map(payment.sats, (sats) => sats.toString()),
 		})),
 	};
 }

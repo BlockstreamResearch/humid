@@ -25,7 +25,7 @@ const SITES = {
 		args: UNIMPLEMENTED,
 		compile_params: READ,
 		if: UNIMPLEMENTED,
-		script_hash: UNIMPLEMENTED,
+		script_hash: READ,
 		type: READ,
 		utxo_type: READ,
 	},

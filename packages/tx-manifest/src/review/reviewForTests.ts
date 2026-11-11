@@ -121,6 +121,7 @@ export function dependencies(overrides: Partial<ReviewDependencies> = {}): Revie
 		fundingUtxos: [utxo("1000000")],
 		network: "liquid",
 		policyAsset: POLICY_ASSET,
+		readAddress: (address) => ({ scriptPubKeyHex: address }),
 		readFeeRate: async () => 1000,
 		readTxOut: chainHolding(),
 		scriptPubKeyOf: () => DERIVED_SCRIPT,

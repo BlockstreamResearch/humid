@@ -251,6 +251,7 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 			feeSats: computed(344n),
 			blindedAmounts: [],
 			netEffect: [{ asset: computed(ASSET), sats: computed(-50_344n) }],
+			payments: [],
 			protocol: fromDapp("p2pk-simplicity"),
 			publishedAmounts: [],
 		},

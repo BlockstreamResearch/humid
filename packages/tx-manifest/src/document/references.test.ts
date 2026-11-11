@@ -70,10 +70,11 @@ describe("what a name must come from", () => {
 });
 
 describe("what a position refuses", () => {
-	test("a destination takes only a parameter, even where another form would resolve", () => {
-		const found = refusalOf(() => resolveReference("instance.TIMEOUT", "destination", SCOPE));
-
-		expect(found.reason).toContain("cannot be used as a destination");
+	test("a destination takes a parameter or a deployment field, and no input attribute", () => {
+		expect(resolveReference("instance.TIMEOUT", "destination", SCOPE).form).toBe("instance");
+		expect(
+			refusalOf(() => resolveReference("vault_in.amount_sat", "destination", SCOPE)).reason,
+		).toContain("cannot be used as a destination");
 	});
 
 	test("an attribute of a transaction input is recognised in either spelling", () => {

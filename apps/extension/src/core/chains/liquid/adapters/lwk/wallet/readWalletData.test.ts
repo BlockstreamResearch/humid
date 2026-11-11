@@ -37,7 +37,7 @@ function walletTx(
 
 const wollet = (txs: unknown[]) => ({ transactions: () => txs }) as never;
 
-describe("activity for coins that hide nothing", () => {
+describe("activity for coins that are not blinded", () => {
 	test("an explicit receive shows up", () => {
 		const activity = readWalletActivityForAsset(
 			wollet([

@@ -45,7 +45,7 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 		accepts: ["instance", "params", "bare"],
 		describes: "a compile parameter",
 	},
-	destination: { accepts: ["params"], describes: "a destination" },
+	destination: { accepts: ["instance", "params"], describes: "a destination" },
 	entropy: { accepts: ["instance", "params"], describes: "an issuance entropy" },
 	expression: {
 		accepts: ["instance", "params", "input-attribute", "bare"],

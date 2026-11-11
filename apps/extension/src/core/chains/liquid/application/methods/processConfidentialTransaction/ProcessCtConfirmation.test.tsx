@@ -36,6 +36,7 @@ const MODEL: ShownConfirmation = {
 		},
 	],
 	netEffect: [{ asset: computed(FEE_ASSET), sats: computed("-50500") }],
+	payments: [],
 	protocol: fromDapp("p2pk-simplicity"),
 	publishedAmounts: [
 		{
@@ -357,6 +358,33 @@ describe("what the screen says", () => {
 
 		expect(html).toContain("Amount published onchain");
 		expect(html).toContain("so your next action can spend those funds");
+	});
+
+	test("shows who each payment goes to, as the dapp's word, and how much", () => {
+		const html = markup({
+			...MODEL,
+			payments: [
+				{ address: fromDapp("tlq1_theirs"), asset: computed(FEE_ASSET), sats: computed("500") },
+				{ address: fromDapp("tlq1_other"), asset: computed(TOKEN), sats: computed("7") },
+			],
+		});
+
+		expect(html).toContain("Paid to");
+		expect(html).toContain("tlq1_theirs");
+		expect(html).toContain("0.000005 L-BTC");
+		expect(html).toContain("claimed by the dapp");
+		expect(html).toContain(TOKEN);
+	});
+
+	test("refuses a payment that does not say where it goes", () => {
+		expect(
+			isProcessCtConfirmationData(
+				payload({
+					...MODEL,
+					payments: [{ asset: computed(FEE_ASSET), sats: computed("500") }],
+				}),
+			),
+		).toBe(false);
 	});
 
 	test("shows a protocol's own token in base units, never as L-BTC", () => {

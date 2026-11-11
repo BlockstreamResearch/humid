@@ -244,7 +244,7 @@ export function assembleReviewedTransaction<Builder extends AssemblingBuilder, F
 				output.scriptPubKeyHex,
 				output.sats,
 				output.asset,
-				output.blinded ? input.blindingPublicKeyHex : undefined,
+				output.blinded ? (output.blindingPublicKeyHex ?? input.blindingPublicKeyHex) : undefined,
 			);
 		}
 

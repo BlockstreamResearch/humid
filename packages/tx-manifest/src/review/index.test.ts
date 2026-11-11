@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { computed, fromDapp } from "../confirmation/provenance";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
 	chainHolding,
@@ -211,5 +212,103 @@ describe("the transaction a review settles", () => {
 		});
 
 		expect((await refused(request)).reject).toBe("document-fault");
+	});
+});
+
+describe("where an output can pay", () => {
+	const KEY = `02${"55".repeat(32)}`;
+	const CONFIDENTIAL = "tlq1_confidential";
+	const OPEN = "tex1_open";
+	const THEIRS = `0014${"44".repeat(20)}`;
+	const readAddress = (address: string) => {
+		if (address === CONFIDENTIAL) {
+			return { blindingPublicKeyHex: KEY, scriptPubKeyHex: THEIRS };
+		}
+
+		if (address === OPEN) {
+			return { scriptPubKeyHex: THEIRS };
+		}
+
+		throw new Error("not an address");
+	};
+
+	const paying = (output: Record<string, unknown>, params: Record<string, unknown> = {}) =>
+		p2pk
+			.editedAction("Pay", (action) => {
+				action.outputs = [
+					{ amount_sat: 1000, id: "paid_out", ...output },
+					...(action.outputs as unknown[]),
+				];
+			})
+			.request("Pay", { params: { amount_sat: 1000, pubkey: PUBKEY, ...params } });
+
+	const paidOut = async (output: Record<string, unknown>, params?: Record<string, unknown>) =>
+		(await reviewed(paying(output, params), { readAddress })).outputs.find(
+			(planned) => planned.id === "paid_out",
+		);
+
+	test("a confidential address, blinded with the key the address carries", async () => {
+		expect(await paidOut({ destination: CONFIDENTIAL })).toMatchObject({
+			blinded: true,
+			blindingPublicKeyHex: KEY,
+			scriptPubKeyHex: THEIRS,
+		});
+	});
+
+	test("and lists each address paid on the confirmation, as the dapp's word", async () => {
+		const review = await reviewed(paying({ destination: CONFIDENTIAL }), { readAddress });
+
+		expect(review.confirmation.payments).toEqual([
+			{
+				address: fromDapp(CONFIDENTIAL),
+				asset: computed(POLICY_ASSET),
+				sats: computed(1000n),
+			},
+		]);
+	});
+
+	test("an address a parameter names, in the open where the address carries no key", async () => {
+		expect(await paidOut({ destination: "params.receiver" }, { receiver: OPEN })).toMatchObject({
+			blinded: false,
+			decidedBy: "unblindable",
+			scriptPubKeyHex: THEIRS,
+		});
+	});
+
+	test("a confidential address in the open, where the protocol asks for an amount it can read", async () => {
+		const paid = await paidOut({ confidential: false, destination: CONFIDENTIAL });
+
+		expect(paid?.blinded).toBe(false);
+		expect(paid?.blindingPublicKeyHex).toBeUndefined();
+	});
+
+	test("but no address that carries no key, where the protocol asks for the output to be blinded", async () => {
+		const refusal = await refused(paying({ confidential: true, destination: OPEN }), {
+			readAddress,
+		});
+
+		expect(refusal.reason).toContain(OPEN);
+	});
+
+	test("nor something that is not an address on this network", async () => {
+		const refusal = await refused(paying({ destination: "nowhere" }), { readAddress });
+
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("nowhere");
+	});
+
+	test("a script hash, as the taproot output it names", async () => {
+		expect(await paidOut({ destination: { script_hash: "ab".repeat(32) } })).toMatchObject({
+			blinded: false,
+			scriptPubKeyHex: `5120${"ab".repeat(32)}`,
+		});
+	});
+
+	test("a burn, which no one can spend", async () => {
+		expect((await paidOut({ destination: { type: "burn" } }))?.scriptPubKeyHex).toBe("6a");
+	});
+
+	test("and nowhere at all for the fee leg, which the network takes without an output", async () => {
+		expect(await paidOut({ destination: { type: "fee" } })).toBeUndefined();
 	});
 });
