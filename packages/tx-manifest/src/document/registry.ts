@@ -11,7 +11,7 @@ const UNIMPLEMENTED: Construct = { state: "unimplemented" };
 
 const SITES = {
 	action: {
-		allow_change: UNIMPLEMENTED,
+		allow_change: READ,
 		create_instance: READ,
 		description: SHOWN,
 		inputs: READ,

@@ -11,8 +11,8 @@ describe("the constructs a document declares", () => {
 	});
 
 	test("report what the format defines and this wallet does not implement yet", () => {
-		expect(findings({ actions: { Pay: { allow_change: "any" } } })).toEqual([
-			{ at: "action Pay", key: "allow_change", state: "unimplemented" },
+		expect(findings({ actions: { Pay: { on_post_broadcast: { set: {} } } } })).toEqual([
+			{ at: "action Pay", key: "on_post_broadcast", state: "unimplemented" },
 		]);
 	});
 

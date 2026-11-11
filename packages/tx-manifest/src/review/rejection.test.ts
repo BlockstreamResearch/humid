@@ -40,11 +40,11 @@ describe("what the document alone is refused for", () => {
 
 	test("a construct the format defines and this wallet does not implement", async () => {
 		const refusal = await payRefusal((pay) => {
-			pay.allow_change = "any";
+			pay.on_post_broadcast = { set: {} };
 		});
 
 		expect(refusal.reject).toBe("unimplemented-construct");
-		expect(refusal.reason).toContain("allow_change");
+		expect(refusal.reason).toContain("on_post_broadcast");
 	});
 
 	test("a key the format does not define", async () => {

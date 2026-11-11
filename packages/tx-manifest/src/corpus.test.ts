@@ -33,14 +33,8 @@ function outcome(name: string) {
 }
 
 describe("the reference examples", () => {
-	test("are read in full, except where they use what this wallet does not implement yet", () => {
-		expect(Object.fromEntries(EXAMPLES.map((name) => [name, outcome(name)]))).toEqual({
-			dex: "read-in-full",
-			last_will: "read-in-full",
-			lending_v2: "unimplemented-construct",
-			lending_v3: "read-in-full",
-			p2pk: "read-in-full",
-		});
+	test("are read in full", () => {
+		expect(EXAMPLES.map(outcome)).toEqual(EXAMPLES.map(() => "read-in-full"));
 	});
 });
 

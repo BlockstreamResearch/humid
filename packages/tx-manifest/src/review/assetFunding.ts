@@ -14,6 +14,7 @@ export type FundedAsset = {
 export type AssetFundingContext = {
 	feeSats: bigint;
 	holdings: AssetHoldings;
+	mayReturn: (asset: string) => boolean;
 	policyAsset: string;
 	reserved: { asset: string; utxo: SelectableUtxo }[];
 };
@@ -53,10 +54,11 @@ export function fundAssets(entries: AssetEntry[], context: AssetFundingContext):
 
 		const surplus = total - entry.needed - fee;
 
-		if (!isPolicy && surplus > 0n && !entry.change) {
+		if (surplus > 0n && !entry.change && !context.mayReturn(entry.asset)) {
 			throw new Refusal(
-				`This action leaves ${surplus} of ${entry.asset} over, and declares no change ` +
-					"output to return it to. Building it would destroy that amount.",
+				`This action leaves ${surplus} of ${entry.asset} over${isPolicy ? " after the fee" : ""}, ` +
+					"declares no change output to return it to, and its allow_change does not let " +
+					"this wallet add one. Building it would destroy that amount.",
 			);
 		}
 

@@ -28,12 +28,16 @@ const receive = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
 
 const receiveInputs = () => structuredClone(p2pk.action("Receive").inputs) as Document[];
 
-function withReceive(inputs: unknown[], outputs?: unknown[]): Document {
+function withReceive(inputs: unknown[], outputs?: unknown[], allowChange?: string): Document {
 	return p2pk.editedAction("Receive", (action) => {
 		action.inputs = inputs;
 
 		if (outputs !== undefined) {
 			action.outputs = outputs;
+		}
+
+		if (allowChange !== undefined) {
+			action.allow_change = allowChange;
 		}
 	}).manifest;
 }
@@ -184,7 +188,7 @@ describe("the transaction-level facts a program spend needs", () => {
 				id: "received_out",
 			},
 		];
-		const review = await reviewed(spending(withReceive([inputs[0]], outputs)));
+		const review = await reviewed(spending(withReceive([inputs[0]], outputs, "lbtc_only")));
 
 		expect(review.sequence).toBe(10);
 		expect(review.selected).toHaveLength(0);
@@ -294,10 +298,26 @@ describe("an action whose only output is change", () => {
 		expect(review.outputs.map((output) => output.id)).toEqual(["fee_change"]);
 	});
 
-	test("and adds a change output of its own where the action declares none", async () => {
-		const review = await reviewed(spending(withReceive(receiveInputs(), [receivedOut])));
+	test("and refuses what is left where the action declares no change and allows none", async () => {
+		const refusal = await refused(spending(withReceive(receiveInputs(), [receivedOut])));
+
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("allow_change");
+	});
+
+	test("but adds a change output of its own where the action allows undeclared change", async () => {
+		const review = await reviewed(
+			spending(withReceive(receiveInputs(), [receivedOut], "lbtc_only")),
+		);
 
 		expect(review.outputs.map((output) => output.id)).toEqual(["received_out", "change"]);
+	});
+
+	test("and refuses an allow_change the format does not define", async () => {
+		const refusal = await refused(spending(withReceive(receiveInputs(), [receivedOut], "some")));
+
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain('"some"');
 	});
 });
 

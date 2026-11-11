@@ -25,10 +25,16 @@ function entry(asset: string, needed: bigint, overrides: Partial<AssetEntry> = {
 
 const CHANGE = { blinded: true, id: "token_change" };
 
-function fund(entries: AssetEntry[], holdings: Record<string, SelectableUtxo[]>, feeSats = 500n) {
+function fund(
+	entries: AssetEntry[],
+	holdings: Record<string, SelectableUtxo[]>,
+	feeSats = 500n,
+	mayReturn: (asset: string) => boolean = (asset) => asset === POLICY,
+) {
 	return fundAssets(entries, {
 		feeSats,
 		holdings: (asset) => holdings[asset] ?? [],
+		mayReturn,
 		policyAsset: POLICY,
 		reserved: [],
 	});
@@ -115,8 +121,21 @@ describe("when one asset cannot be funded", () => {
 		expect(result.reject).toBe("document-fault");
 	});
 
-	test("and the same surplus in the network's own asset is not, because the wallet returns the surplus as change", () => {
+	test("and so is a surplus in the network's own asset, unless the action lets the wallet add change", () => {
+		const refusal = refusalOf(() =>
+			fund([entry(POLICY, 1000n)], { [POLICY]: [utxo("9000")] }, 500n, () => false),
+		);
+
+		expect(refusal.reason).toContain("7500");
 		expect(fund([entry(POLICY, 1000n)], { [POLICY]: [utxo("9000")] })[0]?.changeSats).toBe(7500n);
+	});
+
+	test("and a surplus in any asset is returned when the action lets the wallet add change for every asset", () => {
+		expect(
+			fund([entry(TOKEN, 1000n)], { [TOKEN]: [utxo("1500")] }, 500n, () => true)[0],
+		).toMatchObject({
+			changeSats: 500n,
+		});
 	});
 });
 
@@ -127,6 +146,7 @@ describe("an output already committed to for an issuance", () => {
 		return fundAssets(entries, {
 			feeSats: 0n,
 			holdings: (asset) => holdings[asset] ?? [],
+			mayReturn: () => false,
 			policyAsset: POLICY,
 			reserved: [{ asset: TOKEN, utxo: reserved }],
 		});

@@ -144,6 +144,7 @@
 				},
 				"Withdraw": {
 					"description": "Spend the vault back to the owner's wallet. Every value it compiles the vault with comes off the deployment; this action declares no parameters of its own.",
+					"allow_change": "lbtc_only",
 					"inputs": [
 						{
 							"id": "vault_in",

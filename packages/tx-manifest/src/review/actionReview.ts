@@ -90,6 +90,7 @@ export class ActionReview {
 	readonly #includeDebugSymbols: boolean;
 	readonly #declaredTypes: Record<string, string>;
 	readonly #policyAsset: string;
+	readonly #mayReturn: (asset: string) => boolean;
 	readonly #pools = new Map<string, SelectableUtxo[]>();
 	readonly #inputs: Record<string, Record<string, unknown>> = {};
 	readonly #chainHeld: HeldValue[] = [];
@@ -123,6 +124,11 @@ export class ActionReview {
 		}
 
 		this.#action = action;
+
+		const allowed = allowChange(action);
+
+		this.#mayReturn = (asset) =>
+			allowed === "any" || (allowed === "lbtc_only" && asset === this.#policyAsset);
 		this.#includeDebugSymbols = this.#manifest.includeDebugSymbols;
 
 		const fields = this.#deployment.fields;
@@ -562,6 +568,7 @@ export class ActionReview {
 		return fundAssets(ledger.entries, {
 			feeSats: this.#scope.fee ?? 0n,
 			holdings: pinnedHoldings,
+			mayReturn: this.#mayReturn,
 			policyAsset: this.#input.policyAsset,
 			reserved: issued.reserved,
 		});
@@ -850,6 +857,21 @@ const UNDECLARED_CHANGE: BlindingDecision = {
 	decidedBy: "spendable-change",
 	overrode: "chain",
 };
+
+const ALLOW_CHANGE = ["none", "lbtc_only", "any"];
+
+function allowChange(action: Action): string {
+	const declared = action.node.allow_change ?? "none";
+
+	if (typeof declared !== "string" || !ALLOW_CHANGE.includes(declared)) {
+		throw new Refusal(
+			`${action.name} sets allow_change to ${JSON.stringify(declared)}, and the format ` +
+				'allows only "none", "lbtc_only" or "any".',
+		);
+	}
+
+	return declared;
+}
 
 type ResolvedIssuances = {
 	issuances: PlannedIssuance[];

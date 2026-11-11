@@ -174,6 +174,7 @@ function changeSaying(confidential: boolean | undefined | "absent"): Document {
 	return confidential === "absent"
 		? p2pk.editedAction("Receive", (action) => {
 				(action.outputs as Document[]).pop();
+				action.allow_change = "lbtc_only";
 			}).manifest
 		: confidentialAt(1, confidential);
 }
@@ -208,7 +209,7 @@ describe("what a person is told about an amount this wallet published", () => {
 		]);
 	});
 
-	test("and says it even where the document declares no change at all", async () => {
+	test("and says it for change the document declares none of and lets the wallet add", async () => {
 		expect(await published(changeSaying("absent"))).toEqual([
 			{
 				id: "change",

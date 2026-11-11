@@ -411,8 +411,12 @@ describe("lending_v3", () => {
 	});
 });
 
-test("lending_v2 is refused as a whole until allow_change is implemented", async () => {
-	expect(await new ReferenceExample("lending_v2").outcome("Prepare")).toBe(
-		"unimplemented-construct",
-	);
+describe("lending_v2", () => {
+	const lending = new ReferenceExample("lending_v2");
+
+	test("Prepare signs, paying exactly the fee the review shows", async () => {
+		const review = await lending.reviewed("Prepare");
+
+		expect(signedFee(review)).toBe(review.estimatedFeeSats);
+	});
 });

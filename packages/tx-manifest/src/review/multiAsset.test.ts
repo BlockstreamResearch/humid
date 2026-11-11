@@ -54,6 +54,42 @@ function pay(
 	);
 }
 
+describe("change the action does not declare", () => {
+	function withoutTokenChange(allowChange: string) {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const payToken = (document.actions as Record<string, Record<string, unknown>>).PayToken!;
+
+		payToken.outputs = (payToken.outputs as Record<string, unknown>[]).filter(
+			(output) => output.id !== "token_change",
+		);
+		payToken.allow_change = allowChange;
+
+		return reviewManifestAction(request({ manifest: document }), {
+			...deps,
+			fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+			holdingsOf: () => [utxo("4000", TOKEN_TXID)],
+		});
+	}
+
+	test("is refused in an asset other than the network's own when only L-BTC change is allowed", async () => {
+		const refusal = asRefusal(await withoutTokenChange("lbtc_only"));
+
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain(TOKEN);
+	});
+
+	test("is returned to the wallet in any asset when any change is allowed", async () => {
+		const review = asReview(await withoutTokenChange("any"));
+
+		expect(
+			review.outputs.find((output) => output.asset === TOKEN && output.id === "change"),
+		).toMatchObject({
+			sats: 3000n,
+			scriptPubKeyHex: WALLET_SCRIPT,
+		});
+	});
+});
+
 describe("an action that moves two assets", () => {
 	test("funds each asset out of what the wallet holds in that one", async () => {
 		const review = asReview(await pay());
