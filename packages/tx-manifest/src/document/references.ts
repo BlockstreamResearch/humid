@@ -25,6 +25,7 @@ export type ReferenceSiteKind =
 	| "asset"
 	| "compileParam"
 	| "destination"
+	| "entropy"
 	| "expression"
 	| "issuedAmount"
 	| "stateLeaf"
@@ -45,6 +46,7 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 		describes: "a compile parameter",
 	},
 	destination: { accepts: ["params"], describes: "a destination" },
+	entropy: { accepts: ["instance", "params"], describes: "an issuance entropy" },
 	expression: {
 		accepts: ["instance", "params", "input-attribute", "bare"],
 		describes: "an expression",

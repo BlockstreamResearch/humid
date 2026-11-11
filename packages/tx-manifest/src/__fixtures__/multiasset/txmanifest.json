@@ -103,8 +103,105 @@
 					"id": "minted_out",
 					"destination": "wallet",
 					"amount_sat": "params.supply",
-					"asset": "mint_in.asset",
+					"asset": "mint_in.issued_asset",
 					"confidential": false
+				},
+				{
+					"id": "change_out",
+					"destination": "change",
+					"asset": "lbtc"
+				}
+			]
+		},
+		"MintReissuable": {
+			"description": "Creates a new asset with one reissuance token, keeping the token blinded so it can reissue.",
+			"params": {
+				"supply": {
+					"type": "u64",
+					"description": "How many units to create."
+				}
+			},
+			"inputs": [
+				{
+					"id": "mint_in",
+					"utxo_source": "wallet",
+					"asset": "lbtc",
+					"issuance": {
+						"kind": "new",
+						"asset_amount_sat": "params.supply",
+						"inflation_amount_sat": 1
+					}
+				}
+			],
+			"outputs": [
+				{
+					"id": "minted_out",
+					"destination": "wallet",
+					"amount_sat": "params.supply",
+					"asset": "mint_in.issued_asset",
+					"confidential": false
+				},
+				{
+					"id": "token_out",
+					"destination": "wallet",
+					"amount_sat": 1,
+					"asset": "mint_in.reissuance_token",
+					"confidential": true
+				},
+				{
+					"id": "change_out",
+					"destination": "change",
+					"asset": "lbtc"
+				}
+			]
+		},
+		"Reissue": {
+			"description": "Mints more of an asset by spending its reissuance token, and keeps the token.",
+			"params": {
+				"entropy": {
+					"type": "bytes32",
+					"description": "The issuance entropy the first mint left."
+				},
+				"issued": {
+					"type": "liquid.asset_id",
+					"description": "The asset the entropy derives."
+				},
+				"token": {
+					"type": "liquid.asset_id",
+					"description": "The asset's reissuance token."
+				},
+				"supply": {
+					"type": "u64",
+					"description": "How many more units to create."
+				}
+			},
+			"inputs": [
+				{
+					"id": "token_in",
+					"utxo_source": "wallet",
+					"asset": "params.token",
+					"issuance": {
+						"kind": "reissue",
+						"asset_amount_sat": "params.supply",
+						"entropy": "params.entropy",
+						"issued_asset": "params.issued"
+					}
+				}
+			],
+			"outputs": [
+				{
+					"id": "minted_out",
+					"destination": "wallet",
+					"amount_sat": "params.supply",
+					"asset": "token_in.issued_asset",
+					"confidential": false
+				},
+				{
+					"id": "token_back",
+					"destination": "wallet",
+					"amount_sat": 1,
+					"asset": "params.token",
+					"confidential": true
 				},
 				{
 					"id": "change_out",

@@ -108,10 +108,14 @@ export function inputHookScope(
 ): ReferenceScope {
 	const bare: Record<string, unknown> = {};
 
-	for (const key of ["asset", "reissuance_token"]) {
+	for (const key of ["asset", "issuance_entropy", "issued_asset", "reissuance_token"]) {
 		if (self[key] !== undefined) {
 			bare[key] = self[key];
 		}
+	}
+
+	if (self.issued_asset !== undefined) {
+		bare.asset = self.issued_asset;
 	}
 
 	return { ...scope, params: { ...scope.params, ...bare } };

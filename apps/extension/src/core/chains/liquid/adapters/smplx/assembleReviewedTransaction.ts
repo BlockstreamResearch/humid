@@ -58,6 +58,15 @@ export type AssemblingBuilder = Pick<
 		blindingSecretsJson?: string,
 		derivationPath?: string,
 	) => AssembledIssuanceReport;
+	addReissuanceInput: (
+		txid: string,
+		vout: number,
+		txOutHex: string,
+		assetAmountSats: bigint,
+		assetEntropy: string,
+		blindingSecretsJson: string,
+		derivationPath?: string,
+	) => AssembledIssuanceReport;
 };
 
 export function assembleReviewedTransaction<Builder extends AssemblingBuilder, Finished>(
@@ -190,18 +199,29 @@ export function assembleReviewedTransaction<Builder extends AssemblingBuilder, F
 				continue;
 			}
 
-			builder
-				.addIssuanceInput(
-					utxo.txid,
-					utxo.vout,
-					utxo.txOut,
-					issuance.assetAmountSats,
-					issuance.inflationAmountSats,
-					undefined,
-					utxo.blindingSecretsJson,
-					utxo.derivationPath,
-				)
-				.free();
+			const issued =
+				issuance.kind === "reissue"
+					? builder.addReissuanceInput(
+							utxo.txid,
+							utxo.vout,
+							utxo.txOut,
+							issuance.assetAmountSats,
+							simplexEntropy(issuance.entropy),
+							utxo.blindingSecretsJson ?? "",
+							utxo.derivationPath,
+						)
+					: builder.addIssuanceInput(
+							utxo.txid,
+							utxo.vout,
+							utxo.txOut,
+							issuance.assetAmountSats,
+							issuance.inflationAmountSats,
+							undefined,
+							utxo.blindingSecretsJson,
+							utxo.derivationPath,
+						);
+
+			issued.free();
 		}
 
 		for (const [index, { sequence }] of draft.inputOrder.entries()) {
@@ -275,6 +295,10 @@ function witnessValuesJson(values: StaticWitness[] | undefined): string | undefi
 			values.map(({ name, simplicityType, value }) => [name, { type: simplicityType, value }]),
 		),
 	);
+}
+
+function simplexEntropy(entropy: string): string {
+	return (entropy.match(/../g) ?? []).toReversed().join("");
 }
 
 function outpointKey(outpoint: { txid: string; vout: number }): string {

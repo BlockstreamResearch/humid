@@ -6,6 +6,9 @@ import { declaredIssuance, issuanceAttributes, resolveIssuance } from "./issuanc
 
 const OUTPOINT = { txid: "c".repeat(64), vout: 2 };
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+const YES_ENTROPY = "f8326827828ee2aab3c4d273fb573a8cf89a401bbc6643637d439ff36c60b6b9";
+const YES_ASSET = "3a8b6b466346d9dbfcecd8c8d7b0c1873aee4e00fd5df0d95086a3f7eecd5a39";
+const reversed = (hex: string) => (hex.match(/../g) ?? []).toReversed().join("");
 
 function resolve(
 	declared: Record<string, unknown>,
@@ -60,29 +63,61 @@ describe("what this wallet will mint", () => {
 	});
 });
 
-describe("what it will not mint, and says so rather than modelling", () => {
-	test("a reissuance, because it has nothing to derive the asset from", () => {
-		const refusal = refusalOf(() => resolve({ asset_amount_sat: 1000, kind: "reissue" }));
-
-		expect(refusal.reject).toBe("unimplemented-construct");
-		expect(refusal.reason).toContain("entropy");
-		expect(refusal.reason).toContain("mint_in");
+describe("reissuance tokens", () => {
+	test("are minted alongside the asset", () => {
+		expect(
+			resolve({ asset_amount_sat: 1000, inflation_amount_sat: 1, kind: "new" }).inflationAmountSats,
+		).toBe(1n);
 	});
 
-	test("a reissuance token, because it would have to be confidential to be spendable", () => {
-		const refusal = refusalOf(() =>
-			resolve({ asset_amount_sat: 1000, inflation_amount_sat: 1, kind: "new" }),
+	test("are minted on their own, with no units of the asset", () => {
+		expect(resolve({ asset_amount_sat: 0, inflation_amount_sat: 1, kind: "new" })).toMatchObject({
+			assetAmountSats: 0n,
+			inflationAmountSats: 1n,
+		});
+	});
+});
+
+describe("a reissuance", () => {
+	const reissue = (declared: Record<string, unknown>, params: Record<string, unknown> = {}) =>
+		resolve(
+			{ asset_amount_sat: 50, entropy: "params.entropy", kind: "reissue", ...declared },
+			{
+				entropy: YES_ENTROPY,
+				...params,
+			},
 		);
 
-		expect(refusal.reject).toBe("unimplemented-construct");
-		expect(refusal.reason).toContain("confidential");
+	test("mints more of the asset its entropy derives", () => {
+		expect(reissue({ issued_asset: YES_ASSET })).toMatchObject({
+			asset: YES_ASSET,
+			assetAmountSats: 50n,
+			entropy: YES_ENTROPY,
+			inflationAmountSats: 0n,
+			kind: "reissue",
+		});
 	});
 
-	test("but a stated zero of them is the ordinary case and is built", () => {
-		resolve({ asset_amount_sat: 1000, inflation_amount_sat: 0, kind: "new" });
+	test("refuses an issued_asset its entropy does not derive, such as one copied byte-reversed", () => {
+		const refusal = refusalOf(() =>
+			reissue({ issued_asset: YES_ASSET }, { entropy: reversed(YES_ENTROPY) }),
+		);
+
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("byte-reversed");
 	});
 
-	test("an issuance of no units, which creates no asset", () => {
+	test("refuses one that names no entropy", () => {
+		expect(refusalOf(() => reissue({ entropy: undefined })).reason).toContain("mint_in");
+	});
+
+	test("refuses one of no units", () => {
+		expect(refusalOf(() => reissue({ asset_amount_sat: 0 })).reject).toBe("document-fault");
+	});
+});
+
+describe("what it will not mint", () => {
+	test("an issuance of no units and no tokens, which creates nothing", () => {
 		expect(refusalOf(() => resolve({ asset_amount_sat: 0, kind: "new" })).reject).toBe(
 			"document-fault",
 		);
@@ -115,7 +150,8 @@ describe("what an issuance says about itself, for a later name to read", () => {
 		const issued = resolve({ asset_amount_sat: 1000, kind: "new" });
 
 		expect(issuanceAttributes(issued)).toEqual({
-			asset: issued.asset,
+			issuance_entropy: issued.entropy,
+			issued_asset: issued.asset,
 			reissuance_token: issued.reissuanceToken,
 		});
 		expect(issued.asset).not.toBe(PUBKEY);

@@ -232,6 +232,22 @@ describe("the transaction-level facts a program spend needs", () => {
 	});
 });
 
+describe("a program input that reissues an asset", () => {
+	test("is refused, since reading the token it holds needs blinding factors this wallet does not read", async () => {
+		const inputs = receiveInputs();
+
+		inputs[0] = {
+			...inputs[0],
+			issuance: { asset_amount_sat: 50, entropy: "ab".repeat(32), kind: "reissue" },
+		};
+
+		const refusal = await refused(spending(withReceive(inputs)));
+
+		expect(refusal.reject).toBe("unimplemented-construct");
+		expect(refusal.reason).toContain("p2pk_in");
+	});
+});
+
 describe("a program input that issues an asset", () => {
 	const issuingDocument = () => {
 		const inputs = receiveInputs();
@@ -248,7 +264,7 @@ describe("a program input that issues an asset", () => {
 			},
 			{
 				amount_sat: 1000,
-				asset: "p2pk_in.asset",
+				asset: "p2pk_in.issued_asset",
 				description: "The units this action mints.",
 				destination: "wallet",
 				id: "minted_out",

@@ -56,6 +56,7 @@ type Recorded = {
 	}[];
 	locktimes: number[];
 	sequences: { inputIndex: number; sequence: number }[];
+	reissues: { assetAmountSats: bigint; entropy: string; txid: string; vout: number }[];
 	spends: { txOut: string; txid: string; vout: number }[];
 	unused: { inputIndex: number; names: string[] }[];
 };
@@ -112,6 +113,24 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 				return {
 					assetId: reports.asset ?? ISSUED.asset,
 					assetEntropy: reports.entropy ?? ISSUED.entropy,
+					free: () => {
+						recorded.freedReports += 1;
+					},
+					inflationAssetId: reports.reissuanceToken ?? ISSUED.reissuanceToken,
+				};
+			}
+			addReissuanceInput(
+				txid: string,
+				vout: number,
+				_txOut: string,
+				assetAmountSats: bigint,
+				entropy: string,
+			) {
+				recorded.reissues.push({ assetAmountSats, entropy, txid, vout });
+
+				return {
+					assetId: reports.asset ?? ISSUED.asset,
+					assetEntropy: entropy,
 					free: () => {
 						recorded.freedReports += 1;
 					},
@@ -277,6 +296,7 @@ function emptyRecord(): Recorded {
 		locktimes: [],
 		outputs: [],
 		sequences: [],
+		reissues: [],
 		spends: [],
 		unused: [],
 	};
@@ -679,6 +699,27 @@ describe("assembleReviewedTransaction", () => {
 
 	describe("an input that creates an asset", () => {
 		const issuing = { issuances: [plannedIssuance()] };
+
+		test("reissues through the module's own call, handing it the entropy in the module's byte order", async () => {
+			const token = {
+				...WALLET_UTXO,
+				blindingSecretsJson: '{"value":1}',
+				confidential: true,
+				derivationPath: "0/3",
+				txid: ISSUANCE_TXID,
+			};
+			const { assemble, recorded } = subject({
+				issuances: [{ ...plannedIssuance(), entropy: `01${"00".repeat(31)}`, kind: "reissue" }],
+				selected: [token],
+			});
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.reissues).toEqual([
+				{ assetAmountSats: 1000n, entropy: `${"00".repeat(31)}01`, txid: ISSUANCE_TXID, vout: 0 },
+			]);
+			expect(recorded.issues).toEqual([]);
+			expect(recorded.freedReports).toBe(1);
+		});
 
 		test("is added as an issuance, with the amounts the review resolved", async () => {
 			const { assemble, recorded } = subject(issuing);

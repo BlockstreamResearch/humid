@@ -1,14 +1,19 @@
 import { MAX_BASE_UNITS } from "../chain/baseUnits";
-import { type DerivedIssuance, deriveNewIssuance, type Outpoint } from "../chain/issuance";
+import {
+	type DerivedIssuance,
+	deriveFromEntropy,
+	deriveNewIssuance,
+	type Outpoint,
+} from "../chain/issuance";
 import { asRecord } from "../document/json";
-import type { ReferenceScope } from "../document/references";
+import { type ReferenceScope, parseReference, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
 import { evaluateExpression } from "./evaluate";
 
 export type IssuanceRequest = {
 	assetAmountSats: bigint;
 	inflationAmountSats: bigint;
-	kind: "new";
+	kind: "new" | "reissue";
 };
 
 export type PlannedIssuance = DerivedIssuance &
@@ -23,6 +28,39 @@ export function declaredIssuance(
 	return asRecord(input.issuance);
 }
 
+export function reissuanceOf(
+	declared: Record<string, unknown>,
+	id: string,
+	scope: ReferenceScope,
+): DerivedIssuance {
+	const entropy = Refusal.amend(
+		() => hexOf(declared.entropy, scope),
+		(reason) => `Input ${id} reissues an asset and does not say which: ${reason}`,
+	);
+	const derived = deriveFromEntropy(entropy);
+
+	if (!derived) {
+		throw new Refusal(`Input ${id} reissues from ${entropy}, which is not an issuance entropy.`);
+	}
+
+	if (declared.issued_asset !== undefined) {
+		const stated = Refusal.amend(
+			() => hexOf(declared.issued_asset, scope),
+			(reason) => `Input ${id} states an issued_asset this wallet cannot read: ${reason}`,
+		);
+
+		if (stated.toLowerCase() !== derived.asset) {
+			throw new Refusal(
+				`Input ${id} says it reissues ${stated}, and its entropy derives ${derived.asset}. ` +
+					"An entropy copied from a block explorer is byte-reversed relative to the one the " +
+					"format writes.",
+			);
+		}
+	}
+
+	return derived;
+}
+
 export function resolveIssuance(
 	input: {
 		declared: Record<string, unknown>;
@@ -33,15 +71,7 @@ export function resolveIssuance(
 ): PlannedIssuance {
 	const kind = input.declared.kind;
 
-	if (kind === "reissue") {
-		throw new Refusal(
-			`Input ${input.id} reissues an asset, and this wallet has nothing to derive it from: ` +
-				"the entropy of the original issuance is not part of what a site sends this wallet.",
-			"unimplemented-construct",
-		);
-	}
-
-	if (kind !== "new") {
+	if (kind !== "new" && kind !== "reissue") {
 		throw new Refusal(
 			`Input ${input.id} declares an issuance of kind ${JSON.stringify(kind)}, and the ` +
 				'format defines "new" and "reissue".',
@@ -53,11 +83,24 @@ export function resolveIssuance(
 		(reason) => `Input ${input.id} does not say how much it issues: ${reason}`,
 	);
 
-	if (assetAmountSats <= 0n) {
-		throw new Refusal(`Input ${input.id} issues ${assetAmountSats} units, which creates no asset.`);
+	if (kind === "reissue") {
+		if (assetAmountSats <= 0n) {
+			throw new Refusal(
+				`Input ${input.id} reissues ${assetAmountSats} units, which mints nothing.`,
+			);
+		}
+
+		return {
+			...reissuanceOf(input.declared, input.id, scope),
+			assetAmountSats,
+			inflationAmountSats: 0n,
+			inputId: input.id,
+			kind,
+			outpoint: input.outpoint,
+		};
 	}
 
-	const inflation =
+	const inflationAmountSats =
 		input.declared.inflation_amount_sat === undefined
 			? 0n
 			: Refusal.amend(
@@ -66,11 +109,14 @@ export function resolveIssuance(
 						`Input ${input.id} does not say how many reissuance tokens it mints: ${reason}`,
 				);
 
-	if (inflation !== 0n) {
+	if (
+		assetAmountSats < 0n ||
+		inflationAmountSats < 0n ||
+		assetAmountSats + inflationAmountSats === 0n
+	) {
 		throw new Refusal(
-			`Input ${input.id} mints ${inflation} reissuance tokens, which have to be held ` +
-				"confidentially, and this wallet builds transactions whose values are all explicit.",
-			"unimplemented-construct",
+			`Input ${input.id} issues ${assetAmountSats} units and ${inflationAmountSats} ` +
+				"reissuance tokens, which creates nothing.",
 		);
 	}
 
@@ -86,15 +132,36 @@ export function resolveIssuance(
 	return {
 		...derived,
 		assetAmountSats,
-		inflationAmountSats: 0n,
+		inflationAmountSats,
 		inputId: input.id,
-		kind: "new",
+		kind,
 		outpoint: input.outpoint,
 	};
 }
 
 export function issuanceAttributes(issuance: PlannedIssuance): Record<string, unknown> {
-	return { asset: issuance.asset, reissuance_token: issuance.reissuanceToken };
+	return {
+		issuance_entropy: issuance.entropy,
+		issued_asset: issuance.asset,
+		reissuance_token: issuance.reissuanceToken,
+	};
+}
+
+function hexOf(declared: unknown, scope: ReferenceScope): string {
+	if (typeof declared !== "string") {
+		throw new Refusal("it is not written as text.");
+	}
+
+	const found =
+		parseReference(declared) === undefined || /^(0x)?[0-9a-fA-F]{64}$/.test(declared)
+			? declared
+			: resolveReference(declared, "entropy", scope).value;
+
+	if (typeof found !== "string" || !/^(0x)?[0-9a-fA-F]{64}$/.test(found)) {
+		throw new Refusal(`${declared} is not 32 bytes of hex.`);
+	}
+
+	return found.replace(/^0x/, "").toLowerCase();
 }
 
 function amountOf(declared: unknown, scope: ReferenceScope): bigint {

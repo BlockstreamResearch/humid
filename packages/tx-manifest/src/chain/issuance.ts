@@ -22,19 +22,21 @@ export function deriveNewIssuance(
 		return undefined;
 	}
 
-	const entropy = combine(sha256(sha256(spent)), contract);
-
-	return {
-		asset: writeId(combine(entropy, ASSET)),
-		entropy: writeId(entropy),
-		reissuanceToken: writeId(combine(entropy, TOKEN)),
-	};
+	return fromEntropy(combine(sha256(sha256(spent)), contract));
 }
 
-export function assetFromEntropy(entropy: string): string | undefined {
-	const bytes = readId(entropy);
+export function deriveFromEntropy(entropy: string): DerivedIssuance | undefined {
+	const bytes = decodeHex(entropy);
 
-	return bytes ? writeId(combine(bytes, ASSET)) : undefined;
+	return bytes?.length === 32 ? fromEntropy(bytes) : undefined;
+}
+
+function fromEntropy(entropy: Uint8Array): DerivedIssuance {
+	return {
+		asset: writeId(combine(entropy, ASSET)),
+		entropy: encodeHex(entropy),
+		reissuanceToken: writeId(combine(entropy, TOKEN)),
+	};
 }
 
 const ZERO_HASH = "0".repeat(64);

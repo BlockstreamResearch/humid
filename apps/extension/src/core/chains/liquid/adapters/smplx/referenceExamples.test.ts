@@ -8,9 +8,14 @@ import {
 	type ManifestReview,
 	type ParsedLiquidProcessCtParams,
 	reviewManifestAction,
+	type SelectableUtxo,
 	type TransactionDraft,
 } from "@humid/tx-manifest";
+import { hmac } from "@noble/hashes/hmac.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { hexToBytes } from "@noble/hashes/utils.js";
 
+import { lwk } from "../lwk/lwkWasmForTests";
 import { assembleReviewedTransaction } from "./assembleReviewedTransaction";
 import {
 	createSmplxProgramCompiler,
@@ -21,10 +26,9 @@ import { smplx } from "./smplxWasmForTests";
 
 const NETWORK = "liquidtestnet";
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-const SIGNER = new smplx.Signer(
-	"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-	NETWORK,
-);
+const MNEMONIC =
+	"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+const SIGNER = new smplx.Signer(MNEMONIC, NETWORK);
 const KEY = SIGNER.schnorrPublicKey().slice(-64);
 const WALLET_SCRIPT = SIGNER.scriptPubKeyHex();
 const PLENTY = "100000000";
@@ -39,6 +43,7 @@ type Spend = Holding & { utxoType: string };
 
 type Request = {
 	holdings?: Record<string, string>;
+	owned?: Record<string, SelectableUtxo[]>;
 	instance?: Record<string, string>;
 	params?: Record<string, unknown>;
 	spends?: Spend[];
@@ -116,7 +121,8 @@ class ReferenceExample {
 				estimateFee: this.estimateFee,
 				programParamTypes: createSmplxProgramParamTypes(smplx),
 				fundingUtxos: [wallet(POLICY_ASSET, PLENTY)],
-				holdingsOf: (asset) => [wallet(asset, request.holdings?.[asset] ?? PLENTY)],
+				holdingsOf: (asset) =>
+					request.owned?.[asset] ?? [wallet(asset, request.holdings?.[asset] ?? PLENTY)],
 				network: NETWORK,
 				policyAsset: POLICY_ASSET,
 				readChainTip: async () => CHAIN_TIP,
@@ -193,15 +199,65 @@ function built<Finished>(
 	);
 }
 
-function signedFee(review: ManifestReview): bigint {
-	const signed = built(review, (builder) =>
+function signed(review: ManifestReview): { feeSats: bigint; hex: string } {
+	const transaction = built(review, (builder) =>
 		SIGNER.finalizeStrictFee(builder, review.feeRateSatsPerKvb),
 	);
 
 	try {
-		return signed.feeSats;
+		return { feeSats: transaction.feeSats, hex: transaction.hex };
 	} finally {
-		signed.free();
+		transaction.free();
+	}
+}
+
+function signedFee(review: ManifestReview): bigint {
+	return signed(review).feeSats;
+}
+
+function receivedIn(hex: string, asset: string): SelectableUtxo {
+	const network = lwk.Network.testnet();
+	const descriptor = new lwk.Signer(new lwk.Mnemonic(MNEMONIC), network)
+		.wpkhSlip77Descriptor()
+		.toString();
+	const master = /slip77\((?<key>[0-9a-f]{64})\)/.exec(descriptor)?.groups?.key ?? "";
+	const blindingKey = lwk.SecretKey.fromBytes(
+		hmac(sha256, hexToBytes(master), hexToBytes(WALLET_SCRIPT)),
+	);
+	const transaction = lwk.Transaction.fromString(hex);
+
+	for (let vout = 0; ; vout += 1) {
+		const output = transaction.output(vout);
+
+		if (!output) {
+			throw new Error(`The wallet received no blinded output of ${asset}.`);
+		}
+
+		if (!output.isPartiallyBlinded()) {
+			continue;
+		}
+
+		const secrets = output.unblind(blindingKey);
+
+		if (secrets.asset().toString() !== asset) {
+			continue;
+		}
+
+		return {
+			amount: secrets.value().toString(),
+			blindingSecretsJson: JSON.stringify({
+				asset,
+				assetBlindingFactor: secrets.assetBlindingFactor().toString(),
+				value: Number(secrets.value()),
+				valueBlindingFactor: secrets.valueBlindingFactor().toString(),
+			}),
+			confidential: true,
+			derivationPath: "0/0",
+			spendable: true,
+			txOut: output.toString(),
+			txid: transaction.txid().toString(),
+			vout,
+		};
 	}
 }
 
@@ -436,5 +492,33 @@ describe("lending_v2", () => {
 
 			expect(signedFee(review)).toBe(review.estimatedFeeSats);
 		}
+	});
+});
+
+describe("multiasset", () => {
+	const multiasset = new ReferenceExample("multiasset");
+
+	test("mints an asset with its reissuance token, then reissues from that token, each at exactly the fee shown", async () => {
+		const minted = await multiasset.reviewed("MintReissuable", { params: { supply: 21 } });
+		const mint = signed(minted);
+		const [issued] = minted.issuances;
+
+		if (!issued) {
+			throw new Error("The mint planned no issuance.");
+		}
+
+		const reissued = await multiasset.reviewed("Reissue", {
+			owned: { [issued.reissuanceToken]: [receivedIn(mint.hex, issued.reissuanceToken)] },
+			params: {
+				entropy: issued.entropy,
+				issued: issued.asset,
+				supply: 50,
+				token: issued.reissuanceToken,
+			},
+		});
+
+		expect(mint.feeSats).toBe(minted.estimatedFeeSats);
+		expect(reissued.issuances[0]).toMatchObject({ asset: issued.asset, kind: "reissue" });
+		expect(signedFee(reissued)).toBe(reissued.estimatedFeeSats);
 	});
 });

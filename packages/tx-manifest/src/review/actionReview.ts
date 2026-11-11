@@ -26,6 +26,7 @@ import { type InputRule, resolveInputRules } from "../evaluation/inputRules";
 import {
 	declaredIssuance,
 	issuanceAttributes,
+	reissuanceOf,
 	type PlannedIssuance,
 	resolveIssuance,
 } from "../evaluation/issuance";
@@ -461,12 +462,19 @@ export class ActionReview {
 		return assetLedger(this.#action, plan.outputs, {
 			held: [
 				...this.#chainHeld,
-				...issued.issuances.map((issuance) => ({
-					asset: issuance.asset,
-					created: true as const,
-					id: issuance.inputId,
-					sats: issuance.assetAmountSats,
-				})),
+				...issued.issuances.flatMap((issuance) =>
+					[
+						{ asset: issuance.asset, sats: issuance.assetAmountSats },
+						{ asset: issuance.reissuanceToken, sats: issuance.inflationAmountSats },
+					]
+						.filter(({ sats }) => sats > 0n)
+						.map(({ asset, sats }) => ({
+							asset,
+							created: true as const,
+							id: issuance.inputId,
+							sats,
+						})),
+				),
 			],
 			policyAsset: this.#input.policyAsset,
 			scope: this.#scope,
@@ -920,9 +928,6 @@ function resolveIssuances(
 		return ordered;
 	};
 
-	const spareIn = (asset: string): SelectableUtxo | undefined =>
-		candidatesIn(asset).find((utxo) => !taken.has(outpointKey(utxo)));
-
 	for (const entry of asArray(action.node.inputs)) {
 		const declared = asRecord(entry);
 		const issuance = declared && declaredIssuance(declared);
@@ -932,13 +937,23 @@ function resolveIssuances(
 		}
 
 		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
-
-		const asset = resolveAsset(declared.asset, `input ${id}`, {
-			policyAsset: context.policyAsset,
-			scope: context.scope,
-		});
-
+		const reissues = issuance.kind === "reissue";
 		const program = context.programInputs.find((candidate) => candidate.id === id);
+
+		if (program && reissues) {
+			throw new Refusal(
+				`Input ${id} reissues an asset from a program, which needs the blinding factors of ` +
+					"the token that program holds, and this wallet does not read them yet.",
+				"unimplemented-construct",
+			);
+		}
+
+		const asset = reissues
+			? reissuedToken(declared, issuance, id, context)
+			: resolveAsset(declared.asset, `input ${id}`, {
+					policyAsset: context.policyAsset,
+					scope: context.scope,
+				});
 
 		if (program) {
 			const outpoint = { txid: program.txid, vout: program.vout };
@@ -961,12 +976,17 @@ function resolveIssuances(
 			continue;
 		}
 
-		const funding = spareIn(asset);
+		const funding = candidatesIn(asset).find(
+			(utxo) => !taken.has(outpointKey(utxo)) && (!reissues || utxo.confidential === true),
+		);
 
 		if (!funding) {
 			throw new Refusal(
-				`Input ${id} issues an asset, which needs one of this wallet's own outputs in ` +
-					`${asset} to derive it from, and there is none left to use.`,
+				reissues
+					? `Input ${id} reissues an asset, which needs a blinded output of this wallet ` +
+							`holding its reissuance token ${asset}, and there is none left to use.`
+					: `Input ${id} issues an asset, which needs one of this wallet's own outputs in ` +
+							`${asset} to derive it from, and there is none left to use.`,
 				"shortfall",
 			);
 		}
@@ -983,6 +1003,25 @@ function resolveIssuances(
 	}
 
 	return { issuances, reserved };
+}
+
+function reissuedToken(
+	declared: Record<string, unknown>,
+	issuance: Record<string, unknown>,
+	id: string,
+	context: { policyAsset: string; scope: ReferenceScope },
+): string {
+	const token = reissuanceOf(issuance, id, context.scope).reissuanceToken;
+	const spent = resolveAsset(declared.asset, `input ${id}`, context);
+
+	if (spent !== token) {
+		throw new Refusal(
+			`Input ${id} reissues an asset whose reissuance token is ${token}, and declares that ` +
+				`it spends ${spent}. A reissuing input spends its token.`,
+		);
+	}
+
+	return token;
 }
 
 function bySize(left: bigint, right: bigint, smallestFirst: boolean): number {

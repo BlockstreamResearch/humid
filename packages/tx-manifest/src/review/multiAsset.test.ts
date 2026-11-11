@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { deriveNewIssuance } from "../chain/issuance";
+import { deriveFromEntropy, deriveNewIssuance } from "../chain/issuance";
 import { type ManifestReview, reviewManifestAction } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import type { SelectableUtxo } from "./coinSelection";
@@ -438,7 +438,7 @@ function twoIssuances(money: SelectableUtxo[]) {
 
 	outputs.splice(1, 0, {
 		amount_sat: "params.supply",
-		asset: "mint_two.asset",
+		asset: "mint_two.issued_asset",
 		confidential: false,
 		destination: "wallet",
 		id: "minted_two_out",
@@ -453,13 +453,20 @@ function twoIssuances(money: SelectableUtxo[]) {
 	);
 }
 
-describe("the issuances this wallet refuses outright", () => {
-	async function mintDeclaring(issuance: Record<string, unknown>) {
-		const document = structuredClone(MANIFEST) as Record<string, unknown>;
-		const actions = document.actions as Record<string, Record<string, unknown>>;
-		const inputs = actions.Mint?.inputs as Record<string, unknown>[];
+describe("reissuance tokens and reissuance", () => {
+	const YES_ENTROPY = "f8326827828ee2aab3c4d273fb573a8cf89a401bbc6643637d439ff36c60b6b9";
+	const YES_ASSET = "3a8b6b466346d9dbfcecd8c8d7b0c1873aee4e00fd5df0d95086a3f7eecd5a39";
+	const YES_TOKEN = deriveFromEntropy(YES_ENTROPY)?.reissuanceToken ?? "";
 
-		inputs[0]!.issuance = issuance;
+	function mintDeclaring(
+		issuance: Record<string, unknown>,
+		outputs: Record<string, unknown>[] = [],
+	) {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const mint = (document.actions as Record<string, Record<string, unknown>>).Mint!;
+
+		(mint.inputs as Record<string, unknown>[])[0]!.issuance = issuance;
+		mint.outputs = [...(mint.outputs as Record<string, unknown>[]), ...outputs];
 
 		return reviewManifestAction(
 			{
@@ -470,24 +477,111 @@ describe("the issuances this wallet refuses outright", () => {
 		);
 	}
 
-	test("a reissuance, because the request carries no entropy to derive it from", async () => {
-		const refusal = asRefusal(await mintDeclaring({ asset_amount_sat: 21, kind: "reissue" }));
+	function reissue(token: SelectableUtxo[], issued = YES_ASSET) {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
 
-		expect(refusal.reject).toBe("unimplemented-construct");
-		expect(refusal.reason).toContain("entropy");
+		(document.actions as Record<string, unknown>).Reissue = {
+			inputs: [
+				{
+					asset: "params.token",
+					id: "token_in",
+					issuance: {
+						asset_amount_sat: 50,
+						entropy: "params.entropy",
+						issued_asset: "params.issued",
+						kind: "reissue",
+					},
+					utxo_source: "wallet",
+				},
+			],
+			outputs: [
+				{ amount_sat: 50, asset: "token_in.issued_asset", destination: "wallet", id: "minted_out" },
+				{ amount_sat: 1, asset: "params.token", destination: "wallet", id: "token_back" },
+				{ asset: "lbtc", destination: "change", id: "change_out" },
+			],
+		};
+
+		return reviewManifestAction(
+			{
+				...request({
+					action: "Reissue",
+					params: { entropy: YES_ENTROPY, issued, token: YES_TOKEN },
+				}),
+				manifest: document,
+			},
+			{
+				...deps,
+				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+				holdingsOf: (asset) => (asset === YES_TOKEN ? token : []),
+			},
+		);
+	}
+
+	const blindedToken = utxo("1", TOKEN_TXID, {
+		blindingSecretsJson: "{}",
+		confidential: true,
+		derivationPath: "0/3",
 	});
 
-	test("and a reissuance token, which would have to be confidential to be spendable", async () => {
-		const refusal = asRefusal(
-			await mintDeclaring({
-				asset_amount_sat: 21,
-				inflation_amount_sat: 1,
-				kind: "new",
-			}),
+	test("are minted with the asset and paid to a blinded wallet output, the only kind that can reissue", async () => {
+		const review = asReview(
+			await mintDeclaring({ asset_amount_sat: 21, inflation_amount_sat: 1, kind: "new" }, [
+				{
+					amount_sat: 1,
+					asset: "mint_in.reissuance_token",
+					destination: "wallet",
+					id: "token_out",
+				},
+			]),
 		);
 
-		expect(refusal.reject).toBe("unimplemented-construct");
-		expect(refusal.reason).toContain("confidential");
+		expect(review.issuances[0]?.inflationAmountSats).toBe(1n);
+		expect(review.outputs.find((output) => output.id === "token_out")).toMatchObject({
+			asset: review.issuances[0]?.reissuanceToken,
+			blinded: true,
+			sats: 1n,
+		});
+	});
+
+	test("are refused where the action pays them nowhere", async () => {
+		const refusal = asRefusal(
+			await mintDeclaring({ asset_amount_sat: 21, inflation_amount_sat: 1, kind: "new" }),
+		);
+
+		expect(refusal.reject).toBe("document-fault");
+	});
+
+	test("a reissuance spends the wallet's blinded token and mints the asset its entropy derives", async () => {
+		const review = asReview(await reissue([blindedToken]));
+
+		expect(review.issuances).toMatchObject([
+			{
+				asset: YES_ASSET,
+				assetAmountSats: 50n,
+				kind: "reissue",
+				outpoint: { txid: TOKEN_TXID, vout: 0 },
+			},
+		]);
+		expect(review.outputs.find((output) => output.id === "minted_out")?.asset).toBe(YES_ASSET);
+		expect(review.selected).toContainEqual(blindedToken);
+	});
+
+	test("is refused where the wallet holds its token only in the open, which cannot reissue", async () => {
+		const refusal = asRefusal(await reissue([utxo("1", TOKEN_TXID)]));
+
+		expect(refusal.reject).toBe("shortfall");
+		expect(refusal.reason).toContain("blinded");
+	});
+
+	test("is refused where its issued_asset is not the asset its entropy derives", async () => {
+		expect(asRefusal(await reissue([blindedToken], TOKEN)).reason).toContain(TOKEN);
+	});
+
+	test("is refused where it names no entropy to derive the asset from", async () => {
+		const refusal = asRefusal(await mintDeclaring({ asset_amount_sat: 21, kind: "reissue" }));
+
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("mint_in");
 	});
 });
 
