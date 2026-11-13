@@ -1,7 +1,9 @@
 import { asArray, asRecord } from "./json";
 
 export type ProgramSite = {
+	amount?: unknown;
 	asset?: unknown;
+	blinding?: unknown;
 	id: string;
 	role: "created" | "spent";
 	signatureWitness?: string;
@@ -23,7 +25,9 @@ export function programSites(action: Record<string, unknown>): ProgramSite[] {
 
 			sites.push({
 				...site,
+				amount: asRecord(entry)?.amount_sat,
 				asset: asRecord(entry)?.asset,
+				blinding: asRecord(entry)?.blinding,
 				id: identifierOf(entry),
 				role: "spent",
 				...(signatureWitness === undefined ? {} : { signatureWitness }),

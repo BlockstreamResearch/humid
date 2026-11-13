@@ -3,11 +3,13 @@ import type { Action } from "../document/manifest";
 import { parseReference, type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
 import { type BlindingDecision, resolveBlinding } from "./blinding";
+import { type BlindingFactors, resolveBlindingFactors } from "./blindingFactors";
 import { evaluateExpression } from "./evaluate";
 import { encodeMetadataParts } from "./metadataParts";
 
 export type PlannedOutput = {
 	blinding: BlindingDecision;
+	factors?: BlindingFactors;
 	id: string;
 	sats?: bigint;
 	target:
@@ -45,21 +47,30 @@ export function planAction(action: Action, scope: ReferenceScope): PlannedSpend 
 		const blinding = resolveBlinding({
 			declared: output.confidential,
 			...(target.kind === "change" ? { change: true } : {}),
-			...(target.kind === "program"
+			...(target.kind === "program" && output.confidential !== true
 				? { unblindable: "program" as const }
 				: target.kind === "data"
 					? { unblindable: "data" as const }
 					: {}),
 		});
+		const factors =
+			output.blinding === undefined
+				? {}
+				: {
+						factors: Refusal.amend(
+							() => resolveBlindingFactors(output.blinding, scope),
+							(reason) => `${named} ${reason}`,
+						),
+					};
 
 		if (target.kind === "change" || target.kind === "fee") {
-			outputs.push({ blinding, id, target });
+			outputs.push({ blinding, ...factors, id, target });
 
 			continue;
 		}
 
 		if (target.kind === "data" && output.amount_sat === undefined) {
-			outputs.push({ blinding, id, sats: 0n, target });
+			outputs.push({ blinding, ...factors, id, sats: 0n, target });
 
 			continue;
 		}
@@ -74,7 +85,7 @@ export function planAction(action: Action, scope: ReferenceScope): PlannedSpend 
 		}
 
 		fundingSats += sats;
-		outputs.push({ blinding, id, sats, target });
+		outputs.push({ blinding, ...factors, id, sats, target });
 	}
 
 	if (outputs.length === 0) {
@@ -173,7 +184,7 @@ function opReturnScript(payloadHex: string): string {
 	return `6a4c${length.toString(16).padStart(2, "0")}${payloadHex}`;
 }
 
-function resolveAmount(amount: unknown, scope: ReferenceScope): bigint {
+export function resolveAmount(amount: unknown, scope: ReferenceScope): bigint {
 	if (typeof amount === "number" && Number.isSafeInteger(amount)) {
 		return BigInt(amount);
 	}

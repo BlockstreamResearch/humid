@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
+	DERIVED_SCRIPT,
 	PROGRAM_TXOUT,
 	type Document,
 	Fixture,
@@ -229,6 +230,58 @@ describe("the transaction-level facts a program spend needs", () => {
 			["program", 10],
 			["wallet", undefined],
 		]);
+	});
+});
+
+const readBlinded = async () => ({ scriptPubKeyHex: DERIVED_SCRIPT, txOutHex: PROGRAM_TXOUT });
+
+describe("a program input that spends a blinded output", () => {
+	const ONE = `01${"00".repeat(31)}`;
+	const TWO = `02${"00".repeat(31)}`;
+	const stating = (stated: Record<string, unknown>) => {
+		const inputs = receiveInputs();
+
+		inputs[0] = { ...inputs[0], ...stated };
+
+		return spending(withReceive(inputs));
+	};
+
+	test("opens the output with the factors and amount the manifest states", async () => {
+		const review = await reviewed(
+			stating({ amount_sat: 40_000, blinding: { asset_bf: "1", value_bf: "2" } }),
+			{ readTxOut: readBlinded },
+		);
+
+		expect(JSON.parse(review.programInputs[0]?.blindingSecretsJson ?? "{}")).toEqual({
+			asset: POLICY_ASSET,
+			assetBlindingFactor: ONE,
+			value: "40000",
+			valueBlindingFactor: TWO,
+		});
+		expect(review.outputs.find((output) => output.id === "received_out")?.sats).toBe(40_000n);
+	});
+
+	test("refuses one that states only one of the two factors", async () => {
+		const refusal = await refused(stating({ amount_sat: 40_000, blinding: { asset_bf: "1" } }), {
+			readTxOut: readBlinded,
+		});
+
+		expect(refusal.reason).toContain("both");
+	});
+
+	test("refuses one that does not state the amount the output holds", async () => {
+		const refusal = await refused(stating({ blinding: { asset_bf: "1", value_bf: "2" } }), {
+			readTxOut: readBlinded,
+		});
+
+		expect(refusal.reason).toContain("amount_sat");
+	});
+
+	test("and refuses a blinded output an input states no factors for", async () => {
+		const refusal = await refused(spending(), { readTxOut: readBlinded });
+
+		expect(refusal.reject).toBe("unbuildable-utxo-type");
+		expect(refusal.reason).toContain("blinding factors");
 	});
 });
 

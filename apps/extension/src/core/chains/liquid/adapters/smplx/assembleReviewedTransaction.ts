@@ -159,7 +159,7 @@ export function assembleReviewedTransaction<Builder extends AssemblingBuilder, F
 							issuance.assetAmountSats,
 							issuance.inflationAmountSats,
 							undefined,
-							undefined,
+							program.blindingSecretsJson,
 							program.extraLeavesJson,
 							program.includeDebugSymbols,
 							input.signingDerivationPath,
@@ -174,7 +174,7 @@ export function assembleReviewedTransaction<Builder extends AssemblingBuilder, F
 						program.argumentsJson,
 						witness,
 						program.signatureWitness,
-						undefined,
+						program.blindingSecretsJson,
 						program.extraLeavesJson,
 						program.includeDebugSymbols,
 						input.signingDerivationPath,
@@ -249,6 +249,8 @@ export function assembleReviewedTransaction<Builder extends AssemblingBuilder, F
 				output.sats,
 				output.asset,
 				output.blinded ? (output.blindingPublicKeyHex ?? input.blindingPublicKeyHex) : undefined,
+				output.assetBlindingFactor,
+				output.valueBlindingFactor,
 			);
 		}
 

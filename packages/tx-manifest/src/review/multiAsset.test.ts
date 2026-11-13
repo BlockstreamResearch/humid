@@ -635,18 +635,25 @@ describe("what each output does with the value it carries", () => {
 		});
 	});
 
-	test("a program output is open whatever it says", async () => {
-		const review = asReview(
-			await documentSaying((document) => {
-				outputsOf(document)[1]!.confidential = true;
-			}),
-		);
+	test("a program output is open unless the protocol asks for it to be blinded", async () => {
+		const review = asReview(await documentSaying(() => {}));
 
 		expect(review.outputs[1]).toMatchObject({
 			blinded: false,
 			decidedBy: "unblindable",
 			id: "p2pk_out",
 		});
+	});
+
+	test("and blinded with the wallet's own key where the protocol asks", async () => {
+		const review = asReview(
+			await documentSaying((document) => {
+				outputsOf(document)[1]!.confidential = true;
+			}),
+		);
+
+		expect(review.outputs[1]).toMatchObject({ blinded: true, decidedBy: "output", id: "p2pk_out" });
+		expect(review.outputs[1]?.blindingPublicKeyHex).toBeUndefined();
 	});
 
 	test("and so is an OP_RETURN", async () => {
@@ -838,7 +845,6 @@ describe("a program that does not state what it holds", () => {
 
 		expect(refusal.reject).toBe("document-fault");
 		expect(refusal.reason).toContain("no id");
-		expect(refusal.reason).toContain("600");
 	});
 
 	test("but is netted against that asset's cost where the input states and names the asset", async () => {

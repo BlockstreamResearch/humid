@@ -40,7 +40,7 @@ const FIXTURES = new URL(
 );
 
 type Holding = { amount: string; asset: string };
-type Spend = Holding & { utxoType: string };
+type Spend = Holding & { txOutHex?: string; utxoType: string };
 
 type Request = {
 	holdings?: Record<string, string>;
@@ -130,6 +130,12 @@ class ReferenceExample {
 				readChainTip: async () => CHAIN_TIP,
 				readFeeRate: async () => 100,
 				readTxOut: async ({ txid }) => {
+					const blinded = held.get(txid)?.txOutHex;
+
+					if (blinded !== undefined) {
+						return { scriptPubKeyHex: lastScript, txOutHex: blinded };
+					}
+
 					const amountSats = held.get(txid)?.amount ?? PLENTY;
 					const rawAssetId = held.get(txid)?.asset ?? POLICY_ASSET;
 
@@ -291,6 +297,35 @@ describe("p2pk", () => {
 		});
 
 		expect(signedFee(pay)).toBe(pay.estimatedFeeSats);
+		expect(signedFee(receive)).toBe(receive.estimatedFeeSats);
+	});
+
+	test("Pay blinds the program output with chosen factors, and Receive opens it by stating them", async () => {
+		const blinding = { asset_bf: "3", value_bf: "5" };
+		const paying = new ReferenceExample("p2pk");
+		const actions = paying.manifest.actions as Record<
+			string,
+			{ inputs: Record<string, unknown>[]; outputs: Record<string, unknown>[] }
+		>;
+
+		Object.assign(actions.Pay!.outputs[0]!, { blinding, confidential: true });
+		actions.Pay!.outputs.splice(1, 0, {
+			amount_sat: 1000,
+			asset: "lbtc",
+			destination: "wallet",
+			id: "kept_out",
+		});
+		Object.assign(actions.Receive!.inputs[0]!, { amount_sat: 1000, blinding });
+
+		const pay = await paying.reviewed("Pay", { params: { amount_sat: 1000, pubkey: KEY } });
+		const paid = signed(pay);
+		const locked = lwk.Transaction.fromString(paid.hex).output(0)?.toString() ?? "";
+		const receive = await paying.reviewed("Receive", {
+			params: { pubkey: KEY },
+			spends: [{ amount: "1000", asset: POLICY_ASSET, txOutHex: locked, utxoType: "p2pk_output" }],
+		});
+
+		expect(paid.feeSats).toBe(pay.estimatedFeeSats);
 		expect(signedFee(receive)).toBe(receive.estimatedFeeSats);
 	});
 

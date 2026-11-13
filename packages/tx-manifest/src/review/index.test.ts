@@ -297,6 +297,21 @@ describe("where an output can pay", () => {
 		expect(refusal.reason).toContain("nowhere");
 	});
 
+	test("a blinded output, with the factors the protocol chose", async () => {
+		expect(await paidOut({ blinding: { asset_bf: "3" }, destination: CONFIDENTIAL })).toMatchObject(
+			{ assetBlindingFactor: `03${"00".repeat(31)}`, blinded: true },
+		);
+	});
+
+	test("but no chosen factors on an output that is not blinded", async () => {
+		const refusal = await refused(
+			paying({ blinding: { asset_bf: "3" }, confidential: false, destination: CONFIDENTIAL }),
+			{ readAddress },
+		);
+
+		expect(refusal.reason).toContain("not blinded");
+	});
+
 	test("a script hash, as the taproot output it names", async () => {
 		expect(await paidOut({ destination: { script_hash: "ab".repeat(32) } })).toMatchObject({
 			blinded: false,

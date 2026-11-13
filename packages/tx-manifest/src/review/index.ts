@@ -1,6 +1,7 @@
 import type { ReadChainTip, ReadFeeRate, ReadTxOut } from "../chain/chainRead";
 import type { ConfirmationModel } from "../confirmation";
 import type { BlindingWord } from "../evaluation/blinding";
+import type { BlindingFactors } from "../evaluation/blindingFactors";
 import type { PlannedIssuance } from "../evaluation/issuance";
 import type { StaticWitness } from "../evaluation/witness";
 import type { CreatedInstance } from "../programs/instance";
@@ -19,6 +20,7 @@ export type ProgramFinding = ProgramDerivation & {
 
 export type ReviewedProgramInput = {
 	argumentsJson: string;
+	blindingSecretsJson?: string;
 	extraLeavesJson: string;
 	id: string;
 	includeDebugSymbols: boolean;
@@ -36,7 +38,7 @@ export type PlannedInput =
 	| { program: ReviewedProgramInput; sequence?: number; source: "program" }
 	| { sequence?: number; source: "wallet"; utxo: SelectableUtxo };
 
-export type ReviewedOutput = {
+export type ReviewedOutput = BlindingFactors & {
 	address?: string;
 	asset: string;
 	blinded: boolean;

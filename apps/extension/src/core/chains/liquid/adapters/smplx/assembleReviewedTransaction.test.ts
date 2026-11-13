@@ -25,6 +25,7 @@ const TXOUT_HEX = `01${"49".repeat(32)}0100000000000186a000160014${"00".repeat(2
 type Recorded = {
 	programs: {
 		argumentsJson: string | undefined;
+		blindingSecretsJson?: string;
 		derivationPath: string | undefined;
 		extraLeavesJson: string | undefined;
 		includeDebugSymbols: boolean | undefined;
@@ -50,7 +51,9 @@ type Recorded = {
 	}[];
 	outputs: {
 		asset: string;
+		assetBlindingFactor?: string | null;
 		blindingKey: string | null | undefined;
+		valueBlindingFactor?: string | null;
 		sats: bigint;
 		script: string;
 	}[];
@@ -83,8 +86,22 @@ const plannedIssuance = () => ({
 function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): SmplxModule {
 	return {
 		TransactionBuilder: class {
-			addOutput(script: string, sats: bigint, asset: string, blindingKey?: string | null) {
-				recorded.outputs.push({ asset, blindingKey, sats, script });
+			addOutput(
+				script: string,
+				sats: bigint,
+				asset: string,
+				blindingKey?: string | null,
+				assetBlindingFactor?: string | null,
+				valueBlindingFactor?: string | null,
+			) {
+				recorded.outputs.push({
+					asset,
+					blindingKey,
+					sats,
+					script,
+					...(assetBlindingFactor ? { assetBlindingFactor } : {}),
+					...(valueBlindingFactor ? { valueBlindingFactor } : {}),
+				});
 			}
 			addInput(txid: string, vout: number, txOut: string) {
 				recorded.spends.push({ txOut, txid, vout });
@@ -145,13 +162,14 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 				argumentsJson?: string,
 				witnessJson?: string,
 				signatureWitness?: string,
-				_blindingSecretsJson?: string,
+				blindingSecretsJson?: string,
 				extraLeavesJson?: string,
 				includeDebugSymbols?: boolean,
 				derivationPath?: string,
 			) {
 				recorded.programs.push({
 					argumentsJson,
+					...(blindingSecretsJson === undefined ? {} : { blindingSecretsJson }),
 					derivationPath,
 					extraLeavesJson,
 					includeDebugSymbols,
@@ -602,6 +620,16 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.unused).toEqual([]);
 		});
 
+		test("opens a blinded program output with the secrets the review built", async () => {
+			const secrets = '{"value":"1"}';
+			const { assemble, recorded } = subject(
+				spendingPlan({ programInputs: [{ ...programInput, blindingSecretsJson: secrets }] }),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.programs[0]?.blindingSecretsJson).toBe(secrets);
+		});
+
 		test("declares the locktime the plan carries, and each input's own sequence", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
@@ -902,6 +930,26 @@ describe("assembleReviewedTransaction", () => {
 				},
 			],
 		};
+
+		test("blinds an output with the factors the review chose", async () => {
+			const factor = `03${"00".repeat(31)}`;
+			const { assemble, recorded } = subject({
+				outputs: [
+					{
+						...blindedAndOpen.outputs[0]!,
+						assetBlindingFactor: factor,
+						valueBlindingFactor: factor,
+					},
+				],
+			});
+
+			await assemble();
+
+			expect(recorded.outputs[0]).toMatchObject({
+				assetBlindingFactor: factor,
+				valueBlindingFactor: factor,
+			});
+		});
 
 		test("passes the key only to the outputs the review says are blinded", async () => {
 			const { assemble, recorded } = subject(blindedAndOpen, () => SIGNED, {

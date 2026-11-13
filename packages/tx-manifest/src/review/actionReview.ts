@@ -14,6 +14,7 @@ import {
 	resolveAsset,
 } from "../evaluation/assetLedger";
 import { type BlindingDecision, resolveChangeBlinding } from "../evaluation/blinding";
+import { type BlindingFactors, resolveBlindingFactors } from "../evaluation/blindingFactors";
 import {
 	actionHook,
 	inputHook,
@@ -31,7 +32,7 @@ import {
 	resolveIssuance,
 } from "../evaluation/issuance";
 import { fillParameters } from "../evaluation/parameters";
-import { type PlannedSpend, planAction } from "../evaluation/plan";
+import { type PlannedSpend, planAction, resolveAmount } from "../evaluation/plan";
 import { checkPositions, type StatedPosition } from "../evaluation/positions";
 import { resolveStaticWitnesses } from "../evaluation/witness";
 import { declaredParamTypes } from "../programs/declaredTypes";
@@ -322,42 +323,29 @@ export class ActionReview {
 
 			checkProgramOnChain(derived, onChain.scriptPubKeyHex);
 
-			if (onChain.amountSats === undefined || onChain.rawAssetId === undefined) {
-				throw new Refusal(
-					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} did not come back with an ` +
-						"explicit amount and asset, so this wallet cannot say what it holds. It will not " +
-						"assume a balance for an output it is about to spend.",
-					"unbuildable-utxo-type",
-				);
-			}
-
 			if (!site.id) {
 				throw new Refusal(
-					`The ${site.utxoType} this action spends holds ${onChain.amountSats} of ` +
-						`${onChain.rawAssetId}, and the manifest gives that input no id, so this wallet ` +
-						"cannot account for what it brings.",
+					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} is spent by an input the ` +
+						"manifest gives no id, so this wallet cannot account for what it brings.",
 				);
 			}
 
-			const held = baseUnits(onChain.amountSats);
+			const holding =
+				site.blinding === undefined
+					? explicitHolding(site, outpoint, onChain)
+					: this.#blindedHolding(site);
 
-			if (held === undefined) {
-				throw new Refusal(
-					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} came back holding ` +
-						`${JSON.stringify(onChain.amountSats)}, which is not an amount this wallet can read. ` +
-						"It will not spend an output it cannot say the value of.",
-					"unbuildable-utxo-type",
-				);
-			}
-
-			this.#inputs[site.id] = { amount_sat: held, asset: onChain.rawAssetId };
-			this.#chainHeld.push({ asset: onChain.rawAssetId, id: site.id, sats: held });
+			this.#inputs[site.id] = { amount_sat: holding.sats, asset: holding.asset };
+			this.#chainHeld.push({ asset: holding.asset, id: site.id, sats: holding.sats });
 			this.#programInputs.push({
 				argumentsJson: derived.argumentsJson,
 				extraLeavesJson: derived.extraLeavesJson,
 				id: site.id,
 				includeDebugSymbols: derived.includeDebugSymbols,
 				...(site.signatureWitness === undefined ? {} : { signatureWitness: site.signatureWitness }),
+				...(holding.blindingSecretsJson === undefined
+					? {}
+					: { blindingSecretsJson: holding.blindingSecretsJson }),
 				source: derived.source,
 				txOutHex: onChain.txOutHex,
 				txid: outpoint.txid,
@@ -393,6 +381,42 @@ export class ActionReview {
 				`${address} is not an address this wallet can pay on ${this.#input.network}: ${String(error)}`,
 			);
 		}
+	}
+
+	#blindedHolding(site: ProgramSite): Holding {
+		const at = `Input ${site.id}`;
+		const { assetBlindingFactor, valueBlindingFactor } = Refusal.amend(
+			() => resolveBlindingFactors(site.blinding, this.#scope),
+			(reason) => `${at} ${reason}`,
+		);
+
+		if (assetBlindingFactor === undefined || valueBlindingFactor === undefined) {
+			throw new Refusal(
+				`${at} states only one blinding factor of the output it spends, and a blinded output ` +
+					"opens only with both.",
+			);
+		}
+
+		const asset = resolveAsset(site.asset, `input ${site.id}`, {
+			policyAsset: this.#input.policyAsset,
+			scope: this.#scope,
+		});
+		const sats = Refusal.amend(
+			() => resolveAmount(site.amount, this.#scope),
+			(reason) =>
+				`${at} spends a blinded output, which states its amount only through amount_sat: ${reason}`,
+		);
+
+		return {
+			asset,
+			blindingSecretsJson: JSON.stringify({
+				asset,
+				assetBlindingFactor,
+				value: sats.toString(),
+				valueBlindingFactor,
+			}),
+			sats,
+		};
 	}
 
 	async #readTxOut(outpoint: Outpoint) {
@@ -593,7 +617,12 @@ export class ActionReview {
 			returned: new Map(),
 		};
 
-		const payChange = (asset: string, id: string, planned: BlindingDecision) => {
+		const payChange = (
+			asset: string,
+			id: string,
+			planned: BlindingDecision,
+			factors?: BlindingFactors,
+		) => {
 			const sats = changeFor.get(asset) ?? 0n;
 
 			changeFor.delete(asset);
@@ -611,11 +640,13 @@ export class ActionReview {
 			}
 
 			const blinding = isPolicy ? resolveChangeBlinding(planned, spendsConfidential) : planned;
+			const blinded = blinding.blinding === "blinded";
 
 			paid.at.set(id, paid.outputs.length);
 			paid.outputs.push({
 				asset,
-				blinded: blinding.blinding === "blinded",
+				blinded,
+				...chosenFactors(id, factors, blinded),
 				decidedBy: blinding.decidedBy,
 				id,
 				...(blinding.overrode === undefined ? {} : { overrode: blinding.overrode }),
@@ -628,7 +659,7 @@ export class ActionReview {
 			const asset = ledger.outputs[at] ?? this.#policyAsset;
 
 			if (planned.target.kind === "change") {
-				payChange(asset, planned.id, planned.blinding);
+				payChange(asset, planned.id, planned.blinding, planned.factors);
 
 				continue;
 			}
@@ -660,6 +691,7 @@ export class ActionReview {
 					asset,
 					blinded,
 					...(blinded ? { blindingPublicKeyHex } : {}),
+					...chosenFactors(planned.id, planned.factors, blinded),
 					decidedBy: blinded ? planned.blinding.decidedBy : "unblindable",
 					id: planned.id,
 					sats: planned.sats,
@@ -687,10 +719,13 @@ export class ActionReview {
 				paid.returned.set(asset, (paid.returned.get(asset) ?? 0n) + planned.sats);
 			}
 
+			const blinded = planned.blinding.blinding === "blinded";
+
 			paid.at.set(planned.id, paid.outputs.length);
 			paid.outputs.push({
 				asset,
-				blinded: planned.blinding.blinding === "blinded",
+				blinded,
+				...chosenFactors(planned.id, planned.factors, blinded),
 				decidedBy: planned.blinding.decidedBy,
 				id: planned.id,
 				sats: planned.sats,
@@ -892,6 +927,57 @@ const FEE_ROUNDS = 4;
 const MIN_FEE_SATS = 10n;
 
 const DUST_SATS = 22n;
+
+type Holding = { asset: string; blindingSecretsJson?: string; sats: bigint };
+
+function explicitHolding(
+	site: ProgramSite,
+	outpoint: Outpoint,
+	onChain: Awaited<ReturnType<ReviewInput["readTxOut"]>>,
+): Holding {
+	const at = `${outpoint.txid}:${outpoint.vout}`;
+
+	if (onChain.amountSats === undefined || onChain.rawAssetId === undefined) {
+		throw new Refusal(
+			`The ${site.utxoType} at ${at} did not come back with an explicit amount and asset, and ` +
+				`input ${site.id} states no blinding factors to open it with. This wallet will not ` +
+				"assume a balance for an output it is about to spend.",
+			"unbuildable-utxo-type",
+		);
+	}
+
+	const sats = baseUnits(onChain.amountSats);
+
+	if (sats === undefined) {
+		throw new Refusal(
+			`The ${site.utxoType} at ${at} came back holding ${JSON.stringify(onChain.amountSats)}, ` +
+				"which is not an amount this wallet can read. It will not spend an output it cannot " +
+				"say the value of.",
+			"unbuildable-utxo-type",
+		);
+	}
+
+	return { asset: onChain.rawAssetId, sats };
+}
+
+function chosenFactors(
+	id: string,
+	factors: BlindingFactors | undefined,
+	blinded: boolean,
+): BlindingFactors {
+	if (factors === undefined) {
+		return {};
+	}
+
+	if (!blinded) {
+		throw new Refusal(
+			`Output ${id || "(unnamed)"} chooses blinding factors and is not blinded, so nothing ` +
+				"would blind it with them.",
+		);
+	}
+
+	return factors;
+}
 
 const UNDECLARED_CHANGE: BlindingDecision = {
 	blinding: "open",

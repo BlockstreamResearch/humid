@@ -35,7 +35,7 @@ const SITES = {
 	input: {
 		amount_sat: READ,
 		asset: READ,
-		blinding: UNIMPLEMENTED,
+		blinding: READ,
 		description: SHOWN,
 		from_address: READ,
 		id: READ,
@@ -63,7 +63,7 @@ const SITES = {
 	output: {
 		amount_sat: READ,
 		asset: READ,
-		blinding: UNIMPLEMENTED,
+		blinding: READ,
 		condition: UNIMPLEMENTED,
 		confidential: READ,
 		data: READ,
