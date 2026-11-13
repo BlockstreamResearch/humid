@@ -320,6 +320,7 @@ export class ActionReview {
 			network: this.#input.network,
 			scope: this.#scope,
 			utxoType: site.utxoType,
+			...(site.args === undefined ? {} : { args: site.args }),
 			wiring: site.wiring,
 		});
 	}

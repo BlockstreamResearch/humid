@@ -22,7 +22,7 @@ const SITES = {
 		params: READ,
 	},
 	programReference: {
-		args: UNIMPLEMENTED,
+		args: READ,
 		compile_params: READ,
 		if: UNIMPLEMENTED,
 		script_hash: READ,
@@ -115,6 +115,11 @@ const SITES = {
 		description: SHOWN,
 		fields: READ,
 	},
+	utxoParam: {
+		default: READ,
+		description: SHOWN,
+		type: READ,
+	},
 	ui: {
 		group: SHOWN,
 		hide: SHOWN,
@@ -124,7 +129,7 @@ const SITES = {
 	utxoType: {
 		asset: SHOWN,
 		description: SHOWN,
-		params: UNIMPLEMENTED,
+		params: READ,
 		script: READ,
 		state_vars: UNIMPLEMENTED,
 	},
@@ -244,6 +249,11 @@ function walkSites(manifest: Manifest, visit: SiteVisitor): void {
 
 	for (const [name, declared] of Object.entries(manifest.utxoTypes)) {
 		at(`utxo type ${name}`, declared, "utxoType");
+
+		for (const [param, definition] of Object.entries(asRecord(asRecord(declared)?.params) ?? {})) {
+			at(`utxo type ${name} / param ${param}`, definition, "utxoParam");
+		}
+
 		at(`utxo type ${name} / script`, asRecord(declared)?.script, "script");
 	}
 }

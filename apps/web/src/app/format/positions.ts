@@ -14,5 +14,6 @@ export const WHERE_IT_SITS: Record<ConstructSiteKind, string> = {
 	template: "on a contract template",
 	ui: "in display metadata",
 	utxoType: "on a kind of holding",
+	utxoParam: "on a parameter of a kind of holding",
 	witness: "on a witness",
 };

@@ -41,9 +41,9 @@ describe("the constructs a document declares", () => {
 
 	test("look inside a program reference, where a binding changes the address", () => {
 		const declared = findings({
-			actions: { Pay: { outputs: [{ destination: { args: {}, utxo_type: "t" }, id: "o" }] } },
+			actions: { Pay: { outputs: [{ destination: { if: "x", utxo_type: "t" }, id: "o" }] } },
 		});
 
-		expect(declared.map((finding) => finding.key)).toEqual(["args"]);
+		expect(declared.map((finding) => finding.key)).toEqual(["if"]);
 	});
 });

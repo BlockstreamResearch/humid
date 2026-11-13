@@ -405,6 +405,40 @@ describe("p2pk", () => {
 		expect(signedFee(receive)).toBe(receive.estimatedFeeSats);
 	});
 
+	test("Pay and Receive sign through a utxo type that declares its params, at the same address", async () => {
+		const closed = new ReferenceExample("p2pk");
+		const types = closed.manifest.utxo_types as Record<string, Record<string, unknown>>;
+		const actions = closed.manifest.actions as Record<
+			string,
+			{ inputs: Record<string, unknown>[]; outputs: Record<string, unknown>[] }
+		>;
+
+		types.p2pk_output!.params = { PUB_KEY: { type: "pubkey" } };
+
+		for (const site of [
+			actions.Pay!.outputs[0]!.destination,
+			actions.Receive!.inputs[0]!.utxo_source,
+		]) {
+			const reference = site as Record<string, unknown>;
+
+			delete reference.compile_params;
+			reference.args = { PUB_KEY: "params.pubkey" };
+		}
+
+		const request = { params: { amount_sat: 1000, pubkey: KEY } };
+		const pay = await closed.reviewed("Pay", request);
+		const open = await new ReferenceExample("p2pk").reviewed("Pay", request);
+		const paid = settled(pay);
+
+		expect(pay.programs[0]?.address).toBe(open.programs[0]?.address);
+		settled(
+			await closed.reviewed("Receive", {
+				params: { pubkey: KEY },
+				spends: [heldAt(paid, 0, "p2pk_output", POLICY_ASSET)],
+			}),
+		);
+	});
+
 	test("Pay also pays another wallet's confidential address, blinded to that wallet, at the fee shown", async () => {
 		const theirs = new smplx.Signer(
 			"legal winner thank year wave sausage worth useful legal winner thank yellow",

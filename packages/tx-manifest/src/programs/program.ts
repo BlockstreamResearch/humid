@@ -5,6 +5,7 @@ import { Refusal } from "../refusal";
 import { resolveCompileParams } from "./compileParams";
 import type { ProgramAbi, ProgramParamTypes } from "./programParamTypes";
 import { stateLeavesOf } from "./stateLeaves";
+import { bindUtxoParams, boundWiring } from "./utxoParams";
 
 export type CompiledProgram = {
 	address: string;
@@ -48,6 +49,7 @@ export async function deriveProgramAddress(
 		network: string;
 		scope: ReferenceScope;
 		utxoType: string;
+		args?: unknown;
 		wiring: Record<string, unknown>;
 	},
 ): Promise<ProgramDerivation> {
@@ -79,19 +81,20 @@ export async function deriveProgramAddress(
 	}
 
 	const declaring = { declares: abi.parameters, source: sourcePath };
-	const wiring = {
-		...instanceFieldsNamed(declaring.declares, input.scope.instance),
-		...asRecord(script?.compile_params),
-		...input.wiring,
-	};
+	const bound = bindUtxoParams(input.utxoType, declared, input, input.scope);
+	const scope = bound?.scope ?? input.scope;
+	const wiring = bound
+		? { ...boundWiring(bound, declaring.declares), ...asRecord(script?.compile_params) }
+		: {
+				...instanceFieldsNamed(declaring.declares, input.scope.instance),
+				...asRecord(script?.compile_params),
+				...input.wiring,
+			};
 	const argumentsJson = JSON.stringify(
-		resolveCompileParams(wiring, input.declaredTypes, input.scope, declaring),
+		resolveCompileParams(wiring, bound?.types ?? input.declaredTypes, scope, declaring),
 	);
 	const extraLeavesJson = JSON.stringify(
-		stateLeavesOf(script?.extra_leaves, {
-			at: `Utxo type "${input.utxoType}"`,
-			scope: input.scope,
-		}),
+		stateLeavesOf(script?.extra_leaves, { at: `Utxo type "${input.utxoType}"`, scope }),
 	);
 
 	try {

@@ -204,19 +204,24 @@ export function actionReferences(manifest: Manifest, action: Action): ReferenceO
 		}
 	};
 
-	const addWiring = (at: string, wiring: unknown): void => {
+	const addWiring = (
+		at: string,
+		wiring: unknown,
+		site: ReferenceSiteKind = "compileParam",
+	): void => {
 		for (const [name, value] of Object.entries(asRecord(wiring) ?? {})) {
-			add("compileParam", `${at} / ${name}`, value);
+			add(site, `${at} / ${name}`, value);
 		}
+	};
+	const addSite = (at: string, reference: unknown): void => {
+		addWiring(at, asRecord(reference)?.compile_params);
+		addWiring(at, asRecord(reference)?.args, "field");
 	};
 
 	for (const declared of asArray(action.node.inputs)) {
 		const input = asRecord(declared);
 
-		addWiring(
-			`${where} / input ${identifierOf(input)}`,
-			asRecord(input?.utxo_source)?.compile_params,
-		);
+		addSite(`${where} / input ${identifierOf(input)}`, input?.utxo_source);
 	}
 
 	for (const declared of asArray(action.node.outputs)) {
@@ -224,7 +229,7 @@ export function actionReferences(manifest: Manifest, action: Action): ReferenceO
 		const at = `${where} / output ${identifierOf(output)}`;
 		const destination = output?.destination;
 
-		addWiring(at, asRecord(destination)?.compile_params);
+		addSite(at, destination);
 		add("amount", `${at} / amount_sat`, output?.amount_sat);
 
 		if (typeof destination === "string" && !DESTINATION_KEYWORDS.has(destination)) {
@@ -249,10 +254,16 @@ export function actionReferences(manifest: Manifest, action: Action): ReferenceO
 	}
 
 	for (const name of namedUtxoTypes(action.node)) {
-		addWiring(
-			`utxo type ${name} / script`,
-			asRecord(manifest.utxoType(name)?.script)?.compile_params,
-		);
+		const declared = manifest.utxoType(name);
+		const params = asRecord(declared?.params);
+
+		if (params === undefined) {
+			addWiring(`utxo type ${name} / script`, asRecord(declared?.script)?.compile_params);
+		}
+
+		for (const [param, definition] of Object.entries(params ?? {})) {
+			add("field", `utxo type ${name} / param ${param}`, asRecord(definition)?.default);
+		}
 	}
 
 	return found;

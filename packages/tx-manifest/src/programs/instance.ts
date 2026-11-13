@@ -1,7 +1,7 @@
 import { asRecord } from "../document/json";
 import type { Action } from "../document/manifest";
-import { parseReference, type ReferenceScope, resolveReference } from "../document/references";
-import { computedValue, computesValue } from "../evaluation/computedValue";
+import type { ReferenceScope } from "../document/references";
+import { statedValue } from "../evaluation/computedValue";
 import { Refusal } from "../refusal";
 import { resolveCompileParams } from "./compileParams";
 import { PROGRAM_HASH_SEED, type HashProgram, ITERATION_BOUND } from "./programHash";
@@ -26,7 +26,7 @@ export function statedCreatedFields(action: Action, scope: ReferenceScope): Reco
 			continue;
 		}
 
-		const resolved = Refusal.attempt(() => resolveFieldReference(name, value, scope));
+		const resolved = Refusal.attempt(() => statedValue(`Field ${name}`, value, scope));
 
 		if (resolved !== undefined) {
 			stated[name] = resolved;
@@ -61,7 +61,7 @@ export function resolveCreatedInstance(
 
 	for (const [name, value] of Object.entries(declared)) {
 		if (typeof value === "string") {
-			direct[name] = resolveFieldReference(name, value, input.scope);
+			direct[name] = statedValue(`Field ${name}`, value, input.scope);
 
 			continue;
 		}
@@ -260,34 +260,6 @@ function tapleafWiring(node: Record<string, unknown>): TapleafWiring {
 	}
 
 	return { declaredAtUse, wiring };
-}
-
-function resolveFieldReference(name: string, text: string, scope: ReferenceScope): string {
-	if (parseReference(text) === undefined) {
-		return computesValue(text)
-			? Refusal.amend(
-					() => computedValue(text, "field", scope),
-					(reason) => `Field ${name}: ${reason}`,
-				)
-			: text;
-	}
-
-	const found = Refusal.amend(
-		() => resolveReference(text, "field", scope).value,
-		(reason) => `Field ${name}: ${reason}`,
-	);
-
-	if (typeof found === "bigint" || (typeof found === "number" && Number.isSafeInteger(found))) {
-		return found.toString();
-	}
-
-	if (typeof found !== "string") {
-		throw new Refusal(
-			`Field ${name} resolves to a value this runtime cannot record as a field yet.`,
-		);
-	}
-
-	return found;
 }
 
 function fieldTypes(declared: Record<string, unknown>): Record<string, string> {

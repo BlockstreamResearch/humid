@@ -8,6 +8,7 @@ export type ProgramSite = {
 	role: "created" | "spent";
 	signatureWitness?: string;
 	unusedWitnesses?: string[];
+	args?: unknown;
 	utxoType: string;
 	witnessNames?: string[];
 	wiring: Record<string, unknown>;
@@ -55,7 +56,7 @@ export function namedUtxoTypes(action: Record<string, unknown>): string[] {
 
 function programReference(
 	value: unknown,
-): { utxoType: string; wiring: Record<string, unknown> } | undefined {
+): { args?: unknown; utxoType: string; wiring: Record<string, unknown> } | undefined {
 	const record = asRecord(value);
 	const utxoType = record?.utxo_type;
 
@@ -63,7 +64,11 @@ function programReference(
 		return undefined;
 	}
 
-	return { utxoType, wiring: asRecord(record?.compile_params) ?? {} };
+	return {
+		...(record?.args === undefined ? {} : { args: record.args }),
+		utxoType,
+		wiring: asRecord(record?.compile_params) ?? {},
+	};
 }
 
 function walletSignatureWitness(declared: Record<string, unknown>): string | undefined {
