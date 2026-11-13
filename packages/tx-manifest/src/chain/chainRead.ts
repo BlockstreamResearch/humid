@@ -7,6 +7,7 @@ export type TxOutAtOutPoint = {
 	amountSats?: string;
 	rawAssetId?: string;
 	scriptPubKeyHex: string;
+	transactionHex?: string;
 	txOutHex: string;
 };
 
@@ -40,7 +41,8 @@ export function createEsploraTxOutReader(
 			throw new Error(`Could not read transaction ${txid}: ${response.status}`);
 		}
 
-		const parsed = txOutAt(encodeHex(new Uint8Array(await response.arrayBuffer())), vout);
+		const transactionHex = encodeHex(new Uint8Array(await response.arrayBuffer()));
+		const parsed = txOutAt(transactionHex, vout);
 
 		if (!parsed.ok) {
 			throw new Error(`Reading ${txid}:${vout}: ${parsed.reason}`);
@@ -52,6 +54,7 @@ export function createEsploraTxOutReader(
 			...(amountSats === undefined ? {} : { amountSats }),
 			...(rawAssetId === undefined ? {} : { rawAssetId }),
 			scriptPubKeyHex,
+			transactionHex,
 			txOutHex,
 		};
 	};

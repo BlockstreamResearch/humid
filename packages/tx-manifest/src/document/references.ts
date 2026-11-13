@@ -27,6 +27,7 @@ export type ReferenceSiteKind =
 	| "destination"
 	| "entropy"
 	| "expression"
+	| "field"
 	| "issuedAmount"
 	| "stateLeaf"
 	| "witnessKey"
@@ -50,6 +51,10 @@ const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: st
 	expression: {
 		accepts: ["instance", "params", "input-attribute", "bare"],
 		describes: "an expression",
+	},
+	field: {
+		accepts: ["instance", "params", "input-attribute", "bare"],
+		describes: "a deployment field",
 	},
 	issuedAmount: {
 		accepts: ["instance", "params", "bare"],

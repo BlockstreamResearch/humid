@@ -238,7 +238,7 @@ export class ActionReview {
 
 		const funded = this.#fund(ledger, rules, issued);
 		const paid = this.#payOutputs(plan, ledger, funded);
-		const placed = this.#placeInputs(ledger, funded, rules);
+		const placed = this.#placeInputs(ledger, funded, rules, issued.reserved);
 
 		this.#checkPositions(placed, paid);
 
@@ -331,9 +331,12 @@ export class ActionReview {
 			}
 
 			const holding =
-				site.blinding === undefined
-					? explicitHolding(site, outpoint, onChain)
-					: this.#blindedHolding(site);
+				site.blinding !== undefined
+					? this.#blindedHolding(site)
+					: onChain.amountSats !== undefined && onChain.rawAssetId !== undefined
+						? explicitHolding(site, outpoint, onChain.amountSats, onChain.rawAssetId)
+						: // oxlint-disable-next-line no-await-in-loop
+							await this.#reopenedHolding(site, outpoint, onChain.transactionHex);
 
 			this.#inputs[site.id] = { amount_sat: holding.sats, asset: holding.asset };
 			this.#chainHeld.push({ asset: holding.asset, id: site.id, sats: holding.sats });
@@ -416,6 +419,60 @@ export class ActionReview {
 				valueBlindingFactor,
 			}),
 			sats,
+		};
+	}
+
+	async #reopenedHolding(
+		site: ProgramSite,
+		outpoint: Outpoint,
+		transactionHex: string | undefined,
+	): Promise<Holding> {
+		const opened =
+			transactionHex === undefined
+				? undefined
+				: await this.#input.unblind?.(transactionHex, outpoint.vout);
+
+		if (!opened) {
+			throw new Refusal(
+				`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} is blinded to a key this ` +
+					`wallet does not hold, and input ${site.id} states no blinding factors to open it ` +
+					"with. This wallet will not assume a balance for an output it is about to spend.",
+				"unbuildable-utxo-type",
+			);
+		}
+
+		const declaredAsset =
+			site.asset === undefined
+				? undefined
+				: resolveAsset(site.asset, `input ${site.id}`, {
+						policyAsset: this.#input.policyAsset,
+						scope: this.#scope,
+					});
+		const declaredSats =
+			typeof site.amount === "number" || typeof site.amount === "string"
+				? resolveAmount(site.amount, this.#scope)
+				: undefined;
+
+		if (
+			(declaredAsset !== undefined && declaredAsset !== opened.asset) ||
+			(declaredSats !== undefined && declaredSats !== opened.sats)
+		) {
+			throw new Refusal(
+				`Input ${site.id} expects ${declaredSats ?? "an amount"} of ${declaredAsset ?? "an asset"}, ` +
+					`and the ${site.utxoType} it spends holds ${opened.sats} of ${opened.asset}.`,
+				"program-mismatch",
+			);
+		}
+
+		return {
+			asset: opened.asset,
+			blindingSecretsJson: JSON.stringify({
+				asset: opened.asset,
+				assetBlindingFactor: opened.assetBlindingFactor,
+				value: opened.sats.toString(),
+				valueBlindingFactor: opened.valueBlindingFactor,
+			}),
+			sats: opened.sats,
 		};
 	}
 
@@ -604,9 +661,9 @@ export class ActionReview {
 
 	#payOutputs(plan: PlannedSpend, ledger: AssetLedger, funded: FundedAsset[]): PaidOutputs {
 		const changeFor = new Map(funded.map((entry) => [entry.asset, entry.changeSats]));
-		const spendsConfidential = funded.some((entry) =>
-			entry.selected.some((utxo) => utxo.confidential === true),
-		);
+		const spendsConfidential =
+			this.#programInputs.some((program) => program.blindingSecretsJson !== undefined) ||
+			funded.some((entry) => entry.selected.some((utxo) => utxo.confidential === true));
 		const programScripts = new Map(
 			this.#programs.map((found) => [found.utxoType, found.scriptPubKeyHex]),
 		);
@@ -740,7 +797,17 @@ export class ActionReview {
 		return paid;
 	}
 
-	#placeInputs(ledger: AssetLedger, funded: FundedAsset[], rules: InputRule[]): PlacedInputs {
+	#placeInputs(
+		ledger: AssetLedger,
+		funded: FundedAsset[],
+		rules: InputRule[],
+		reserved: ResolvedIssuances["reserved"],
+	): PlacedInputs {
+		const reservedFor = new Map(reserved.map((held) => [held.inputId, held.utxo]));
+		const unreserved = (asset: string) =>
+			(fundedFor.get(asset)?.selected ?? []).filter(
+				(utxo) => !reserved.some((held) => outpointKey(held.utxo) === outpointKey(utxo)),
+			);
 		const sequenceOf = new Map(rules.map((rule) => [rule.id, rule.sequence]));
 		const withSequence = (id: string) => {
 			const sequence = sequenceOf.get(id);
@@ -759,6 +826,16 @@ export class ActionReview {
 		const walletRuns = new Map<string, PlannedInput[]>();
 
 		for (const wallet of ledger.walletInputs) {
+			const own = reservedFor.get(wallet.id);
+
+			if (own) {
+				walletRuns.set(wallet.id, [
+					Object.assign({ source: "wallet" as const, utxo: own }, withSequence(wallet.id)),
+				]);
+
+				continue;
+			}
+
 			const credited = creditedWith.get(wallet.asset);
 
 			if (credited !== undefined) {
@@ -781,7 +858,7 @@ export class ActionReview {
 			creditedWith.set(wallet.asset, wallet.id);
 			walletRuns.set(
 				wallet.id,
-				(fundedFor.get(wallet.asset)?.selected ?? []).map((utxo) =>
+				unreserved(wallet.asset).map((utxo) =>
 					Object.assign({ source: "wallet" as const, utxo }, waits),
 				),
 			);
@@ -809,7 +886,7 @@ export class ActionReview {
 
 		const undeclared = fundedOrder
 			.filter((asset) => !creditedWith.has(asset))
-			.flatMap((asset) => fundedFor.get(asset)?.selected ?? []);
+			.flatMap((asset) => unreserved(asset));
 
 		if (undeclared.length > 0) {
 			placeable.push({ slots: undeclared.map((utxo) => ({ source: "wallet" as const, utxo })) });
@@ -933,31 +1010,21 @@ type Holding = { asset: string; blindingSecretsJson?: string; sats: bigint };
 function explicitHolding(
 	site: ProgramSite,
 	outpoint: Outpoint,
-	onChain: Awaited<ReturnType<ReviewInput["readTxOut"]>>,
+	amountSats: string,
+	asset: string,
 ): Holding {
-	const at = `${outpoint.txid}:${outpoint.vout}`;
-
-	if (onChain.amountSats === undefined || onChain.rawAssetId === undefined) {
-		throw new Refusal(
-			`The ${site.utxoType} at ${at} did not come back with an explicit amount and asset, and ` +
-				`input ${site.id} states no blinding factors to open it with. This wallet will not ` +
-				"assume a balance for an output it is about to spend.",
-			"unbuildable-utxo-type",
-		);
-	}
-
-	const sats = baseUnits(onChain.amountSats);
+	const sats = baseUnits(amountSats);
 
 	if (sats === undefined) {
 		throw new Refusal(
-			`The ${site.utxoType} at ${at} came back holding ${JSON.stringify(onChain.amountSats)}, ` +
-				"which is not an amount this wallet can read. It will not spend an output it cannot " +
-				"say the value of.",
+			`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} came back holding ` +
+				`${JSON.stringify(amountSats)}, which is not an amount this wallet can read. It will ` +
+				"not spend an output it cannot say the value of.",
 			"unbuildable-utxo-type",
 		);
 	}
 
-	return { asset: onChain.rawAssetId, sats };
+	return { asset, sats };
 }
 
 function chosenFactors(
@@ -1049,14 +1116,6 @@ function resolveIssuances(
 		const reissues = issuance.kind === "reissue";
 		const program = context.programInputs.find((candidate) => candidate.id === id);
 
-		if (program && reissues) {
-			throw new Refusal(
-				`Input ${id} reissues an asset from a program, which needs the blinding factors of ` +
-					"the token that program holds, and this wallet does not read them yet.",
-				"unimplemented-construct",
-			);
-		}
-
 		const asset = reissues
 			? reissuedToken(declared, issuance, id, context)
 			: resolveAsset(declared.asset, `input ${id}`, {
@@ -1067,6 +1126,16 @@ function resolveIssuances(
 		if (program) {
 			const outpoint = { txid: program.txid, vout: program.vout };
 			const key = outpointKey(outpoint);
+
+			if (
+				reissues &&
+				(program.blindingSecretsJson === undefined || context.inputs[id]?.asset !== asset)
+			) {
+				throw new Refusal(
+					`Input ${id} reissues an asset, which needs the program it spends to hold that ` +
+						`asset's reissuance token ${asset} blinded, and the program holds something else.`,
+				);
+			}
 
 			if (taken.has(key)) {
 				throw new Refusal(

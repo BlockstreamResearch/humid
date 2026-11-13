@@ -11,6 +11,7 @@ export {
 	type ReadAddress,
 	type ReviewedProgramInput,
 	type TransactionDraft,
+	type Unblind,
 	isRefusal,
 	reviewManifestAction,
 } from "./review";

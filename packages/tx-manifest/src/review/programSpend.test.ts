@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { deriveFromEntropy } from "../chain/issuance";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import {
 	DERIVED_SCRIPT,
@@ -233,6 +234,12 @@ describe("the transaction-level facts a program spend needs", () => {
 	});
 });
 
+const readRaw = async () => ({
+	scriptPubKeyHex: DERIVED_SCRIPT,
+	transactionHex: "aa",
+	txOutHex: PROGRAM_TXOUT,
+});
+
 const readBlinded = async () => ({ scriptPubKeyHex: DERIVED_SCRIPT, txOutHex: PROGRAM_TXOUT });
 
 describe("a program input that spends a blinded output", () => {
@@ -261,6 +268,18 @@ describe("a program input that spends a blinded output", () => {
 		expect(review.outputs.find((output) => output.id === "received_out")?.sats).toBe(40_000n);
 	});
 
+	test("and blinds the change, since the network takes a blinded input only with a blinded output", async () => {
+		const review = await reviewed(
+			stating({ amount_sat: 40_000, blinding: { asset_bf: "1", value_bf: "2" } }),
+			{ readTxOut: readBlinded },
+		);
+
+		expect(review.outputs.find((output) => output.id === "fee_change")).toMatchObject({
+			blinded: true,
+			decidedBy: "confidential-input",
+		});
+	});
+
 	test("refuses one that states only one of the two factors", async () => {
 		const refusal = await refused(stating({ amount_sat: 40_000, blinding: { asset_bf: "1" } }), {
 			readTxOut: readBlinded,
@@ -286,18 +305,80 @@ describe("a program input that spends a blinded output", () => {
 });
 
 describe("a program input that reissues an asset", () => {
-	test("is refused, since reading the token it holds needs blinding factors this wallet does not read", async () => {
+	const ENTROPY = "f8326827828ee2aab3c4d273fb573a8cf89a401bbc6643637d439ff36c60b6b9";
+	const ISSUED = "3a8b6b466346d9dbfcecd8c8d7b0c1873aee4e00fd5df0d95086a3f7eecd5a39";
+	const TOKEN = deriveFromEntropy(ENTROPY)?.reissuanceToken ?? "";
+	const reissuing = (stated: Record<string, unknown>) => {
 		const inputs = receiveInputs();
 
 		inputs[0] = {
 			...inputs[0],
-			issuance: { asset_amount_sat: 50, entropy: "ab".repeat(32), kind: "reissue" },
+			asset: TOKEN,
+			issuance: { asset_amount_sat: 50, entropy: ENTROPY, issued_asset: ISSUED, kind: "reissue" },
+			...stated,
 		};
 
-		const refusal = await refused(spending(withReceive(inputs)));
+		return spending(
+			withReceive(inputs, [
+				{ amount_sat: 50, asset: ISSUED, destination: "wallet", id: "minted_out" },
+				{ amount_sat: 1, asset: TOKEN, destination: "wallet", id: "token_back" },
+				{ asset: "lbtc", destination: "change", id: "fee_change" },
+			]),
+		);
+	};
 
-		expect(refusal.reject).toBe("unimplemented-construct");
-		expect(refusal.reason).toContain("p2pk_in");
+	test("mints from the blinded token the program holds", async () => {
+		const review = await reviewed(
+			reissuing({ amount_sat: 1, blinding: { asset_bf: "1", value_bf: "2" } }),
+			{ readTxOut: readBlinded },
+		);
+
+		expect(review.issuances).toMatchObject([
+			{ asset: ISSUED, kind: "reissue", outpoint: { txid: TXID, vout: 0 } },
+		]);
+		expect(review.outputs.find((output) => output.id === "minted_out")?.sats).toBe(50n);
+	});
+
+	test("is refused where the program holds its token in the open, which cannot reissue", async () => {
+		expect((await refused(reissuing({}))).reason).toContain(TOKEN);
+	});
+});
+
+describe("a blinded program output the manifest states no factors for", () => {
+	const opened = {
+		asset: POLICY_ASSET,
+		assetBlindingFactor: `01${"00".repeat(31)}`,
+		sats: 40_000n,
+		valueBlindingFactor: `02${"00".repeat(31)}`,
+	};
+
+	test("is opened with the wallet's own blinding key", async () => {
+		const review = await reviewed(spending(), { readTxOut: readRaw, unblind: () => opened });
+
+		expect(JSON.parse(review.programInputs[0]?.blindingSecretsJson ?? "{}")).toMatchObject({
+			asset: POLICY_ASSET,
+			value: "40000",
+		});
+		expect(review.outputs.find((output) => output.id === "received_out")?.sats).toBe(40_000n);
+	});
+
+	test("but refused where it holds something other than the manifest expects", async () => {
+		const inputs = receiveInputs();
+
+		inputs[0] = { ...inputs[0], amount_sat: 1 };
+
+		const refusal = await refused(spending(withReceive(inputs)), {
+			readTxOut: readRaw,
+			unblind: () => opened,
+		});
+
+		expect(refusal.reject).toBe("program-mismatch");
+	});
+
+	test("and refused where the wallet's key does not open it", async () => {
+		const refusal = await refused(spending(), { readTxOut: readRaw, unblind: () => undefined });
+
+		expect(refusal.reason).toContain("blinded to a key this wallet does not hold");
 	});
 });
 

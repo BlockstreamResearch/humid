@@ -1,0 +1,2516 @@
+{
+  "$schema": "../../schema/txmanifest.schema.json",
+  "$comment": "A fork of Deadcat's prediction market that this engine can run. The reissuance tokens stay confidential (Elements requires it), but each recreated token advances both blinding factors by exactly one, so the covenant checks the outputs as a translation of the inputs and needs no output-side witnesses. The factors are therefore derivable from the previous spend's on-chain witness and nothing has to be persisted; the first pair is the constant abf = vbf = 1, set by CreateMarket. The fee is checked at num_outputs - 1 on every path, which lets these actions declare an L-BTC change output instead of paying the surplus to miners. Different CMR, different addresses, NOT interoperable with Deadcat. Original header follows. Ported from Deadcat.Live (github.com/Resolvr-io/deadcat, src-tauri/crates/deadcat-sdk). prediction_market.simf is a verbatim copy of that crate's contract/prediction_market.simf — do not edit it, every byte feeds the CMR and therefore all four covenant addresses. The upstream SDK builds these transactions in Rust (src/pset/*.rs); this manifest is the same seven spending paths expressed declaratively. Deadcat's OTHER covenant, maker_order.simf, is deliberately NOT modelled: it tweaks the MAKER's key as the taproot internal key, while this engine hardcodes the NUMS internal key (covenant.rs::NUMS_KEY_BYTES), so no address it computed would be correct.",
+  "manifest_version": "0.3.1",
+  "protocol": "deadcat-prediction-market-v3",
+  "description": "Deadcat v3 — a binary (YES/NO) prediction market on Liquid. Collateral is locked in a covenant that mints matched YES/NO token pairs at 2 x COLLATERAL_PER_TOKEN per pair; an off-chain oracle commits the outcome ON-CHAIN as a state transition, and winners then burn tokens to draw the whole pair's collateral. The market's state (0 dormant, 1 unresolved, 2 resolved-YES, 3 resolved-NO) is not stored in a variable — it is a tapdata leaf in the covenant's tap tree, so each state is a DIFFERENT address and the covenant proves its own state by comparing the address it is being spent from. Modelled as one template: one instance per market.",
+  "chain": "liquid",
+  "requires": ["simplicity"],
+  "simplicity_hl": { "version": "0.9.0",
+    "$comment": "Deadcat compiles with debug symbols OFF (contract.rs: template.instantiate(args, false)). Flipping this changes every fail-node commitment, hence the CMR, hence all four addresses.",
+    "debug_symbols": false
+  },
+  "utxo_types": {
+    "market_dormant": {
+      "description": "STATE 0 — DORMANT. Holds only the two reissuance tokens, no collateral. This is where CreateMarket parks them and where a full Cancel returns them. The address is the Simplicity leaf branched with a tapdata leaf carrying the u64 0 (big-endian, 8 bytes) — see taproot.rs::tapdata_hash. Nothing else about the address differs between the four states.",
+      "script": {
+        "type": "simplicity",
+        "source": "./prediction_market.simf",
+        "source_hash": "sha256:6b17b170282f751a3727f4e66969b8310b4934b3e7264d930460937ac6725c88",
+        "compile_params": {
+          "ORACLE_PUBLIC_KEY": "ORACLE_PUBLIC_KEY",
+          "COLLATERAL_ASSET_ID": "COLLATERAL_ASSET_ID",
+          "YES_TOKEN_ASSET": "YES_TOKEN_ASSET",
+          "NO_TOKEN_ASSET": "NO_TOKEN_ASSET",
+          "YES_REISSUANCE_TOKEN": "YES_REISSUANCE_TOKEN",
+          "NO_REISSUANCE_TOKEN": "NO_REISSUANCE_TOKEN",
+          "COLLATERAL_PER_TOKEN": "COLLATERAL_PER_TOKEN",
+          "EXPIRY_TIME": "EXPIRY_TIME"
+        },
+        "extra_leaves": [
+          {
+            "$comment": "state = 0. jet::tapdata_init() + sha_256_ctx_8_add_8(state) hashes exactly 8 big-endian bytes, so no pad_to here — unlike the lending example's 32-byte storage slots.",
+            "type": "tapdata",
+            "payload": [
+              {
+                "value": "0",
+                "type": "u64",
+                "endian": "be"
+              }
+            ]
+          }
+        ]
+      },
+      "asset": "YES_REISSUANCE_TOKEN"
+    },
+    "market_unresolved": {
+      "description": "STATE 1 — UNRESOLVED, the live market. Holds three UTXOs: the YES reissuance token, the NO reissuance token, and the single consolidated collateral UTXO. 'Single' is load-bearing: every issuance path must consume the existing collateral UTXO and re-emit one consolidated output, so the oracle can move the whole market to a resolved address in one transaction (design doc section 6).",
+      "script": {
+        "type": "simplicity",
+        "source": "./prediction_market.simf",
+        "source_hash": "sha256:6b17b170282f751a3727f4e66969b8310b4934b3e7264d930460937ac6725c88",
+        "compile_params": {
+          "ORACLE_PUBLIC_KEY": "ORACLE_PUBLIC_KEY",
+          "COLLATERAL_ASSET_ID": "COLLATERAL_ASSET_ID",
+          "YES_TOKEN_ASSET": "YES_TOKEN_ASSET",
+          "NO_TOKEN_ASSET": "NO_TOKEN_ASSET",
+          "YES_REISSUANCE_TOKEN": "YES_REISSUANCE_TOKEN",
+          "NO_REISSUANCE_TOKEN": "NO_REISSUANCE_TOKEN",
+          "COLLATERAL_PER_TOKEN": "COLLATERAL_PER_TOKEN",
+          "EXPIRY_TIME": "EXPIRY_TIME"
+        },
+        "extra_leaves": [
+          {
+            "type": "tapdata",
+            "payload": [
+              {
+                "value": "1",
+                "type": "u64",
+                "endian": "be"
+              }
+            ]
+          }
+        ]
+      },
+      "asset": "COLLATERAL_ASSET_ID"
+    },
+    "market_resolved_yes": {
+      "description": "STATE 2 — RESOLVED YES. The oracle attested YES, so YES tokens redeem at 2 x COLLATERAL_PER_TOKEN each and NO tokens are worth nothing. There is no path from here to state 3: that is the whole point of committing the outcome on-chain rather than checking the oracle signature at redemption time (design doc section 9.2).",
+      "script": {
+        "type": "simplicity",
+        "source": "./prediction_market.simf",
+        "source_hash": "sha256:6b17b170282f751a3727f4e66969b8310b4934b3e7264d930460937ac6725c88",
+        "compile_params": {
+          "ORACLE_PUBLIC_KEY": "ORACLE_PUBLIC_KEY",
+          "COLLATERAL_ASSET_ID": "COLLATERAL_ASSET_ID",
+          "YES_TOKEN_ASSET": "YES_TOKEN_ASSET",
+          "NO_TOKEN_ASSET": "NO_TOKEN_ASSET",
+          "YES_REISSUANCE_TOKEN": "YES_REISSUANCE_TOKEN",
+          "NO_REISSUANCE_TOKEN": "NO_REISSUANCE_TOKEN",
+          "COLLATERAL_PER_TOKEN": "COLLATERAL_PER_TOKEN",
+          "EXPIRY_TIME": "EXPIRY_TIME"
+        },
+        "extra_leaves": [
+          {
+            "type": "tapdata",
+            "payload": [
+              {
+                "value": "2",
+                "type": "u64",
+                "endian": "be"
+              }
+            ]
+          }
+        ]
+      },
+      "asset": "COLLATERAL_ASSET_ID"
+    },
+    "market_resolved_no": {
+      "description": "STATE 3 — RESOLVED NO. Mirror of state 2: NO tokens redeem, YES tokens are worthless.",
+      "script": {
+        "type": "simplicity",
+        "source": "./prediction_market.simf",
+        "source_hash": "sha256:6b17b170282f751a3727f4e66969b8310b4934b3e7264d930460937ac6725c88",
+        "compile_params": {
+          "ORACLE_PUBLIC_KEY": "ORACLE_PUBLIC_KEY",
+          "COLLATERAL_ASSET_ID": "COLLATERAL_ASSET_ID",
+          "YES_TOKEN_ASSET": "YES_TOKEN_ASSET",
+          "NO_TOKEN_ASSET": "NO_TOKEN_ASSET",
+          "YES_REISSUANCE_TOKEN": "YES_REISSUANCE_TOKEN",
+          "NO_REISSUANCE_TOKEN": "NO_REISSUANCE_TOKEN",
+          "COLLATERAL_PER_TOKEN": "COLLATERAL_PER_TOKEN",
+          "EXPIRY_TIME": "EXPIRY_TIME"
+        },
+        "extra_leaves": [
+          {
+            "type": "tapdata",
+            "payload": [
+              {
+                "value": "3",
+                "type": "u64",
+                "endian": "be"
+              }
+            ]
+          }
+        ]
+      },
+      "asset": "COLLATERAL_ASSET_ID"
+    }
+  },
+  "contract_templates": {
+    "binary_market": {
+      "description": "One binary prediction market. IssueReissuanceTokens is the constructor: it mints the minting rights and writes the instance file that defines the market. CreateMarket then locks those rights into the covenant (a plain Elements transaction — no covenant runs), InitialIssuance brings the market to life, then anyone may MintPairs or Cancel while it is unresolved. It ends one of two ways: the oracle resolves it (ResolveYes / ResolveNo, then RedeemYes / RedeemNo), or it expires unresolved and both sides redeem at half rate (RedeemExpired). All eight fields below are compile params of prediction_market.simf, so changing any one of them is a different market at four different addresses.",
+      "fields": {
+        "ORACLE_PUBLIC_KEY": {
+          "type": "pubkey",
+          "description": "X-only BIP340 key the resolve path checks. In Deadcat this is the aggregate key of a 2-of-3 FROST committee — on-chain it is just one key, the threshold signing happens off-chain."
+        },
+        "COLLATERAL_ASSET_ID": {
+          "type": "liquid.asset_id",
+          "description": "The asset backing the market, normally L-BTC. Also the asset the network fee is paid in, which is why the covenant's fee-output checks are satisfiable."
+        },
+        "COLLATERAL_PER_TOKEN": {
+          "type": "u64",
+          "description": "Satoshis backing ONE token. A pair costs 2 x this. Deliberately per-token, not per-pair, so the covenant only ever multiplies — no division means no rounding bug (design doc section 4.3)."
+        },
+        "EXPIRY_TIME": {
+          "type": "u32",
+          "description": "Absolute block height. Before it, the oracle may resolve and anyone may mint. At or after it, RedeemExpired unlocks and every token — winning or losing — redeems at 1 x COLLATERAL_PER_TOKEN."
+        },
+        "YES_TOKEN_ASSET": {
+          "type": "liquid.asset_id",
+          "description": "Asset id of the YES outcome token, derived from the outpoint pinned as CreateMarket in[0]. Also half of MARKET_ID = sha256(YES || NO), the oracle's domain separator."
+        },
+        "NO_TOKEN_ASSET": {
+          "type": "liquid.asset_id",
+          "description": "Asset id of the NO outcome token, derived from the outpoint pinned as CreateMarket in[1]."
+        },
+        "YES_REISSUANCE_TOKEN": {
+          "type": "liquid.asset_id",
+          "description": "The reissuance token for YES. Holding it is what permits minting more YES, and it only ever lives at a covenant address — that is the enforcement mechanism behind collateral consolidation."
+        },
+        "NO_REISSUANCE_TOKEN": {
+          "type": "liquid.asset_id",
+          "description": "The reissuance token for NO. Same role as YES_REISSUANCE_TOKEN."
+        },
+        "YES_ISSUANCE_ENTROPY": {
+          "type": "bytes32",
+          "description": "Issuance entropy of the YES mint — fast_merkle_root([sha256d(defining outpoint), contract_hash]), the value YES_TOKEN_ASSET itself is derived from. Every later reissuance needs it and NOTHING on chain carries it: the reissuance token UTXO holds no trace of the outpoint that created it. Captured by the constructor at the one moment it exists."
+        },
+        "NO_ISSUANCE_ENTROPY": {
+          "type": "bytes32",
+          "description": "Issuance entropy of the NO mint. Same role, from the other defining outpoint."
+        }
+      },
+      "actions": {
+        "IssueReissuanceTokens": {
+          "$comment": "The constructor: it is this action, not CreateMarket, that writes the instance file. That is forced by where the asset ids come from — they are derived from the outpoints THIS transaction spends, and nothing downstream can recover them (the reissuance token id and the asset id are sibling hashes of the entropy, so you cannot walk from one to the other). Capturing them here — create_instance reads them straight off the two inputs via $inputs.<id>.<field> — is the only point at which they exist and can still be recorded.\n\nWhy the bootstrap is two transactions at all: CreateMarket pays to the state-0 covenant address, and that address is a function of all four asset ids, which are functions of the outpoints being spent. The engine snapshots compile params BEFORE it resolves any input, so one action cannot both mint an asset and pay it to an address derived from that asset. This action sidesteps it by paying only to the wallet. Upstream Deadcat does both in one transaction (pset/creation.rs) because it computes the ids in Rust before building anything; the two-transaction bootstrap lands the market in exactly the same on-chain state.",
+          "description": "Step 1 of 2 in bootstrapping a market, and the action that defines it. Mints the YES and NO reissuance tokens — 1 unit each — from two of your L-BTC UTXOs and keeps them in your wallet, then writes the instance file recording the market's full definition: the four asset ids this transaction just fixed, plus the terms you supply below. NOTE: it mints ZERO units of the YES and NO tokens themselves. Only the minting rights exist at this point; outcome tokens appear at InitialIssuance, and they have to, because tokens minted here would be backed by no collateral at all. Run CreateMarket next to lock the two tokens into the covenant.",
+          "intent": "define a market backed by {params.COLLATERAL_ASSET_ID:symbol} and mint its minting rights",
+          "params": {
+            "ORACLE_PUBLIC_KEY": {
+              "type": "pubkey",
+              "description": "The oracle's x-only key. Baked into every one of this market's four addresses, so it cannot be changed later."
+            },
+            "COLLATERAL_ASSET_ID": {
+              "type": "liquid.asset_id",
+              "description": "Asset backing the market. Use the L-BTC policy asset unless you know why you want something else."
+            },
+            "COLLATERAL_PER_TOKEN": {
+              "type": "u64",
+              "default": "1000",
+              "description": "Satoshis behind one token. A YES/NO pair therefore costs twice this, and a winning token pays out twice this."
+            },
+            "EXPIRY_TIME": {
+              "type": "u32",
+              "description": "Block height after which the market expires unresolved and everyone redeems at half rate. Leave the oracle real time to attest."
+            }
+          },
+          "inputs": [
+            {
+              "id": "yes_defining_in",
+              "description": "Wallet L-BTC UTXO whose outpoint defines the YES asset pair: YES_TOKEN_ASSET = AssetId::new_issuance(outpoint, zero contract hash) and YES_REISSUANCE_TOKEN = AssetId::new_reissuance_token(outpoint, zero contract hash, confidential=false). Issues 0 asset units and 1 inflation (reissuance) token — YES tokens themselves are not minted until InitialIssuance reissues against this one.",
+              "utxo_source": "wallet",
+              "asset": "lbtc",
+              "required_index": 0,
+              "issuance": {
+                "kind": "new",
+                "asset_amount_sat": 0,
+                "inflation_amount_sat": 1
+              },
+              "ui": {
+                "label": "input that defines the YES asset",
+                "role": "issuance"
+              }
+            },
+            {
+              "id": "no_defining_in",
+              "description": "Wallet L-BTC UTXO whose outpoint defines the NO asset pair, the same way. Must be a different outpoint from yes_defining_in, or YES and NO would be the same asset.",
+              "utxo_source": "wallet",
+              "asset": "lbtc",
+              "required_index": 1,
+              "issuance": {
+                "kind": "new",
+                "asset_amount_sat": 0,
+                "inflation_amount_sat": 1
+              },
+              "ui": {
+                "label": "input that defines the NO asset",
+                "role": "issuance"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "yes_reissuance_out",
+              "description": "The YES reissuance token, 1 unit, to your wallet. The asset reference reads the id the engine derived from in[0] once it resolved. `inputs.` is the explicit spelling of an input reference; the bare `yes_defining_in.reissuance_token` also works but is ambiguous by shape with every other namespace. Blinded, but with factors the wallet picks. Pinning the protocol constant here would be both pointless and fatal: pointless because only the covenant has to reproduce a factor and the covenant never sees this UTXO — the wallet unblinds its own — and fatal because CreateMarket pays this same token to abf = 1, and an output cannot reuse the abf of the input it comes from. The surjection proof would have a zero shift to prove and no valid secret key to prove it with.",
+              "destination": "wallet",
+              "asset": "inputs.yes_defining_in.reissuance_token",
+              "amount_sat": 1,
+              "confidential": true,
+              "required_index": 0,
+              "ui": {
+                "label": "YES minting right, held by you",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_out",
+              "description": "The NO reissuance token, 1 unit, to your wallet.",
+              "destination": "wallet",
+              "asset": "inputs.no_defining_in.reissuance_token",
+              "amount_sat": 1,
+              "confidential": true,
+              "required_index": 1,
+              "ui": {
+                "label": "NO minting right, held by you",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "lbtc_change",
+              "description": "L-BTC change from the two defining inputs.",
+              "destination": "change",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "change returned to you",
+                "role": "change"
+              }
+            }
+          ],
+          "create_instance": {
+            "$comment": "The four asset ids are read straight off the inputs that created them — `$inputs.<id>.<field>` is a string lookup, unlike a bare expression, which is arithmetic and would reject a 32-byte id. Note `issued_asset`, NOT `asset`: on an input carrying an issuance those differ, and `asset` is the asset of the UTXO being spent (L-BTC here). The four terms come from this action's params. All eight are compile params of prediction_market.simf, so from here the market's four covenant addresses are fully determined and every later action can derive them from the instance file alone.",
+            "fields": {
+              "ORACLE_PUBLIC_KEY": "$params.ORACLE_PUBLIC_KEY",
+              "COLLATERAL_ASSET_ID": "$params.COLLATERAL_ASSET_ID",
+              "COLLATERAL_PER_TOKEN": "$params.COLLATERAL_PER_TOKEN",
+              "EXPIRY_TIME": "$params.EXPIRY_TIME",
+              "YES_TOKEN_ASSET": "$inputs.yes_defining_in.issued_asset",
+              "NO_TOKEN_ASSET": "$inputs.no_defining_in.issued_asset",
+              "YES_REISSUANCE_TOKEN": "$inputs.yes_defining_in.reissuance_token",
+              "NO_REISSUANCE_TOKEN": "$inputs.no_defining_in.reissuance_token",
+              "YES_ISSUANCE_ENTROPY": "$inputs.yes_defining_in.issuance_entropy",
+              "NO_ISSUANCE_ENTROPY": "$inputs.no_defining_in.issuance_entropy"
+            }
+          }
+        },
+        "CreateMarket": {
+          "$comment": "Run IssueReissuanceTokens first: it writes the instance file this action reads. Every value here comes from `instance.*` — the four asset ids and the four terms — which is why this action takes no params at all. Those fields are loaded into the context before the engine snapshots compile params, so the state-0 address computes correctly even though the assets were minted in a different transaction.",
+          "description": "Step 2 of 2: lock the minting rights into the covenant. A PLAIN Elements transaction — no covenant input, nothing validated on-chain, so a malformed creation simply produces unspendable UTXOs — that moves both reissuance tokens from your wallet to the state-0 (dormant) address. No outcome tokens are minted and no collateral is deposited; that is InitialIssuance's job. Anyone evaluating a Deadcat market should re-check this transaction by hand: the covenant vouches for everything after it, and for nothing in it.",
+          "intent": "lock the minting rights into a market backed by {instance.COLLATERAL_ASSET_ID:symbol}",
+          "inputs": [
+            {
+              "id": "yes_reissuance_in",
+              "description": "The YES reissuance token in your wallet, minted by IssueReissuanceTokens. Nothing is issued in this transaction — the token merely changes hands, from you to the covenant.",
+              "utxo_source": "wallet",
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 0,
+              "ui": {
+                "label": "your YES minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_in",
+              "description": "The NO reissuance token in your wallet, from the same run.",
+              "utxo_source": "wallet",
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "ui": {
+                "label": "your NO minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "fee_input",
+              "description": "Wallet L-BTC UTXO covering the network fee. Needed here because both other inputs are token UTXOs with no L-BTC in them.",
+              "utxo_source": "wallet",
+              "asset": "lbtc",
+              "ui": {
+                "label": "input used for paying fees",
+                "role": "fee"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "yes_reissuance_out",
+              "description": "The YES reissuance token, 1 unit, parked at the state-0 (dormant) address. From here it can only ever move by a covenant spend.",
+              "destination": {
+                "utxo_type": "market_dormant"
+              },
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 0,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "1",
+                "value_bf": "1"
+              },
+              "ui": {
+                "label": "YES minting right, locked in the market",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_out",
+              "description": "The NO reissuance token, 1 unit, at the same state-0 address.",
+              "destination": {
+                "utxo_type": "market_dormant"
+              },
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "1",
+                "value_bf": "1"
+              },
+              "ui": {
+                "label": "NO minting right, locked in the market",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "creation_change",
+              "description": "L-BTC change from the fee input.",
+              "destination": "change",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "change returned to you",
+                "role": "change"
+              }
+            }
+          ]
+        },
+        "PrepareInitialIssuance": {
+          "$comment": "A funding action, not a protocol one: nothing here touches the covenant. It exists because InitialIssuance declares no change output — the covenant pins the fee at output index 5, and a change output would displace it — so whatever L-BTC the collateral input carries beyond the collateral IS the fee. Feeding it an ordinary wallet UTXO therefore pays the entire remainder to miners. This action cuts a UTXO of exactly the right size first, which turns that behaviour from a hazard into an intent: the surplus becomes FEE_ALLOWANCE and nothing more.",
+          "description": "Cut an exactly-sized collateral UTXO for InitialIssuance. Reads COLLATERAL_PER_TOKEN and COLLATERAL_ASSET_ID from the instance and takes the number of pairs you intend to mint, so the output is PAIRS x 2 x COLLATERAL_PER_TOKEN plus a fee allowance — the exact amount InitialIssuance consumes. Run this first, then InitialIssuance, which will select the UTXO this produced (pin it with --input collateral_in=<txid>:<vout> if your wallet holds other L-BTC of a similar size).",
+          "intent": "cut a {params.PAIRS}-pair collateral UTXO for opening the market",
+          "params": {
+            "PAIRS": {
+              "type": "u64",
+              "description": "How many YES/NO pairs InitialIssuance will mint. Must match the PAIRS you pass there — a mismatch just means the sizing is wrong, and the surplus or shortfall shows up as a fee error."
+            },
+            "FEE_ALLOWANCE": {
+              "type": "u64",
+              "default": "2000",
+              "description": "Extra L-BTC to include on top of the collateral, which becomes InitialIssuance's fee. That transaction is large (three inputs, two of them Simplicity covenant spends with sizeable witnesses), so leave real headroom. Anything unspent here is paid to miners, so do not inflate it either."
+            }
+          },
+          "inputs": [
+            {
+              "id": "funding_in",
+              "description": "Wallet L-BTC UTXO to cut from. Must hold at least the collateral plus the fee allowance plus this transaction's own fee.",
+              "utxo_source": "wallet",
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": {
+                "min_amount": "params.PAIRS * 2 * instance.COLLATERAL_PER_TOKEN + params.FEE_ALLOWANCE"
+              },
+              "ui": {
+                "label": "wallet funds to cut the collateral from",
+                "role": "funding"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "sized_collateral",
+              "description": "The exactly-sized UTXO InitialIssuance will spend as its collateral input: PAIRS x 2 x COLLATERAL_PER_TOKEN of collateral, plus FEE_ALLOWANCE which becomes that transaction's fee.",
+              "destination": "wallet",
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "params.PAIRS * 2 * instance.COLLATERAL_PER_TOKEN + params.FEE_ALLOWANCE",
+              "ui": {
+                "label": "collateral sized for opening the market",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "funding_change",
+              "description": "The rest of the funding UTXO, back to your wallet. Present precisely because this action is allowed a change output, unlike InitialIssuance.",
+              "destination": "change",
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "optional": true,
+              "ui": {
+                "label": "change returned to you",
+                "role": "change"
+              }
+            }
+          ]
+        },
+        "InitialIssuance": {
+          "$comment": "Path 1. Fee MUST land at output index 5, which it does only because no change output is declared here: the engine appends declared outputs, then any change, then the fee. Declaring a change output would push the fee to index 6 and the covenant would reject the spend. Size the collateral input exactly (see `prepare`) — surplus L-BTC is swallowed by the fee.",
+          "description": "First covenant-validated transaction: state 0 -> 1. Reissues the first batch of YES/NO pairs, deposits their collateral, and moves all three covenant UTXOs to the state-1 address. Collateral comes from your wallet, not from the covenant — in the dormant state there is no collateral UTXO yet.",
+          "intent": "open the market: mint {params.PAIRS} YES/NO pairs and lock their collateral",
+          "params": {
+            "PAIRS": {
+              "type": "u64",
+              "description": "How many matched YES/NO pairs to mint. You deposit PAIRS x 2 x COLLATERAL_PER_TOKEN and receive PAIRS YES tokens and PAIRS NO tokens — you are the market's first counterparty on both sides, and you can sell either leg."
+            }
+          },
+          "inputs": [
+            {
+              "id": "yes_reissuance_in",
+              "description": "The YES reissuance token at the state-0 address, input 0 — the covenant asserts current_index == 0 for this path. Its reissuance mints PAIRS YES tokens.",
+              "utxo_source": {
+                "utxo_type": "market_dormant"
+              },
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 0,
+              "issuance": {
+                "kind": "reissue",
+                "asset_amount_sat": "params.PAIRS",
+                "entropy": "instance.YES_ISSUANCE_ENTROPY",
+                "issued_asset": "instance.YES_TOKEN_ASSET"
+              },
+              "blinding": {
+                "$comment": "The pair CreateMarket wrote. These describe the UTXO being spent, not a choice: the engine rebuilds the confidential prevout from them, and Elements takes the abf as the reissuance's assetBlindingNonce. The outputs advance both to 2.",
+                "asset_bf": "1",
+                "value_bf": "1"
+              },
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "0",
+                  "description": "Claimed state. Not trusted: main() recomputes the state-0 address from it and asserts the input is actually being spent from there, so lying is impossible rather than merely detectable."
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Left(Left(Left(())))",
+                  "description": "Path 1 — initial issuance. The seven paths are a nested Either tree; see witness.rs::build_path_value upstream."
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "YES_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "1"
+                },
+                "YES_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "1"
+                },
+                "NO_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "1"
+                },
+                "NO_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "1"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused"
+              },
+              "ui": {
+                "label": "YES minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_in",
+              "description": "The NO reissuance token, input 1. It runs path 7 (secondary covenant input), which only proves it is spent from the same address as input 0 and leaves every transaction-level check to input 0's path.",
+              "utxo_source": {
+                "utxo_type": "market_dormant"
+              },
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "issuance": {
+                "kind": "reissue",
+                "asset_amount_sat": "params.PAIRS",
+                "entropy": "instance.NO_ISSUANCE_ENTROPY",
+                "issued_asset": "instance.NO_TOKEN_ASSET"
+              },
+              "blinding": {
+                "asset_bf": "1",
+                "value_bf": "1"
+              },
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "0"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Right(()))",
+                  "description": "Path 7 — secondary covenant input."
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "1"
+                },
+                "NO_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "1"
+                },
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "1"
+                },
+                "YES_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "1"
+                }
+              },
+              "ui": {
+                "label": "NO minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "collateral_in",
+              "description": "Your collateral, input 2. Unlike every later issuance this comes from the wallet: the dormant market holds no collateral to consolidate with.",
+              "utxo_source": "wallet",
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": {
+                "min_amount": "params.PAIRS * 2 * instance.COLLATERAL_PER_TOKEN"
+              },
+              "required_index": 2,
+              "ui": {
+                "label": "collateral you are depositing",
+                "role": "collateral"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "yes_reissuance_out",
+              "description": "YES reissuance token cycled forward to the state-1 address (output 0).",
+              "destination": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 0,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "2",
+                "value_bf": "2"
+              },
+              "ui": {
+                "label": "YES minting right, market now live",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_out",
+              "description": "NO reissuance token cycled forward to the state-1 address (output 1).",
+              "destination": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "2",
+                "value_bf": "2"
+              },
+              "ui": {
+                "label": "NO minting right, market now live",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "collateral_out",
+              "description": "The market's one and only collateral UTXO (output 2), at the state-1 address. Exactly PAIRS x 2 x COLLATERAL_PER_TOKEN — the covenant computes this itself from the issuance amount and rejects anything else.",
+              "destination": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "params.PAIRS * 2 * instance.COLLATERAL_PER_TOKEN",
+              "required_index": 2,
+              "ui": {
+                "label": "collateral backing the market",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "yes_tokens_out",
+              "description": "The minted YES tokens (output 3), to your wallet. Unconstrained by the covenant beyond asset balance — it only cares that YES and NO were minted in equal amounts and fully collateralised.",
+              "destination": "wallet",
+              "asset": "instance.YES_TOKEN_ASSET",
+              "amount_sat": "params.PAIRS",
+              "required_index": 3,
+              "ui": {
+                "label": "YES tokens minted to you",
+                "role": "outcome_token"
+              }
+            },
+            {
+              "id": "no_tokens_out",
+              "description": "The minted NO tokens (output 4), to your wallet.",
+              "destination": "wallet",
+              "asset": "instance.NO_TOKEN_ASSET",
+              "amount_sat": "params.PAIRS",
+              "required_index": 4,
+              "ui": {
+                "label": "NO tokens minted to you",
+                "role": "outcome_token"
+              }
+            },
+            {
+              "id": "lbtc_change",
+              "description": "L-BTC change back to your wallet. v3 checks the fee at num_outputs - 1 rather than at a fixed index, so a trailing change output is legal here — which is what stops the collateral input's surplus being paid to miners. It also supplies the free blinding factor the +1 rule needs: with both token outputs' factors fixed, this output absorbs the value-balance residue.",
+              "destination": "change",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "change returned to you",
+                "role": "change"
+              }
+            }
+          ]
+        },
+        "MintPairs": {
+          "$comment": "Path 2. Same index-5 fee requirement as InitialIssuance, so again no change output is declared. The difference from path 1 is input 2: the existing collateral UTXO is consumed and re-emitted as old + new, which is what keeps the market to exactly one collateral UTXO.",
+          "description": "Mint more pairs into a live market (state 1 -> 1). Permissionless: anyone who deposits collateral gets tokens, there is no issuer and no allowlist. Consumes the market's collateral UTXO and re-emits the consolidated total.",
+          "intent": "mint {params.PAIRS} more YES/NO pairs into the market",
+          "params": {
+            "PAIRS": {
+              "type": "u64",
+              "description": "Additional pairs to mint. You deposit PAIRS x 2 x COLLATERAL_PER_TOKEN of new collateral on top of whatever the market already holds."
+            },
+            "RT_FACTOR": {
+              "type": "u64",
+              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and the engine does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
+            }
+          },
+          "inputs": [
+            {
+              "id": "yes_reissuance_in",
+              "description": "YES reissuance token from state 1, input 0 (the primary — current_index must be 0).",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 0,
+              "issuance": {
+                "kind": "reissue",
+                "asset_amount_sat": "params.PAIRS",
+                "entropy": "instance.YES_ISSUANCE_ENTROPY",
+                "issued_asset": "instance.YES_TOKEN_ASSET"
+              },
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR",
+                "value_bf": "params.RT_FACTOR"
+              },
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Left(Left(Right(())))",
+                  "description": "Path 2 — subsequent issuance."
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "YES_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "NO_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "NO_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                }
+              },
+              "ui": {
+                "label": "YES minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_in",
+              "description": "NO reissuance token from state 1, input 1, on path 7.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "issuance": {
+                "kind": "reissue",
+                "asset_amount_sat": "params.PAIRS",
+                "entropy": "instance.NO_ISSUANCE_ENTROPY",
+                "issued_asset": "instance.NO_TOKEN_ASSET"
+              },
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR",
+                "value_bf": "params.RT_FACTOR"
+              },
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Right(()))",
+                  "description": "Path 7 — secondary covenant input."
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "NO minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "existing_collateral_in",
+              "description": "The market's current collateral UTXO, input 2 — the covenant checks this index's script hash against the state-1 address by hand. Also on path 7. Its amount comes from the state file.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "required_index": 2,
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Right(()))",
+                  "description": "Path 7 — secondary covenant input."
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "collateral already in the market",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "new_collateral_in",
+              "description": "Your new collateral, input 3, from the wallet.",
+              "utxo_source": "wallet",
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": {
+                "min_amount": "params.PAIRS * 2 * instance.COLLATERAL_PER_TOKEN"
+              },
+              "required_index": 3,
+              "ui": {
+                "label": "collateral you are adding",
+                "role": "collateral"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "yes_reissuance_out",
+              "description": "YES reissuance token back to state 1 (output 0).",
+              "destination": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 0,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR + 1",
+                "value_bf": "params.RT_FACTOR + 1"
+              },
+              "ui": {
+                "label": "YES minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_out",
+              "description": "NO reissuance token back to state 1 (output 1).",
+              "destination": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR + 1",
+                "value_bf": "params.RT_FACTOR + 1"
+              },
+              "ui": {
+                "label": "NO minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "collateral_out",
+              "description": "The re-consolidated collateral UTXO (output 2): the old amount plus this issuance's deposit, computed by the covenant as safe_add(old, pairs x 2 x CPT).",
+              "destination": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "existing_collateral_in.amount_sat + params.PAIRS * 2 * instance.COLLATERAL_PER_TOKEN",
+              "required_index": 2,
+              "ui": {
+                "label": "all collateral backing the market",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "yes_tokens_out",
+              "description": "Newly minted YES tokens to your wallet (output 3).",
+              "destination": "wallet",
+              "asset": "instance.YES_TOKEN_ASSET",
+              "amount_sat": "params.PAIRS",
+              "required_index": 3,
+              "ui": {
+                "label": "YES tokens minted to you",
+                "role": "outcome_token"
+              }
+            },
+            {
+              "id": "no_tokens_out",
+              "description": "Newly minted NO tokens to your wallet (output 4).",
+              "destination": "wallet",
+              "asset": "instance.NO_TOKEN_ASSET",
+              "amount_sat": "params.PAIRS",
+              "required_index": 4,
+              "ui": {
+                "label": "NO tokens minted to you",
+                "role": "outcome_token"
+              }
+            },
+            {
+              "id": "lbtc_change",
+              "description": "L-BTC change back to your wallet. v3 checks the fee at num_outputs - 1 rather than at a fixed index, so a trailing change output is legal here — which is what stops the collateral input's surplus being paid to miners. It also supplies the free blinding factor the +1 rule needs: with both token outputs' factors fixed, this output absorbs the value-balance residue.",
+              "destination": "change",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "change returned to you",
+                "role": "change"
+              }
+            }
+          ]
+        },
+        "ResolveYes": {
+          "$comment": "Path 3 with ORACLE_OUTCOME_YES = true. Modelled as two actions rather than one with a runtime outcome because the destination address IS the outcome — state 2 and state 3 are different covenant addresses, and the engine has no conditional destination. The covenant demands exactly 4 outputs, so no change output may be declared: the fee absorbs any L-BTC surplus, which lands it at index 3 as required.",
+          "description": "Commit a YES outcome on-chain (state 1 -> 2). Permissionless to submit: the oracle signs a message that mentions only the market, never this transaction, so anyone holding the attestation can post it. Nothing moves except the three covenant UTXOs, which all shift to the state-2 address; the collateral amount is preserved exactly.",
+          "intent": "resolve the market YES using the oracle's attestation",
+          "params": {
+            "ORACLE_SIGNATURE": {
+              "type": "bytes",
+              "description": "The oracle's 64-byte BIP340 signature over sha256(MARKET_ID || 0x01), where MARKET_ID = sha256(YES_TOKEN_ASSET || NO_TOKEN_ASSET) over the asset ids in internal byte order. Paste it 0x-prefixed. Produced off-chain; the wallet cannot compute it."
+            },
+            "RT_FACTOR": {
+              "type": "u64",
+              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and the engine does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
+            }
+          },
+          "inputs": [
+            {
+              "id": "yes_reissuance_in",
+              "description": "YES reissuance token, input 0 — the primary input, and the one that verifies the oracle signature.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 0,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR",
+                "value_bf": "params.RT_FACTOR"
+              },
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Left(Right(Left(())))",
+                  "description": "Path 3 — oracle resolve."
+                },
+                "ORACLE_OUTCOME_YES": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "bool",
+                  "value": "true",
+                  "description": "Picks the YES branch, which both selects the signed message byte 0x01 and sends every covenant output to the state-2 address."
+                },
+                "ORACLE_SIGNATURE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "[u8; 64]",
+                  "value": "params.ORACLE_SIGNATURE",
+                  "description": "Substituted from the action param before the value is parsed."
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "YES_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "NO_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "NO_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                }
+              },
+              "ui": {
+                "label": "YES minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_in",
+              "description": "NO reissuance token, input 1, on path 7.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR",
+                "value_bf": "params.RT_FACTOR"
+              },
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Right(()))"
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "NO minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "collateral_in",
+              "description": "The market's collateral UTXO, input 2, on path 7. Its amount is read from the state file and must be reproduced exactly on output 2.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "required_index": 2,
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Right(()))"
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "collateral backing the market",
+                "role": "collateral"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "yes_reissuance_out",
+              "description": "YES reissuance token moved to the state-2 address (output 0).",
+              "destination": {
+                "utxo_type": "market_resolved_yes"
+              },
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 0,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR + 1",
+                "value_bf": "params.RT_FACTOR + 1"
+              },
+              "ui": {
+                "label": "YES minting right, market resolved",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_out",
+              "description": "NO reissuance token moved to the state-2 address (output 1). Minting is over, but the tokens are carried along so nothing is stranded.",
+              "destination": {
+                "utxo_type": "market_resolved_yes"
+              },
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR + 1",
+                "value_bf": "params.RT_FACTOR + 1"
+              },
+              "ui": {
+                "label": "NO minting right, market resolved",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "collateral_out",
+              "description": "All collateral moved intact to the state-2 address (output 2). No value enters or leaves in a resolve.",
+              "destination": {
+                "utxo_type": "market_resolved_yes"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "collateral_in.amount_sat",
+              "required_index": 2,
+              "ui": {
+                "label": "collateral, now redeemable by YES",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "lbtc_change",
+              "description": "L-BTC change back to your wallet. v3 checks the fee at num_outputs - 1 rather than at a fixed index, so a trailing change output is legal here — which is what stops the collateral input's surplus being paid to miners. It also supplies the free blinding factor the +1 rule needs: with both token outputs' factors fixed, this output absorbs the value-balance residue.",
+              "destination": "change",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "change returned to you",
+                "role": "change"
+              }
+            }
+          ]
+        },
+        "ResolveNo": {
+          "$comment": "Path 3 with ORACLE_OUTCOME_YES = false. Identical to ResolveYes except the signed outcome byte is 0x00 and every covenant output goes to state 3. Same 4-output rule: declare no change.",
+          "description": "Commit a NO outcome on-chain (state 1 -> 3). Whichever of ResolveYes / ResolveNo confirms first wins — that is the equivocation protection. An oracle that signs both outcomes cannot start a race to drain the pool, because after the first resolve there is no path back to state 1 and none between states 2 and 3.",
+          "intent": "resolve the market NO using the oracle's attestation",
+          "params": {
+            "ORACLE_SIGNATURE": {
+              "type": "bytes",
+              "description": "The oracle's 64-byte BIP340 signature over sha256(MARKET_ID || 0x00). Paste it 0x-prefixed."
+            },
+            "RT_FACTOR": {
+              "type": "u64",
+              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and the engine does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
+            }
+          },
+          "inputs": [
+            {
+              "id": "yes_reissuance_in",
+              "description": "YES reissuance token, input 0 — still the primary input on a NO resolve; the covenant's layout is fixed regardless of outcome.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 0,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR",
+                "value_bf": "params.RT_FACTOR"
+              },
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Left(Right(Left(())))",
+                  "description": "Path 3 — oracle resolve."
+                },
+                "ORACLE_OUTCOME_YES": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "bool",
+                  "value": "false",
+                  "description": "Picks the NO branch: outcome byte 0x00 and state-3 outputs."
+                },
+                "ORACLE_SIGNATURE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "[u8; 64]",
+                  "value": "params.ORACLE_SIGNATURE"
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "YES_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "NO_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "NO_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                }
+              },
+              "ui": {
+                "label": "YES minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_in",
+              "description": "NO reissuance token, input 1, on path 7.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR",
+                "value_bf": "params.RT_FACTOR"
+              },
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Right(()))"
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "NO minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "collateral_in",
+              "description": "The market's collateral UTXO, input 2, on path 7.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "required_index": 2,
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Right(()))"
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "collateral backing the market",
+                "role": "collateral"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "yes_reissuance_out",
+              "description": "YES reissuance token moved to the state-3 address (output 0).",
+              "destination": {
+                "utxo_type": "market_resolved_no"
+              },
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 0,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR + 1",
+                "value_bf": "params.RT_FACTOR + 1"
+              },
+              "ui": {
+                "label": "YES minting right, market resolved",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_out",
+              "description": "NO reissuance token moved to the state-3 address (output 1).",
+              "destination": {
+                "utxo_type": "market_resolved_no"
+              },
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR + 1",
+                "value_bf": "params.RT_FACTOR + 1"
+              },
+              "ui": {
+                "label": "NO minting right, market resolved",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "collateral_out",
+              "description": "All collateral moved intact to the state-3 address (output 2).",
+              "destination": {
+                "utxo_type": "market_resolved_no"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "collateral_in.amount_sat",
+              "required_index": 2,
+              "ui": {
+                "label": "collateral, now redeemable by NO",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "lbtc_change",
+              "description": "L-BTC change back to your wallet. v3 checks the fee at num_outputs - 1 rather than at a fixed index, so a trailing change output is legal here — which is what stops the collateral input's surplus being paid to miners. It also supplies the free blinding factor the +1 rule needs: with both token outputs' factors fixed, this output absorbs the value-balance residue.",
+              "destination": "change",
+              "asset": "lbtc",
+              "optional": true,
+              "ui": {
+                "label": "change returned to you",
+                "role": "change"
+              }
+            }
+          ]
+        },
+        "RedeemYes": {
+          "allow_change": "lbtc_only",
+          "$comment": "Path 4 in state 2, PARTIAL form (remaining collateral > 0). The full-drain form is a different output layout — the burn becomes output 0 and there is no collateral output at all — and needs its own action, not modelled here. The fee is checked at num_outputs - 1, so change outputs are fine on this path.",
+          "description": "Redeem winning YES tokens for collateral (state 2). Each YES token draws 2 x COLLATERAL_PER_TOKEN — the whole pair's backing, both your stake and the loser's — so the pool drains exactly as all winners redeem, with nothing stranded. Losing NO tokens have no path; they are simply worthless.",
+          "intent": "redeem {params.TOKENS_BURNED} winning YES tokens for collateral",
+          "params": {
+            "TOKENS_BURNED": {
+              "type": "u64",
+              "description": "How many YES tokens to burn. Must be strictly less than the market's total remaining backing, or this becomes a full drain and needs the other output layout."
+            }
+          },
+          "inputs": [
+            {
+              "id": "collateral_in",
+              "description": "The market's collateral UTXO at the state-2 address, input 0 — this path reads amounts from index 0, so it must come first.",
+              "utxo_source": {
+                "utxo_type": "market_resolved_yes"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "required_index": 0,
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "2",
+                  "description": "State 2 also selects YES_TOKEN_ASSET as the only asset the covenant will accept as a burn."
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Left(Right(Right(())))",
+                  "description": "Path 4 — post-resolution redemption."
+                },
+                "TOKENS_BURNED": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "params.TOKENS_BURNED",
+                  "description": "Drives both the burn output amount and the payout; the covenant checks both against it."
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "collateral pool being drawn down",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "yes_tokens_in",
+              "description": "Your winning YES tokens, from the wallet. Size this exactly — any surplus becomes a change output, which is allowed here but pointless.",
+              "utxo_source": "wallet",
+              "asset": "instance.YES_TOKEN_ASSET",
+              "amount_sat": {
+                "min_amount": "params.TOKENS_BURNED"
+              },
+              "ui": {
+                "label": "winning YES tokens you are burning",
+                "role": "outcome_token"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "collateral_out",
+              "description": "What is left of the pool, back to the state-2 address (output 0). The reissuance tokens are untouched by this transaction and stay where they are by consensus.",
+              "destination": {
+                "utxo_type": "market_resolved_yes"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "collateral_in.amount_sat - params.TOKENS_BURNED * 2 * instance.COLLATERAL_PER_TOKEN",
+              "required_index": 0,
+              "ui": {
+                "label": "collateral left for other winners",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "yes_tokens_burn",
+              "description": "The YES tokens destroyed (output 1). The covenant requires a ZERO-LENGTH scriptPubKey here — sha256 of the empty script — not the 1-byte OP_RETURN this engine emits.",
+              "destination": {
+                "type": "burn"
+              },
+              "asset": "instance.YES_TOKEN_ASSET",
+              "amount_sat": "params.TOKENS_BURNED",
+              "required_index": 1,
+              "ui": {
+                "label": "YES tokens burned",
+                "role": "burn",
+                "group": "burned / protocol data"
+              }
+            },
+            {
+              "id": "payout_out",
+              "description": "Your winnings (output 2): TOKENS_BURNED x 2 x COLLATERAL_PER_TOKEN. The covenant does not check this leg at all — it constrains what stays behind and what is burned, and the rest follows from asset balance.",
+              "destination": "wallet",
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "params.TOKENS_BURNED * 2 * instance.COLLATERAL_PER_TOKEN",
+              "required_index": 2,
+              "ui": {
+                "label": "your winnings",
+                "role": "settlement"
+              }
+            },
+            {
+              "id": "token_change",
+              "description": "YES token change, if your input held more than you burned.",
+              "destination": "change",
+              "asset": "instance.YES_TOKEN_ASSET",
+              "optional": true,
+              "ui": {
+                "label": "unburned YES tokens returned to you",
+                "role": "change"
+              }
+            }
+          ]
+        },
+        "RedeemNo": {
+          "allow_change": "lbtc_only",
+          "$comment": "Path 4 in state 3 — the mirror of RedeemYes. Same partial-only caveat.",
+          "description": "Redeem winning NO tokens for collateral (state 3). Each NO token draws 2 x COLLATERAL_PER_TOKEN.",
+          "intent": "redeem {params.TOKENS_BURNED} winning NO tokens for collateral",
+          "params": {
+            "TOKENS_BURNED": {
+              "type": "u64",
+              "description": "How many NO tokens to burn."
+            }
+          },
+          "inputs": [
+            {
+              "id": "collateral_in",
+              "description": "The market's collateral UTXO at the state-3 address, input 0.",
+              "utxo_source": {
+                "utxo_type": "market_resolved_no"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "required_index": 0,
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "3",
+                  "description": "State 3 selects NO_TOKEN_ASSET as the winning side."
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Left(Right(Right(())))",
+                  "description": "Path 4 — post-resolution redemption."
+                },
+                "TOKENS_BURNED": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "params.TOKENS_BURNED"
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "collateral pool being drawn down",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "no_tokens_in",
+              "description": "Your winning NO tokens, from the wallet.",
+              "utxo_source": "wallet",
+              "asset": "instance.NO_TOKEN_ASSET",
+              "amount_sat": {
+                "min_amount": "params.TOKENS_BURNED"
+              },
+              "ui": {
+                "label": "winning NO tokens you are burning",
+                "role": "outcome_token"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "collateral_out",
+              "description": "Remaining pool back to the state-3 address (output 0).",
+              "destination": {
+                "utxo_type": "market_resolved_no"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "collateral_in.amount_sat - params.TOKENS_BURNED * 2 * instance.COLLATERAL_PER_TOKEN",
+              "required_index": 0,
+              "ui": {
+                "label": "collateral left for other winners",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "no_tokens_burn",
+              "description": "The NO tokens destroyed (output 1). Same zero-length-script requirement as RedeemYes.",
+              "destination": {
+                "type": "burn"
+              },
+              "asset": "instance.NO_TOKEN_ASSET",
+              "amount_sat": "params.TOKENS_BURNED",
+              "required_index": 1,
+              "ui": {
+                "label": "NO tokens burned",
+                "role": "burn",
+                "group": "burned / protocol data"
+              }
+            },
+            {
+              "id": "payout_out",
+              "description": "Your winnings (output 2).",
+              "destination": "wallet",
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "params.TOKENS_BURNED * 2 * instance.COLLATERAL_PER_TOKEN",
+              "required_index": 2,
+              "ui": {
+                "label": "your winnings",
+                "role": "settlement"
+              }
+            },
+            {
+              "id": "token_change",
+              "description": "NO token change, if your input held more than you burned.",
+              "destination": "change",
+              "asset": "instance.NO_TOKEN_ASSET",
+              "optional": true,
+              "ui": {
+                "label": "unburned NO tokens returned to you",
+                "role": "change"
+              }
+            }
+          ]
+        },
+        "RedeemExpired": {
+          "allow_change": "lbtc_only",
+          "$comment": "Path 5, partial form. NOT EXECUTABLE YET: this is the one Deadcat path that calls jet::check_lock_height(EXPIRY_TIME), an absolute CLTV, and the engine cannot set a transaction nLockTime — see meta/tasks/upnext/12-engine-absolute-locktime.md. (The pre-expiry paths are fine: they assert lock_time < EXPIRY_TIME, which a locktime of 0 satisfies.) BURN_TOKEN_ASSET must be supplied byte-reversed, because witness values are parsed as raw SimplicityHL literals with no liquid.asset_id type hint to trigger the reversal that compile params get.",
+          "description": "Redeem after the market expired unresolved (state 1, at or after EXPIRY_TIME). Both sides redeem at 1 x COLLATERAL_PER_TOKEN — half the winner's rate — so YES and NO holders are made whole together and the pool drains exactly. This is the escape hatch for an oracle that never attests.",
+          "intent": "redeem {params.TOKENS_BURNED} tokens from the expired market",
+          "params": {
+            "TOKENS_BURNED": {
+              "type": "u64",
+              "description": "How many tokens to burn, of whichever side you hold."
+            },
+            "BURN_TOKEN_ASSET": {
+              "type": "bytes",
+              "description": "The asset id of the side you are burning — YES_TOKEN_ASSET or NO_TOKEN_ASSET — 0x-prefixed and in INTERNAL byte order, i.e. the display id reversed. The covenant accepts either, and rejects anything else."
+            },
+            "BURN_TOKEN_ASSET_DISPLAY": {
+              "type": "liquid.asset_id",
+              "description": "The same asset id in normal display order, used for the transaction's burn output and token input. Must be the reverse of BURN_TOKEN_ASSET."
+            }
+          },
+          "inputs": [
+            {
+              "id": "collateral_in",
+              "description": "The market's collateral UTXO, still at the state-1 address, input 0. The sequence below is ENABLE_LOCKTIME_NO_RBF: any value other than 0xFFFFFFFF enables the nLockTime that check_lock_height reads. The engine will warn that the BIP68 disable bit is set — expected, since this timeout is an absolute height.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "required_index": 0,
+              "sequence": 4294967294,
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Left(Left(())))",
+                  "description": "Path 5 — expiry redemption."
+                },
+                "TOKENS_BURNED": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "params.TOKENS_BURNED"
+                },
+                "BURN_TOKEN_ASSET": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.BURN_TOKEN_ASSET",
+                  "description": "Tells the covenant which side you are burning. It checks the value equals YES_TOKEN_ASSET or NO_TOKEN_ASSET and then holds output 1 to it."
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "collateral pool being drawn down",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "tokens_in",
+              "description": "The tokens you are burning, from the wallet — either side.",
+              "utxo_source": "wallet",
+              "asset": "params.BURN_TOKEN_ASSET_DISPLAY",
+              "amount_sat": {
+                "min_amount": "params.TOKENS_BURNED"
+              },
+              "ui": {
+                "label": "tokens you are burning",
+                "role": "outcome_token"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "collateral_out",
+              "description": "Remaining pool back to the state-1 address (output 0) — the market never leaves state 1 on this path.",
+              "destination": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "collateral_in.amount_sat - params.TOKENS_BURNED * instance.COLLATERAL_PER_TOKEN",
+              "required_index": 0,
+              "ui": {
+                "label": "collateral left for other holders",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "tokens_burn",
+              "description": "The tokens destroyed (output 1). Zero-length script required, as on the other burn paths.",
+              "destination": {
+                "type": "burn"
+              },
+              "asset": "params.BURN_TOKEN_ASSET_DISPLAY",
+              "amount_sat": "params.TOKENS_BURNED",
+              "required_index": 1,
+              "ui": {
+                "label": "tokens burned",
+                "role": "burn",
+                "group": "burned / protocol data"
+              }
+            },
+            {
+              "id": "payout_out",
+              "description": "Your refund (output 2): TOKENS_BURNED x COLLATERAL_PER_TOKEN, half the resolved rate, because the other half belongs to the holder of the matching token on the other side.",
+              "destination": "wallet",
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "params.TOKENS_BURNED * instance.COLLATERAL_PER_TOKEN",
+              "required_index": 2,
+              "ui": {
+                "label": "your refund",
+                "role": "settlement"
+              }
+            }
+          ]
+        },
+        "CancelPairs": {
+          "allow_change": "lbtc_only",
+          "$comment": "Path 6, partial form (state 1 -> 1). The full form, which drains the pool to zero and cycles the reissuance tokens back to state 0, is CancelAll.",
+          "description": "Unwind part of your position while the market is unresolved. Burn matched YES and NO in equal amounts and take back the full 2 x COLLATERAL_PER_TOKEN per pair — you are undoing an issuance, so there is no loss and no time constraint. Only matched pairs qualify: burning one side alone would leave the other side under-collateralised.",
+          "intent": "cancel {params.PAIRS_BURNED} pairs and reclaim their collateral",
+          "params": {
+            "PAIRS_BURNED": {
+              "type": "u64",
+              "description": "How many matched pairs to burn. You must hold this many of BOTH YES and NO."
+            }
+          },
+          "inputs": [
+            {
+              "id": "collateral_in",
+              "description": "The market's collateral UTXO, input 0.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "required_index": 0,
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Left(Right(())))",
+                  "description": "Path 6 — cancellation. The partial and full forms are the same path; the covenant picks between them by testing whether any collateral remains."
+                },
+                "PAIRS_BURNED": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "params.PAIRS_BURNED"
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "collateral pool being drawn down",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "yes_tokens_in",
+              "description": "Your YES tokens, from the wallet.",
+              "utxo_source": "wallet",
+              "asset": "instance.YES_TOKEN_ASSET",
+              "amount_sat": {
+                "min_amount": "params.PAIRS_BURNED"
+              },
+              "ui": {
+                "label": "YES side of the pairs you are burning",
+                "role": "outcome_token"
+              }
+            },
+            {
+              "id": "no_tokens_in",
+              "description": "Your NO tokens, from the wallet, in the same amount.",
+              "utxo_source": "wallet",
+              "asset": "instance.NO_TOKEN_ASSET",
+              "amount_sat": {
+                "min_amount": "params.PAIRS_BURNED"
+              },
+              "ui": {
+                "label": "NO side of the pairs you are burning",
+                "role": "outcome_token"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "collateral_out",
+              "description": "Remaining pool back to the state-1 address (output 0). Non-zero is what makes this the partial branch — if it were zero the covenant would demand CancelAll's layout instead.",
+              "destination": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "collateral_in.amount_sat - params.PAIRS_BURNED * 2 * instance.COLLATERAL_PER_TOKEN",
+              "required_index": 0,
+              "ui": {
+                "label": "collateral still backing the market",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "yes_tokens_burn",
+              "description": "YES tokens destroyed (output 1). Zero-length script required.",
+              "destination": {
+                "type": "burn"
+              },
+              "asset": "instance.YES_TOKEN_ASSET",
+              "amount_sat": "params.PAIRS_BURNED",
+              "required_index": 1,
+              "ui": {
+                "label": "YES tokens burned",
+                "role": "burn",
+                "group": "burned / protocol data"
+              }
+            },
+            {
+              "id": "no_tokens_burn",
+              "description": "NO tokens destroyed (output 2), same amount — the covenant checks both indices, which is how equal burning is enforced.",
+              "destination": {
+                "type": "burn"
+              },
+              "asset": "instance.NO_TOKEN_ASSET",
+              "amount_sat": "params.PAIRS_BURNED",
+              "required_index": 2,
+              "ui": {
+                "label": "NO tokens burned",
+                "role": "burn",
+                "group": "burned / protocol data"
+              }
+            },
+            {
+              "id": "refund_out",
+              "description": "Your refund (output 3): the full deposit for those pairs, PAIRS_BURNED x 2 x COLLATERAL_PER_TOKEN.",
+              "destination": "wallet",
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "params.PAIRS_BURNED * 2 * instance.COLLATERAL_PER_TOKEN",
+              "required_index": 3,
+              "ui": {
+                "label": "collateral refunded to you",
+                "role": "settlement"
+              }
+            }
+          ]
+        },
+        "CancelAll": {
+          "allow_change": "lbtc_only",
+          "$comment": "Path 6, full form (state 1 -> 0). PAIRS_BURNED must equal the whole pool: collateral_in.amount_sat / (2 x COLLATERAL_PER_TOKEN). If it does not, the covenant takes the partial branch instead and this output layout is rejected.",
+          "description": "Wind the market all the way down. Burn every outstanding pair, take back all the collateral, and cycle both reissuance tokens back to the state-0 address so the market is dormant rather than dead. Without this the tokens would be stranded at a collateral-less state-1 address and the market could never be reissued — the reason the dormant state exists at all (design doc section 5.3).",
+          "intent": "wind the market down and return it to dormant",
+          "params": {
+            "PAIRS_BURNED": {
+              "type": "u64",
+              "description": "Every outstanding pair. Must equal the pool's total collateral divided by 2 x COLLATERAL_PER_TOKEN, exactly."
+            },
+            "RT_FACTOR": {
+              "type": "u64",
+              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and the engine does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
+            }
+          },
+          "inputs": [
+            {
+              "id": "collateral_in",
+              "description": "The market's collateral UTXO, input 0 — the primary input, running path 6.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "required_index": 0,
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Left(Right(())))",
+                  "description": "Path 6 — cancellation, full branch (chosen by the covenant when nothing remains)."
+                },
+                "PAIRS_BURNED": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "params.PAIRS_BURNED"
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "YES_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "NO_REISSUANCE_INPUT_ABF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                },
+                "NO_REISSUANCE_INPUT_VBF": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "params.RT_FACTOR"
+                }
+              },
+              "ui": {
+                "label": "the whole collateral pool",
+                "role": "collateral"
+              }
+            },
+            {
+              "id": "yes_reissuance_in",
+              "description": "YES reissuance token, input 1 — the full branch verifies it at exactly this index. Runs path 7.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR",
+                "value_bf": "params.RT_FACTOR"
+              },
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Right(()))"
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "YES minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_in",
+              "description": "NO reissuance token, input 2, also on path 7.",
+              "utxo_source": {
+                "utxo_type": "market_unresolved"
+              },
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 2,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR",
+                "value_bf": "params.RT_FACTOR"
+              },
+              "witnesses": {
+                "STATE": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u64",
+                  "value": "1"
+                },
+                "PATH": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
+                  "value": "Right(Right(()))"
+                },
+                "BUDGET_PAD_A": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_B": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_C": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BUDGET_PAD_D": {
+                  "type": "simplicityhl",
+                  "simplicity_type": "u256",
+                  "value": "0"
+                },
+                "BURN_TOKEN_ASSET": "unused",
+                "NO_REISSUANCE_INPUT_ABF": "unused",
+                "NO_REISSUANCE_INPUT_VBF": "unused",
+                "ORACLE_OUTCOME_YES": "unused",
+                "ORACLE_SIGNATURE": "unused",
+                "PAIRS_BURNED": "unused",
+                "TOKENS_BURNED": "unused",
+                "YES_REISSUANCE_INPUT_ABF": "unused",
+                "YES_REISSUANCE_INPUT_VBF": "unused"
+              },
+              "ui": {
+                "label": "NO minting right",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "yes_tokens_in",
+              "description": "All outstanding YES tokens, from the wallet.",
+              "utxo_source": "wallet",
+              "asset": "instance.YES_TOKEN_ASSET",
+              "amount_sat": {
+                "min_amount": "params.PAIRS_BURNED"
+              },
+              "ui": {
+                "label": "every YES token, being burned",
+                "role": "outcome_token"
+              }
+            },
+            {
+              "id": "no_tokens_in",
+              "description": "All outstanding NO tokens, from the wallet.",
+              "utxo_source": "wallet",
+              "asset": "instance.NO_TOKEN_ASSET",
+              "amount_sat": {
+                "min_amount": "params.PAIRS_BURNED"
+              },
+              "ui": {
+                "label": "every NO token, being burned",
+                "role": "outcome_token"
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "id": "yes_reissuance_out",
+              "description": "YES reissuance token returned to the state-0 (dormant) address (output 0).",
+              "destination": {
+                "utxo_type": "market_dormant"
+              },
+              "asset": "instance.YES_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 0,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR + 1",
+                "value_bf": "params.RT_FACTOR + 1"
+              },
+              "ui": {
+                "label": "YES minting right, back to dormant",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "no_reissuance_out",
+              "description": "NO reissuance token returned to the state-0 address (output 1). From here the market can be reopened with another InitialIssuance.",
+              "destination": {
+                "utxo_type": "market_dormant"
+              },
+              "asset": "instance.NO_REISSUANCE_TOKEN",
+              "amount_sat": 1,
+              "required_index": 1,
+              "confidential": true,
+              "blinding": {
+                "asset_bf": "params.RT_FACTOR + 1",
+                "value_bf": "params.RT_FACTOR + 1"
+              },
+              "ui": {
+                "label": "NO minting right, back to dormant",
+                "role": "reissuance_token"
+              }
+            },
+            {
+              "id": "yes_tokens_burn",
+              "description": "All YES tokens destroyed (output 2). Zero-length script required.",
+              "destination": {
+                "type": "burn"
+              },
+              "asset": "instance.YES_TOKEN_ASSET",
+              "amount_sat": "params.PAIRS_BURNED",
+              "required_index": 2,
+              "ui": {
+                "label": "YES tokens burned",
+                "role": "burn",
+                "group": "burned / protocol data"
+              }
+            },
+            {
+              "id": "no_tokens_burn",
+              "description": "All NO tokens destroyed (output 3).",
+              "destination": {
+                "type": "burn"
+              },
+              "asset": "instance.NO_TOKEN_ASSET",
+              "amount_sat": "params.PAIRS_BURNED",
+              "required_index": 3,
+              "ui": {
+                "label": "NO tokens burned",
+                "role": "burn",
+                "group": "burned / protocol data"
+              }
+            },
+            {
+              "id": "refund_out",
+              "description": "The entire pool refunded to you (output 4). The covenant does not constrain this leg; it falls out of asset balance once outputs 0-3 are pinned.",
+              "destination": "wallet",
+              "asset": "instance.COLLATERAL_ASSET_ID",
+              "amount_sat": "collateral_in.amount_sat",
+              "required_index": 4,
+              "ui": {
+                "label": "all collateral refunded to you",
+                "role": "settlement"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

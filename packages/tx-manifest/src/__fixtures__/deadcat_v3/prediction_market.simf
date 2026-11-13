@@ -1,0 +1,593 @@
+// Binary Prediction Market Covenant - v3, derivable blinding factors
+// SimplicityHL contract for Liquid
+//
+// Forked from examples/deadcat/prediction_market.simf (Deadcat.Live), which is kept
+// verbatim. The reissuance tokens stay CONFIDENTIAL - Elements requires it, since a
+// reissuance compares blind(token_id, nonce) against the spent input's asset COMMITMENT
+// and an explicit asset can never match (see confidential_validation.cpp). What changes is
+// how the recreated tokens are checked.
+//
+// Upstream verifies each output by recomputing its commitment from output blinding factors
+// supplied as witnesses. Those factors are chosen at blinding time, cannot be recovered
+// from the chain, and so have to be persisted out-of-band for the next spend.
+//
+// This version fixes the step instead: abf_out = abf_in + 1, vbf_out = vbf_in + 1. Because
+// the value is 1, that is a pure translation of the commitments,
+//
+//     A_out = A_in + G          C_out = C_in + 2G
+//
+// which the covenant checks by point arithmetic. Two consequences:
+//
+//   * The four output blinding witnesses disappear. Only the INPUT factors are needed -
+//     one to prove the input is this market's token, one to pin its amount to 1.
+//   * The factors become derivable. The Simplicity witness is on-chain, so the next
+//     spender reads abf_in/vbf_in off THIS transaction and adds one. Nothing has to be
+//     stored. The very first pair has no prior witness to read and is the documented
+//     constant abf = vbf = 1, set by CreateMarket.
+//
+// The tokens are consequently traceable on-chain: the factors are public, so anyone can
+// open the commitments. That is accepted here - the asset ids are compile params and the
+// covenant addresses are public, so blinding was never buying confidentiality, only
+// reissuability.
+//
+// Also relaxed, so that a change output can exist and the L-BTC surplus stops being paid
+// to miners: the issuance and resolve paths check the fee at num_outputs - 1 (as paths
+// 4/5/6 already do) instead of at a fixed index, and the resolve path no longer demands
+// exactly four outputs. Outputs 0-2 remain pinned by index to asset, amount and script, so
+// no covenant-held value can reach a trailing output - only the spender's own fee input.
+//
+// This is a FORK: the CMR and all four covenant addresses differ from upstream.
+
+// ============================================================================
+// Type aliases
+// ============================================================================
+
+// PATH dispatch types (7-way nested Either)
+type Path1or2 = Either<(), ()>;
+type Path3or4 = Either<(), ()>;
+type Path1to4 = Either<Path1or2, Path3or4>;
+type Path5or6 = Either<(), ()>;
+type Path5to7 = Either<Path5or6, ()>;
+
+// The blinding factors of one reissuance-token INPUT: (abf, vbf). The matching output
+// factors are abf+1 / vbf+1 and are never supplied - see the header.
+type BlindingPair = (u256, u256);
+
+// ============================================================================
+// Boolean helpers
+// ============================================================================
+
+fn not(bit: bool) -> bool {
+    <u1>::into(jet::complement_1(<bool>::into(bit)))
+}
+
+fn or(a: bool, b: bool) -> bool {
+    <u1>::into(jet::or_1(<bool>::into(a), <bool>::into(b)))
+}
+
+fn ensure_zero_bit(b: bool) {
+    assert!(not(b));
+}
+
+// ============================================================================
+// Utility functions
+// ============================================================================
+
+fn get_input_script_hash(index: u32) -> u256 {
+    unwrap(jet::input_script_hash(index))
+}
+
+fn get_output_explicit_asset(index: u32) -> u256 {
+    unwrap_right::<(u1, u256)>(unwrap(jet::output_asset(index)))
+}
+
+fn get_output_explicit_asset_amount(index: u32) -> (u256, u64) {
+    let (asset, amount): (Asset1, Amount1) = unwrap(jet::output_amount(index));
+    let asset_val: u256 = unwrap_right::<(u1, u256)>(asset);
+    let amount_val: u64 = unwrap_right::<(u1, u256)>(amount);
+    (asset_val, amount_val)
+}
+
+fn get_input_explicit_asset_amount(index: u32) -> (u256, u64) {
+    let (asset, amount): (Asset1, Amount1) = unwrap(jet::input_amount(index));
+    let asset_val: u256 = unwrap_right::<(u1, u256)>(asset);
+    let amount_val: u64 = unwrap_right::<(u1, u256)>(amount);
+    (asset_val, amount_val)
+}
+
+fn ensure_output_script_hash_eq(index: u32, expected: u256) {
+    let actual: u256 = unwrap(jet::output_script_hash(index));
+    assert!(jet::eq_256(actual, expected));
+}
+
+fn ensure_output_asset_with_amount_eq(index: u32, expected_asset: u256, expected_amount: u64) {
+    let (asset, amount): (u256, u64) = get_output_explicit_asset_amount(index);
+    assert!(jet::eq_256(asset, expected_asset));
+    assert!(jet::eq_64(amount, expected_amount));
+}
+
+fn empty_script_hash() -> u256 {
+    0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+}
+
+fn ensure_output_is_op_return(index: u32) {
+    let script_hash: u256 = unwrap(jet::output_script_hash(index));
+    assert!(jet::eq_256(script_hash, empty_script_hash()));
+}
+
+fn ensure_fee_output(index: u32) {
+    let script_hash: u256 = unwrap(jet::output_script_hash(index));
+    assert!(jet::eq_256(script_hash, empty_script_hash()));
+}
+
+// ============================================================================
+// Pedersen commitment verification
+// ============================================================================
+
+// Assert that a computed curve point equals a stored 33-byte commitment, which
+// introspection hands back as (parity, x).
+fn assert_point_eq_commitment(point: Gej, commitment: (u1, u256)) {
+    let ge: Ge = unwrap(jet::gej_normalize(point));
+    let (x, y): (u256, u256) = ge;
+    let (stored_parity, stored_x): (u1, u256) = commitment;
+    assert!(jet::eq_256(x, stored_x));
+    // Generator parity encodes quadratic residue status, not odd/even bit parity.
+    // is_none(fe_square_root(y)) == true when y is NOT a QR, matching stored parity = 1.
+    assert!(jet::eq_1(<bool>::into(is_none::<u256>(jet::fe_square_root(y))), stored_parity));
+}
+
+/// Prove the input at `index` holds exactly 1 unit of `expected_token`, and return the
+/// commitments so the paired output can be checked as a translation of them.
+fn verify_input_reissuance_token(
+    index: u32,
+    expected_token: u256,
+    bf: BlindingPair
+) -> (Gej, Gej) {
+    let (abf, vbf): (u256, u256) = bf;
+
+    let asset_commitment: (u1, u256) = unwrap_left::<u256>(unwrap(jet::input_asset(index)));
+    let (_, amount_either): (Asset1, Amount1) = unwrap(jet::input_amount(index));
+    let amount_commitment: (u1, u256) = unwrap_left::<u64>(amount_either);
+
+    // Asset generator: H(token) + abf*G. Binding the input to THIS market's token id is
+    // the part Elements cannot do for us - its own reissuance check only proves the input
+    // matches the entropy stated in the same (attacker-supplied) witness.
+    let h_point: Ge = jet::hash_to_curve(expected_token);
+    let asset_gen: Gej = jet::gej_ge_add(jet::generate(abf), h_point);
+    assert_point_eq_commitment(asset_gen, asset_commitment);
+
+    // Value commitment: asset_gen + vbf*G. There is no `value *` factor, so this is a
+    // commitment to exactly 1 - which is what pins the amount.
+    let value_gen: Gej = jet::gej_add(asset_gen, jet::generate(vbf));
+    assert_point_eq_commitment(value_gen, amount_commitment);
+
+    (asset_gen, value_gen)
+}
+
+/// Prove the output at `index` recreates the token whose input commitments are given,
+/// with both blinding factors advanced by exactly one.
+///
+/// abf_out = abf_in + 1 shifts the asset generator by G; vbf_out = vbf_in + 1 shifts the
+/// value commitment by a further G, for 2G in total. No witness is needed: every term is
+/// either introspected or derived.
+fn verify_output_is_shifted_token(index: u32, in_asset_gen: Gej, in_value_gen: Gej) {
+    let asset_commitment: (u1, u256) = unwrap_left::<u256>(unwrap(jet::output_asset(index)));
+    let (_, amount_either): (Asset1, Amount1) = unwrap(jet::output_amount(index));
+    let amount_commitment: (u1, u256) = unwrap_left::<u64>(amount_either);
+
+    assert_point_eq_commitment(jet::gej_add(in_asset_gen, jet::generate(1)), asset_commitment);
+    assert_point_eq_commitment(jet::gej_add(in_value_gen, jet::generate(2)), amount_commitment);
+}
+
+// ============================================================================
+// Taproot address computation
+// ============================================================================
+
+fn covenant_nums_key() -> u256 {
+    0x50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0
+}
+
+fn compute_p2tr_script_hash_from_output_key(output_key: u256) -> u256 {
+    let ctx: Ctx8 = jet::sha_256_ctx_8_init();
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_2(ctx, 0x5120);
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_32(ctx, output_key);
+    jet::sha_256_ctx_8_finalize(ctx)
+}
+
+fn script_hash_for_input_script(state: u64) -> u256 {
+    let tap_leaf: u256 = jet::tapleaf_hash();
+    let state_ctx: Ctx8 = jet::tapdata_init();
+    let state_ctx: Ctx8 = jet::sha_256_ctx_8_add_8(state_ctx, state);
+    let state_leaf: u256 = jet::sha_256_ctx_8_finalize(state_ctx);
+    let tap_node: u256 = jet::build_tapbranch(tap_leaf, state_leaf);
+    let tweaked_key: u256 = jet::build_taptweak(covenant_nums_key(), tap_node);
+    compute_p2tr_script_hash_from_output_key(tweaked_key)
+}
+
+// ============================================================================
+// Arithmetic helpers
+// ============================================================================
+
+fn safe_multiply(a: u64, b: u64) -> u64 {
+    let result: u128 = jet::multiply_64(a, b);
+    let (high, low): (u64, u64) = <u128>::into(result);
+    assert!(jet::is_zero_64(high));
+    low
+}
+
+fn safe_add(a: u64, b: u64) -> u64 {
+    let (carry, sum): (bool, u64) = jet::add_64(a, b);
+    ensure_zero_bit(carry);
+    sum
+}
+
+fn safe_subtract(a: u64, b: u64) -> u64 {
+    let (borrow, diff): (bool, u64) = jet::subtract_64(a, b);
+    ensure_zero_bit(borrow);
+    diff
+}
+
+fn safe_subtract_32(a: u32, b: u32) -> u32 {
+    let (borrow, diff): (bool, u32) = jet::subtract_32(a, b);
+    ensure_zero_bit(borrow);
+    diff
+}
+
+// ============================================================================
+// Market-specific functions
+// ============================================================================
+
+fn compute_market_id() -> u256 {
+    let ctx: Ctx8 = jet::sha_256_ctx_8_init();
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_32(ctx, param::YES_TOKEN_ASSET);
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_32(ctx, param::NO_TOKEN_ASSET);
+    jet::sha_256_ctx_8_finalize(ctx)
+}
+
+fn verify_oracle_signature(outcome_yes: bool, signature: Signature) {
+    let market_id: u256 = compute_market_id();
+    let outcome_byte: u8 = match outcome_yes {
+        true => 1,
+        false => 0,
+    };
+    let ctx: Ctx8 = jet::sha_256_ctx_8_init();
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_32(ctx, market_id);
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_1(ctx, outcome_byte);
+    let message: u256 = jet::sha_256_ctx_8_finalize(ctx);
+    jet::bip_0340_verify((param::ORACLE_PUBLIC_KEY, message), signature);
+}
+
+fn ensure_pre_expiry() {
+    let tx_lock_time: u32 = jet::lock_time();
+    assert!(jet::lt_32(tx_lock_time, param::EXPIRY_TIME));
+}
+
+fn dormant_script_hash() -> u256 {
+    script_hash_for_input_script(0)
+}
+
+fn unresolved_script_hash() -> u256 {
+    script_hash_for_input_script(1)
+}
+
+fn collateral_for_pairs(pairs: u64) -> u64 {
+    let two_cpt: u64 = safe_multiply(2, param::COLLATERAL_PER_TOKEN);
+    safe_multiply(pairs, two_cpt)
+}
+
+fn get_issuance_amount(index: u32) -> u64 {
+    unwrap_right::<(u1, u256)>(unwrap(unwrap(jet::issuance_asset_amount(index))))
+}
+
+// ============================================================================
+// Spending paths
+// ============================================================================
+
+/// Path 1: Initial Issuance (state 0 → 1)
+fn initial_issuance_path(state: u64, yes_bf: BlindingPair, no_bf: BlindingPair) {
+    assert!(jet::is_zero_64(state));
+    ensure_pre_expiry();
+    assert!(jet::eq_32(jet::current_index(), 0));
+
+    let unresolved_hash: u256 = unresolved_script_hash();
+
+    let (yes_asset_gen, yes_value_gen): (Gej, Gej) =
+        verify_input_reissuance_token(0, param::YES_REISSUANCE_TOKEN, yes_bf);
+    let (no_asset_gen, no_value_gen): (Gej, Gej) =
+        verify_input_reissuance_token(1, param::NO_REISSUANCE_TOKEN, no_bf);
+
+    let yes_amount: u64 = get_issuance_amount(0);
+    let no_amount: u64 = get_issuance_amount(1);
+    assert!(jet::eq_64(yes_amount, no_amount));
+
+    let pairs: u64 = yes_amount;
+    let total_collateral: u64 = collateral_for_pairs(pairs);
+
+    verify_output_is_shifted_token(0, yes_asset_gen, yes_value_gen);
+    ensure_output_script_hash_eq(0, unresolved_hash);
+
+    verify_output_is_shifted_token(1, no_asset_gen, no_value_gen);
+    ensure_output_script_hash_eq(1, unresolved_hash);
+
+    ensure_output_asset_with_amount_eq(2, param::COLLATERAL_ASSET_ID, total_collateral);
+    ensure_output_script_hash_eq(2, unresolved_hash);
+
+    ensure_fee_output(safe_subtract_32(jet::num_outputs(), 1));
+}
+
+/// Path 2: Subsequent Issuance (state 1 → 1)
+fn subsequent_issuance_path(state: u64, yes_bf: BlindingPair, no_bf: BlindingPair) {
+    assert!(jet::eq_64(state, 1));
+    ensure_pre_expiry();
+    assert!(jet::eq_32(jet::current_index(), 0));
+
+    let unresolved_hash: u256 = unresolved_script_hash();
+
+    let (yes_asset_gen, yes_value_gen): (Gej, Gej) =
+        verify_input_reissuance_token(0, param::YES_REISSUANCE_TOKEN, yes_bf);
+    let (no_asset_gen, no_value_gen): (Gej, Gej) =
+        verify_input_reissuance_token(1, param::NO_REISSUANCE_TOKEN, no_bf);
+
+    let yes_amount: u64 = get_issuance_amount(0);
+    let no_amount: u64 = get_issuance_amount(1);
+    assert!(jet::eq_64(yes_amount, no_amount));
+
+    let pairs: u64 = yes_amount;
+    let new_collateral: u64 = collateral_for_pairs(pairs);
+
+    assert!(jet::eq_256(get_input_script_hash(2), unresolved_hash));
+    let (coll_asset, old_collateral): (u256, u64) = get_input_explicit_asset_amount(2);
+    assert!(jet::eq_256(coll_asset, param::COLLATERAL_ASSET_ID));
+    let total_collateral: u64 = safe_add(old_collateral, new_collateral);
+
+    verify_output_is_shifted_token(0, yes_asset_gen, yes_value_gen);
+    ensure_output_script_hash_eq(0, unresolved_hash);
+
+    verify_output_is_shifted_token(1, no_asset_gen, no_value_gen);
+    ensure_output_script_hash_eq(1, unresolved_hash);
+
+    ensure_output_asset_with_amount_eq(2, param::COLLATERAL_ASSET_ID, total_collateral);
+    ensure_output_script_hash_eq(2, unresolved_hash);
+
+    ensure_fee_output(safe_subtract_32(jet::num_outputs(), 1));
+}
+
+/// Path 3: Oracle Resolve (state 1 → 2 or 3)
+fn oracle_resolve_path(
+    state: u64,
+    outcome_yes: bool,
+    sig: Signature,
+    yes_bf: BlindingPair,
+    no_bf: BlindingPair
+) {
+    assert!(jet::eq_64(state, 1));
+    ensure_pre_expiry();
+    assert!(jet::eq_32(jet::current_index(), 0));
+
+    verify_oracle_signature(outcome_yes, sig);
+
+    let new_state: u64 = match outcome_yes {
+        true => 2,
+        false => 3,
+    };
+    let new_state_hash: u256 = script_hash_for_input_script(new_state);
+
+    let (yes_asset_gen, yes_value_gen): (Gej, Gej) =
+        verify_input_reissuance_token(0, param::YES_REISSUANCE_TOKEN, yes_bf);
+    let (no_asset_gen, no_value_gen): (Gej, Gej) =
+        verify_input_reissuance_token(1, param::NO_REISSUANCE_TOKEN, no_bf);
+
+    verify_output_is_shifted_token(0, yes_asset_gen, yes_value_gen);
+    ensure_output_script_hash_eq(0, new_state_hash);
+
+    verify_output_is_shifted_token(1, no_asset_gen, no_value_gen);
+    ensure_output_script_hash_eq(1, new_state_hash);
+
+    let unresolved_hash: u256 = unresolved_script_hash();
+    assert!(jet::eq_256(get_input_script_hash(2), unresolved_hash));
+    let (coll_asset, coll_amount): (u256, u64) = get_input_explicit_asset_amount(2);
+    assert!(jet::eq_256(coll_asset, param::COLLATERAL_ASSET_ID));
+    ensure_output_asset_with_amount_eq(2, param::COLLATERAL_ASSET_ID, coll_amount);
+    ensure_output_script_hash_eq(2, new_state_hash);
+
+    // Outputs 0-2 are pinned by index to asset, amount and script, so the only value that
+    // can reach a trailing output is the spender's own fee input. A change output is
+    // therefore harmless here, and upstream's num_outputs == 4 is dropped to allow it.
+    ensure_fee_output(safe_subtract_32(jet::num_outputs(), 1));
+}
+
+/// Path 4: Post-Resolution Redemption (state 2 or 3)
+fn post_resolution_redemption_path(state: u64, tokens_burned: u64) {
+    let is_yes: bool = jet::eq_64(state, 2);
+    let is_no: bool = jet::eq_64(state, 3);
+    assert!(or(is_yes, is_no));
+
+    let state_hash: u256 = script_hash_for_input_script(state);
+
+    let winner_asset: u256 = match is_yes {
+        true => param::YES_TOKEN_ASSET,
+        false => param::NO_TOKEN_ASSET,
+    };
+
+    let (coll_asset, coll_amount): (u256, u64) = get_input_explicit_asset_amount(0);
+    assert!(jet::eq_256(coll_asset, param::COLLATERAL_ASSET_ID));
+
+    let payout: u64 = collateral_for_pairs(tokens_burned);
+    let remaining: u64 = safe_subtract(coll_amount, payout);
+
+    let num_outputs: u32 = jet::num_outputs();
+    let is_partial: bool = not(jet::is_zero_64(remaining));
+
+    match is_partial {
+        true => {
+            ensure_output_asset_with_amount_eq(0, param::COLLATERAL_ASSET_ID, remaining);
+            ensure_output_script_hash_eq(0, state_hash);
+            ensure_output_asset_with_amount_eq(1, winner_asset, tokens_burned);
+            ensure_output_is_op_return(1);
+            let fee_idx: u32 = safe_subtract_32(num_outputs, 1);
+            ensure_fee_output(fee_idx);
+        },
+        false => {
+            ensure_output_asset_with_amount_eq(0, winner_asset, tokens_burned);
+            ensure_output_is_op_return(0);
+            let fee_idx: u32 = safe_subtract_32(num_outputs, 1);
+            ensure_fee_output(fee_idx);
+        },
+    };
+}
+
+/// Path 5: Expiry Redemption (state 1, post-expiry)
+fn expiry_redemption_path(state: u64, tokens_burned: u64, burn_asset: u256) {
+    assert!(jet::eq_64(state, 1));
+    jet::check_lock_height(param::EXPIRY_TIME);
+
+    let unresolved_hash: u256 = unresolved_script_hash();
+
+    let (coll_asset, coll_amount): (u256, u64) = get_input_explicit_asset_amount(0);
+    assert!(jet::eq_256(coll_asset, param::COLLATERAL_ASSET_ID));
+
+    let is_yes: bool = jet::eq_256(burn_asset, param::YES_TOKEN_ASSET);
+    let is_no: bool = jet::eq_256(burn_asset, param::NO_TOKEN_ASSET);
+    assert!(or(is_yes, is_no));
+
+    let payout: u64 = safe_multiply(tokens_burned, param::COLLATERAL_PER_TOKEN);
+    let remaining: u64 = safe_subtract(coll_amount, payout);
+
+    let num_outputs: u32 = jet::num_outputs();
+    let is_partial: bool = not(jet::is_zero_64(remaining));
+
+    match is_partial {
+        true => {
+            ensure_output_asset_with_amount_eq(0, param::COLLATERAL_ASSET_ID, remaining);
+            ensure_output_script_hash_eq(0, unresolved_hash);
+            ensure_output_asset_with_amount_eq(1, burn_asset, tokens_burned);
+            ensure_output_is_op_return(1);
+            let fee_idx: u32 = safe_subtract_32(num_outputs, 1);
+            ensure_fee_output(fee_idx);
+        },
+        false => {
+            ensure_output_asset_with_amount_eq(0, burn_asset, tokens_burned);
+            ensure_output_is_op_return(0);
+            let fee_idx: u32 = safe_subtract_32(num_outputs, 1);
+            ensure_fee_output(fee_idx);
+        },
+    };
+}
+
+/// Path 6: Cancellation (state 1 → 1 partial, 1 → 0 full)
+fn cancellation_path(state: u64, pairs_burned: u64, yes_bf: BlindingPair, no_bf: BlindingPair) {
+    assert!(jet::eq_64(state, 1));
+
+    let unresolved_hash: u256 = unresolved_script_hash();
+
+    let (coll_asset, coll_amount): (u256, u64) = get_input_explicit_asset_amount(0);
+    assert!(jet::eq_256(coll_asset, param::COLLATERAL_ASSET_ID));
+
+    let refund: u64 = collateral_for_pairs(pairs_burned);
+    let remaining: u64 = safe_subtract(coll_amount, refund);
+
+    let num_outputs: u32 = jet::num_outputs();
+    let is_partial: bool = not(jet::is_zero_64(remaining));
+
+    match is_partial {
+        true => {
+            ensure_output_asset_with_amount_eq(0, param::COLLATERAL_ASSET_ID, remaining);
+            ensure_output_script_hash_eq(0, unresolved_hash);
+            ensure_output_asset_with_amount_eq(1, param::YES_TOKEN_ASSET, pairs_burned);
+            ensure_output_is_op_return(1);
+            ensure_output_asset_with_amount_eq(2, param::NO_TOKEN_ASSET, pairs_burned);
+            ensure_output_is_op_return(2);
+            let fee_idx: u32 = safe_subtract_32(num_outputs, 1);
+            ensure_fee_output(fee_idx);
+        },
+        false => {
+            let dormant_hash: u256 = dormant_script_hash();
+
+            let (yes_asset_gen, yes_value_gen): (Gej, Gej) =
+                verify_input_reissuance_token(1, param::YES_REISSUANCE_TOKEN, yes_bf);
+            let (no_asset_gen, no_value_gen): (Gej, Gej) =
+                verify_input_reissuance_token(2, param::NO_REISSUANCE_TOKEN, no_bf);
+
+            verify_output_is_shifted_token(0, yes_asset_gen, yes_value_gen);
+            ensure_output_script_hash_eq(0, dormant_hash);
+
+            verify_output_is_shifted_token(1, no_asset_gen, no_value_gen);
+            ensure_output_script_hash_eq(1, dormant_hash);
+
+            ensure_output_asset_with_amount_eq(2, param::YES_TOKEN_ASSET, pairs_burned);
+            ensure_output_is_op_return(2);
+            ensure_output_asset_with_amount_eq(3, param::NO_TOKEN_ASSET, pairs_burned);
+            ensure_output_is_op_return(3);
+
+            let fee_idx: u32 = safe_subtract_32(num_outputs, 1);
+            ensure_fee_output(fee_idx);
+        },
+    };
+}
+
+/// Path 7: Secondary Covenant Input
+fn secondary_covenant_input_path() {
+    let my_index: u32 = jet::current_index();
+    let my_hash: u256 = get_input_script_hash(my_index);
+    let primary_hash: u256 = get_input_script_hash(0);
+    assert!(jet::eq_256(my_hash, primary_hash));
+    ensure_zero_bit(jet::eq_32(my_index, 0));
+}
+
+// ============================================================================
+// Main entry point
+// ============================================================================
+
+fn main() {
+    let state: u64 = witness::STATE;
+
+    let expected_hash: u256 = script_hash_for_input_script(state);
+    let actual_hash: u256 = get_input_script_hash(jet::current_index());
+    assert!(jet::eq_256(expected_hash, actual_hash));
+
+    // Budget padding: these witnesses increase the serialized witness size so that
+    // the Simplicity execution budget (witness_stack_bytes + 50 WU) covers the
+    // program's cost. Without this, the pruned program's cost slightly exceeds
+    // the budget derived from its natural witness + program size.
+    let budget_pad_a: u256 = witness::BUDGET_PAD_A;
+    let budget_pad_b: u256 = witness::BUDGET_PAD_B;
+    assert!(jet::eq_256(budget_pad_a, budget_pad_b));
+    let budget_pad_c: u256 = witness::BUDGET_PAD_C;
+    let budget_pad_d: u256 = witness::BUDGET_PAD_D;
+    assert!(jet::eq_256(budget_pad_c, budget_pad_d));
+
+    // Read all witnesses in main (required by SimplicityHL). Only the INPUT blinding
+    // factors are witnesses now; the output factors are abf+1 / vbf+1 and are derived.
+    let yes_in_abf: u256 = witness::YES_REISSUANCE_INPUT_ABF;
+    let yes_in_vbf: u256 = witness::YES_REISSUANCE_INPUT_VBF;
+    let no_in_abf: u256 = witness::NO_REISSUANCE_INPUT_ABF;
+    let no_in_vbf: u256 = witness::NO_REISSUANCE_INPUT_VBF;
+    let oracle_sig: Signature = witness::ORACLE_SIGNATURE;
+    let oracle_outcome: bool = witness::ORACLE_OUTCOME_YES;
+    let tokens_burned: u64 = witness::TOKENS_BURNED;
+    let burn_asset: u256 = witness::BURN_TOKEN_ASSET;
+    let pairs_burned: u64 = witness::PAIRS_BURNED;
+
+    let yes_bf: BlindingPair = (yes_in_abf, yes_in_vbf);
+    let no_bf: BlindingPair = (no_in_abf, no_in_vbf);
+
+    match witness::PATH {
+        Left(l: Path1to4) => match l {
+            Left(i: Path1or2) => match i {
+                Left(u: ()) => initial_issuance_path(state, yes_bf, no_bf),
+                Right(u: ()) => subsequent_issuance_path(state, yes_bf, no_bf),
+            },
+            Right(r: Path3or4) => match r {
+                Left(u: ()) => oracle_resolve_path(state, oracle_outcome, oracle_sig, yes_bf, no_bf),
+                Right(u: ()) => post_resolution_redemption_path(state, tokens_burned),
+            },
+        },
+        Right(r: Path5to7) => match r {
+            Left(rd: Path5or6) => match rd {
+                Left(u: ()) => expiry_redemption_path(state, tokens_burned, burn_asset),
+                Right(u: ()) => cancellation_path(state, pairs_burned, yes_bf, no_bf),
+            },
+            Right(u: ()) => secondary_covenant_input_path(),
+        },
+    }
+}

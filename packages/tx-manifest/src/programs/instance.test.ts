@@ -171,6 +171,10 @@ describe("the deployment a constructor creates", () => {
 		});
 	});
 
+	test("and records a whole number the request supplied as one, in its digits", () => {
+		expect(open({ ...PARAMS, TIMEOUT: 900_000 }).result.fields.TIMEOUT).toBe("900000");
+	});
+
 	test("and the program hashes nothing but a compiler could produce", () => {
 		const { result } = open();
 

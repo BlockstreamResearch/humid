@@ -815,7 +815,7 @@ describe("a program that does not state what it holds", () => {
 
 		expect(refusal.reject).toBe("unbuildable-utxo-type");
 		expect(refusal.reason).toContain("p2pk_output");
-		expect(refusal.reason).toContain("explicit amount and asset");
+		expect(refusal.reason).toContain("blinded to a key this wallet does not hold");
 		expect(refusal.reason).toContain("will not assume a balance");
 	});
 
@@ -823,7 +823,7 @@ describe("a program that does not state what it holds", () => {
 		const refusal = asRefusal(await spendReading({}, { asset: "policy-only" }));
 
 		expect(refusal.reject).toBe("unbuildable-utxo-type");
-		expect(refusal.reason).toContain("explicit amount and asset");
+		expect(refusal.reason).toContain("blinded to a key this wallet does not hold");
 	});
 
 	test("and where the chain reports only one half of what it holds", async () => {

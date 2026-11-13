@@ -17,6 +17,7 @@ import { hexToBytes } from "@noble/hashes/utils.js";
 
 import { lwk } from "../lwk/lwkWasmForTests";
 import { addressReader } from "../lwk/wallet/readAddress";
+import { walletUnblinder } from "../lwk/wallet/walletUnblinder";
 import { assembleReviewedTransaction } from "./assembleReviewedTransaction";
 import {
 	createSmplxProgramCompiler,
@@ -32,6 +33,9 @@ const MNEMONIC =
 const SIGNER = new smplx.Signer(MNEMONIC, NETWORK);
 const KEY = SIGNER.schnorrPublicKey().slice(-64);
 const WALLET_SCRIPT = SIGNER.scriptPubKeyHex();
+const DESCRIPTOR = new lwk.Signer(new lwk.Mnemonic(MNEMONIC), lwk.Network.testnet())
+	.wpkhSlip77Descriptor()
+	.toString();
 const PLENTY = "100000000";
 const CHAIN_TIP = 3_000_000;
 const FIXTURES = new URL(
@@ -40,7 +44,7 @@ const FIXTURES = new URL(
 );
 
 type Holding = { amount: string; asset: string };
-type Spend = Holding & { txOutHex?: string; utxoType: string };
+type Spend = Holding & { transactionHex?: string; txOutHex?: string; utxoType: string };
 
 type Request = {
 	holdings?: Record<string, string>;
@@ -121,19 +125,26 @@ class ReferenceExample {
 				compilerVersion: SMPLX_COMPILER_VERSION,
 				estimateFee: this.estimateFee,
 				programParamTypes: createSmplxProgramParamTypes(smplx),
-				fundingUtxos: [wallet(POLICY_ASSET, PLENTY)],
+				fundingUtxos: request.owned?.[POLICY_ASSET] ?? [wallet(POLICY_ASSET, PLENTY)],
 				holdingsOf: (asset) =>
 					request.owned?.[asset] ?? [wallet(asset, request.holdings?.[asset] ?? PLENTY)],
 				network: NETWORK,
 				policyAsset: POLICY_ASSET,
 				readAddress: addressReader(lwk, lwk.Network.testnet()),
 				readChainTip: async () => CHAIN_TIP,
+				unblind: walletUnblinder(lwk, DESCRIPTOR, WALLET_SCRIPT),
 				readFeeRate: async () => 100,
 				readTxOut: async ({ txid }) => {
 					const blinded = held.get(txid)?.txOutHex;
 
 					if (blinded !== undefined) {
-						return { scriptPubKeyHex: lastScript, txOutHex: blinded };
+						const transactionHex = held.get(txid)?.transactionHex;
+
+						return {
+							scriptPubKeyHex: lastScript,
+							...(transactionHex === undefined ? {} : { transactionHex }),
+							txOutHex: blinded,
+						};
 					}
 
 					const amountSats = held.get(txid)?.amount ?? PLENTY;
@@ -173,12 +184,12 @@ function outpoint(at: number): string {
 	return (at + 1).toString(16).repeat(64);
 }
 
-function wallet(asset: string, amount: string) {
+function wallet(asset: string, amount: string, txid = asset) {
 	return {
 		amount,
 		spendable: true,
 		txOut: explicitTxOut(WALLET_SCRIPT, asset, amount),
-		txid: asset,
+		txid,
 		vout: 1,
 	};
 }
@@ -326,6 +337,36 @@ describe("p2pk", () => {
 		});
 
 		expect(paid.feeSats).toBe(pay.estimatedFeeSats);
+		expect(signedFee(receive)).toBe(receive.estimatedFeeSats);
+	});
+
+	test("Pay blinds the program output with the wallet's key, and Receive reopens it with that key", async () => {
+		const paying = new ReferenceExample("p2pk");
+		const actions = paying.manifest.actions as Record<
+			string,
+			{ outputs: Record<string, unknown>[] }
+		>;
+
+		Object.assign(actions.Pay!.outputs[0]!, { confidential: true });
+
+		const pay = await paying.reviewed("Pay", { params: { amount_sat: 1000, pubkey: KEY } });
+		const paid = signed(pay);
+		const transaction = lwk.Transaction.fromString(paid.hex);
+		const receive = await paying.reviewed("Receive", {
+			params: { pubkey: KEY },
+			spends: [
+				{
+					amount: "1000",
+					asset: POLICY_ASSET,
+					transactionHex: paid.hex,
+					txOutHex: transaction.output(0)?.toString() ?? "",
+					utxoType: "p2pk_output",
+				},
+			],
+		});
+
+		expect(paid.feeSats).toBe(pay.estimatedFeeSats);
+		expect(receive.outputs.find((output) => output.id === "received_out")?.sats).toBe(1000n);
 		expect(signedFee(receive)).toBe(receive.estimatedFeeSats);
 	});
 
@@ -561,6 +602,39 @@ describe("lending_v2", () => {
 describe("multiasset", () => {
 	const multiasset = new ReferenceExample("multiasset");
 
+	test("locks the token in a program with chosen factors, then reissues from the program", async () => {
+		const minted = await multiasset.reviewed("MintReissuable", { params: { supply: 21 } });
+		const mint = signed(minted);
+		const [issued] = minted.issuances;
+
+		if (!issued) {
+			throw new Error("The mint planned no issuance.");
+		}
+
+		const token = issued.reissuanceToken;
+		const locked = await multiasset.reviewed("LockToken", {
+			owned: { [token]: [receivedIn(mint.hex, token)] },
+			params: { pubkey: KEY, token },
+		});
+		const lock = signed(locked);
+		const reissued = await multiasset.reviewed("ReissueFromProgram", {
+			params: { entropy: issued.entropy, issued: issued.asset, pubkey: KEY, supply: 50, token },
+			spends: [
+				{
+					amount: "1",
+					asset: token,
+					transactionHex: lock.hex,
+					txOutHex: lwk.Transaction.fromString(lock.hex).output(0)?.toString() ?? "",
+					utxoType: "p2pk_output",
+				},
+			],
+		});
+
+		expect(lock.feeSats).toBe(locked.estimatedFeeSats);
+		expect(reissued.issuances[0]).toMatchObject({ asset: issued.asset, kind: "reissue" });
+		expect(signedFee(reissued)).toBe(reissued.estimatedFeeSats);
+	});
+
 	test("mints an asset with its reissuance token, then reissues from that token, each at exactly the fee shown", async () => {
 		const minted = await multiasset.reviewed("MintReissuable", { params: { supply: 21 } });
 		const mint = signed(minted);
@@ -583,5 +657,50 @@ describe("multiasset", () => {
 		expect(mint.feeSats).toBe(minted.estimatedFeeSats);
 		expect(reissued.issuances[0]).toMatchObject({ asset: issued.asset, kind: "reissue" });
 		expect(signedFee(reissued)).toBe(reissued.estimatedFeeSats);
+	});
+});
+
+describe("deadcat_v3", () => {
+	const market = new ReferenceExample("deadcat_v3", "binary_market");
+
+	async function issueTokens() {
+		const issued = await market.reviewed("IssueReissuanceTokens", {
+			owned: {
+				[POLICY_ASSET]: [
+					wallet(POLICY_ASSET, PLENTY, "a1".repeat(32)),
+					wallet(POLICY_ASSET, PLENTY, "b2".repeat(32)),
+				],
+			},
+			params: { COLLATERAL_ASSET_ID: POLICY_ASSET, EXPIRY_TIME: 3_100_000, ORACLE_PUBLIC_KEY: KEY },
+		});
+
+		return { issued, transaction: signed(issued) };
+	}
+
+	test("IssueReissuanceTokens mints both tokens blinded to the wallet, at the fee shown", async () => {
+		const { issued, transaction } = await issueTokens();
+
+		expect(issued.outputs.filter((output) => output.blinded).map((output) => output.id)).toEqual([
+			"yes_reissuance_out",
+			"no_reissuance_out",
+		]);
+		expect(transaction.feeSats).toBe(issued.estimatedFeeSats);
+	});
+
+	test("CreateMarket waits on Simplex building the market's 8-byte state leaf", async () => {
+		const { issued, transaction } = await issueTokens();
+		const instance = issued.createdInstance?.fields ?? {};
+		const yes = instance.YES_REISSUANCE_TOKEN ?? "";
+		const no = instance.NO_REISSUANCE_TOKEN ?? "";
+
+		expect(
+			await market.outcome("CreateMarket", {
+				instance,
+				owned: {
+					[no]: [receivedIn(transaction.hex, no)],
+					[yes]: [receivedIn(transaction.hex, yes)],
+				},
+			}),
+		).toBe("document-fault");
 	});
 });

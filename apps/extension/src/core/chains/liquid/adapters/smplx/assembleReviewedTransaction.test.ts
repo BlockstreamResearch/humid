@@ -59,7 +59,13 @@ type Recorded = {
 	}[];
 	locktimes: number[];
 	sequences: { inputIndex: number; sequence: number }[];
-	reissues: { assetAmountSats: bigint; entropy: string; txid: string; vout: number }[];
+	reissues: {
+		assetAmountSats: bigint;
+		blindingSecretsJson?: string;
+		entropy: string;
+		txid: string;
+		vout: number;
+	}[];
 	spends: { txOut: string; txid: string; vout: number }[];
 	unused: { inputIndex: number; names: string[] }[];
 };
@@ -144,6 +150,29 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 				entropy: string,
 			) {
 				recorded.reissues.push({ assetAmountSats, entropy, txid, vout });
+
+				return {
+					assetId: reports.asset ?? ISSUED.asset,
+					assetEntropy: entropy,
+					free: () => {
+						recorded.freedReports += 1;
+					},
+					inflationAssetId: reports.reissuanceToken ?? ISSUED.reissuanceToken,
+				};
+			}
+			addProgramReissuanceInput(
+				txid: string,
+				vout: number,
+				_txOutHex: string,
+				_source: string,
+				_argumentsJson: string | undefined,
+				_witnessJson: string | undefined,
+				_programSignature: string | undefined,
+				assetAmountSats: bigint,
+				entropy: string,
+				blindingSecretsJson: string,
+			) {
+				recorded.reissues.push({ assetAmountSats, blindingSecretsJson, entropy, txid, vout });
 
 				return {
 					assetId: reports.asset ?? ISSUED.asset,
@@ -618,6 +647,35 @@ describe("assembleReviewedTransaction", () => {
 			await assemble();
 
 			expect(recorded.unused).toEqual([]);
+		});
+
+		test("reissues from the token a program holds, through the module's program call", async () => {
+			const secrets = '{"value":"1"}';
+			const { assemble, recorded } = subject(
+				spendingPlan({
+					issuances: [
+						{
+							...plannedIssuance(),
+							entropy: `01${"00".repeat(31)}`,
+							kind: "reissue",
+							outpoint: { txid: PROGRAM_TXID, vout: 1 },
+						},
+					],
+					programInputs: [{ ...programInput, blindingSecretsJson: secrets }],
+				}),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.reissues).toEqual([
+				{
+					assetAmountSats: 1000n,
+					blindingSecretsJson: secrets,
+					entropy: `${"00".repeat(31)}01`,
+					txid: PROGRAM_TXID,
+					vout: 1,
+				},
+			]);
+			expect(recorded.programs).toEqual([]);
 		});
 
 		test("opens a blinded program output with the secrets the review built", async () => {

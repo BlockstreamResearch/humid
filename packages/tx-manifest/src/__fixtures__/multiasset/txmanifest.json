@@ -209,6 +209,137 @@
 					"asset": "lbtc"
 				}
 			]
+		},
+		"LockToken": {
+			"description": "Locks a blinded reissuance token in a p2pk program, with blinding factors a later reissuance can state.",
+			"params": {
+				"pubkey": {
+					"type": "pubkey",
+					"description": "The key the program checks."
+				},
+				"token": {
+					"type": "liquid.asset_id",
+					"description": "The reissuance token to lock."
+				}
+			},
+			"inputs": [
+				{
+					"id": "token_in",
+					"utxo_source": "wallet",
+					"asset": "params.token"
+				}
+			],
+			"outputs": [
+				{
+					"id": "locked_out",
+					"destination": {
+						"utxo_type": "p2pk_output",
+						"compile_params": {
+							"PUB_KEY": "params.pubkey"
+						}
+					},
+					"asset": "params.token",
+					"amount_sat": 1,
+					"confidential": true,
+					"blinding": {
+						"asset_bf": "1",
+						"value_bf": "1"
+					}
+				},
+				{
+					"id": "change_out",
+					"destination": "change",
+					"asset": "lbtc"
+				}
+			]
+		},
+		"ReissueFromProgram": {
+			"description": "Mints more of an asset from the reissuance token a p2pk program holds, and locks the token back with advanced factors.",
+			"params": {
+				"pubkey": {
+					"type": "pubkey",
+					"description": "The key the program checks."
+				},
+				"token": {
+					"type": "liquid.asset_id",
+					"description": "The reissuance token the program holds."
+				},
+				"entropy": {
+					"type": "bytes32",
+					"description": "The issuance entropy the first mint left."
+				},
+				"issued": {
+					"type": "liquid.asset_id",
+					"description": "The asset the entropy derives."
+				},
+				"supply": {
+					"type": "u64",
+					"description": "How many more units to create."
+				}
+			},
+			"inputs": [
+				{
+					"id": "token_in",
+					"utxo_source": {
+						"utxo_type": "p2pk_output",
+						"compile_params": {
+							"PUB_KEY": "params.pubkey"
+						}
+					},
+					"asset": "params.token",
+					"amount_sat": 1,
+					"blinding": {
+						"asset_bf": "1",
+						"value_bf": "1"
+					},
+					"issuance": {
+						"kind": "reissue",
+						"asset_amount_sat": "params.supply",
+						"entropy": "params.entropy",
+						"issued_asset": "params.issued"
+					},
+					"witnesses": {
+						"SIGNATURE": {
+							"type": "Signature",
+							"sig_type": "sig_hash_all",
+							"source": {
+								"type": "wallet",
+								"key": "params.pubkey"
+							}
+						}
+					}
+				}
+			],
+			"outputs": [
+				{
+					"id": "minted_out",
+					"destination": "wallet",
+					"asset": "token_in.issued_asset",
+					"amount_sat": "params.supply",
+					"confidential": false
+				},
+				{
+					"id": "token_back",
+					"destination": {
+						"utxo_type": "p2pk_output",
+						"compile_params": {
+							"PUB_KEY": "params.pubkey"
+						}
+					},
+					"asset": "params.token",
+					"amount_sat": 1,
+					"confidential": true,
+					"blinding": {
+						"asset_bf": "2",
+						"value_bf": "2"
+					}
+				},
+				{
+					"id": "change_out",
+					"destination": "change",
+					"asset": "lbtc"
+				}
+			]
 		}
 	}
 }

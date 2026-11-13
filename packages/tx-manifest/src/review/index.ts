@@ -63,6 +63,18 @@ export type TransactionDraft = {
 	outputs: ReviewedOutput[];
 };
 
+export type Unblinded = {
+	asset: string;
+	assetBlindingFactor: string;
+	sats: bigint;
+	valueBlindingFactor: string;
+};
+
+export type Unblind = (
+	transactionHex: string,
+	vout: number,
+) => Unblinded | undefined | Promise<Unblinded | undefined>;
+
 export type ReadAddress = (address: string) => {
 	blindingPublicKeyHex?: string;
 	scriptPubKeyHex: string;
@@ -110,6 +122,7 @@ export type ReviewInput = {
 	readFeeRate: ReadFeeRate;
 	readTxOut: ReadTxOut;
 	scriptPubKeyOf: CompileScriptPubKey;
+	unblind?: Unblind;
 	walletScriptPubKeyHex: string;
 };
 

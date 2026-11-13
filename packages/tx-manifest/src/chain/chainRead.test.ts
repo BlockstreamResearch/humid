@@ -114,6 +114,7 @@ describe("the Esplora output reader", () => {
 			amountSats: "1000",
 			rawAssetId: POLICY_ASSET,
 			scriptPubKeyHex: FIRST_SCRIPT,
+			transactionHex: built,
 			txOutHex: explicit(1000n, FIRST_SCRIPT),
 		});
 	});

@@ -11,6 +11,7 @@ import {
 	Refusal,
 	type ReadTxOut,
 	reviewManifestAction,
+	type Unblind,
 	type SelectableUtxo,
 	toShownConfirmation,
 } from "@humid/tx-manifest";
@@ -21,6 +22,7 @@ import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wa
 import { createLwkNetwork } from "../../../adapters/lwk/createLwkNetwork";
 import { loadLwkWasm } from "../../../adapters/lwk/loadLwkWasm";
 import { addressReader } from "../../../adapters/lwk/wallet/readAddress";
+import { walletUnblinder } from "../../../adapters/lwk/wallet/walletUnblinder";
 import { withAccountMnemonic } from "../../../adapters/lwk/wallet/withAccountMnemonic";
 import { assembleReviewedTransaction } from "../../../adapters/smplx/assembleReviewedTransaction";
 import {
@@ -66,6 +68,7 @@ export type LiquidProcessCtDependencies = {
 	readTxOut: (chain: LiquidChainRecord) => ReadTxOut;
 	readAddress: (chain: LiquidChainRecord) => Promise<ReadAddress>;
 	resolveAccount: typeof resolveDappAccount;
+	unblinder: (account: LiquidWalletAccount, scriptPubKeyHex: string) => Promise<Unblind>;
 	withMnemonic: typeof withAccountMnemonic;
 };
 
@@ -85,6 +88,8 @@ export const liquidProcessCtDependencies: LiquidProcessCtDependencies = {
 		return addressReader(lwk, createLwkNetwork(lwk, chain));
 	},
 	resolveAccount: resolveDappAccount,
+	unblinder: async (account, scriptPubKeyHex) =>
+		walletUnblinder(await loadLwkWasm(), account.descriptor, scriptPubKeyHex),
 	withMnemonic: withAccountMnemonic,
 };
 
@@ -185,6 +190,9 @@ export const createProcessLiquidConfidentialTransaction = (
 			await context.walletBackend.syncAccount(account);
 
 			const readAddress = await dependencies.readAddress(context.chain);
+			const walletScriptPubKeyHex = readAddress(
+				context.walletBackend.getSigningAddress(account).address,
+			).scriptPubKeyHex;
 			const result = await reviewManifestAction(params, {
 				accountLabel: accountLabelOf(context, account),
 				compile: createSmplxProgramCompiler(smplx),
@@ -209,8 +217,8 @@ export const createProcessLiquidConfidentialTransaction = (
 				readFeeRate: dependencies.readFeeRate(context.chain),
 				readTxOut: dependencies.readTxOut(context.chain),
 				scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, network),
-				walletScriptPubKeyHex: readAddress(context.walletBackend.getSigningAddress(account).address)
-					.scriptPubKeyHex,
+				unblind: await dependencies.unblinder(account, walletScriptPubKeyHex),
+				walletScriptPubKeyHex,
 			});
 
 			if (isRefusal(result)) {

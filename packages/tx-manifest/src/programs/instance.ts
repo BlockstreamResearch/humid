@@ -274,7 +274,7 @@ function resolveFieldReference(name: string, text: string, scope: ReferenceScope
 	let found: unknown;
 
 	try {
-		found = resolveReference(text, "compileParam", scope).value;
+		found = resolveReference(text, "field", scope).value;
 	} catch (error) {
 		if (!(error instanceof Refusal)) {
 			throw error;
@@ -292,6 +292,10 @@ function resolveFieldReference(name: string, text: string, scope: ReferenceScope
 		}
 
 		return text;
+	}
+
+	if (typeof found === "bigint" || (typeof found === "number" && Number.isSafeInteger(found))) {
+		return found.toString();
 	}
 
 	if (typeof found !== "string") {

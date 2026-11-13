@@ -47,6 +47,21 @@ export type AssemblingBuilder = Pick<
 		includeDebugSymbols?: boolean,
 		derivationPath?: string,
 	) => AssembledIssuanceReport;
+	addProgramReissuanceInput: (
+		txid: string,
+		vout: number,
+		txOutHex: string,
+		source: string,
+		argumentsJson: string | undefined,
+		witnessJson: string | undefined,
+		programSignature: string | undefined,
+		assetAmountSats: bigint,
+		assetEntropy: string,
+		blindingSecretsJson: string,
+		extraLeavesJson?: string,
+		includeDebugSymbols?: boolean,
+		derivationPath?: string,
+	) => AssembledIssuanceReport;
 	setLocktimeHeight: (height: number) => void;
 	setInputSequence: (inputIndex: number, sequence: number) => void;
 	setUnusedWitnesses: (inputIndex: number, names: string[]) => void;
@@ -146,7 +161,25 @@ export function assembleReviewedTransaction<Builder extends AssemblingBuilder, F
 				const { program } = planned;
 				const witness = witnessValuesJson(program.witnessValues);
 
-				if (issuance) {
+				if (issuance?.kind === "reissue") {
+					builder
+						.addProgramReissuanceInput(
+							program.txid,
+							program.vout,
+							program.txOutHex,
+							program.source,
+							program.argumentsJson,
+							witness,
+							program.signatureWitness,
+							issuance.assetAmountSats,
+							simplexEntropy(issuance.entropy),
+							program.blindingSecretsJson ?? "",
+							program.extraLeavesJson,
+							program.includeDebugSymbols,
+							input.signingDerivationPath,
+						)
+						.free();
+				} else if (issuance) {
 					builder
 						.addProgramIssuanceInput(
 							program.txid,
