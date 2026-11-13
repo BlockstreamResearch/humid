@@ -21,12 +21,12 @@ export type RejectToken =
 	| "built-something-else";
 
 export class Refusal extends Error {
-	constructor(
-		reason: string,
-		readonly reject: RejectToken = "document-fault",
-	) {
+	readonly reject: RejectToken;
+
+	constructor(reason: string, reject: RejectToken = "document-fault") {
 		super(reason);
 		this.name = "Refusal";
+		this.reject = reject;
 	}
 
 	get reason(): string {

@@ -520,20 +520,21 @@ describe("an action whose only output is change", () => {
 	});
 });
 
+const listed = (txid: string, asset?: string) => ({
+	txid,
+	utxo_type: "p2pk_output",
+	vout: 0,
+	...(asset === undefined ? {} : { asset }),
+});
+const spent = (review: Awaited<ReturnType<typeof reviewed>>) =>
+	review.programInputs.map((program) => program.txid[0]);
+
 describe("which program output each input spends", () => {
 	const twoPrograms = () => {
 		const inputs = receiveInputs();
 
 		return withReceive([inputs[0], { ...inputs[0], id: "p2pk_in_2" }, inputs[1]]);
 	};
-	const listed = (txid: string, asset?: string) => ({
-		txid,
-		utxo_type: "p2pk_output",
-		vout: 0,
-		...(asset === undefined ? {} : { asset }),
-	});
-	const spent = (review: Awaited<ReturnType<typeof reviewed>>) =>
-		review.programInputs.map((program) => program.txid[0]);
 
 	test("gives two inputs of one type two different outputs", async () => {
 		const request = {

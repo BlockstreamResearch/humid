@@ -38,11 +38,11 @@ describe("the reference examples", () => {
 	});
 });
 
-describe("what a document is refused for", () => {
-	const p2pk = () => example("p2pk");
-	const refusal = (raw: Record<string, unknown>, contractSources = p2pk().contractSources) =>
-		refuseUnsupported(new Manifest(raw), { contractSources })?.reject;
+const p2pk = () => example("p2pk");
+const refusal = (raw: Record<string, unknown>, contractSources = p2pk().contractSources) =>
+	refuseUnsupported(new Manifest(raw), { contractSources })?.reject;
 
+describe("what a document is refused for", () => {
 	test("a format version this wallet does not read", () => {
 		expect(refusal({ ...p2pk().raw, manifest_version: "0.2.0" })).toBe("foreign-format");
 	});

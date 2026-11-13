@@ -38,10 +38,13 @@ export const COMPILED = {
 };
 
 export class Fixture {
-	private constructor(
-		readonly manifest: Document,
-		readonly contractSources: Record<string, string>,
-	) {}
+	readonly contractSources: Record<string, string>;
+	readonly manifest: Document;
+
+	private constructor(manifest: Document, contractSources: Record<string, string>) {
+		this.contractSources = contractSources;
+		this.manifest = manifest;
+	}
 
 	static load(name: string): Fixture {
 		const at = new URL(`../__fixtures__/${name}/`, import.meta.url);

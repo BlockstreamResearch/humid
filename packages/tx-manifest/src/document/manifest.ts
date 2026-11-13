@@ -10,9 +10,11 @@ export type Action = {
 
 export class Manifest {
 	readonly actions: Action[];
+	readonly node: Record<string, unknown>;
 	readonly utxoTypes: Record<string, unknown>;
 
-	constructor(readonly node: Record<string, unknown>) {
+	constructor(node: Record<string, unknown>) {
+		this.node = node;
 		this.utxoTypes = asRecord(node.utxo_types) ?? {};
 		this.actions = [
 			...actionsOf(node.actions),

@@ -39,8 +39,8 @@ describe("what the document alone is refused for", () => {
 	});
 
 	test("a construct the format defines and this wallet does not implement", async () => {
-		const refusal = await payRefusal((pay) => {
-			pay.on_post_broadcast = { set: {} };
+		const refusal = await payRefusal((action) => {
+			action.on_post_broadcast = { set: {} };
 		});
 
 		expect(refusal.reject).toBe("unimplemented-construct");
@@ -48,8 +48,8 @@ describe("what the document alone is refused for", () => {
 	});
 
 	test("a key the format does not define", async () => {
-		const refusal = await payRefusal((pay) => {
-			pay.sacrifice_to = "the sea";
+		const refusal = await payRefusal((action) => {
+			action.sacrifice_to = "the sea";
 		});
 
 		expect(refusal.reject).toBe("document-fault");
@@ -57,8 +57,8 @@ describe("what the document alone is refused for", () => {
 	});
 
 	test("but not a comment, which decides nothing", async () => {
-		const manifest = p2pk.editedAction("Pay", (pay) => {
-			pay.$comment = "written by a person";
+		const manifest = p2pk.editedAction("Pay", (action) => {
+			action.$comment = "written by a person";
 		}).manifest;
 
 		await reviewed(pay({ manifest }));
@@ -79,8 +79,8 @@ describe("what the document alone is refused for", () => {
 	});
 
 	test("a witness this wallet cannot produce", async () => {
-		const manifest = p2pk.editedAction("Receive", (receive) => {
-			const inputs = receive.inputs as Document[];
+		const manifest = p2pk.editedAction("Receive", (action) => {
+			const inputs = action.inputs as Document[];
 			const witnesses = inputs[0]?.witnesses as Record<string, Document>;
 
 			(witnesses.SIGNATURE ?? {}).type = "PedersenProof";
@@ -128,8 +128,8 @@ describe("what the document alone is refused for", () => {
 	});
 
 	test("an asset the wallet could not establish", async () => {
-		const refusal = await payRefusal((pay) => {
-			((pay.outputs as Document[])[0] ?? {}).asset = "params.nobody_supplied_this";
+		const refusal = await payRefusal((action) => {
+			((action.outputs as Document[])[0] ?? {}).asset = "params.nobody_supplied_this";
 		});
 
 		expect(refusal.reject).toBe("foreign-asset");
@@ -163,73 +163,73 @@ describe("a declaration this runtime cannot read is refused, never passed over",
 		what: string;
 	}[] = [
 		{
-			edit: (pay) => {
-				(pay.inputs as unknown[])[0] = "funding_input";
+			edit: (action) => {
+				(action.inputs as unknown[])[0] = "funding_input";
 			},
 			reject: "document-fault",
 			what: "an input that is not a declaration at all",
 		},
 		{
-			edit: (pay) => {
-				pay.params = ["pubkey", "amount_sat"];
+			edit: (action) => {
+				action.params = ["pubkey", "amount_sat"];
 			},
 			reject: "document-fault",
 			what: "parameters written as a list, which would fill none of them",
 		},
 		{
-			edit: (pay) => {
-				((pay.inputs as Document[])[0] ?? {}).witnesses = ["SIGNATURE"];
+			edit: (action) => {
+				((action.inputs as Document[])[0] ?? {}).witnesses = ["SIGNATURE"];
 			},
 			reject: "document-fault",
 			what: "a witness block nothing can read, which the witness check would see none of",
 		},
 		{
-			edit: (pay) => {
-				((pay.inputs as Document[])[0] ?? {}).issuance = "new";
+			edit: (action) => {
+				((action.inputs as Document[])[0] ?? {}).issuance = "new";
 			},
 			reject: "document-fault",
 			what: "an issuance nothing can read, which would create no asset and say nothing",
 		},
 		{
-			edit: (pay) => {
-				pay.on_pre_broadcast = "params.locked = 1";
+			edit: (action) => {
+				action.on_pre_broadcast = "params.locked = 1";
 			},
 			reject: "document-fault",
 			what: "a hook that is not a block of assignments",
 		},
 		{
-			edit: (pay) => {
-				pay.on_pre_broadcast = { set: "params.locked = 1" };
+			edit: (action) => {
+				action.on_pre_broadcast = { set: "params.locked = 1" };
 			},
 			reject: "document-fault",
 			what: "a hook whose assignments are not a list of them",
 		},
 		{
-			edit: (pay) => {
-				((pay.inputs as Document[])[0] ?? {}).on_resolved = { sets: {} };
+			edit: (action) => {
+				((action.inputs as Document[])[0] ?? {}).on_resolved = { sets: {} };
 			},
 			reject: "document-fault",
 			what: "an input hook declaring nothing to set",
 		},
 		{
-			edit: (pay) => {
-				((pay.inputs as Document[])[0] ?? {}).required_index = 1.5;
+			edit: (action) => {
+				((action.inputs as Document[])[0] ?? {}).required_index = 1.5;
 			},
 			reject: "unbuildable-position",
 			says: "not a place in a transaction",
 			what: "an input position that is not a place a transaction has",
 		},
 		{
-			edit: (pay) => {
-				((pay.outputs as Document[])[0] ?? {}).required_index = "first";
+			edit: (action) => {
+				((action.outputs as Document[])[0] ?? {}).required_index = "first";
 			},
 			reject: "unbuildable-position",
 			says: "not a place in a transaction",
 			what: "an output position written as a word",
 		},
 		{
-			edit: (pay) => {
-				const outputs = pay.outputs as Document[];
+			edit: (action) => {
+				const outputs = action.outputs as Document[];
 
 				delete (outputs[0] ?? {}).id;
 				(outputs[0] ?? {}).required_index = 0;
@@ -239,22 +239,22 @@ describe("a declaration this runtime cannot read is refused, never passed over",
 			what: "a positioned output the manifest gives no id, which nothing could be checked against",
 		},
 		{
-			edit: (pay) => {
-				((pay.inputs as Document[])[0] ?? {}).sequence = 1.5;
+			edit: (action) => {
+				((action.inputs as Document[])[0] ?? {}).sequence = 1.5;
 			},
 			reject: "document-fault",
 			what: "a sequence that is not a whole number",
 		},
 		{
-			edit: (pay) => {
-				((pay.inputs as Document[])[0] ?? {}).sequence = 4_294_967_296;
+			edit: (action) => {
+				((action.inputs as Document[])[0] ?? {}).sequence = 4_294_967_296;
 			},
 			reject: "document-fault",
 			what: "a sequence wider than the four bytes that hold one",
 		},
 		{
-			edit: (pay) => {
-				((pay.inputs as Document[])[0] ?? {}).sequence = {
+			edit: (action) => {
+				((action.inputs as Document[])[0] ?? {}).sequence = {
 					relative_blocks: Number.NaN,
 				};
 			},
@@ -262,8 +262,8 @@ describe("a declaration this runtime cannot read is refused, never passed over",
 			what: "a relative timelock of no number of blocks",
 		},
 		{
-			edit: (pay) => {
-				((pay.inputs as Document[])[0] ?? {}).sequence = {
+			edit: (action) => {
+				((action.inputs as Document[])[0] ?? {}).sequence = {
 					relative_blocks: Number.POSITIVE_INFINITY,
 				};
 			},
@@ -271,8 +271,8 @@ describe("a declaration this runtime cannot read is refused, never passed over",
 			what: "a relative timelock with no end",
 		},
 		{
-			edit: (pay) => {
-				((pay.inputs as Document[])[0] ?? {}).sequence = { relative_blocks: 2.5 };
+			edit: (action) => {
+				((action.inputs as Document[])[0] ?? {}).sequence = { relative_blocks: 2.5 };
 			},
 			reject: "document-fault",
 			what: "a relative timelock of part of a block",
