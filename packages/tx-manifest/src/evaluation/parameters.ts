@@ -4,10 +4,13 @@ import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
 import { evaluateExpression } from "./evaluate";
 
+export type WalletValues = { address: string; key: string; script_hash: string };
+
 export function fillParameters(
 	action: Action,
 	supplied: Record<string, unknown>,
 	scope: ReferenceScope,
+	wallet: WalletValues,
 ): Record<string, unknown> {
 	const declared = asRecord(action.node.params);
 
@@ -19,19 +22,24 @@ export function fillParameters(
 
 	for (const [name, entry] of Object.entries(declared)) {
 		const spec = asRecord(entry);
+		const fromWallet =
+			asRecord(spec?.compute)?.type === "wallet" ? asRecord(spec?.compute)?.wallet : undefined;
 
-		if (!spec || params[name] !== undefined) {
+		if (fromWallet !== undefined) {
+			if (typeof fromWallet !== "string" || !Object.hasOwn(wallet, fromWallet)) {
+				throw new Refusal(
+					`The parameter ${name} is filled from the wallet's ${JSON.stringify(fromWallet)}, ` +
+						'and the format defines "key", "address" and "script_hash".',
+				);
+			}
+
+			params[name] = wallet[fromWallet as keyof WalletValues];
+
 			continue;
 		}
 
-		const fromWallet = walletSource(spec);
-
-		if (fromWallet) {
-			throw new Refusal(
-				`The parameter ${name} is filled from this wallet's own ${fromWallet}, and this ` +
-					"wallet cannot supply it while reviewing an action.",
-				"unimplemented-construct",
-			);
+		if (!spec || params[name] !== undefined) {
+			continue;
 		}
 
 		const computed = spec.compute;
@@ -53,14 +61,4 @@ export function fillParameters(
 	}
 
 	return params;
-}
-
-function walletSource(spec: Record<string, unknown>): string | undefined {
-	const computed = asRecord(spec.compute);
-
-	if (computed?.type !== "wallet") {
-		return undefined;
-	}
-
-	return typeof computed.wallet === "string" ? computed.wallet.replaceAll("_", " ") : "value";
 }

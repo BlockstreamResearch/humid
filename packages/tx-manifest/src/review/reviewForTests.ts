@@ -26,6 +26,7 @@ export const DERIVED = "tex1p_derived";
 export const DERIVED_SCRIPT = `5120${"11".repeat(32)}`;
 export const ELSEWHERE_SCRIPT = `5120${"22".repeat(32)}`;
 export const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
+export const WALLET_ADDRESS = "tex1q_wallet";
 export const PROGRAM_TXOUT = `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`;
 
 export const COMPILED = {
@@ -125,6 +126,8 @@ export function dependencies(overrides: Partial<ReviewDependencies> = {}): Revie
 		readFeeRate: async () => 1000,
 		readTxOut: chainHolding(),
 		scriptPubKeyOf: () => DERIVED_SCRIPT,
+		walletAddress: WALLET_ADDRESS,
+		walletKey: PUBKEY,
 		walletScriptPubKeyHex: WALLET_SCRIPT,
 		...overrides,
 	};

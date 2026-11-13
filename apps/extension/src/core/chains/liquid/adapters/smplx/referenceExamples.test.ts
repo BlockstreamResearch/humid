@@ -133,6 +133,8 @@ class ReferenceExample {
 				readAddress: addressReader(lwk, lwk.Network.testnet()),
 				readChainTip: async () => CHAIN_TIP,
 				unblind: walletUnblinder(lwk, DESCRIPTOR, WALLET_SCRIPT),
+				walletAddress: SIGNER.address(),
+				walletKey: KEY,
 				readFeeRate: async () => 100,
 				readTxOut: async ({ txid }) => {
 					const blinded = held.get(txid)?.txOutHex;
@@ -588,6 +590,25 @@ describe("lending_v3", () => {
 
 describe("lending_v2", () => {
 	const lending = new ReferenceExample("lending_v2");
+
+	test("IssueUtilityNFTs fills the borrower's key, address and script hash from the wallet, and signs", async () => {
+		const review = await new ReferenceExample("lending_v2", "lending_contract").reviewed(
+			"IssueUtilityNFTs",
+			{
+				owned: {
+					[POLICY_ASSET]: [1, 2, 3, 4, 5].map((at) =>
+						wallet(POLICY_ASSET, PLENTY, at.toString(16).repeat(64)),
+					),
+				},
+			},
+		);
+
+		expect(review.createdInstance?.fields).toMatchObject({
+			BORROWER_ADDRESS: SIGNER.address(),
+			BORROWER_PUB_KEY: KEY,
+		});
+		expect(signedFee(review)).toBe(review.estimatedFeeSats);
+	});
 
 	test("Prepare and PrepareLender sign, paying exactly the fee the review shows", async () => {
 		for (const action of ["Prepare", "PrepareLender"]) {

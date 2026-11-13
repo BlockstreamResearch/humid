@@ -1,3 +1,6 @@
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+
 import { baseUnits } from "../chain/baseUnits";
 import type { Outpoint } from "../chain/outpoint";
 import { byOutpoint, outpointKey } from "../chain/outpoint";
@@ -29,7 +32,8 @@ import {
 	issuanceAttributes,
 	reissuanceOf,
 	type PlannedIssuance,
-	resolveIssuance,
+	issuanceIdentity,
+	withIssuedAmounts,
 } from "../evaluation/issuance";
 import { fillParameters } from "../evaluation/parameters";
 import { type PlannedSpend, planAction, resolveAmount } from "../evaluation/plan";
@@ -130,7 +134,16 @@ export class ActionReview {
 
 		const fields = this.#deployment.fields;
 		const supplied = withoutDeployedFields(action, request.params, fields);
-		const params = fillParameters(action, supplied, { instance: fields, params: supplied });
+		const params = fillParameters(
+			action,
+			supplied,
+			{ instance: fields, params: supplied },
+			{
+				address: input.walletAddress,
+				key: input.walletKey,
+				script_hash: bytesToHex(sha256(hexToBytes(input.walletScriptPubKeyHex))),
+			},
+		);
 		const malformed = malformedDeclaration(action);
 
 		if (malformed) {
@@ -162,7 +175,7 @@ export class ActionReview {
 	async #run(): Promise<ManifestReview> {
 		await this.#spendPrograms();
 
-		const issued = resolveIssuances(this.#action, {
+		const identified = resolveIssuances(this.#action, {
 			programInputs: this.#programInputs,
 			holdings: (asset) => this.#holdings(asset),
 			inputs: this.#inputs,
@@ -171,6 +184,13 @@ export class ActionReview {
 		});
 
 		this.#scope = runActionHooks(this.#action, this.#scope);
+
+		const issued: ResolvedIssuances = {
+			...identified,
+			issuances: identified.issuances.map((planned) =>
+				withIssuedAmounts(planned, identified.declarations.get(planned.inputId) ?? {}, this.#scope),
+			),
+		};
 
 		const created = this.#createInstance();
 
@@ -1068,6 +1088,7 @@ function allowChange(action: Action): string {
 }
 
 type ResolvedIssuances = {
+	declarations: Map<string, Record<string, unknown>>;
 	issuances: PlannedIssuance[];
 	reserved: { asset: string; inputId: string; utxo: SelectableUtxo }[];
 };
@@ -1083,6 +1104,7 @@ function resolveIssuances(
 	},
 ): ResolvedIssuances {
 	const issuances: PlannedIssuance[] = [];
+	const declarations = new Map<string, Record<string, unknown>>();
 	const reserved: { asset: string; inputId: string; utxo: SelectableUtxo }[] = [];
 	const policyAsset = context.policyAsset.trim().toLowerCase();
 	const pools = new Map<string, SelectableUtxo[]>();
@@ -1145,7 +1167,9 @@ function resolveIssuances(
 				);
 			}
 
-			const issuedHere = resolveIssuance({ declared: issuance, id, outpoint }, context.scope);
+			const issuedHere = issuanceIdentity({ declared: issuance, id, outpoint }, context.scope);
+
+			declarations.set(id, issuance);
 
 			taken.add(key);
 			issuances.push(issuedHere);
@@ -1169,18 +1193,19 @@ function resolveIssuances(
 			);
 		}
 
-		const resolved = resolveIssuance(
+		const resolved = issuanceIdentity(
 			{ declared: issuance, id, outpoint: { txid: funding.txid, vout: funding.vout } },
 			context.scope,
 		);
 
+		declarations.set(id, issuance);
 		taken.add(outpointKey(funding));
 		reserved.push({ asset, inputId: id, utxo: funding });
 		issuances.push(resolved);
 		context.inputs[id] = { ...context.inputs[id], ...issuanceAttributes(resolved) };
 	}
 
-	return { issuances, reserved };
+	return { declarations, issuances, reserved };
 }
 
 function reissuedToken(

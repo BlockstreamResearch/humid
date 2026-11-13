@@ -69,6 +69,17 @@ export function resolveIssuance(
 	},
 	scope: ReferenceScope,
 ): PlannedIssuance {
+	return withIssuedAmounts(issuanceIdentity(input, scope), input.declared, scope);
+}
+
+export function issuanceIdentity(
+	input: {
+		declared: Record<string, unknown>;
+		id: string;
+		outpoint: Outpoint;
+	},
+	scope: ReferenceScope,
+): PlannedIssuance {
 	const kind = input.declared.kind;
 
 	if (kind !== "new" && kind !== "reissue") {
@@ -78,49 +89,10 @@ export function resolveIssuance(
 		);
 	}
 
-	const assetAmountSats = Refusal.amend(
-		() => amountOf(input.declared.asset_amount_sat, scope),
-		(reason) => `Input ${input.id} does not say how much it issues: ${reason}`,
-	);
-
-	if (kind === "reissue") {
-		if (assetAmountSats <= 0n) {
-			throw new Refusal(
-				`Input ${input.id} reissues ${assetAmountSats} units, which mints nothing.`,
-			);
-		}
-
-		return {
-			...reissuanceOf(input.declared, input.id, scope),
-			assetAmountSats,
-			inflationAmountSats: 0n,
-			inputId: input.id,
-			kind,
-			outpoint: input.outpoint,
-		};
-	}
-
-	const inflationAmountSats =
-		input.declared.inflation_amount_sat === undefined
-			? 0n
-			: Refusal.amend(
-					() => amountOf(input.declared.inflation_amount_sat, scope),
-					(reason) =>
-						`Input ${input.id} does not say how many reissuance tokens it mints: ${reason}`,
-				);
-
-	if (
-		assetAmountSats < 0n ||
-		inflationAmountSats < 0n ||
-		assetAmountSats + inflationAmountSats === 0n
-	) {
-		throw new Refusal(
-			`Input ${input.id} issues ${assetAmountSats} units and ${inflationAmountSats} ` +
-				"reissuance tokens, which creates nothing.",
-		);
-	}
-
-	const derived = deriveNewIssuance(input.outpoint);
+	const derived =
+		kind === "reissue"
+			? reissuanceOf(input.declared, input.id, scope)
+			: deriveNewIssuance(input.outpoint);
 
 	if (!derived) {
 		throw new Refusal(
@@ -131,12 +103,53 @@ export function resolveIssuance(
 
 	return {
 		...derived,
-		assetAmountSats,
-		inflationAmountSats,
+		assetAmountSats: 0n,
+		inflationAmountSats: 0n,
 		inputId: input.id,
 		kind,
 		outpoint: input.outpoint,
 	};
+}
+
+export function withIssuedAmounts(
+	planned: PlannedIssuance,
+	declared: Record<string, unknown>,
+	scope: ReferenceScope,
+): PlannedIssuance {
+	const id = planned.inputId;
+	const assetAmountSats = Refusal.amend(
+		() => amountOf(declared.asset_amount_sat, scope),
+		(reason) => `Input ${id} does not say how much it issues: ${reason}`,
+	);
+
+	if (planned.kind === "reissue") {
+		if (assetAmountSats <= 0n) {
+			throw new Refusal(`Input ${id} reissues ${assetAmountSats} units, which mints nothing.`);
+		}
+
+		return { ...planned, assetAmountSats };
+	}
+
+	const inflationAmountSats =
+		declared.inflation_amount_sat === undefined
+			? 0n
+			: Refusal.amend(
+					() => amountOf(declared.inflation_amount_sat, scope),
+					(reason) => `Input ${id} does not say how many reissuance tokens it mints: ${reason}`,
+				);
+
+	if (
+		assetAmountSats < 0n ||
+		inflationAmountSats < 0n ||
+		assetAmountSats + inflationAmountSats === 0n
+	) {
+		throw new Refusal(
+			`Input ${id} issues ${assetAmountSats} units and ${inflationAmountSats} ` +
+				"reissuance tokens, which creates nothing.",
+		);
+	}
+
+	return { ...planned, assetAmountSats, inflationAmountSats };
 }
 
 export function issuanceAttributes(issuance: PlannedIssuance): Record<string, unknown> {

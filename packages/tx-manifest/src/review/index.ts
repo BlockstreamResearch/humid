@@ -123,6 +123,8 @@ export type ReviewInput = {
 	readTxOut: ReadTxOut;
 	scriptPubKeyOf: CompileScriptPubKey;
 	unblind?: Unblind;
+	walletAddress: string;
+	walletKey: string;
 	walletScriptPubKeyHex: string;
 };
 

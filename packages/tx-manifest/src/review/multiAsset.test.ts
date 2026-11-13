@@ -323,6 +323,26 @@ describe("an action that creates an asset", () => {
 		expect(minted?.asset).toBe(review.issuances[0]?.asset ?? "");
 	});
 
+	test("issues an amount the action's own hook works out before the transaction is built", async () => {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const mintAction = (document.actions as Record<string, Record<string, unknown>>).Mint ?? {};
+		const inputs = mintAction.inputs as Record<string, unknown>[];
+		const outputs = mintAction.outputs as Record<string, unknown>[];
+
+		mintAction.on_pre_broadcast = { set: { "params.doubled": "params.supply * 2" } };
+		((inputs[0] ?? {}).issuance as Record<string, unknown>).asset_amount_sat = "params.doubled";
+		(outputs[0] ?? {}).amount_sat = "params.doubled";
+
+		const review = asReview(
+			await reviewManifestAction(
+				request({ action: "Mint", manifest: document, params: { pubkey: PUBKEY, supply: 21 } }),
+				{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] },
+			),
+		);
+
+		expect(review.issuances[0]?.assetAmountSats).toBe(42n);
+	});
+
 	test("refuses a supply beyond what a transaction can carry", async () => {
 		const document = structuredClone(MANIFEST) as Record<string, unknown>;
 		const actions = document.actions as Record<string, Record<string, unknown>>;

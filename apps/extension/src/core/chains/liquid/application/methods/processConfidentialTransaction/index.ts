@@ -22,6 +22,7 @@ import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wa
 import { createLwkNetwork } from "../../../adapters/lwk/createLwkNetwork";
 import { loadLwkWasm } from "../../../adapters/lwk/loadLwkWasm";
 import { addressReader } from "../../../adapters/lwk/wallet/readAddress";
+import { walletKeyOf } from "../../../adapters/lwk/wallet/walletKey";
 import { walletUnblinder } from "../../../adapters/lwk/wallet/walletUnblinder";
 import { withAccountMnemonic } from "../../../adapters/lwk/wallet/withAccountMnemonic";
 import { assembleReviewedTransaction } from "../../../adapters/smplx/assembleReviewedTransaction";
@@ -69,6 +70,7 @@ export type LiquidProcessCtDependencies = {
 	readAddress: (chain: LiquidChainRecord) => Promise<ReadAddress>;
 	resolveAccount: typeof resolveDappAccount;
 	unblinder: (account: LiquidWalletAccount, scriptPubKeyHex: string) => Promise<Unblind>;
+	walletKeyOf: typeof walletKeyOf;
 	withMnemonic: typeof withAccountMnemonic;
 };
 
@@ -90,6 +92,7 @@ export const liquidProcessCtDependencies: LiquidProcessCtDependencies = {
 	resolveAccount: resolveDappAccount,
 	unblinder: async (account, scriptPubKeyHex) =>
 		walletUnblinder(await loadLwkWasm(), account.descriptor, scriptPubKeyHex),
+	walletKeyOf,
 	withMnemonic: withAccountMnemonic,
 };
 
@@ -190,9 +193,8 @@ export const createProcessLiquidConfidentialTransaction = (
 			await context.walletBackend.syncAccount(account);
 
 			const readAddress = await dependencies.readAddress(context.chain);
-			const walletScriptPubKeyHex = readAddress(
-				context.walletBackend.getSigningAddress(account).address,
-			).scriptPubKeyHex;
+			const signingAddress = context.walletBackend.getSigningAddress(account);
+			const walletScriptPubKeyHex = readAddress(signingAddress.address).scriptPubKeyHex;
 			const result = await reviewManifestAction(params, {
 				accountLabel: accountLabelOf(context, account),
 				compile: createSmplxProgramCompiler(smplx),
@@ -218,6 +220,8 @@ export const createProcessLiquidConfidentialTransaction = (
 				readTxOut: dependencies.readTxOut(context.chain),
 				scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, network),
 				unblind: await dependencies.unblinder(account, walletScriptPubKeyHex),
+				walletAddress: signingAddress.unconfidential,
+				walletKey: dependencies.walletKeyOf(account.descriptor, signingAddress.index),
 				walletScriptPubKeyHex,
 			});
 

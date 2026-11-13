@@ -143,7 +143,20 @@ describe("what fills a parameter nobody supplied", () => {
 		expect(paid(review)).toBe(1001n);
 	});
 
-	test("a value from this wallet's own key is refused by name, not reported as missing", async () => {
+	test("the wallet's own key compiles the program, whatever key the request sent", async () => {
+		const review = await reviewedPay(
+			payDocument((pay) => {
+				const params = pay.params as Record<string, Document>;
+
+				params.pubkey = { compute: { type: "wallet", wallet: "key" }, type: "pubkey" };
+			}),
+			{ amount_sat: 1000, pubkey: "ee".repeat(32) },
+		);
+
+		expect(review.programs[0]?.argumentsJson).toContain(PUBKEY);
+	});
+
+	test("a wallet value the format does not define is refused by name", async () => {
 		const refusal = await refusedPay(
 			payDocument((pay) => {
 				const params = pay.params as Record<string, Document>;
@@ -152,7 +165,7 @@ describe("what fills a parameter nobody supplied", () => {
 			}),
 		);
 
-		expect(refusal.reject).toBe("unimplemented-construct");
+		expect(refusal.reject).toBe("document-fault");
 		expect(refusal.reason).toContain("signer");
 	});
 });
