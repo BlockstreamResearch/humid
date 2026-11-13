@@ -198,7 +198,7 @@ export class ActionReview {
 		this.#attachWitnessValues();
 
 		this.#scope = { ...this.#scope, fee: MIN_FEE_SATS };
-		planAction(this.#action, this.#scope);
+		planAction(this.#action, this.#scope, this.#declaredTypes);
 
 		const rules = resolveInputRules(this.#action, this.#scope);
 		const feeRateSatsPerKvb = await this.#feeRate();
@@ -253,7 +253,7 @@ export class ActionReview {
 		timing: Pick<TransactionDraft, "locktimeHeight">,
 		feeRateSatsPerKvb: number,
 	) {
-		const plan = planAction(this.#action, this.#scope);
+		const plan = planAction(this.#action, this.#scope, this.#declaredTypes);
 		const ledger = this.#ledger(plan, issued);
 
 		const funded = this.#fund(ledger, rules, issued);

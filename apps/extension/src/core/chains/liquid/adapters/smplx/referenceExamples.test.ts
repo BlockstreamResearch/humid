@@ -3,7 +3,6 @@ import { readdirSync, readFileSync } from "node:fs";
 
 import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
 import {
-	type EstimateFee,
 	isRefusal,
 	type ManifestReview,
 	type ParsedLiquidProcessCtParams,
@@ -13,7 +12,7 @@ import {
 } from "@humid/tx-manifest";
 import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { hexToBytes } from "@noble/hashes/utils.js";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
 import { lwk } from "../lwk/lwkWasmForTests";
 import { addressReader } from "../lwk/wallet/readAddress";
@@ -36,15 +35,25 @@ const WALLET_SCRIPT = SIGNER.scriptPubKeyHex();
 const DESCRIPTOR = new lwk.Signer(new lwk.Mnemonic(MNEMONIC), lwk.Network.testnet())
 	.wpkhSlip77Descriptor()
 	.toString();
+const WALLET_BLINDING_KEY = hmac(
+	sha256,
+	hexToBytes(/slip77\((?<key>[0-9a-f]{64})\)/.exec(DESCRIPTOR)?.groups?.key ?? ""),
+	hexToBytes(WALLET_SCRIPT),
+);
 const PLENTY = "100000000";
 const CHAIN_TIP = 3_000_000;
+const CHAIN = new Map<string, string>();
 const FIXTURES = new URL(
 	"../../../../../../../../packages/tx-manifest/src/__fixtures__/",
 	import.meta.url,
 );
 
-type Holding = { amount: string; asset: string };
-type Spend = Holding & { transactionHex?: string; txOutHex?: string; utxoType: string };
+type Spend = {
+	amount?: string;
+	asset: string;
+	at?: { txid: string; vout: number };
+	utxoType: string;
+};
 
 type Request = {
 	holdings?: Record<string, string>;
@@ -62,7 +71,6 @@ class ReferenceExample {
 	constructor(
 		readonly name: string,
 		private readonly template?: string,
-		private readonly estimateFee: EstimateFee = simplexFee,
 	) {
 		const at = new URL(`${name}/`, FIXTURES);
 		const read = (path: string) => readFileSync(new URL(path, at), "utf8");
@@ -104,12 +112,11 @@ class ReferenceExample {
 					? {}
 					: {
 							state: {
-								utxos: spends.map((spend, at) => ({
-									asset: spend.asset,
-									txid: outpoint(at),
-									utxo_type: spend.utxoType,
-									vout: 0,
-								})),
+								utxos: spends.map((spend, at) => {
+									const { txid, vout } = spend.at ?? { txid: outpoint(at), vout: 0 };
+
+									return { asset: spend.asset, txid, utxo_type: spend.utxoType, vout };
+								}),
 							},
 						}),
 			} as ParsedLiquidProcessCtParams,
@@ -123,7 +130,7 @@ class ReferenceExample {
 					return compiled;
 				},
 				compilerVersion: SMPLX_COMPILER_VERSION,
-				estimateFee: this.estimateFee,
+				estimateFee: simplexFee,
 				programParamTypes: createSmplxProgramParamTypes(smplx),
 				fundingUtxos: request.owned?.[POLICY_ASSET] ?? [wallet(POLICY_ASSET, PLENTY)],
 				holdingsOf: (asset) =>
@@ -136,17 +143,11 @@ class ReferenceExample {
 				walletAddress: SIGNER.address(),
 				walletKey: KEY,
 				readFeeRate: async () => 100,
-				readTxOut: async ({ txid }) => {
-					const blinded = held.get(txid)?.txOutHex;
+				readTxOut: async ({ txid, vout }) => {
+					const recorded = CHAIN.get(txid);
 
-					if (blinded !== undefined) {
-						const transactionHex = held.get(txid)?.transactionHex;
-
-						return {
-							scriptPubKeyHex: lastScript,
-							...(transactionHex === undefined ? {} : { transactionHex }),
-							txOutHex: blinded,
-						};
+					if (recorded !== undefined) {
+						return chainTxOut(recorded, vout);
 					}
 
 					const amountSats = held.get(txid)?.amount ?? PLENTY;
@@ -189,10 +190,26 @@ function outpoint(at: number): string {
 function wallet(asset: string, amount: string, txid = asset) {
 	return {
 		amount,
+		scriptPubKeyHex: WALLET_SCRIPT,
 		spendable: true,
 		txOut: explicitTxOut(WALLET_SCRIPT, asset, amount),
 		txid,
 		vout: 1,
+	};
+}
+
+function chainTxOut(transactionHex: string, vout: number) {
+	const output = lwk.Transaction.fromString(transactionHex).output(vout);
+	const sats = output?.value();
+	const asset = output?.asset()?.toString();
+
+	return {
+		...(sats === undefined || asset === undefined
+			? {}
+			: { amountSats: sats.toString(), rawAssetId: asset }),
+		scriptPubKeyHex: bytesToHex(output?.scriptPubkey().bytes() ?? new Uint8Array()),
+		transactionHex,
+		txOutHex: output?.toString() ?? "",
 	};
 }
 
@@ -201,6 +218,19 @@ function explicitTxOut(script: string, asset: string, sats: string): string {
 	const length = (script.length / 2).toString(16).padStart(2, "0");
 
 	return `01${internal}01${BigInt(sats).toString(16).padStart(16, "0")}00${length}${script}`;
+}
+
+function received(hex: string, ...assets: string[]): Record<string, SelectableUtxo[]> {
+	return Object.fromEntries(assets.map((asset) => [asset, coinsOf(hex, asset)]));
+}
+
+function heldAt(
+	transaction: { txid: string },
+	vout: number,
+	utxoType: string,
+	asset: string,
+): Spend {
+	return { asset, at: { txid: transaction.txid, vout }, utxoType };
 }
 
 function simplexFee(draft: TransactionDraft, feeRateSatsPerKvb: number): bigint {
@@ -220,13 +250,17 @@ function built<Finished>(
 	);
 }
 
-function signed(review: ManifestReview): { feeSats: bigint; hex: string } {
+function signed(review: ManifestReview): { feeSats: bigint; hex: string; txid: string } {
 	const transaction = built(review, (builder) =>
 		SIGNER.finalizeStrictFee(builder, review.feeRateSatsPerKvb),
 	);
 
 	try {
-		return { feeSats: transaction.feeSats, hex: transaction.hex };
+		const txid = lwk.Transaction.fromString(transaction.hex).txid().toString();
+
+		CHAIN.set(txid, transaction.hex);
+
+		return { feeSats: transaction.feeSats, hex: transaction.hex, txid };
 	} finally {
 		transaction.free();
 	}
@@ -236,50 +270,59 @@ function signedFee(review: ManifestReview): bigint {
 	return signed(review).feeSats;
 }
 
-function receivedIn(hex: string, asset: string): SelectableUtxo {
-	const network = lwk.Network.testnet();
-	const descriptor = new lwk.Signer(new lwk.Mnemonic(MNEMONIC), network)
-		.wpkhSlip77Descriptor()
-		.toString();
-	const master = /slip77\((?<key>[0-9a-f]{64})\)/.exec(descriptor)?.groups?.key ?? "";
-	const blindingKey = lwk.SecretKey.fromBytes(
-		hmac(sha256, hexToBytes(master), hexToBytes(WALLET_SCRIPT)),
-	);
+function settled(review: ManifestReview): { hex: string; txid: string } {
+	const transaction = signed(review);
+
+	expect(transaction.feeSats).toBe(review.estimatedFeeSats);
+
+	return transaction;
+}
+
+function coinsOf(hex: string, asset: string): SelectableUtxo[] {
 	const transaction = lwk.Transaction.fromString(hex);
+	const txid = transaction.txid().toString();
+	const coins: SelectableUtxo[] = [];
 
-	for (let vout = 0; ; vout += 1) {
-		const output = transaction.output(vout);
-
-		if (!output) {
-			throw new Error(`The wallet received no blinded output of ${asset}.`);
-		}
-
-		if (!output.isPartiallyBlinded()) {
+	for (let vout = 0, output = transaction.output(0); output; output = transaction.output(++vout)) {
+		if (bytesToHex(output.scriptPubkey().bytes()) !== WALLET_SCRIPT) {
 			continue;
 		}
 
-		const secrets = output.unblind(blindingKey);
-
-		if (secrets.asset().toString() !== asset) {
-			continue;
-		}
-
-		return {
-			amount: secrets.value().toString(),
-			blindingSecretsJson: JSON.stringify({
-				asset,
-				assetBlindingFactor: secrets.assetBlindingFactor().toString(),
-				value: Number(secrets.value()),
-				valueBlindingFactor: secrets.valueBlindingFactor().toString(),
-			}),
-			confidential: true,
-			derivationPath: "0/0",
+		const coin = {
+			scriptPubKeyHex: WALLET_SCRIPT,
 			spendable: true,
 			txOut: output.toString(),
-			txid: transaction.txid().toString(),
+			txid,
 			vout,
 		};
+
+		if (!output.isPartiallyBlinded()) {
+			if (output.asset()?.toString() === asset) {
+				coins.push({ ...coin, amount: String(output.value()) });
+			}
+
+			continue;
+		}
+
+		const secrets = output.unblind(lwk.SecretKey.fromBytes(WALLET_BLINDING_KEY));
+
+		if (secrets.asset().toString() === asset) {
+			coins.push({
+				...coin,
+				amount: secrets.value().toString(),
+				blindingSecretsJson: JSON.stringify({
+					asset,
+					assetBlindingFactor: secrets.assetBlindingFactor().toString(),
+					value: Number(secrets.value()),
+					valueBlindingFactor: secrets.valueBlindingFactor().toString(),
+				}),
+				confidential: true,
+				derivationPath: "0/0",
+			});
+		}
 	}
+
+	return coins;
 }
 
 describe("p2pk", () => {
@@ -332,10 +375,9 @@ describe("p2pk", () => {
 
 		const pay = await paying.reviewed("Pay", { params: { amount_sat: 1000, pubkey: KEY } });
 		const paid = signed(pay);
-		const locked = lwk.Transaction.fromString(paid.hex).output(0)?.toString() ?? "";
 		const receive = await paying.reviewed("Receive", {
 			params: { pubkey: KEY },
-			spends: [{ amount: "1000", asset: POLICY_ASSET, txOutHex: locked, utxoType: "p2pk_output" }],
+			spends: [heldAt(paid, 0, "p2pk_output", POLICY_ASSET)],
 		});
 
 		expect(paid.feeSats).toBe(pay.estimatedFeeSats);
@@ -353,18 +395,9 @@ describe("p2pk", () => {
 
 		const pay = await paying.reviewed("Pay", { params: { amount_sat: 1000, pubkey: KEY } });
 		const paid = signed(pay);
-		const transaction = lwk.Transaction.fromString(paid.hex);
 		const receive = await paying.reviewed("Receive", {
 			params: { pubkey: KEY },
-			spends: [
-				{
-					amount: "1000",
-					asset: POLICY_ASSET,
-					transactionHex: paid.hex,
-					txOutHex: transaction.output(0)?.toString() ?? "",
-					utxoType: "p2pk_output",
-				},
-			],
+			spends: [heldAt(paid, 0, "p2pk_output", POLICY_ASSET)],
 		});
 
 		expect(paid.feeSats).toBe(pay.estimatedFeeSats);
@@ -453,71 +486,39 @@ describe("last_will", () => {
 
 describe("dex", () => {
 	const dex = new ReferenceExample("dex", "tessera_offer_contract");
+	const offered = { asset: dex.params.OFFER_ASSET_ID ?? "" };
 
-	async function offer() {
-		const { createdInstance } = await dex.reviewed("MakeOffer", { params: { MAKER_PUB_KEY: KEY } });
+	async function makeOffer() {
+		const review = await dex.reviewed("MakeOffer", { params: { MAKER_PUB_KEY: KEY } });
 
-		return createdInstance?.fields ?? {};
+		return { instance: review.createdInstance?.fields ?? {}, offer: settled(review) };
 	}
 
 	test("MakeOffer creates an offer committing to the maker's own script", async () => {
-		expect(await offer()).toMatchObject({
+		expect((await makeOffer()).instance).toMatchObject({
 			MAKER_PUB_KEY: KEY,
 			MAKER_SPK: expect.stringMatching(/^[0-9a-f]{64}$/),
 		});
 	});
 
-	test("Settle, Refund and ClaimPayout spend what the offer locked", async () => {
-		const instance = await offer();
-		const locked = {
-			amount: dex.params.OFFER_AMOUNT ?? "",
-			asset: dex.params.OFFER_ASSET_ID ?? "",
-		};
-		const outcomes = {
-			ClaimPayout: await dex.outcome("ClaimPayout", {
-				instance,
-				spends: [{ amount: "2000", asset: POLICY_ASSET, utxoType: "maker_payout" }],
-			}),
-			Refund: await dex.outcome("Refund", {
-				instance,
-				spends: [{ ...locked, utxoType: "tessera_offer" }],
-			}),
-			Settle: await dex.outcome("Settle", {
-				instance,
-				spends: [{ ...locked, utxoType: "tessera_offer" }],
-			}),
-		};
+	test("Settle, Refund and ClaimPayout spend what the offer locked, each at exactly the fee shown", async () => {
+		const { instance, offer } = await makeOffer();
+		const locked = [heldAt(offer, 0, "tessera_offer", offered.asset)];
+		const settle = settled(await dex.reviewed("Settle", { instance, spends: locked }));
 
-		expect(outcomes).toEqual({ ClaimPayout: "reviewed", Refund: "reviewed", Settle: "reviewed" });
+		settled(await dex.reviewed("Refund", { instance, spends: locked }));
+		settled(
+			await dex.reviewed("ClaimPayout", {
+				instance,
+				spends: [heldAt(settle, 0, "maker_payout", POLICY_ASSET)],
+			}),
+		);
 	});
 });
 
 describe("lending_v3", () => {
-	const lending = new ReferenceExample("lending_v3", "lending_contract", () => 500n);
-	const zero = "00".repeat(32);
-	const borrowerNft = "ab".repeat(32);
-	const lenderNft = "cd".repeat(32);
-	const terms = lending.params;
-	const offer = {
-		...terms,
-		BORROWER_NFT_ASSET_ID: borrowerNft,
-		CURRENT_DEBT: "1010",
-		FINALIZED_LENDER_VAULT_COV_HASH: zero,
-		FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH: zero,
-		ISSUING_UTXOS_COUNT: "2",
-		LENDER_NFT_ASSET_ID: lenderNft,
-		LENDER_VAULT_COV_HASH: zero,
-		LENDING_COV_SCRIPT_HASH: zero,
-		PRINCIPAL_OUTPUT_SCRIPT_HASH: zero,
-		PROTOCOL_FEE_VAULT_COV_HASH: zero,
-		REISSUANCE_FLAGS: "0",
-	} as Record<string, string>;
-	const collateral = {
-		amount: offer.COLLATERAL_AMOUNT ?? "",
-		asset: offer.COLLATERAL_ASSET_ID ?? "",
-	};
-	const principal = { amount: offer.PRINCIPAL_AMOUNT ?? "", asset: offer.PRINCIPAL_ASSET_ID ?? "" };
-	const nfts = { [borrowerNft]: "1", [lenderNft]: "1" };
+	const issuanceFactory = new ReferenceExample("lending_v3", "issuance_factory");
+	const lending = new ReferenceExample("lending_v3", "lending_contract");
 
 	test("the issuance factory compiles to the script the deployed indexer tracks", () => {
 		const factory = new smplx.Program(
@@ -539,75 +540,124 @@ describe("lending_v3", () => {
 		}
 	});
 
-	test("each action reviews against an offer", async () => {
-		const outcomes = {
-			AcceptOffer: await lending.outcome("AcceptOffer", {
-				holdings: nfts,
-				instance: offer,
-				spends: [
-					{ ...collateral, utxoType: "lending_collateral" },
-					{ amount: "1", asset: lenderNft, utxoType: "lender_nft_script_auth" },
-				],
-			}),
-			CancelOffer: await lending.outcome("CancelOffer", {
-				holdings: nfts,
-				instance: offer,
-				spends: [
-					{ ...collateral, utxoType: "lending_collateral" },
-					{ amount: "1", asset: lenderNft, utxoType: "lender_nft_script_auth" },
-				],
-			}),
-			ClaimPrincipal: await lending.outcome("ClaimPrincipal", {
-				holdings: nfts,
-				instance: offer,
-				spends: [{ ...principal, utxoType: "principal_asset_auth" }],
-			}),
-			CreateFactory: await lending.outcome("CreateFactory"),
-			CreateOffer: await lending.outcome("CreateOffer", {
-				holdings: { [terms.FACTORY_ASSET_ID ?? ""]: "1" },
-				instance: { FACTORY_ASSET_ID: terms.FACTORY_ASSET_ID ?? "" },
-				spends: [
-					{ amount: "1", asset: terms.FACTORY_ASSET_ID ?? "", utxoType: "issuance_factory" },
-				],
-			}),
-			RepayLoan: await lending.outcome("RepayLoan", {
-				holdings: nfts,
-				instance: offer,
-				spends: [{ ...collateral, utxoType: "lending_collateral_active" }],
-			}),
-		};
-
-		expect(outcomes).toEqual({
-			AcceptOffer: "reviewed",
-			CancelOffer: "reviewed",
-			ClaimPrincipal: "reviewed",
-			CreateFactory: "reviewed",
-			CreateOffer: "reviewed",
-			RepayLoan: "reviewed",
+	test("a loan from a new factory signs every step at exactly the fee shown", async () => {
+		const made = await issuanceFactory.reviewed("CreateFactory");
+		const factoryAsset = made.createdInstance?.fields.FACTORY_ASSET_ID ?? "";
+		const factoryMade = settled(made);
+		const offered = await lending.reviewed("CreateOffer", {
+			instance: { FACTORY_ASSET_ID: factoryAsset },
+			owned: received(factoryMade.hex, factoryAsset),
+			params: { FACTORY_ASSET_ID: factoryAsset },
+			spends: [heldAt(factoryMade, 1, "issuance_factory", factoryAsset)],
 		});
+		const offer = settled(offered);
+		const instance = offered.createdInstance?.fields ?? {};
+		const [collateral, principal, borrowerNft, lenderNft] = [
+			"COLLATERAL_ASSET_ID",
+			"PRINCIPAL_ASSET_ID",
+			"BORROWER_NFT_ASSET_ID",
+			"LENDER_NFT_ASSET_ID",
+		].map((name) => instance[name] ?? "");
+		const borrower = received(offer.hex, borrowerNft ?? "");
+		const pending = [
+			heldAt(offer, 5, "lending_collateral", collateral ?? ""),
+			heldAt(offer, 3, "lender_nft_script_auth", lenderNft ?? ""),
+		];
+
+		settled(await lending.reviewed("CancelOffer", { instance, owned: borrower, spends: pending }));
+
+		const accepted = settled(await lending.reviewed("AcceptOffer", { instance, spends: pending }));
+
+		settled(
+			await lending.reviewed("ClaimPrincipal", {
+				instance,
+				owned: borrower,
+				spends: [heldAt(accepted, 1, "principal_asset_auth", principal ?? "")],
+			}),
+		);
+		settled(
+			await lending.reviewed("RepayLoan", {
+				instance,
+				owned: borrower,
+				spends: [heldAt(accepted, 0, "lending_collateral_active", collateral ?? "")],
+			}),
+		);
 	});
 });
 
 describe("lending_v2", () => {
 	const lending = new ReferenceExample("lending_v2");
+	const loan = new ReferenceExample("lending_v2", "lending_contract");
+	const shipped = new ReferenceExample("lending_v2", "lending_contract");
 
-	test("IssueUtilityNFTs fills the borrower's key, address and script hash from the wallet, and signs", async () => {
-		const review = await new ReferenceExample("lending_v2", "lending_contract").reviewed(
-			"IssueUtilityNFTs",
-			{
-				owned: {
-					[POLICY_ASSET]: [1, 2, 3, 4, 5].map((at) =>
-						wallet(POLICY_ASSET, PLENTY, at.toString(16).repeat(64)),
-					),
-				},
+	Object.assign(
+		loan.manifest,
+		JSON.parse(JSON.stringify(loan.manifest).replaceAll('"Either<()>"', '"Either<(), ()>"')),
+	);
+
+	test("a loan signs every step at exactly the fee shown once its witness PATH is typed Either<(), ()>", async () => {
+		const issue = await loan.reviewed("IssueUtilityNFTs", {
+			owned: {
+				[POLICY_ASSET]: [1, 2, 3, 4, 5].map((at) =>
+					wallet(POLICY_ASSET, PLENTY, at.toString(16).repeat(64)),
+				),
 			},
+			params: { LOAN_EXPIRATION_TIME: CHAIN_TIP - 1 },
+		});
+		const instance = issue.createdInstance?.fields ?? {};
+		const issued = settled(issue);
+		const assets = [
+			"COLLATERAL_ASSET_ID",
+			"FIRST_PARAMETERS_NFT_ASSET_ID",
+			"SECOND_PARAMETERS_NFT_ASSET_ID",
+			"BORROWER_NFT_ASSET_ID",
+			"LENDER_NFT_ASSET_ID",
+		].map((name) => instance[name] ?? "");
+		const [collateral = "", firstParams = "", secondParams = "", borrowerNft = "", lenderNft = ""] =
+			assets;
+
+		expect(instance).toMatchObject({ BORROWER_ADDRESS: SIGNER.address(), BORROWER_PUB_KEY: KEY });
+
+		const locked = settled(
+			await loan.reviewed("LockCollateral", { instance, owned: received(issued.hex, ...assets) }),
+		);
+		const offer = [
+			heldAt(locked, 0, "pre_lock", collateral),
+			...assets.slice(1).map((asset, at) => heldAt(locked, at + 1, "prelock_script_auth", asset)),
+		];
+
+		expect(await shipped.outcome("CancelOffer", { instance, spends: offer })).toBe(
+			"built-something-else",
+		);
+		settled(await loan.reviewed("CancelOffer", { instance, spends: offer }));
+
+		const lent = settled(await loan.reviewed("SetupLending", { instance, spends: offer }));
+		const active = [
+			heldAt(lent, 0, "lending_collateral", collateral),
+			heldAt(lent, 2, "lending_script_auth", firstParams),
+			heldAt(lent, 3, "lending_script_auth", secondParams),
+		];
+		const lender = received(lent.hex, lenderNft);
+
+		settled(
+			await loan.reviewed("LiquidateAfterExpiry", { instance, owned: lender, spends: active }),
 		);
 
-		expect(review.createdInstance?.fields).toMatchObject({
-			BORROWER_ADDRESS: SIGNER.address(),
-			BORROWER_PUB_KEY: KEY,
-		});
-		expect(signedFee(review)).toBe(review.estimatedFeeSats);
+		const repaid = settled(
+			await loan.reviewed("RepayLoan", {
+				instance,
+				owned: received(lent.hex, borrowerNft),
+				spends: active,
+			}),
+		);
+
+		settled(
+			await loan.reviewed("ClaimPrincipalWithInterest", {
+				instance,
+				owned: lender,
+				spends: [heldAt(repaid, 1, "lender_principal_vault", instance.PRINCIPAL_ASSET_ID ?? "")],
+			}),
+		);
 	});
 
 	test("Prepare and PrepareLender sign, paying exactly the fee the review shows", async () => {
@@ -634,21 +684,13 @@ describe("multiasset", () => {
 
 		const token = issued.reissuanceToken;
 		const locked = await multiasset.reviewed("LockToken", {
-			owned: { [token]: [receivedIn(mint.hex, token)] },
+			owned: received(mint.hex, token),
 			params: { pubkey: KEY, token },
 		});
 		const lock = signed(locked);
 		const reissued = await multiasset.reviewed("ReissueFromProgram", {
 			params: { entropy: issued.entropy, issued: issued.asset, pubkey: KEY, supply: 50, token },
-			spends: [
-				{
-					amount: "1",
-					asset: token,
-					transactionHex: lock.hex,
-					txOutHex: lwk.Transaction.fromString(lock.hex).output(0)?.toString() ?? "",
-					utxoType: "p2pk_output",
-				},
-			],
+			spends: [heldAt(lock, 0, "p2pk_output", token)],
 		});
 
 		expect(lock.feeSats).toBe(locked.estimatedFeeSats);
@@ -666,7 +708,7 @@ describe("multiasset", () => {
 		}
 
 		const reissued = await multiasset.reviewed("Reissue", {
-			owned: { [issued.reissuanceToken]: [receivedIn(mint.hex, issued.reissuanceToken)] },
+			owned: received(mint.hex, issued.reissuanceToken),
 			params: {
 				entropy: issued.entropy,
 				issued: issued.asset,
@@ -717,10 +759,7 @@ describe("deadcat_v3", () => {
 		expect(
 			await market.outcome("CreateMarket", {
 				instance,
-				owned: {
-					[no]: [receivedIn(transaction.hex, no)],
-					[yes]: [receivedIn(transaction.hex, yes)],
-				},
+				owned: received(transaction.hex, no, yes),
 			}),
 		).toBe("document-fault");
 	});

@@ -27,6 +27,33 @@ const UNSUPPORTED_MODIFIERS = ["align", "pad_to"];
 
 export type PartResolver = (reference: string) => unknown;
 
+const CONCAT = /^concat\((?<items>.*)\)$/s;
+
+export function concatParts(
+	expression: string,
+	declaredTypes: Record<string, string>,
+): { parts: Record<string, string>[] } {
+	const items = CONCAT.exec(expression.trim())?.groups?.items;
+
+	if (items === undefined) {
+		throw new Refusal(`String-form data is "${expression}", which is not a concat(…) of values.`);
+	}
+
+	return {
+		parts: items
+			.split(",")
+			.map((item) => item.trim())
+			.filter(Boolean)
+			.map((value) => {
+				const reference = parseReference(value);
+				const type =
+					reference?.form === "input-attribute" ? undefined : declaredTypes[reference?.name ?? ""];
+
+				return { type: type === "liquid.asset_id" ? type : "bytes", value };
+			}),
+	};
+}
+
 export function encodeMetadataParts(
 	data: unknown,
 	resolve: PartResolver = (reference) => reference,

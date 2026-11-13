@@ -5,7 +5,7 @@ import { Refusal } from "../refusal";
 import { type BlindingDecision, resolveBlinding } from "./blinding";
 import { type BlindingFactors, resolveBlindingFactors } from "./blindingFactors";
 import { evaluateExpression } from "./evaluate";
-import { encodeMetadataParts } from "./metadataParts";
+import { concatParts, encodeMetadataParts } from "./metadataParts";
 
 export type PlannedOutput = {
 	blinding: BlindingDecision;
@@ -26,7 +26,11 @@ export type PlannedSpend = {
 	outputs: PlannedOutput[];
 };
 
-export function planAction(action: Action, scope: ReferenceScope): PlannedSpend {
+export function planAction(
+	action: Action,
+	scope: ReferenceScope,
+	declaredTypes: Record<string, string> = {},
+): PlannedSpend {
 	const outputs: PlannedOutput[] = [];
 	let fundingSats = 0n;
 
@@ -40,7 +44,7 @@ export function planAction(action: Action, scope: ReferenceScope): PlannedSpend 
 		const id = typeof output.id === "string" ? output.id : "";
 		const named = `Output ${id || "(unnamed)"}`;
 		const target = Refusal.amend(
-			() => resolveTarget(output.destination, output.data, scope),
+			() => resolveTarget(output.destination, output.data, scope, declaredTypes),
 			(reason) => `${named} ${reason}`,
 		);
 
@@ -99,6 +103,7 @@ function resolveTarget(
 	destination: unknown,
 	data: unknown,
 	scope: ReferenceScope,
+	declaredTypes: Record<string, string>,
 ): PlannedOutput["target"] {
 	if (destination === "change") {
 		return { kind: "change" };
@@ -151,7 +156,7 @@ function resolveTarget(
 	const hex = Refusal.amend(
 		() =>
 			encodeMetadataParts(
-				data,
+				typeof data === "string" ? concatParts(data, declaredTypes) : data,
 				(reference) => resolveReference(reference, "expression", scope).value,
 			),
 		(reason) => `carries data this runtime cannot encode: ${reason}`,

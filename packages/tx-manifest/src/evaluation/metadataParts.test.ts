@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
+import lendingV2Manifest from "../__fixtures__/lending_v2/txmanifest.json";
 import lendingManifest from "../__fixtures__/lending_v3/txmanifest.json";
 import { Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
+import { declaredParamTypes } from "../programs/declaredTypes";
 import { Refusal } from "../refusal";
-import { encodeMetadataParts, type PartResolver } from "./metadataParts";
+import { concatParts, encodeMetadataParts, type PartResolver } from "./metadataParts";
 import { planAction } from "./plan";
 
 function part(declared: Record<string, unknown>, resolve?: PartResolver): string {
@@ -90,5 +92,37 @@ describe("the OP_RETURN records the lending protocol publishes", () => {
 		expect(publishedRecord("CreateOffer")).toBe(
 			`6a32a9b4ade7${PUBLISHED_ASSET}a086010000000000a0bb0d00e803`,
 		);
+	});
+});
+
+describe("string-form data", () => {
+	test("a concat record joins its values, reversing the one declared an asset id", () => {
+		const manifest = new Manifest(lendingV2Manifest as unknown as Record<string, unknown>);
+		const action = manifest.action("LockCollateral");
+
+		if (!action) {
+			throw new Error("the document declares no LockCollateral");
+		}
+
+		const key = "ab".repeat(32);
+		const record = planAction(
+			action,
+			{
+				instance: {
+					...SCOPE.instance,
+					BORROWER_PUB_KEY: key,
+					FIRST_PARAMETERS_ENCODED: "1",
+					SECOND_PARAMETERS_ENCODED: "1",
+				},
+				params: {},
+			},
+			declaredParamTypes(manifest, action),
+		).outputs.find((output) => output.id === "indexer_op_return");
+
+		expect(record?.target).toEqual({ hex: `6a40${key}${PUBLISHED_ASSET}`, kind: "data" });
+	});
+
+	test("a string that is no concat(…) is refused", () => {
+		expect(() => concatParts("instance.BORROWER_PUB_KEY", {})).toThrow(Refusal);
 	});
 });

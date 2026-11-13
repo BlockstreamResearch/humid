@@ -71,8 +71,6 @@ export async function deriveProgramAddress(
 		throw new Refusal(`The source of ${sourcePath} was not supplied.`);
 	}
 
-	const wiring = { ...asRecord(script?.compile_params), ...input.wiring };
-
 	let declaring: { declares: ProgramParamTypes; source: string } | undefined;
 
 	if (input.programParamTypes) {
@@ -83,6 +81,11 @@ export async function deriveProgramAddress(
 		}
 	}
 
+	const wiring = {
+		...instanceFieldsNamed(declaring?.declares, input.scope.instance),
+		...asRecord(script?.compile_params),
+		...input.wiring,
+	};
 	const argumentsJson = JSON.stringify(
 		resolveCompileParams(wiring, input.declaredTypes, input.scope, declaring),
 	);
@@ -117,6 +120,17 @@ export async function deriveProgramAddress(
 	} catch (error) {
 		throw new Refusal(`The contract at ${sourcePath} did not compile: ${String(error)}`);
 	}
+}
+
+function instanceFieldsNamed(
+	declares: ProgramParamTypes | undefined,
+	instance: Record<string, unknown> | undefined,
+): Record<string, string> {
+	return Object.fromEntries(
+		Object.keys(declares ?? {})
+			.filter((name) => instance !== undefined && Object.hasOwn(instance, name))
+			.map((name) => [name, name]),
+	);
 }
 
 export function checkProgramOnChain(

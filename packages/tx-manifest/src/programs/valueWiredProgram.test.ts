@@ -79,6 +79,19 @@ describe("the vault program", () => {
 		);
 	});
 
+	test("fills a parameter the contract declares and nothing wires from the instance field of that name", async () => {
+		const { calls, derived } = derive({
+			programParamTypes: () => ({ ...DECLARED, TIMEOUT: "u32", UNKNOWN: "u8" }),
+		});
+
+		await derived;
+
+		expect(JSON.parse(calls[0]?.argumentsJson ?? "{}")).toMatchObject({
+			TIMEOUT: { type: "u32", value: "900000" },
+		});
+		expect(calls[0]?.argumentsJson).not.toContain("UNKNOWN");
+	});
+
 	test("and from the contract source the request supplied, not one of its own", async () => {
 		const { calls, derived } = derive({ programParamTypes: () => DECLARED });
 
