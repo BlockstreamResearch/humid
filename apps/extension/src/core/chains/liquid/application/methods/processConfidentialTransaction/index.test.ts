@@ -118,6 +118,12 @@ function journal(): Journal {
 
 function smplxSubstitute(log: Journal) {
 	class Program {
+		static abi() {
+			return JSON.stringify({
+				parameters: { PUB_KEY: "u256" },
+				witnesses: { SIGNATURE: "[u8; 64]" },
+			});
+		}
 		constructor(
 			readonly source: string,
 			readonly argumentsJson?: string,
@@ -212,7 +218,6 @@ function smplxSubstitute(log: Journal) {
 
 	return {
 		Program,
-		programArgumentTypes: () => JSON.stringify({ PUB_KEY: "Pubkey" }),
 		TransactionBuilder,
 		Signer,
 	};

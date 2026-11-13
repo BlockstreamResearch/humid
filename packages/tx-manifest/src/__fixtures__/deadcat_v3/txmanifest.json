@@ -476,54 +476,44 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "0",
                   "description": "Claimed state. Not trusted: main() recomputes the state-0 address from it and asserts the input is actually being spent from there, so lying is impossible rather than merely detectable."
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Left(Left(Left(())))",
                   "description": "Path 1 — initial issuance. The seven paths are a nested Either tree; see witness.rs::build_path_value upstream."
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "YES_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "1"
                 },
                 "YES_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "1"
                 },
                 "NO_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "1"
                 },
                 "NO_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "1"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -559,44 +549,36 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "0"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Right(()))",
                   "description": "Path 7 — secondary covenant input."
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
                 "NO_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "1"
                 },
                 "NO_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "1"
                 },
                 "ORACLE_OUTCOME_YES": "unused",
@@ -605,12 +587,10 @@
                 "TOKENS_BURNED": "unused",
                 "YES_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "1"
                 },
                 "YES_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "1"
                 }
               },
@@ -761,33 +741,27 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Left(Left(Right(())))",
                   "description": "Path 2 — subsequent issuance."
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -797,22 +771,18 @@
                 "TOKENS_BURNED": "unused",
                 "YES_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "YES_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "NO_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "NO_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 }
               },
@@ -843,33 +813,27 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Right(()))",
                   "description": "Path 7 — secondary covenant input."
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -898,33 +862,27 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Right(()))",
                   "description": "Path 7 — secondary covenant input."
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -1078,45 +1036,37 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Left(Right(Left(())))",
                   "description": "Path 3 — oracle resolve."
                 },
                 "ORACLE_OUTCOME_YES": {
                   "type": "simplicityhl",
-                  "simplicity_type": "bool",
                   "value": "true",
                   "description": "Picks the YES branch, which both selects the signed message byte 0x01 and sends every covenant output to the state-2 address."
                 },
                 "ORACLE_SIGNATURE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "[u8; 64]",
                   "value": "params.ORACLE_SIGNATURE",
                   "description": "Substituted from the action param before the value is parsed."
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -1124,22 +1074,18 @@
                 "TOKENS_BURNED": "unused",
                 "YES_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "YES_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "NO_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "NO_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 }
               },
@@ -1164,32 +1110,26 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Right(()))"
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -1218,32 +1158,26 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Right(()))"
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -1359,44 +1293,36 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Left(Right(Left(())))",
                   "description": "Path 3 — oracle resolve."
                 },
                 "ORACLE_OUTCOME_YES": {
                   "type": "simplicityhl",
-                  "simplicity_type": "bool",
                   "value": "false",
                   "description": "Picks the NO branch: outcome byte 0x00 and state-3 outputs."
                 },
                 "ORACLE_SIGNATURE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "[u8; 64]",
                   "value": "params.ORACLE_SIGNATURE"
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -1404,22 +1330,18 @@
                 "TOKENS_BURNED": "unused",
                 "YES_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "YES_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "NO_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "NO_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 }
               },
@@ -1444,32 +1366,26 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Right(()))"
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -1498,32 +1414,26 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Right(()))"
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -1631,40 +1541,33 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "2",
                   "description": "State 2 also selects YES_TOKEN_ASSET as the only asset the covenant will accept as a burn."
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Left(Right(Right(())))",
                   "description": "Path 4 — post-resolution redemption."
                 },
                 "TOKENS_BURNED": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "params.TOKENS_BURNED",
                   "description": "Drives both the burn output amount and the payout; the covenant checks both against it."
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -1773,39 +1676,32 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "3",
                   "description": "State 3 selects NO_TOKEN_ASSET as the winning side."
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Left(Right(Right(())))",
                   "description": "Path 4 — post-resolution redemption."
                 },
                 "TOKENS_BURNED": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "params.TOKENS_BURNED"
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -1923,44 +1819,36 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Left(Left(())))",
                   "description": "Path 5 — expiry redemption."
                 },
                 "TOKENS_BURNED": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "params.TOKENS_BURNED"
                 },
                 "BURN_TOKEN_ASSET": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.BURN_TOKEN_ASSET",
                   "description": "Tells the covenant which side you are burning. It checks the value equals YES_TOKEN_ASSET or NO_TOKEN_ASSET and then holds output 1 to it."
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "NO_REISSUANCE_INPUT_ABF": "unused",
@@ -2057,38 +1945,31 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Left(Right(())))",
                   "description": "Path 6 — cancellation. The partial and full forms are the same path; the covenant picks between them by testing whether any collateral remains."
                 },
                 "PAIRS_BURNED": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "params.PAIRS_BURNED"
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -2218,38 +2099,31 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Left(Right(())))",
                   "description": "Path 6 — cancellation, full branch (chosen by the covenant when nothing remains)."
                 },
                 "PAIRS_BURNED": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "params.PAIRS_BURNED"
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -2258,22 +2132,18 @@
                 "TOKENS_BURNED": "unused",
                 "YES_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "YES_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "NO_REISSUANCE_INPUT_ABF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 },
                 "NO_REISSUANCE_INPUT_VBF": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "params.RT_FACTOR"
                 }
               },
@@ -2298,32 +2168,26 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Right(()))"
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",
@@ -2357,32 +2221,26 @@
               "witnesses": {
                 "STATE": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u64",
                   "value": "1"
                 },
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<Either<(), ()>, Either<(), ()>>, Either<Either<(), ()>, ()>>",
                   "value": "Right(Right(()))"
                 },
                 "BUDGET_PAD_A": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_B": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_C": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BUDGET_PAD_D": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u256",
                   "value": "0"
                 },
                 "BURN_TOKEN_ASSET": "unused",

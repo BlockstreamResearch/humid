@@ -46,6 +46,11 @@ function withReceive(inputs: unknown[], outputs?: unknown[], allowChange?: strin
 
 const spending = (manifest: Document = p2pk.manifest) => receive({ manifest });
 
+const branchedAbi = () => ({
+	parameters: {},
+	witnesses: { BRANCH: "Either<(), ()>", SIGNATURE: "[u8; 64]" },
+});
+
 describe("what the review carries out about a program it will spend", () => {
 	test("carries the witnesses the spend leaves unused, by name", async () => {
 		const inputs = receiveInputs();
@@ -56,7 +61,12 @@ describe("what the review carries out about a program it will spend", () => {
 			witnesses: { ...(program.witnesses as Record<string, unknown>), OTHER_SIG: "unused" },
 		};
 
-		const review = await reviewed(spending(withReceive(inputs)));
+		const review = await reviewed(spending(withReceive(inputs)), {
+			programAbi: () => ({
+				parameters: {},
+				witnesses: { OTHER_SIG: "[u8; 64]", SIGNATURE: "[u8; 64]" },
+			}),
+		});
 
 		expect(review.programInputs[0]?.unusedWitnesses).toEqual(["OTHER_SIG"]);
 	});
@@ -94,30 +104,44 @@ describe("what the review carries out about a program it will spend", () => {
 
 		delete programInput?.witnesses;
 
-		const review = await reviewed(spending(withReceive(inputs)));
+		const review = await reviewed(spending(withReceive(inputs)), {
+			programAbi: () => ({ parameters: {}, witnesses: {} }),
+		});
 
 		expect(review.programInputs[0]?.signatureWitness).toBeUndefined();
 	});
 
-	test("carries a stated witness value through without reading the value", async () => {
+	test("carries a stated witness value through at the type its program declares", async () => {
 		const inputs = receiveInputs();
 
 		inputs[0] = {
 			...inputs[0],
-			witnesses: {
-				BRANCH: {
-					simplicity_type: "Either<(), ()>",
-					type: "simplicityhl",
-					value: "Left(())",
-				},
-			},
+			witnesses: { BRANCH: { type: "simplicityhl", value: "Left(())" } },
 		};
 
-		const review = await reviewed(spending(withReceive(inputs)));
+		const review = await reviewed(spending(withReceive(inputs)), {
+			programAbi: () => ({ parameters: {}, witnesses: { BRANCH: "Either<(), ()>" } }),
+		});
 
 		expect(review.programInputs[0]?.witnessValues).toEqual([
-			{ name: "BRANCH", simplicityType: "Either<(), ()>", value: "Left(())" },
+			{ name: "BRANCH", type: "Either<(), ()>", value: "Left(())" },
 		]);
+	});
+
+	test("refuses an input that leaves out a witness its program reads, or names one it does not", async () => {
+		const left = await refused(spending(), { programAbi: branchedAbi });
+		const inputs = receiveInputs();
+
+		inputs[0] = {
+			...inputs[0],
+			witnesses: { EXTRA: "unused", ...(inputs[0]?.witnesses as object) },
+		};
+
+		const extra = await refused(spending(withReceive(inputs)));
+
+		expect(left).toMatchObject({ reject: "document-fault" });
+		expect(left.reason).toContain("leaves out the witness BRANCH");
+		expect(extra.reason).toContain("names a witness EXTRA");
 	});
 });
 

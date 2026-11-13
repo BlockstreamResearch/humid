@@ -3,7 +3,7 @@ import type { Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
 import { resolveCompileParams } from "./compileParams";
-import type { ProgramParamTypes } from "./programParamTypes";
+import type { ProgramAbi, ProgramParamTypes } from "./programParamTypes";
 import { stateLeavesOf } from "./stateLeaves";
 
 export type CompiledProgram = {
@@ -21,9 +21,7 @@ export type CompileProgram = (input: {
 	source: string;
 }) => Promise<CompiledProgram> | CompiledProgram;
 
-export type ProgramParamTypesOf = (
-	source: string,
-) => Promise<ProgramParamTypes> | ProgramParamTypes;
+export type ProgramAbiOf = (source: string) => Promise<ProgramAbi> | ProgramAbi;
 
 export type ProgramDerivation = {
 	address: string;
@@ -36,13 +34,14 @@ export type ProgramDerivation = {
 	sourcePath: string;
 	tapleafHash: string;
 	utxoType: string;
+	witnessTypes: Record<string, string>;
 };
 
 export async function deriveProgramAddress(
 	manifest: Manifest,
 	input: {
 		compile: CompileProgram;
-		programParamTypes?: ProgramParamTypesOf;
+		programAbi: ProgramAbiOf;
 		contractSources: Record<string, string>;
 		declaredTypes: Record<string, string>;
 		includeDebugSymbols: boolean;
@@ -71,18 +70,17 @@ export async function deriveProgramAddress(
 		throw new Refusal(`The source of ${sourcePath} was not supplied.`);
 	}
 
-	let declaring: { declares: ProgramParamTypes; source: string } | undefined;
+	let abi: ProgramAbi;
 
-	if (input.programParamTypes) {
-		try {
-			declaring = { declares: await input.programParamTypes(source), source: sourcePath };
-		} catch (error) {
-			throw new Refusal(`The contract at ${sourcePath} did not compile: ${String(error)}`);
-		}
+	try {
+		abi = await input.programAbi(source);
+	} catch (error) {
+		throw new Refusal(`The contract at ${sourcePath} did not compile: ${String(error)}`);
 	}
 
+	const declaring = { declares: abi.parameters, source: sourcePath };
 	const wiring = {
-		...instanceFieldsNamed(declaring?.declares, input.scope.instance),
+		...instanceFieldsNamed(declaring.declares, input.scope.instance),
 		...asRecord(script?.compile_params),
 		...input.wiring,
 	};
@@ -116,6 +114,7 @@ export async function deriveProgramAddress(
 			sourcePath,
 			tapleafHash: compiled.tapleafHash,
 			utxoType: input.utxoType,
+			witnessTypes: abi.witnesses,
 		};
 	} catch (error) {
 		throw new Refusal(`The contract at ${sourcePath} did not compile: ${String(error)}`);
@@ -123,11 +122,11 @@ export async function deriveProgramAddress(
 }
 
 function instanceFieldsNamed(
-	declares: ProgramParamTypes | undefined,
+	declares: ProgramParamTypes,
 	instance: Record<string, unknown> | undefined,
 ): Record<string, string> {
 	return Object.fromEntries(
-		Object.keys(declares ?? {})
+		Object.keys(declares)
 			.filter((name) => instance !== undefined && Object.hasOwn(instance, name))
 			.map((name) => [name, name]),
 	);

@@ -27,7 +27,7 @@ import { walletUnblinder } from "../../../adapters/lwk/wallet/walletUnblinder";
 import { withAccountMnemonic } from "../../../adapters/lwk/wallet/withAccountMnemonic";
 import { assembleReviewedTransaction } from "../../../adapters/smplx/assembleReviewedTransaction";
 import {
-	createSmplxProgramParamTypes,
+	createSmplxProgramAbi,
 	createSmplxProgramCompiler,
 	createSmplxScriptPubKeyCompiler,
 } from "../../../adapters/smplx/compileProgramWithSmplx";
@@ -209,7 +209,7 @@ export const createProcessLiquidConfidentialTransaction = (
 						},
 						(builder) => smplx.Signer.estimateStrictFee(builder, network, feeRateSatsPerKvb),
 					),
-				programParamTypes: createSmplxProgramParamTypes(smplx),
+				programAbi: createSmplxProgramAbi(smplx),
 				fundingUtxos: fundable(context, account, account.rawPolicyAssetId),
 				holdingsOf: (asset) => fundable(context, account, asset),
 				network,

@@ -17,6 +17,7 @@ import {
 	type ReviewDependencies,
 	TXID,
 	WALLET_SCRIPT,
+	abiOf,
 } from "./reviewForTests";
 
 const ASSET_STATED = `a0${"00".repeat(30)}0a`;
@@ -68,7 +69,7 @@ function vaultletReview(
 
 				return COMPILED;
 			},
-			programParamTypes: () => ({ SLOT_COUNT: "u8", WITH_BURN: "bool" }),
+			programAbi: (source) => abiOf(source, { SLOT_COUNT: "u8", WITH_BURN: "bool" }),
 			scriptPubKeyOf: ({ argumentsJson, includeDebugSymbols, source }) => {
 				hashed.push({ includeDebugSymbols, source });
 
@@ -159,6 +160,7 @@ describe("a template action against a deployment that exists", () => {
 				tapleafHash: "1e".repeat(32),
 				utxoType: "vault",
 				verified: "matches-chain",
+				witnessTypes: { SIGNATURE: "u32" },
 			},
 		]);
 	});
@@ -273,8 +275,8 @@ describe("what a review still refuses", () => {
 		expect(compiled).toHaveLength(0);
 	});
 
-	test("a program wired to a value when nothing says what the contract declares", async () => {
-		const { result } = vaultletReview(withdraw(), { programParamTypes: undefined });
+	test("a program wired to a value its contract does not declare", async () => {
+		const { result } = vaultletReview(withdraw(), { programAbi: (source) => abiOf(source) });
 
 		expect(asRefusal(await result).reject).toBe("document-fault");
 	});

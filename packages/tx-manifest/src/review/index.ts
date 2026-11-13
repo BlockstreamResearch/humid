@@ -5,7 +5,7 @@ import type { BlindingFactors } from "../evaluation/blindingFactors";
 import type { PlannedIssuance } from "../evaluation/issuance";
 import type { StaticWitness } from "../evaluation/witness";
 import type { CreatedInstance } from "../programs/instance";
-import type { CompileProgram, ProgramDerivation, ProgramParamTypesOf } from "../programs/program";
+import type { CompileProgram, ProgramAbiOf, ProgramDerivation } from "../programs/program";
 import type { CompileScriptPubKey } from "../programs/programHash";
 import { type RejectToken, Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
@@ -31,8 +31,10 @@ export type ReviewedProgramInput = {
 	unusedWitnesses?: string[];
 	utxoType: string;
 	vout: number;
-	witnessValues?: StaticWitness[];
+	witnessValues?: TypedWitness[];
 };
+
+export type TypedWitness = StaticWitness & { type: string };
 
 export type PlannedInput =
 	| { program: ReviewedProgramInput; sequence?: number; source: "program" }
@@ -112,7 +114,7 @@ export type ReviewInput = {
 	compile: CompileProgram;
 	compilerVersion?: string;
 	estimateFee: EstimateFee;
-	programParamTypes?: ProgramParamTypesOf;
+	programAbi: ProgramAbiOf;
 	fundingUtxos: SelectableUtxo[];
 	holdingsOf?: AssetHoldings;
 	network: string;

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-	createSmplxProgramParamTypes,
+	createSmplxProgramAbi,
 	createSmplxProgramCompiler,
 	createSmplxScriptPubKeyCompiler,
 } from "./compileProgramWithSmplx";
@@ -213,46 +213,31 @@ describe("createSmplxScriptPubKeyCompiler", () => {
 });
 
 const answering = (answer: string) =>
-	createSmplxProgramParamTypes({ programArgumentTypes: () => answer });
+	createSmplxProgramAbi({ Program: { abi: () => answer } } as never);
 
-describe("createSmplxProgramParamTypes", () => {
-	test("reads the types the compiler reports for a contract", () => {
-		expect(answering('{"SLOT_COUNT":"u8","WITH_BURN":"bool"}')(PROBE_SOURCE)).toEqual({
-			SLOT_COUNT: "u8",
-			WITH_BURN: "bool",
-		});
-	});
-
-	test("reads a contract that declares none as declaring none", () => {
-		expect(answering("{}")(PROBE_SOURCE)).toEqual({});
-	});
-
-	test("passes the source through unchanged", () => {
-		const asked: string[] = [];
-
-		createSmplxProgramParamTypes({
-			programArgumentTypes: (source: string) => {
-				asked.push(source);
-
-				return "{}";
-			},
-		})(PROBE_SOURCE);
-
-		expect(asked).toEqual([PROBE_SOURCE]);
+describe("createSmplxProgramAbi", () => {
+	test("reads the parameter and witness types the compiler reports for a contract", () => {
+		expect(
+			answering('{"parameters":{"SLOT_COUNT":"u8"},"witnesses":{"PATH":"Either<(), ()>"}}')(
+				PROBE_SOURCE,
+			),
+		).toEqual({ parameters: { SLOT_COUNT: "u8" }, witnesses: { PATH: "Either<(), ()>" } });
 	});
 
 	test("throws on an answer that is not JSON at all", () => {
 		expect(() => answering("not json")(PROBE_SOURCE)).toThrow();
 	});
 
-	test("throws on an answer that is not a set of names", () => {
-		for (const answer of ["[]", '"u8"', "null", "7"]) {
+	test("throws on an answer whose halves are not sets of names", () => {
+		for (const answer of ["[]", "null", '{"parameters":{}}', '{"parameters":[],"witnesses":{}}']) {
 			expect(() => answering(answer)(PROBE_SOURCE)).toThrow();
 		}
 	});
 
-	test("throws naming the parameter whose type is not a type", () => {
-		expect(() => answering('{"SLOT_COUNT":8}')(PROBE_SOURCE)).toThrow(/SLOT_COUNT/);
+	test("throws naming the witness whose type is not a type", () => {
+		expect(() => answering('{"parameters":{},"witnesses":{"PATH":8}}')(PROBE_SOURCE)).toThrow(
+			/PATH/,
+		);
 	});
 });
 
@@ -304,12 +289,12 @@ describe("against the module this wallet ships", () => {
 		}
 	});
 
-	test("reads what the module says a contract's parameters are", async () => {
-		const declared = await createSmplxProgramParamTypes(smplx)(
-			"fn main() { assert!(jet::eq_8(param::SLOTS, 2)); }",
+	test("reads what the module says a contract's parameters and witnesses are", async () => {
+		const declared = await createSmplxProgramAbi(smplx)(
+			"fn main() { assert!(jet::eq_8(param::SLOTS, witness::COUNT)); }",
 		);
 
-		expect(declared.SLOTS).toBe("u8");
+		expect(declared).toEqual({ parameters: { SLOTS: "u8" }, witnesses: { COUNT: "u8" } });
 	});
 
 	test("lets a source that will not compile throw, rather than reporting an address for it", () => {

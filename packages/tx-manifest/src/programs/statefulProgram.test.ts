@@ -57,6 +57,7 @@ async function leavesOf(utxoType: string, instance: Record<string, string> = INS
 			};
 		},
 		contractSources: { "./lending.simf": "fn main() { }" },
+		programAbi: () => ({ parameters: {}, witnesses: {} }),
 		declaredTypes: DECLARED,
 		includeDebugSymbols: false,
 		network: "liquidtestnet",

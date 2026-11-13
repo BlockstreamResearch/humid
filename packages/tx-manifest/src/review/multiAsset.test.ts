@@ -798,6 +798,7 @@ describe("a program that does not state what it holds", () => {
 		(actions.PayToken!.inputs as Record<string, unknown>[]).push({
 			...(options.named === false ? {} : { id: "vault_in" }),
 			utxo_source: { utxo_type: "p2pk_output" },
+			witnesses: { SIGNATURE: "unused" },
 		});
 
 		if (options.asset === "policy-only") {

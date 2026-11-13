@@ -9,6 +9,7 @@ export type ProgramSite = {
 	signatureWitness?: string;
 	unusedWitnesses?: string[];
 	utxoType: string;
+	witnessNames?: string[];
 	wiring: Record<string, unknown>;
 };
 
@@ -32,6 +33,7 @@ export function programSites(action: Record<string, unknown>): ProgramSite[] {
 				role: "spent",
 				...(signatureWitness === undefined ? {} : { signatureWitness }),
 				...(unusedWitnesses.length === 0 ? {} : { unusedWitnesses }),
+				witnessNames: Object.keys(witnesses),
 			});
 		}
 	}

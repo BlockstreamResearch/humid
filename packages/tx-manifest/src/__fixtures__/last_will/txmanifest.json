@@ -116,7 +116,6 @@
                             "witnesses": {
                                 "SPEND_PATH": {
                                     "type": "simplicityhl",
-                                    "simplicity_type": "Either<(), Either<(), ()>>",
                                     "value": "Right(Left(()))",
                                     "description": "Selects the cold-spend path."
                                 },
@@ -156,7 +155,6 @@
                             "witnesses": {
                                 "SPEND_PATH": {
                                     "type": "simplicityhl",
-                                    "simplicity_type": "Either<(), Either<(), ()>>",
                                     "value": "Right(Right(()))",
                                     "description": "Selects the hot-key refresh path."
                                 },
@@ -202,7 +200,6 @@
                             "witnesses": {
                                 "SPEND_PATH": {
                                     "type": "simplicityhl",
-                                    "simplicity_type": "Either<(), Either<(), ()>>",
                                     "value": "Left(())",
                                     "description": "Selects the inherit path."
                                 },

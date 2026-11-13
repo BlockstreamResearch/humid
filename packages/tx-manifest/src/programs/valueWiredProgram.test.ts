@@ -6,7 +6,8 @@ import { Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
 import { declaredParamTypes } from "./declaredTypes";
-import { type ProgramParamTypesOf, deriveProgramAddress } from "./program";
+import { deriveProgramAddress } from "./program";
+import type { ProgramParamTypes } from "./programParamTypes";
 
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const ASSET_STATED = `a0${"00".repeat(30)}0a`;
@@ -30,7 +31,9 @@ const SOURCE = readFileSync(
 
 const manifest = new Manifest(manifestJson as unknown as Record<string, unknown>);
 
-function derive(input: { programParamTypes?: ProgramParamTypesOf; scope?: ReferenceScope } = {}) {
+function derive(
+	input: { programParamTypes?: () => ProgramParamTypes; scope?: ReferenceScope } = {},
+) {
 	const action = manifest.action("Withdraw");
 
 	if (!action) {
@@ -49,9 +52,7 @@ function derive(input: { programParamTypes?: ProgramParamTypesOf; scope?: Refere
 				tapleafHash: "1e".repeat(32),
 			};
 		},
-		...(input.programParamTypes === undefined
-			? {}
-			: { programParamTypes: input.programParamTypes }),
+		programAbi: () => ({ parameters: input.programParamTypes?.() ?? {}, witnesses: {} }),
 		contractSources: { "./vault.simf": SOURCE },
 		declaredTypes: declaredParamTypes(manifest, action),
 		includeDebugSymbols: false,

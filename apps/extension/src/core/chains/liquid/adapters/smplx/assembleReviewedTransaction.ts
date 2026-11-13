@@ -1,7 +1,7 @@
 import {
 	type ManifestReview,
 	Refusal,
-	type StaticWitness,
+	type TypedWitness,
 	type TransactionDraft,
 } from "@humid/tx-manifest";
 
@@ -324,15 +324,13 @@ function refuseUnsignable(utxo: ManifestReview["selected"][number]): void {
 	}
 }
 
-function witnessValuesJson(values: StaticWitness[] | undefined): string | undefined {
+function witnessValuesJson(values: TypedWitness[] | undefined): string | undefined {
 	if (!values || values.length === 0) {
 		return undefined;
 	}
 
 	return JSON.stringify(
-		Object.fromEntries(
-			values.map(({ name, simplicityType, value }) => [name, { type: simplicityType, value }]),
-		),
+		Object.fromEntries(values.map(({ name, type, value }) => [name, { type, value }])),
 	);
 }
 

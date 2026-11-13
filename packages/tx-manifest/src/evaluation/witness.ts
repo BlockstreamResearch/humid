@@ -1,11 +1,11 @@
 import { asArray, asRecord } from "../document/json";
 import type { Action } from "../document/manifest";
 import { type ReferenceScope, parseReference, resolveReference } from "../document/references";
+import type { ProgramSite } from "../document/sites";
 import { Refusal } from "../refusal";
 
 export type StaticWitness = {
 	name: string;
-	simplicityType: string;
 	value: string;
 };
 
@@ -34,13 +34,11 @@ export function resolveStaticWitnesses(
 				continue;
 			}
 
-			const simplicityType = witness.simplicity_type;
 			const value = witness.value;
 
-			if (typeof simplicityType !== "string" || typeof value !== "string") {
+			if (typeof value !== "string") {
 				throw new Refusal(
-					`The witness ${name} on input ${id} is a stated value, and the document states ` +
-						"either no type for it or no value.",
+					`The witness ${name} on input ${id} is a stated value, and the document states no value.`,
 				);
 			}
 
@@ -49,7 +47,7 @@ export function resolveStaticWitnesses(
 				(reason) => `The witness ${name} on input ${id}: ${reason}`,
 			);
 
-			stated.push({ name, simplicityType, value: filled });
+			stated.push({ name, value: filled });
 		}
 
 		if (stated.length > 0) {
@@ -70,4 +68,22 @@ function fill(value: string, scope: ReferenceScope): string {
 
 		return String(resolveReference(text, "witnessValue", scope).value);
 	});
+}
+
+export function checkWitnessNames(site: ProgramSite, declared: Record<string, string>): void {
+	const named = new Set(site.witnessNames);
+	const missing = Object.keys(declared).find((name) => !named.has(name));
+	const unknown = [...named].find((name) => !Object.hasOwn(declared, name));
+
+	if (missing !== undefined) {
+		throw new Refusal(
+			`Input ${site.id} leaves out the witness ${missing}, which its ${site.utxoType} program reads.`,
+		);
+	}
+
+	if (unknown !== undefined) {
+		throw new Refusal(
+			`Input ${site.id} names a witness ${unknown}, which its ${site.utxoType} program does not declare.`,
+		);
+	}
 }

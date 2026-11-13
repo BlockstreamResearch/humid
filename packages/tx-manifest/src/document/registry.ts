@@ -131,7 +131,6 @@ const SITES = {
 	witness: {
 		description: SHOWN,
 		sig_type: READ,
-		simplicity_type: READ,
 		source: READ,
 		type: READ,
 		value: READ,

@@ -211,7 +211,6 @@
               "witnesses": {
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<u32, u32>",
                   "value": "Left(0)",
                   "description": "Settle path (PATH::LEFT). The u32 payload is the index of the output paying the maker — output 0 below. Output index is set by declaration order, so maker_payout_out must stay first."
                 }
@@ -313,7 +312,6 @@
               "witnesses": {
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<u32, u32>",
                   "value": "Right(0)",
                   "description": "Refund path (PATH::RIGHT). The u32 payload is the index of the output returning the asset to the maker — output 0 below."
                 }

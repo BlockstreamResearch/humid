@@ -288,14 +288,13 @@ describe("a position the document states for a piece of the transaction", () => 
 });
 
 describe("a witness value the document states outright", () => {
-	test("is accepted with its type, and the names inside it resolved", async () => {
+	test("is accepted, and the names inside it resolved", async () => {
 		await reviewedPay(
 			payDocument((pay) => {
 				const inputs = pay.inputs as Document[];
 
 				(inputs[0] ?? {}).witnesses = {
 					BRANCH: {
-						simplicity_type: "Either<u32, ()>",
 						type: "simplicityhl",
 						value: "Left(params.amount_sat)",
 					},
@@ -311,7 +310,6 @@ describe("a witness value the document states outright", () => {
 
 				(inputs[0] ?? {}).witnesses = {
 					BRANCH: {
-						simplicity_type: "Either<u32, ()>",
 						type: "simplicityhl",
 						value: "Left(instance.NOBODY_WROTE_THIS)",
 					},

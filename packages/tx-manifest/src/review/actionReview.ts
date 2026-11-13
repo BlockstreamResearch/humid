@@ -38,7 +38,7 @@ import {
 import { fillParameters } from "../evaluation/parameters";
 import { type PlannedSpend, planAction, resolveAmount } from "../evaluation/plan";
 import { checkPositions, type StatedPosition } from "../evaluation/positions";
-import { resolveStaticWitnesses } from "../evaluation/witness";
+import { checkWitnessNames, resolveStaticWitnesses } from "../evaluation/witness";
 import { declaredParamTypes } from "../programs/declaredTypes";
 import {
 	type CreatedInstance,
@@ -90,6 +90,7 @@ export class ActionReview {
 	readonly #action: Action;
 	readonly #includeDebugSymbols: boolean;
 	readonly #declaredTypes: Record<string, string>;
+	readonly #witnessTypes = new Map<string, Record<string, string>>();
 	readonly #policyAsset: string;
 	readonly #mayReturn: (asset: string) => boolean;
 	readonly #pools = new Map<string, SelectableUtxo[]>();
@@ -312,9 +313,7 @@ export class ActionReview {
 	#derive(site: ProgramSite): Promise<ProgramDerivation> {
 		return deriveProgramAddress(this.#manifest, {
 			compile: this.#input.compile,
-			...(this.#input.programParamTypes === undefined
-				? {}
-				: { programParamTypes: this.#input.programParamTypes }),
+			programAbi: this.#input.programAbi,
 			contractSources: this.#request.contractSources,
 			declaredTypes: this.#declaredTypes,
 			includeDebugSymbols: this.#includeDebugSymbols,
@@ -358,6 +357,8 @@ export class ActionReview {
 						: // oxlint-disable-next-line no-await-in-loop
 							await this.#reopenedHolding(site, outpoint, onChain.transactionHex);
 
+			checkWitnessNames(site, derived.witnessTypes);
+			this.#witnessTypes.set(site.id, derived.witnessTypes);
 			this.#inputs[site.id] = { amount_sat: holding.sats, asset: holding.asset };
 			this.#chainHeld.push({ asset: holding.asset, id: site.id, sats: holding.sats });
 			this.#programInputs.push({
@@ -537,9 +538,14 @@ export class ActionReview {
 
 		for (const program of this.#programInputs) {
 			const values = stated.get(program.id);
+			const types = this.#witnessTypes.get(program.id) ?? {};
 
 			if (values && values.length > 0) {
-				program.witnessValues = values;
+				program.witnessValues = values.map(({ name, value }) => ({
+					name,
+					type: types[name] ?? "",
+					value,
+				}));
 			}
 		}
 	}

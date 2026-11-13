@@ -53,6 +53,7 @@ describe("creating a program", () => {
 				tapleafHash: "1e".repeat(32),
 				utxoType: "p2pk_output",
 				verified: "not-yet-onchain",
+				witnessTypes: { SIGNATURE: "u32" },
 			},
 		]);
 	});

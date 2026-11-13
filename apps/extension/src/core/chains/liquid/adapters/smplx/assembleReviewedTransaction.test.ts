@@ -13,6 +13,7 @@ const PROGRAM_BUILD = {
 	source: "fn main() { }",
 	sourcePath: "./p2pk.simf",
 	tapleafHash: "1e".repeat(32),
+	witnessTypes: {},
 };
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 const ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
@@ -557,9 +558,7 @@ describe("assembleReviewedTransaction", () => {
 					programInputs: [
 						{
 							...programInput,
-							witnessValues: [
-								{ name: "BRANCH", simplicityType: "Either<(), ()>", value: "Left(())" },
-							],
+							witnessValues: [{ name: "BRANCH", type: "Either<(), ()>", value: "Left(())" }],
 						},
 					],
 				}),

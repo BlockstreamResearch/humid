@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 
 import type { ReadTxOut } from "../chain/chainRead";
+import type { ProgramAbi } from "../programs/programParamTypes";
 import { Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import type { SelectableUtxo } from "./coinSelection";
@@ -114,6 +115,14 @@ export function sizedFee(draft: TransactionDraft, feeRateSatsPerKvb: number): bi
 	return BigInt(Math.ceil((vsize * feeRateSatsPerKvb) / 1000));
 }
 
+export function abiOf(source: string, parameters: Record<string, string> = {}): ProgramAbi {
+	const named = [...source.matchAll(/witness::(?<name>[A-Z0-9_]+)/g)].map(
+		(found) => found.groups?.name ?? "",
+	);
+
+	return { parameters, witnesses: Object.fromEntries(named.map((name) => [name, "u32"])) };
+}
+
 export function dependencies(overrides: Partial<ReviewDependencies> = {}): ReviewDependencies {
 	return {
 		accountLabel: ACCOUNT,
@@ -122,6 +131,7 @@ export function dependencies(overrides: Partial<ReviewDependencies> = {}): Revie
 		fundingUtxos: [utxo("1000000")],
 		network: "liquid",
 		policyAsset: POLICY_ASSET,
+		programAbi: (source) => abiOf(source),
 		readAddress: (address) => ({ scriptPubKeyHex: address }),
 		readFeeRate: async () => 1000,
 		readTxOut: chainHolding(),

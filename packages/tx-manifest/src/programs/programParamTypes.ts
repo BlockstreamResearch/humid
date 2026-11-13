@@ -3,6 +3,8 @@ import { encodeCompileParam, type EncodedParam } from "./paramEncoding";
 
 export type ProgramParamTypes = Record<string, string>;
 
+export type ProgramAbi = { parameters: ProgramParamTypes; witnesses: Record<string, string> };
+
 export type DeclaringContract = {
 	declares: ProgramParamTypes;
 	source: string;

@@ -717,7 +717,6 @@
               "witnesses": {
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<()>",
                   "value": "Right(())",
                   "description": "Selects cancel_pre_lock_path (PATH::RIGHT)."
                 },
@@ -743,7 +742,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -759,7 +757,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -775,7 +772,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -791,7 +787,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -870,7 +865,6 @@
               "witnesses": {
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<()>",
                   "value": "Left(())",
                   "description": "Selects create_lending_path (PATH::LEFT)."
                 },
@@ -888,7 +882,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -904,7 +897,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -920,7 +912,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -936,7 +927,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -1049,7 +1039,6 @@
               "witnesses": {
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<()>",
                   "value": "Left(())",
                   "description": "Selects loan_repayment_path (PATH::LEFT)."
                 }
@@ -1066,7 +1055,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -1082,7 +1070,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -1189,7 +1176,6 @@
               "witnesses": {
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<()>",
                   "value": "Right(())",
                   "description": "Selects loan_liquidation_path (PATH::RIGHT)."
                 }
@@ -1206,7 +1192,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -1222,7 +1207,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0"
                 }
               }
@@ -1300,12 +1284,10 @@
               "witnesses": {
                 "INPUT_ASSET_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "1"
                 },
                 "OUTPUT_ASSET_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "1"
                 }
               }

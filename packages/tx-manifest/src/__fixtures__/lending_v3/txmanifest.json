@@ -744,7 +744,6 @@
               "witnesses": {
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<u32, u32>",
                   "value": "Left(0)",
                   "description": "IssueAssets path (PATH::LEFT). The u32 payload is the auth-NFT output index (0)."
                 }
@@ -952,7 +951,6 @@
               "witnesses": {
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<(), ()>, Either<Either<(u64, u64), u64>, u64>>",
                   "value": "Left(Left(()))",
                   "description": "OfferAcceptance (PATH::Left(Left(())))."
                 }
@@ -974,7 +972,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0",
                   "description": "Index of the pending-offer covenant input this ScriptAuth is bound to (input 0)."
                 }
@@ -1093,7 +1090,6 @@
               "witnesses": {
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<(), ()>, Either<Either<(u64, u64), u64>, u64>>",
                   "value": "Left(Right(()))",
                   "description": "OfferCancellation (PATH::Left(Right(())))."
                 }
@@ -1115,7 +1111,6 @@
               "witnesses": {
                 "INPUT_SCRIPT_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "0",
                   "description": "The pending-offer covenant input this ScriptAuth is bound to (input 0)."
                 }
@@ -1220,13 +1215,11 @@
               "witnesses": {
                 "INPUT_ASSET_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "1",
                   "description": "Index of the input carrying the borrower auth NFT (input 1)."
                 },
                 "OUTPUT_ASSET_INDEX": {
                   "type": "simplicityhl",
-                  "simplicity_type": "u32",
                   "value": "1",
                   "description": "Index of the output the borrower auth NFT is preserved at (output 1)."
                 }
@@ -1339,7 +1332,6 @@
               "witnesses": {
                 "PATH": {
                   "type": "simplicityhl",
-                  "simplicity_type": "Either<Either<(), ()>, Either<Either<(u64, u64), u64>, u64>>",
                   "value": "Right(Left(Right(instance.CURRENT_DEBT)))",
                   "description": "FullRepayment (PATH::Right(Left(Right(current_debt)))). The u64 payload is the debt being cleared; it is not trusted input — the covenant recomputes the input's expected script hash from it and compares against the real one."
                 }

@@ -20,7 +20,7 @@ import { walletUnblinder } from "../lwk/wallet/walletUnblinder";
 import { assembleReviewedTransaction } from "./assembleReviewedTransaction";
 import {
 	createSmplxProgramCompiler,
-	createSmplxProgramParamTypes,
+	createSmplxProgramAbi,
 	createSmplxScriptPubKeyCompiler,
 } from "./compileProgramWithSmplx";
 import { smplx } from "./smplxWasmForTests";
@@ -131,7 +131,7 @@ class ReferenceExample {
 				},
 				compilerVersion: SMPLX_COMPILER_VERSION,
 				estimateFee: simplexFee,
-				programParamTypes: createSmplxProgramParamTypes(smplx),
+				programAbi: createSmplxProgramAbi(smplx),
 				fundingUtxos: request.owned?.[POLICY_ASSET] ?? [wallet(POLICY_ASSET, PLENTY)],
 				holdingsOf: (asset) =>
 					request.owned?.[asset] ?? [wallet(asset, request.holdings?.[asset] ?? PLENTY)],
@@ -588,14 +588,8 @@ describe("lending_v3", () => {
 describe("lending_v2", () => {
 	const lending = new ReferenceExample("lending_v2");
 	const loan = new ReferenceExample("lending_v2", "lending_contract");
-	const shipped = new ReferenceExample("lending_v2", "lending_contract");
 
-	Object.assign(
-		loan.manifest,
-		JSON.parse(JSON.stringify(loan.manifest).replaceAll('"Either<()>"', '"Either<(), ()>"')),
-	);
-
-	test("a loan signs every step at exactly the fee shown once its witness PATH is typed Either<(), ()>", async () => {
+	test("a loan signs every step at exactly the fee shown", async () => {
 		const issue = await loan.reviewed("IssueUtilityNFTs", {
 			owned: {
 				[POLICY_ASSET]: [1, 2, 3, 4, 5].map((at) =>
@@ -626,9 +620,6 @@ describe("lending_v2", () => {
 			...assets.slice(1).map((asset, at) => heldAt(locked, at + 1, "prelock_script_auth", asset)),
 		];
 
-		expect(await shipped.outcome("CancelOffer", { instance, spends: offer })).toBe(
-			"built-something-else",
-		);
 		settled(await loan.reviewed("CancelOffer", { instance, spends: offer }));
 
 		const lent = settled(await loan.reviewed("SetupLending", { instance, spends: offer }));

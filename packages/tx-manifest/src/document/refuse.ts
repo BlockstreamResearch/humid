@@ -195,9 +195,7 @@ function refuseUnproducibleWitness(manifest: Manifest): Refusal | undefined {
 
 function unproducible(witness: Record<string, unknown> | undefined): string | undefined {
 	if (witness?.type === STATIC_WITNESS) {
-		return typeof witness.simplicity_type === "string" && typeof witness.value === "string"
-			? undefined
-			: "states a value without both a type and a value";
+		return typeof witness.value === "string" ? undefined : "states no value";
 	}
 
 	if (witness?.type !== "Signature") {

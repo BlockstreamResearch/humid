@@ -11,11 +11,12 @@ export {
 	type ReadAddress,
 	type ReviewedProgramInput,
 	type TransactionDraft,
+	type TypedWitness,
 	type Unblind,
 	isRefusal,
 	reviewManifestAction,
 } from "./review";
-export type { StaticWitness } from "./evaluation/witness";
+export type { ProgramAbi } from "./programs/programParamTypes";
 export { type RejectToken, Refusal } from "./refusal";
 
 export { type ShownConfirmation, describeOrigin, toShownConfirmation } from "./confirmation";
