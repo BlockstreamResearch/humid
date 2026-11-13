@@ -18,7 +18,7 @@ const p2pkOf = (manifest: Document) => manifest as unknown as P2pk;
 
 function closed(
 	param: Document = { type: "pubkey" },
-	site: (reference: Document) => void = (reference) => {
+	bind: (reference: Document) => void = (reference) => {
 		reference.args = { PUB_KEY: "params.pubkey" };
 	},
 ): Fixture {
@@ -32,7 +32,7 @@ function closed(
 			actions.Receive.inputs[0].utxo_source,
 		]) {
 			delete reference.compile_params;
-			site(reference);
+			bind(reference);
 		}
 	});
 }
@@ -47,7 +47,7 @@ const receive = (fixture: Fixture) =>
 	});
 
 describe("a utxo type that declares its params", () => {
-	test("is built from what each site binds, as the open form builds it from the action", async () => {
+	test("is built from what each input and output binds, as the open form builds it from the action", async () => {
 		const paid = await reviewed(pay(closed()), { programAbi });
 		const received = await reviewed(receive(closed()), { programAbi });
 
@@ -55,7 +55,7 @@ describe("a utxo type that declares its params", () => {
 		expect(received.programInputs[0]?.argumentsJson).toBe(PUB_KEY_ARGUMENT);
 	});
 
-	test("falls back to a param's default where the site binds nothing", async () => {
+	test("falls back to a param's default where an output binds nothing", async () => {
 		const fixture = closed({ default: PUBKEY, type: "pubkey" }, () => {});
 
 		expect((await reviewed(pay(fixture), { programAbi })).programs[0]?.argumentsJson).toBe(
@@ -80,9 +80,13 @@ describe("a utxo type that declares its params", () => {
 
 describe("what a closed utxo type refuses rather than deriving some address", () => {
 	const cases: [string, Fixture, string][] = [
-		["a param no site binds and nothing defaults", closed(undefined, () => {}), "no default"],
 		[
-			"a site binding a param the type does not declare",
+			"a param no input or output binds and nothing defaults",
+			closed(undefined, () => {}),
+			"no default",
+		],
+		[
+			"an output binding a param the type does not declare",
 			closed(undefined, (reference) => {
 				reference.args = { PUB_KEY: "params.pubkey", PUBKEY: "params.pubkey" };
 			}),
@@ -94,7 +98,7 @@ describe("what a closed utxo type refuses rather than deriving some address", ()
 			"only instance fields",
 		],
 		[
-			"a site handing it compile_params instead of args",
+			"an output handing it compile_params instead of args",
 			closed(undefined, (reference) => {
 				reference.compile_params = { PUB_KEY: "params.pubkey" };
 			}),

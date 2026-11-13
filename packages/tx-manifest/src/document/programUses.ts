@@ -1,6 +1,6 @@
 import { asArray, asRecord } from "./json";
 
-export type ProgramSite = {
+export type ProgramUse = {
 	amount?: unknown;
 	asset?: unknown;
 	blinding?: unknown;
@@ -14,19 +14,19 @@ export type ProgramSite = {
 	wiring: Record<string, unknown>;
 };
 
-export function programSites(action: Record<string, unknown>): ProgramSite[] {
-	const sites: ProgramSite[] = [];
+export function programUses(action: Record<string, unknown>): ProgramUse[] {
+	const uses: ProgramUse[] = [];
 
 	for (const entry of asArray(action.inputs)) {
-		const site = programReference(asRecord(entry)?.utxo_source);
+		const use = programReference(asRecord(entry)?.utxo_source);
 
-		if (site) {
+		if (use) {
 			const witnesses = asRecord(asRecord(entry)?.witnesses) ?? {};
 			const signatureWitness = walletSignatureWitness(witnesses);
 			const unusedWitnesses = Object.keys(witnesses).filter((name) => witnesses[name] === "unused");
 
-			sites.push({
-				...site,
+			uses.push({
+				...use,
 				amount: asRecord(entry)?.amount_sat,
 				asset: asRecord(entry)?.asset,
 				blinding: asRecord(entry)?.blinding,
@@ -40,18 +40,18 @@ export function programSites(action: Record<string, unknown>): ProgramSite[] {
 	}
 
 	for (const entry of asArray(action.outputs)) {
-		const site = programReference(asRecord(entry)?.destination);
+		const use = programReference(asRecord(entry)?.destination);
 
-		if (site) {
-			sites.push({ ...site, id: identifierOf(entry), role: "created" });
+		if (use) {
+			uses.push({ ...use, id: identifierOf(entry), role: "created" });
 		}
 	}
 
-	return sites;
+	return uses;
 }
 
 export function namedUtxoTypes(action: Record<string, unknown>): string[] {
-	return [...new Set(programSites(action).map((site) => site.utxoType))];
+	return [...new Set(programUses(action).map((use) => use.utxoType))];
 }
 
 function programReference(

@@ -3,7 +3,7 @@ import { type ConstructRegistryEntry, describeRegistry } from "@humid/tx-manifes
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-import { WHERE_IT_SITS } from "./positions";
+import { WHERE_IT_SITS } from "./constructKinds";
 
 export default function FormatSupport() {
 	const entries = describeRegistry();
@@ -71,12 +71,12 @@ function Section({
 						<tbody>
 							{entries.map((entry) => (
 								<tr
-									key={`${entry.site}/${entry.key}`}
+									key={`${entry.kind}/${entry.key}`}
 									className="border-border/50 border-b align-top"
 								>
 									<td className="py-2 pr-4 font-mono whitespace-nowrap">{entry.key}</td>
 									<td className="text-muted-foreground py-2 whitespace-nowrap">
-										{WHERE_IT_SITS[entry.site]}
+										{WHERE_IT_SITS[entry.kind]}
 									</td>
 								</tr>
 							))}
@@ -89,7 +89,7 @@ function Section({
 }
 
 function summaryOf(entries: ConstructRegistryEntry[]): string {
-	const kinds = new Set(entries.map((entry) => entry.site)).size;
+	const kinds = new Set(entries.map((entry) => entry.kind)).size;
 
 	return `${entries.length} fields at ${kinds} kinds of position.`;
 }

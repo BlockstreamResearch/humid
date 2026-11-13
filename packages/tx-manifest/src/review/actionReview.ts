@@ -7,9 +7,9 @@ import { byOutpoint, outpointKey } from "../chain/outpoint";
 import { confirmationModel, type ReviewedPlan } from "../confirmation";
 import { asArray, asRecord } from "../document/json";
 import { type Action, type InstanceFile, Manifest, readInstance } from "../document/manifest";
+import { type ProgramUse, programUses } from "../document/programUses";
 import type { ReferenceScope } from "../document/references";
 import { refuseUnsupported } from "../document/refuse";
-import { type ProgramSite, programSites } from "../document/sites";
 import {
 	type AssetLedger,
 	assetLedger,
@@ -306,11 +306,11 @@ export class ActionReview {
 		return pool;
 	}
 
-	#sites(role: ProgramSite["role"]): ProgramSite[] {
-		return programSites(this.#action.node).filter((site) => site.role === role);
+	#uses(role: ProgramUse["role"]): ProgramUse[] {
+		return programUses(this.#action.node).filter((use) => use.role === role);
 	}
 
-	#derive(site: ProgramSite): Promise<ProgramDerivation> {
+	#derive(use: ProgramUse): Promise<ProgramDerivation> {
 		return deriveProgramAddress(this.#manifest, {
 			compile: this.#input.compile,
 			programAbi: this.#input.programAbi,
@@ -319,63 +319,63 @@ export class ActionReview {
 			includeDebugSymbols: this.#includeDebugSymbols,
 			network: this.#input.network,
 			scope: this.#scope,
-			utxoType: site.utxoType,
-			...(site.args === undefined ? {} : { args: site.args }),
-			wiring: site.wiring,
+			utxoType: use.utxoType,
+			...(use.args === undefined ? {} : { args: use.args }),
+			wiring: use.wiring,
 		});
 	}
 
 	async #spendPrograms(): Promise<void> {
 		const utxos = new ProgramUtxos(this.#request.state, this.#deployment.providedInputs);
 
-		for (const site of this.#sites("spent")) {
+		for (const use of this.#uses("spent")) {
 			// oxlint-disable-next-line no-await-in-loop
-			const derived = await this.#derive(site);
+			const derived = await this.#derive(use);
 			const asset = Refusal.attempt(() =>
-				resolveAsset(site.asset, `input ${site.id}`, {
+				resolveAsset(use.asset, `input ${use.id}`, {
 					policyAsset: this.#input.policyAsset,
 					scope: this.#scope,
 				}),
 			);
-			const outpoint = utxos.claim(site.id, site.utxoType, asset);
+			const outpoint = utxos.claim(use.id, use.utxoType, asset);
 			// oxlint-disable-next-line no-await-in-loop
 			const onChain = await this.#readTxOut(outpoint);
 
 			checkProgramOnChain(derived, onChain.scriptPubKeyHex);
 
-			if (!site.id) {
+			if (!use.id) {
 				throw new Refusal(
-					`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} is spent by an input the ` +
+					`The ${use.utxoType} at ${outpoint.txid}:${outpoint.vout} is spent by an input the ` +
 						"manifest gives no id, so this wallet cannot account for what it brings.",
 				);
 			}
 
 			const holding =
-				site.blinding !== undefined
-					? this.#blindedHolding(site)
+				use.blinding !== undefined
+					? this.#blindedHolding(use)
 					: onChain.amountSats !== undefined && onChain.rawAssetId !== undefined
-						? explicitHolding(site, outpoint, onChain.amountSats, onChain.rawAssetId)
+						? explicitHolding(use, outpoint, onChain.amountSats, onChain.rawAssetId)
 						: // oxlint-disable-next-line no-await-in-loop
-							await this.#reopenedHolding(site, outpoint, onChain.transactionHex);
+							await this.#reopenedHolding(use, outpoint, onChain.transactionHex);
 
-			checkWitnessNames(site, derived.witnessTypes);
-			this.#witnessTypes.set(site.id, derived.witnessTypes);
-			this.#inputs[site.id] = { amount_sat: holding.sats, asset: holding.asset };
-			this.#chainHeld.push({ asset: holding.asset, id: site.id, sats: holding.sats });
+			checkWitnessNames(use, derived.witnessTypes);
+			this.#witnessTypes.set(use.id, derived.witnessTypes);
+			this.#inputs[use.id] = { amount_sat: holding.sats, asset: holding.asset };
+			this.#chainHeld.push({ asset: holding.asset, id: use.id, sats: holding.sats });
 			this.#programInputs.push({
 				argumentsJson: derived.argumentsJson,
 				extraLeavesJson: derived.extraLeavesJson,
-				id: site.id,
+				id: use.id,
 				includeDebugSymbols: derived.includeDebugSymbols,
-				...(site.signatureWitness === undefined ? {} : { signatureWitness: site.signatureWitness }),
+				...(use.signatureWitness === undefined ? {} : { signatureWitness: use.signatureWitness }),
 				...(holding.blindingSecretsJson === undefined
 					? {}
 					: { blindingSecretsJson: holding.blindingSecretsJson }),
 				source: derived.source,
 				txOutHex: onChain.txOutHex,
 				txid: outpoint.txid,
-				...(site.unusedWitnesses === undefined ? {} : { unusedWitnesses: site.unusedWitnesses }),
-				utxoType: site.utxoType,
+				...(use.unusedWitnesses === undefined ? {} : { unusedWitnesses: use.unusedWitnesses }),
+				utxoType: use.utxoType,
 				vout: outpoint.vout,
 			});
 			this.#programs.push({ ...derived, role: "spent", verified: "matches-chain" });
@@ -408,10 +408,10 @@ export class ActionReview {
 		}
 	}
 
-	#blindedHolding(site: ProgramSite): Holding {
-		const at = `Input ${site.id}`;
+	#blindedHolding(use: ProgramUse): Holding {
+		const at = `Input ${use.id}`;
 		const { assetBlindingFactor, valueBlindingFactor } = Refusal.amend(
-			() => resolveBlindingFactors(site.blinding, this.#scope),
+			() => resolveBlindingFactors(use.blinding, this.#scope),
 			(reason) => `${at} ${reason}`,
 		);
 
@@ -422,12 +422,12 @@ export class ActionReview {
 			);
 		}
 
-		const asset = resolveAsset(site.asset, `input ${site.id}`, {
+		const asset = resolveAsset(use.asset, `input ${use.id}`, {
 			policyAsset: this.#input.policyAsset,
 			scope: this.#scope,
 		});
 		const sats = Refusal.amend(
-			() => resolveAmount(site.amount, this.#scope),
+			() => resolveAmount(use.amount, this.#scope),
 			(reason) =>
 				`${at} spends a blinded output, which states its amount only through amount_sat: ${reason}`,
 		);
@@ -445,7 +445,7 @@ export class ActionReview {
 	}
 
 	async #reopenedHolding(
-		site: ProgramSite,
+		use: ProgramUse,
 		outpoint: Outpoint,
 		transactionHex: string | undefined,
 	): Promise<Holding> {
@@ -456,23 +456,23 @@ export class ActionReview {
 
 		if (!opened) {
 			throw new Refusal(
-				`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} is blinded to a key this ` +
-					`wallet does not hold, and input ${site.id} states no blinding factors to open it ` +
+				`The ${use.utxoType} at ${outpoint.txid}:${outpoint.vout} is blinded to a key this ` +
+					`wallet does not hold, and input ${use.id} states no blinding factors to open it ` +
 					"with. This wallet will not assume a balance for an output it is about to spend.",
 				"unbuildable-utxo-type",
 			);
 		}
 
 		const declaredAsset =
-			site.asset === undefined
+			use.asset === undefined
 				? undefined
-				: resolveAsset(site.asset, `input ${site.id}`, {
+				: resolveAsset(use.asset, `input ${use.id}`, {
 						policyAsset: this.#input.policyAsset,
 						scope: this.#scope,
 					});
 		const declaredSats =
-			typeof site.amount === "number" || typeof site.amount === "string"
-				? resolveAmount(site.amount, this.#scope)
+			typeof use.amount === "number" || typeof use.amount === "string"
+				? resolveAmount(use.amount, this.#scope)
 				: undefined;
 
 		if (
@@ -480,8 +480,8 @@ export class ActionReview {
 			(declaredSats !== undefined && declaredSats !== opened.sats)
 		) {
 			throw new Refusal(
-				`Input ${site.id} expects ${declaredSats ?? "an amount"} of ${declaredAsset ?? "an asset"}, ` +
-					`and the ${site.utxoType} it spends holds ${opened.sats} of ${opened.asset}.`,
+				`Input ${use.id} expects ${declaredSats ?? "an amount"} of ${declaredAsset ?? "an asset"}, ` +
+					`and the ${use.utxoType} it spends holds ${opened.sats} of ${opened.asset}.`,
 				"program-mismatch",
 			);
 		}
@@ -526,9 +526,9 @@ export class ActionReview {
 	}
 
 	async #createPrograms(): Promise<void> {
-		for (const site of this.#sites("created")) {
+		for (const use of this.#uses("created")) {
 			// oxlint-disable-next-line no-await-in-loop
-			const derived = await this.#derive(site);
+			const derived = await this.#derive(use);
 
 			this.#programs.push({ ...derived, role: "created", verified: "not-yet-onchain" });
 		}
@@ -1035,7 +1035,7 @@ const DUST_SATS = 22n;
 type Holding = { asset: string; blindingSecretsJson?: string; sats: bigint };
 
 function explicitHolding(
-	site: ProgramSite,
+	use: ProgramUse,
 	outpoint: Outpoint,
 	amountSats: string,
 	asset: string,
@@ -1044,7 +1044,7 @@ function explicitHolding(
 
 	if (sats === undefined) {
 		throw new Refusal(
-			`The ${site.utxoType} at ${outpoint.txid}:${outpoint.vout} came back holding ` +
+			`The ${use.utxoType} at ${outpoint.txid}:${outpoint.vout} came back holding ` +
 				`${JSON.stringify(amountSats)}, which is not an amount this wallet can read. It will ` +
 				"not spend an output it cannot say the value of.",
 			"unbuildable-utxo-type",

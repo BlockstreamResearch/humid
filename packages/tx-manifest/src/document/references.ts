@@ -1,7 +1,7 @@
 import { Refusal } from "../refusal";
 import { asArray, asRecord } from "./json";
 import { type Action, type Manifest } from "./manifest";
-import { namedUtxoTypes } from "./sites";
+import { namedUtxoTypes } from "./programUses";
 
 export type ReferenceForm = "bare" | "input-attribute" | "instance" | "params";
 
@@ -21,7 +21,7 @@ export type ReferenceScope = {
 
 export type ReferenceResolution = { form: ReferenceForm; value: unknown };
 
-export type ReferenceSiteKind =
+export type ReferencePosition =
 	| "amount"
 	| "asset"
 	| "compileParam"
@@ -34,7 +34,7 @@ export type ReferenceSiteKind =
 	| "witnessKey"
 	| "witnessValue";
 
-const SITES: Record<ReferenceSiteKind, { accepts: ReferenceForm[]; describes: string }> = {
+const POSITIONS: Record<ReferencePosition, { accepts: ReferenceForm[]; describes: string }> = {
 	amount: {
 		accepts: ["instance", "params", "input-attribute", "bare"],
 		describes: "an amount",
@@ -80,7 +80,7 @@ const NAMESPACES: Record<string, ReferenceForm> = {
 	params: "params",
 };
 
-const PROGRAM_ARGUMENTS = new Set<ReferenceSiteKind>(["compileParam", "stateLeaf"]);
+const PROGRAM_ARGUMENTS = new Set<ReferencePosition>(["compileParam", "stateLeaf"]);
 
 const NAME = "[A-Za-z_][A-Za-z0-9_]*";
 const REFERENCE = new RegExp(`^(?<head>${NAME})(?:\\.(?<tail>${NAME}))?$`);
@@ -108,11 +108,11 @@ export function parseReference(text: string): ParsedReference | undefined {
 
 export function resolveReference(
 	text: string,
-	site: ReferenceSiteKind,
+	position: ReferencePosition,
 	scope: ReferenceScope,
 ): ReferenceResolution {
 	const reference = parseReference(text);
-	const accepted = SITES[site];
+	const accepted = POSITIONS[position];
 
 	if (!reference) {
 		throw new Refusal(`"${text}" is not a reference.`);
@@ -122,20 +122,20 @@ export function resolveReference(
 		throw new Refusal(`"${text}" cannot be used as ${accepted.describes}.`);
 	}
 
-	return { form: reference.form, value: lookUp(reference, site, scope) };
+	return { form: reference.form, value: lookUp(reference, position, scope) };
 }
 
 function lookUp(
 	reference: ParsedReference,
-	site: ReferenceSiteKind,
+	position: ReferencePosition,
 	scope: ReferenceScope,
 ): unknown {
 	switch (reference.form) {
 		case "bare": {
 			const name = reference.name;
 
-			if (PROGRAM_ARGUMENTS.has(site)) {
-				return lookUp({ form: "instance", name }, site, scope);
+			if (PROGRAM_ARGUMENTS.has(position)) {
+				return lookUp({ form: "instance", name }, position, scope);
 			}
 
 			if (name === "fee" && scope.fee !== undefined) {
@@ -188,7 +188,7 @@ function read(source: Record<string, unknown> | undefined, name: string, label: 
 
 export type ReferenceOccurrence = {
 	at: string;
-	site: ReferenceSiteKind;
+	position: ReferencePosition;
 	text: string;
 };
 
@@ -198,22 +198,22 @@ export function actionReferences(manifest: Manifest, action: Action): ReferenceO
 	const found: ReferenceOccurrence[] = [];
 	const where = `action ${action.name}`;
 
-	const add = (site: ReferenceSiteKind, at: string, value: unknown): void => {
+	const add = (position: ReferencePosition, at: string, value: unknown): void => {
 		if (typeof value === "string") {
-			found.push({ at, site, text: value });
+			found.push({ at, position, text: value });
 		}
 	};
 
 	const addWiring = (
 		at: string,
 		wiring: unknown,
-		site: ReferenceSiteKind = "compileParam",
+		position: ReferencePosition = "compileParam",
 	): void => {
 		for (const [name, value] of Object.entries(asRecord(wiring) ?? {})) {
-			add(site, `${at} / ${name}`, value);
+			add(position, `${at} / ${name}`, value);
 		}
 	};
-	const addSite = (at: string, reference: unknown): void => {
+	const addProgramUse = (at: string, reference: unknown): void => {
 		addWiring(at, asRecord(reference)?.compile_params);
 		addWiring(at, asRecord(reference)?.args, "field");
 	};
@@ -221,7 +221,7 @@ export function actionReferences(manifest: Manifest, action: Action): ReferenceO
 	for (const declared of asArray(action.node.inputs)) {
 		const input = asRecord(declared);
 
-		addSite(`${where} / input ${identifierOf(input)}`, input?.utxo_source);
+		addProgramUse(`${where} / input ${identifierOf(input)}`, input?.utxo_source);
 	}
 
 	for (const declared of asArray(action.node.outputs)) {
@@ -229,7 +229,7 @@ export function actionReferences(manifest: Manifest, action: Action): ReferenceO
 		const at = `${where} / output ${identifierOf(output)}`;
 		const destination = output?.destination;
 
-		addSite(at, destination);
+		addProgramUse(at, destination);
 		add("amount", `${at} / amount_sat`, output?.amount_sat);
 
 		if (typeof destination === "string" && !DESTINATION_KEYWORDS.has(destination)) {
@@ -293,7 +293,7 @@ export function instanceReferences(
 
 		return (
 			reference.form === "bare" &&
-			occurrence.site === "compileParam" &&
+			occurrence.position === "compileParam" &&
 			reference.name in fields &&
 			!(reference.name in supplied)
 		);

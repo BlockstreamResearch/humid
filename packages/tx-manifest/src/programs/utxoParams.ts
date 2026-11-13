@@ -11,30 +11,32 @@ export type BoundParams = {
 export function bindUtxoParams(
 	utxoType: string,
 	declared: Record<string, unknown>,
-	site: { args?: unknown; wiring: Record<string, unknown> },
+	use: { args?: unknown; wiring: Record<string, unknown> },
 	scope: ReferenceScope,
 ): BoundParams | undefined {
 	const params = asRecord(declared.params);
 
 	if (!params) {
-		if (site.args !== undefined) {
-			throw new Refusal(`A site binds args to ${utxoType}, which declares no params.`);
+		if (use.args !== undefined) {
+			throw new Refusal(
+				`An input or output gives ${utxoType} args, and the type declares no params.`,
+			);
 		}
 
 		return undefined;
 	}
 
-	if (Object.keys(site.wiring).length > 0) {
+	if (Object.keys(use.wiring).length > 0) {
 		throw new Refusal(
-			`A site gives compile_params to ${utxoType}, which declares params; a site binds them with args.`,
+			`An input or output gives ${utxoType} compile_params, and the type declares params, which are bound with args.`,
 		);
 	}
 
-	const args = asRecord(site.args) ?? {};
+	const args = asRecord(use.args) ?? {};
 	const unknown = Object.keys(args).find((name) => !Object.hasOwn(params, name));
 
 	if (unknown !== undefined) {
-		throw new Refusal(`A site binds ${unknown}, which is not a param of ${utxoType}.`);
+		throw new Refusal(`An input or output binds ${unknown}, which is not a param of ${utxoType}.`);
 	}
 
 	const values: Record<string, string> = {};
@@ -49,7 +51,9 @@ export function bindUtxoParams(
 		}
 
 		if (bound !== undefined && typeof bound !== "string") {
-			throw new Refusal(`A site binds ${utxoType}'s ${name} to something that is not text.`);
+			throw new Refusal(
+				`An input or output binds ${utxoType}'s ${name} to something that is not text.`,
+			);
 		}
 
 		values[name] =
@@ -70,7 +74,7 @@ function defaultOf(
 ): string {
 	if (typeof declared !== "string") {
 		throw new Refusal(
-			`A site leaves ${utxoType}'s ${name} unbound, and the param has no default to fall back on.`,
+			`An input or output leaves ${utxoType}'s ${name} unbound, and the param has no default to fall back on.`,
 		);
 	}
 

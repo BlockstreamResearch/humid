@@ -32,7 +32,7 @@ function ledgerOf(params: Record<string, unknown>, held: HeldValue[] = []) {
 
 const PARAMS = { amount_sat: 1000, fee_sat: 700, pubkey: PUBKEY, token: TOKEN };
 
-describe("which asset a declared site is in", () => {
+describe("which asset a declared input or output is in", () => {
 	const context = { policyAsset: POLICY_ASSET, scope: { params: {} } };
 
 	test("nothing stated means the asset the network charges fees in", () => {

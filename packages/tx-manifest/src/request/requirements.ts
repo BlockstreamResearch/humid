@@ -1,7 +1,7 @@
 import { asRecord } from "../document/json";
 import { type Action, type Manifest, readInstance } from "../document/manifest";
+import { programUses, namedUtxoTypes } from "../document/programUses";
 import { instanceReferences, parseReference } from "../document/references";
-import { programSites, namedUtxoTypes } from "../document/sites";
 import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./request";
 
 export function resolveActionRequirements(
@@ -78,7 +78,7 @@ export function resolveActionRequirements(
 
 	const pinned = readInstance(request.instance).providedInputs;
 
-	if (programSites(action).some((site) => site.role === "spent" && !(site.id in pinned))) {
+	if (programUses(action).some((use) => use.role === "spent" && !(use.id in pinned))) {
 		required.push("state");
 
 		if (!request.state) {

@@ -27,7 +27,7 @@ export type { SelectableUtxo } from "./review/coinSelection";
 
 export {
 	type ConstructRegistryEntry,
-	type ConstructSiteKind,
+	type ConstructKind,
 	type ConstructState,
 	describeRegistry,
 } from "./document/registry";

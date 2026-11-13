@@ -9,7 +9,7 @@ const READ: Construct = { state: "acted-on" };
 const SHOWN: Construct = { state: "shown" };
 const UNIMPLEMENTED: Construct = { state: "unimplemented" };
 
-const SITES = {
+const CONSTRUCTS = {
 	action: {
 		allow_change: READ,
 		create_instance: READ,
@@ -142,21 +142,21 @@ const SITES = {
 	},
 } satisfies Record<string, Record<string, Construct>>;
 
-export type ConstructSiteKind = keyof typeof SITES;
+export type ConstructKind = keyof typeof CONSTRUCTS;
 
 const IGNORED = new Set(["$comment", "$schema"]);
 
 export type ConstructRegistryEntry = {
 	key: string;
-	site: ConstructSiteKind;
+	kind: ConstructKind;
 	state: ConstructState;
 };
 
 export function describeRegistry(): ConstructRegistryEntry[] {
-	return Object.entries(SITES).flatMap(([site, constructs]) =>
+	return Object.entries(CONSTRUCTS).flatMap(([kind, constructs]) =>
 		Object.entries(constructs).map(([key, construct]: [string, Construct]) => ({
 			key,
-			site: site as ConstructSiteKind,
+			kind: kind as ConstructKind,
 			state: construct.state,
 		})),
 	);
@@ -171,13 +171,13 @@ export type ConstructFinding = {
 export function inspectConstructs(manifest: Manifest): ConstructFinding[] {
 	const findings: ConstructFinding[] = [];
 
-	walkSites(manifest, (node, site, at) => {
-		const constructs: Record<string, Construct> = SITES[site];
+	walkConstructs(manifest, (node, kind, at) => {
+		const constructs: Record<string, Construct> = CONSTRUCTS[kind];
 
 		for (const key of Object.keys(node)) {
 			const construct = constructs[key];
 
-			if (IGNORED.has(key) || (!construct && site === "ui")) {
+			if (IGNORED.has(key) || (!construct && kind === "ui")) {
 				continue;
 			}
 
@@ -192,14 +192,14 @@ export function inspectConstructs(manifest: Manifest): ConstructFinding[] {
 	return findings;
 }
 
-type SiteVisitor = (node: Record<string, unknown>, site: ConstructSiteKind, at: string) => void;
+type ConstructVisitor = (node: Record<string, unknown>, kind: ConstructKind, at: string) => void;
 
-function walkSites(manifest: Manifest, visit: SiteVisitor): void {
-	const at = (where: string, node: unknown, site: ConstructSiteKind) => {
+function walkConstructs(manifest: Manifest, visit: ConstructVisitor): void {
+	const at = (where: string, node: unknown, kind: ConstructKind) => {
 		const record = asRecord(node);
 
 		if (record) {
-			visit(record, site, where);
+			visit(record, kind, where);
 		}
 	};
 

@@ -1,7 +1,7 @@
 import {
 	parseReference,
 	type ReferenceScope,
-	type ReferenceSiteKind,
+	type ReferencePosition,
 	resolveReference,
 } from "../document/references";
 import { Refusal } from "../refusal";
@@ -15,10 +15,10 @@ export function computesValue(text: string): boolean {
 
 export function computedValue(
 	text: string,
-	site: ReferenceSiteKind,
+	position: ReferencePosition,
 	scope: ReferenceScope,
 ): string {
-	return String(evaluateExpression(text, site, scope));
+	return String(evaluateExpression(text, position, scope));
 }
 
 export function statedValue(label: string, text: string, scope: ReferenceScope): string {

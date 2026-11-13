@@ -415,11 +415,11 @@ describe("p2pk", () => {
 
 		types.p2pk_output!.params = { PUB_KEY: { type: "pubkey" } };
 
-		for (const site of [
+		for (const use of [
 			actions.Pay!.outputs[0]!.destination,
 			actions.Receive!.inputs[0]!.utxo_source,
 		]) {
-			const reference = site as Record<string, unknown>;
+			const reference = use as Record<string, unknown>;
 
 			delete reference.compile_params;
 			reference.args = { PUB_KEY: "params.pubkey" };

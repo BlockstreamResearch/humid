@@ -1,7 +1,7 @@
 import { asArray, asRecord } from "../document/json";
 import type { Action } from "../document/manifest";
+import type { ProgramUse } from "../document/programUses";
 import { type ReferenceScope, parseReference, resolveReference } from "../document/references";
-import type { ProgramSite } from "../document/sites";
 import { Refusal } from "../refusal";
 
 export type StaticWitness = {
@@ -70,20 +70,20 @@ function fill(value: string, scope: ReferenceScope): string {
 	});
 }
 
-export function checkWitnessNames(site: ProgramSite, declared: Record<string, string>): void {
-	const named = new Set(site.witnessNames);
+export function checkWitnessNames(use: ProgramUse, declared: Record<string, string>): void {
+	const named = new Set(use.witnessNames);
 	const missing = Object.keys(declared).find((name) => !named.has(name));
 	const unknown = [...named].find((name) => !Object.hasOwn(declared, name));
 
 	if (missing !== undefined) {
 		throw new Refusal(
-			`Input ${site.id} leaves out the witness ${missing}, which its ${site.utxoType} program reads.`,
+			`Input ${use.id} leaves out the witness ${missing}, which its ${use.utxoType} program reads.`,
 		);
 	}
 
 	if (unknown !== undefined) {
 		throw new Refusal(
-			`Input ${site.id} names a witness ${unknown}, which its ${site.utxoType} program does not declare.`,
+			`Input ${use.id} names a witness ${unknown}, which its ${use.utxoType} program does not declare.`,
 		);
 	}
 }

@@ -1,6 +1,6 @@
-import type { ConstructSiteKind } from "@humid/tx-manifest";
+import type { ConstructKind } from "@humid/tx-manifest";
 
-export const WHERE_IT_SITS: Record<ConstructSiteKind, string> = {
+export const WHERE_IT_SITS: Record<ConstructKind, string> = {
 	action: "on an action",
 	programReference: "on a program reference",
 	compute: "on a computed value",

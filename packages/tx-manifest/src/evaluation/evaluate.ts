@@ -1,6 +1,6 @@
 import {
 	type ReferenceScope,
-	type ReferenceSiteKind,
+	type ReferencePosition,
 	resolveReference,
 } from "../document/references";
 import { Refusal } from "../refusal";
@@ -10,7 +10,7 @@ const I64_MIN = -(2n ** 63n);
 
 export function evaluateExpression(
 	text: string,
-	site: ReferenceSiteKind,
+	position: ReferencePosition,
 	scope: ReferenceScope,
 ): bigint {
 	const tokens = tokenise(text);
@@ -19,7 +19,7 @@ export function evaluateExpression(
 		throw unreadable(text);
 	}
 
-	const reader = { at: 0, scope, site, tokens };
+	const reader = { at: 0, scope, position, tokens };
 	const value = Refusal.amend(
 		() => readSum(reader),
 		(reason) => `${reason} The expression was "${text}".`,
@@ -41,7 +41,7 @@ type Token = { kind: "name" | "number" | "symbol"; text: string };
 type Reader = {
 	at: number;
 	scope: ReferenceScope;
-	site: ReferenceSiteKind;
+	position: ReferencePosition;
 	tokens: Token[];
 };
 
@@ -212,7 +212,7 @@ function readCall(reader: Reader, name: string): bigint {
 }
 
 function readReference(reader: Reader, token: Token): bigint {
-	const count = asInteger(resolveReference(token.text, reader.site, reader.scope).value);
+	const count = asInteger(resolveReference(token.text, reader.position, reader.scope).value);
 
 	if (count === undefined) {
 		throw new Refusal(`"${token.text}" is not a number, so it cannot be part of an amount.`);

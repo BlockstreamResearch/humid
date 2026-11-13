@@ -3,8 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { describeRegistry } from "@humid/tx-manifest";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { WHERE_IT_SITS } from "./constructKinds";
 import FormatSupport from "./index";
-import { WHERE_IT_SITS } from "./positions";
 
 function render(): string {
 	return renderToStaticMarkup(<FormatSupport />);
