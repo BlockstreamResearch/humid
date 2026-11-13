@@ -3,6 +3,7 @@ import type { ConstructSiteKind } from "@humid/tx-manifest";
 export const WHERE_IT_SITS: Record<ConstructSiteKind, string> = {
 	action: "on an action",
 	programReference: "on a program reference",
+	compute: "on a computed value",
 	createInstance: "on a create_instance",
 	input: "on an input",
 	manifest: "on the document",

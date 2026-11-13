@@ -5,6 +5,7 @@ import { STATIC_WITNESS } from "../evaluation/witness";
 import { Refusal } from "../refusal";
 import { asArray, asRecord } from "./json";
 import type { Manifest } from "./manifest";
+import { RESERVED_INPUT_IDS } from "./references";
 import { inspectConstructs } from "./registry";
 
 const FORMAT_MAJOR = 0;
@@ -20,6 +21,7 @@ export function refuseUnsupported(
 		refuseForeignFormat(manifest) ??
 		refuseForeignChain(manifest) ??
 		refuseConstructs(manifest) ??
+		refuseReservedInputIds(manifest) ??
 		refuseCapabilities(manifest) ??
 		refuseUnbuildableUtxoType(manifest) ??
 		refuseSourceMismatch(manifest, input.contractSources) ??
@@ -73,6 +75,23 @@ function refuseConstructs(manifest: Manifest): Refusal | undefined {
 			);
 }
 
+function refuseReservedInputIds(manifest: Manifest): Refusal | undefined {
+	for (const action of manifest.actions) {
+		const reserved = asArray(action.node.inputs)
+			.map((input) => asRecord(input)?.id)
+			.find((id) => typeof id === "string" && RESERVED_INPUT_IDS.has(id));
+
+		if (reserved !== undefined) {
+			return new Refusal(
+				`The manifest is malformed: ${action.name} names an input "${String(reserved)}", which is a namespace.`,
+				"document-fault",
+			);
+		}
+	}
+
+	return undefined;
+}
+
 function refuseCapabilities(manifest: Manifest): Refusal | undefined {
 	const missing = asArray(manifest.node.requires).find(
 		(capability) => typeof capability !== "string" || !CAPABILITIES.has(capability),
@@ -105,18 +124,16 @@ function refuseSourceMismatch(
 	manifest: Manifest,
 	contractSources: Record<string, string>,
 ): Refusal | undefined {
-	for (const [name, script] of scripts(manifest)) {
-		const path = script.source;
-		const declared = script.source_hash;
+	for (const { at, hash, path } of programReferences(manifest)) {
 		const source = typeof path === "string" ? contractSources[path] : undefined;
 
-		if (declared === undefined || source === undefined) {
+		if (hash === undefined || source === undefined) {
 			continue;
 		}
 
-		if (declared !== `sha256:${bytesToHex(sha256(utf8ToBytes(source)))}`) {
+		if (hash !== `sha256:${bytesToHex(sha256(utf8ToBytes(source)))}`) {
 			return new Refusal(
-				`The contract at ${String(path)} is not the one the ${name} contract pins with ${String(declared)}.`,
+				`The contract at ${String(path)} is not the one ${at} pins with ${String(hash)}.`,
 				"source-mismatch",
 			);
 		}
@@ -137,16 +154,14 @@ function refuseForeignCompiler(
 
 	const documentRange = asRecord(manifest.node.simplicity_hl)?.version;
 
-	for (const [name, script] of scripts(manifest)) {
-		const range = script.simplicity_hl_version ?? documentRange;
-		const source =
-			typeof script.source === "string" ? input.contractSources[script.source] : undefined;
+	for (const { at, path, range } of programReferences(manifest)) {
+		const source = typeof path === "string" ? input.contractSources[path] : undefined;
 		const directive = source === undefined ? undefined : simcDirective(source);
 
-		for (const required of [range, directive]) {
+		for (const required of [range ?? documentRange, directive]) {
 			if (typeof required === "string" && !satisfies(shipped, required)) {
 				return new Refusal(
-					`The ${name} contract asks for SimplicityHL ${required}, and this wallet compiles with ${shipped}.`,
+					`The contract at ${String(path)}, used by ${at}, asks for SimplicityHL ${required}, and this wallet compiles with ${shipped}.`,
 					"foreign-compiler",
 				);
 			}
@@ -198,12 +213,46 @@ function unproducible(witness: Record<string, unknown> | undefined): string | un
 		: `asks for ${String(witness.sig_type)}, and this wallet signs over the whole transaction`;
 }
 
-function scripts(manifest: Manifest): [string, Record<string, unknown>][] {
-	return Object.entries(manifest.utxoTypes).flatMap(([name, declared]) => {
+type ProgramReference = { at: string; hash: unknown; path: unknown; range: unknown };
+
+function programReferences(manifest: Manifest): ProgramReference[] {
+	const scripts = Object.entries(manifest.utxoTypes).flatMap(([name, declared]) => {
 		const script = asRecord(asRecord(declared)?.script);
 
-		return script ? [[name, script] as [string, Record<string, unknown>]] : [];
+		return script
+			? [
+					{
+						at: `the ${name} contract`,
+						hash: script.source_hash,
+						path: script.source,
+						range: script.simplicity_hl_version,
+					},
+				]
+			: [];
 	});
+	const computes = manifest.actions.flatMap((action) =>
+		[
+			...Object.entries(asRecord(asRecord(action.node.create_instance)?.fields) ?? {}),
+			...Object.entries(asRecord(action.node.params) ?? {}).map(
+				([name, param]) => [name, asRecord(param)?.compute] as const,
+			),
+		].flatMap(([name, declared]) => {
+			const compute = asRecord(declared);
+
+			return compute?.simf === undefined
+				? []
+				: [
+						{
+							at: `${action.name} / ${name}`,
+							hash: compute.simf_hash,
+							path: compute.simf,
+							range: compute.simplicity_hl_version,
+						},
+					];
+		}),
+	);
+
+	return [...scripts, ...computes];
 }
 
 function simcDirective(source: string): string | undefined {

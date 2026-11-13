@@ -1,6 +1,6 @@
 import { asRecord } from "../document/json";
 import type { Action } from "../document/manifest";
-import { type ReferenceScope, resolveReference } from "../document/references";
+import { parseReference, type ReferenceScope, resolveReference } from "../document/references";
 import { computedValue, computesValue } from "../evaluation/computedValue";
 import { Refusal } from "../refusal";
 import { resolveCompileParams } from "./compileParams";
@@ -14,15 +14,7 @@ export function createsInstance(action: Action): boolean {
 }
 
 function computeKind(node: Record<string, unknown>): string | undefined {
-	for (const key of ["type", "lang"]) {
-		const value = node[key];
-
-		if (typeof value === "string") {
-			return value;
-		}
-	}
-
-	return undefined;
+	return typeof node.type === "string" ? node.type : undefined;
 }
 
 export function statedCreatedFields(action: Action, scope: ReferenceScope): Record<string, string> {
@@ -271,28 +263,19 @@ function tapleafWiring(node: Record<string, unknown>): TapleafWiring {
 }
 
 function resolveFieldReference(name: string, text: string, scope: ReferenceScope): string {
-	let found: unknown;
-
-	try {
-		found = resolveReference(text, "field", scope).value;
-	} catch (error) {
-		if (!(error instanceof Refusal)) {
-			throw error;
-		}
-
-		if (computesValue(text)) {
-			return Refusal.amend(
-				() => computedValue(text, "compileParam", scope),
-				(reason) => `Field ${name}: ${reason}`,
-			);
-		}
-
-		if (text.startsWith("$") || text.includes(".")) {
-			throw new Refusal(`Field ${name}: ${error.reason}`);
-		}
-
-		return text;
+	if (parseReference(text) === undefined) {
+		return computesValue(text)
+			? Refusal.amend(
+					() => computedValue(text, "field", scope),
+					(reason) => `Field ${name}: ${reason}`,
+				)
+			: text;
 	}
+
+	const found = Refusal.amend(
+		() => resolveReference(text, "field", scope).value,
+		(reason) => `Field ${name}: ${reason}`,
+	);
 
 	if (typeof found === "bigint" || (typeof found === "number" && Number.isSafeInteger(found))) {
 		return found.toString();

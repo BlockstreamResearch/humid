@@ -380,7 +380,7 @@ describe("the network fee an amount names", () => {
 		receive.inputs = [(receive.inputs as Document[])[0]];
 		receive.outputs = [
 			{
-				amount_sat: "inputs.p2pk_in.amount_sat - fee",
+				amount_sat: "p2pk_in.amount_sat - fee",
 				destination: "wallet",
 				id: "received_out",
 			},

@@ -27,7 +27,7 @@ export function resolveCompileParams(
 		let found: unknown;
 
 		try {
-			found = resolveProgramReference(reference, scope);
+			found = resolveReference(reference, "compileParam", scope).value;
 		} catch (error) {
 			if (!(error instanceof Refusal)) {
 				throw error;
@@ -59,20 +59,6 @@ export function resolveCompileParams(
 	}
 
 	return resolved;
-}
-
-function resolveProgramReference(reference: string, scope: ReferenceScope): unknown {
-	try {
-		return resolveReference(reference, "compileParam", scope).value;
-	} catch (error) {
-		const parsed = parseReference(reference);
-
-		if (parsed?.form === "bare" && scope.instance && parsed.name in scope.instance) {
-			return scope.instance[parsed.name];
-		}
-
-		throw error;
-	}
 }
 
 function asStatedValue(

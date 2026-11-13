@@ -73,7 +73,7 @@ describe("a chain of fields that each read the one before", () => {
 	const LINKS = 5;
 
 	function chained(): Action {
-		const fields: Record<string, unknown> = { OWNER_PUB_KEY: "$params.OWNER_PUB_KEY" };
+		const fields: Record<string, unknown> = { OWNER_PUB_KEY: "params.OWNER_PUB_KEY" };
 
 		for (let index = LINKS - 1; index >= 0; index -= 1) {
 			fields[`LINK_${index}`] = {
@@ -397,13 +397,25 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 				{
 					isConstructor: true,
 					name: "Odd",
-					node: { create_instance: { fields: { X: { compute: "contract", simf: "./a.simf" } } } },
+					node: { create_instance: { fields: { X: { simf: "./a.simf", type: "simf_fn" } } } },
 				},
 				{ contractSources: SOURCES, hashProgram, scope: { params: {} } },
 			),
 		);
 
-		expect(result.reason).toContain("contract");
+		expect(result.reason).toContain('"simf_fn"');
+	});
+
+	test("a bare word, which names neither a parameter nor a field, rather than recording the word", () => {
+		const { hashProgram } = recordingCompiler();
+		const created = (value: string) =>
+			resolveCreatedInstance(
+				{ isConstructor: true, name: "Words", node: { create_instance: { fields: { X: value } } } },
+				{ contractSources: SOURCES, hashProgram, scope: { params: { OWNER: KEY } } },
+			);
+
+		expect(refusalOf(() => created("OWNER")).reason).toContain("params.OWNER");
+		expect(created("2").fields.X).toBe("2");
 	});
 
 	test("a state leaf that is not the width a contract reads one at", () => {

@@ -97,10 +97,10 @@
                     ],
                     "create_instance": {
                         "fields": {
-                            "INHERITOR_PUB_KEY": "$params.INHERITOR_PUB_KEY",
-                            "HOT_PUB_KEY": "$params.HOT_PUB_KEY",
-                            "COLD_PUB_KEY": "$params.COLD_PUB_KEY",
-                            "INHERIT_BLOCKS": "$params.INHERIT_BLOCKS"
+                            "INHERITOR_PUB_KEY": "params.INHERITOR_PUB_KEY",
+                            "HOT_PUB_KEY": "params.HOT_PUB_KEY",
+                            "COLD_PUB_KEY": "params.COLD_PUB_KEY",
+                            "INHERIT_BLOCKS": "params.INHERIT_BLOCKS"
                         }
                     }
                 },

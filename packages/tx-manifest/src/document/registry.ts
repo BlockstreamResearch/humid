@@ -29,6 +29,22 @@ const SITES = {
 		type: READ,
 		utxo_type: READ,
 	},
+	compute: {
+		address: UNIMPLEMENTED,
+		compile_params: UNIMPLEMENTED,
+		depends_on: UNIMPLEMENTED,
+		expr: UNIMPLEMENTED,
+		extra_leaves: READ,
+		fn: UNIMPLEMENTED,
+		input: UNIMPLEMENTED,
+		params: READ,
+		program: UNIMPLEMENTED,
+		simf: READ,
+		simf_hash: READ,
+		simplicity_hl_version: READ,
+		type: READ,
+		wallet: READ,
+	},
 	createInstance: {
 		fields: READ,
 	},
@@ -114,7 +130,6 @@ const SITES = {
 	},
 	witness: {
 		description: SHOWN,
-		inject: UNIMPLEMENTED,
 		sig_type: READ,
 		simplicity_type: READ,
 		source: READ,
@@ -197,8 +212,15 @@ function walkSites(manifest: Manifest, visit: SiteVisitor): void {
 		at(where, action.node, "action");
 		at(`${where} / create_instance`, action.node.create_instance, "createInstance");
 
+		for (const [name, field] of Object.entries(
+			asRecord(asRecord(action.node.create_instance)?.fields) ?? {},
+		)) {
+			at(`${where} / create_instance / ${name}`, field, "compute");
+		}
+
 		for (const [name, param] of Object.entries(asRecord(action.node.params) ?? {})) {
 			at(`${where} / param ${name}`, param, "param");
+			at(`${where} / param ${name} / compute`, asRecord(param)?.compute, "compute");
 		}
 
 		for (const kind of ["input", "output"] as const) {

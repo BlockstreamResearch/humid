@@ -16,6 +16,7 @@ export type ReferenceScope = {
 	inputs?: Record<string, Record<string, unknown>>;
 	instance?: Record<string, unknown>;
 	params: Record<string, unknown>;
+	self?: Record<string, unknown>;
 };
 
 export type ReferenceResolution = { form: ReferenceForm; value: unknown };
@@ -79,18 +80,15 @@ const NAMESPACES: Record<string, ReferenceForm> = {
 	params: "params",
 };
 
+const PROGRAM_ARGUMENTS = new Set<ReferenceSiteKind>(["compileParam", "stateLeaf"]);
+
 const NAME = "[A-Za-z_][A-Za-z0-9_]*";
-const REFERENCE = new RegExp(
-	`^\\$?(?:inputs\\.(?<input>${NAME})\\.(?<field>${NAME})|(?<head>${NAME})(?:\\.(?<tail>${NAME}))?)$`,
-);
+const REFERENCE = new RegExp(`^(?<head>${NAME})(?:\\.(?<tail>${NAME}))?$`);
+
+export const RESERVED_INPUT_IDS = new Set(Object.keys(NAMESPACES));
 
 export function parseReference(text: string): ParsedReference | undefined {
 	const groups = REFERENCE.exec(text.trim())?.groups;
-
-	if (groups?.input && groups.field) {
-		return { attribute: groups.field, form: "input-attribute", name: groups.input };
-	}
-
 	const head = groups?.head;
 
 	if (!head) {
@@ -124,21 +122,33 @@ export function resolveReference(
 		throw new Refusal(`"${text}" cannot be used as ${accepted.describes}.`);
 	}
 
-	return { form: reference.form, value: lookUp(reference, scope) };
+	return { form: reference.form, value: lookUp(reference, site, scope) };
 }
 
-function lookUp(reference: ParsedReference, scope: ReferenceScope): unknown {
+function lookUp(
+	reference: ParsedReference,
+	site: ReferenceSiteKind,
+	scope: ReferenceScope,
+): unknown {
 	switch (reference.form) {
 		case "bare": {
-			if (reference.name === "fee" && scope.fee !== undefined) {
+			const name = reference.name;
+
+			if (PROGRAM_ARGUMENTS.has(site)) {
+				return lookUp({ form: "instance", name }, site, scope);
+			}
+
+			if (name === "fee" && scope.fee !== undefined) {
 				return scope.fee;
 			}
 
-			if (!(reference.name in scope.params)) {
-				throw new Refusal(`"${reference.name}" is not a parameter of this action.`);
+			if (scope.self && Object.hasOwn(scope.self, name)) {
+				return scope.self[name];
 			}
 
-			return scope.params[reference.name];
+			throw new Refusal(
+				`"${name}" names nothing here: a parameter is params.${name}, a deployment field instance.${name}.`,
+			);
 		}
 
 		case "input-attribute": {

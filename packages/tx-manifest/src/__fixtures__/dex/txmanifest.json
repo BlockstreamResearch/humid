@@ -175,13 +175,13 @@
           ],
           "create_instance": {
             "fields": {
-              "OFFER_ASSET_ID": "$params.OFFER_ASSET_ID",
-              "OFFER_AMOUNT": "$params.OFFER_AMOUNT",
-              "ASSET_B": "$params.ASSET_B",
-              "AMOUNT_B": "$params.AMOUNT_B",
-              "MAKER_PUB_KEY": "$params.MAKER_PUB_KEY",
-              "TIMEOUT": "$params.TIMEOUT",
-              "MAX_FEE": "$params.MAX_FEE",
+              "OFFER_ASSET_ID": "params.OFFER_ASSET_ID",
+              "OFFER_AMOUNT": "params.OFFER_AMOUNT",
+              "ASSET_B": "params.ASSET_B",
+              "AMOUNT_B": "params.AMOUNT_B",
+              "MAKER_PUB_KEY": "params.MAKER_PUB_KEY",
+              "TIMEOUT": "params.TIMEOUT",
+              "MAX_FEE": "params.MAX_FEE",
               "MAKER_SPK": {
                 "type": "tapleaf",
                 "simf": "./maker_payout.simf",

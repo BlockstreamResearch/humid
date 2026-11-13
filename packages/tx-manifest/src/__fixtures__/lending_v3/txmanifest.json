@@ -213,9 +213,9 @@
           },
           "create_instance": {
             "fields": {
-              "FACTORY_ASSET_ID": "$instance.FACTORY_ASSET_ID",
-              "ISSUING_UTXOS_COUNT": "$params.ISSUING_UTXOS_COUNT",
-              "REISSUANCE_FLAGS": "$params.REISSUANCE_FLAGS"
+              "FACTORY_ASSET_ID": "instance.FACTORY_ASSET_ID",
+              "ISSUING_UTXOS_COUNT": "params.ISSUING_UTXOS_COUNT",
+              "REISSUANCE_FLAGS": "params.REISSUANCE_FLAGS"
             }
           },
           "inputs": [
@@ -449,19 +449,19 @@
           },
           "create_instance": {
             "fields": {
-              "FACTORY_ASSET_ID": "$params.FACTORY_ASSET_ID",
+              "FACTORY_ASSET_ID": "params.FACTORY_ASSET_ID",
               "ISSUING_UTXOS_COUNT": "2",
               "REISSUANCE_FLAGS": "0",
-              "COLLATERAL_ASSET_ID": "$params.COLLATERAL_ASSET_ID",
-              "PRINCIPAL_ASSET_ID": "$params.PRINCIPAL_ASSET_ID",
-              "PROTOCOL_FEE_KEEPER_ASSET_ID": "$params.PROTOCOL_FEE_KEEPER_ASSET_ID",
-              "ZERO_HASH": "$params.ZERO_HASH",
-              "BORROWER_NFT_ASSET_ID": "$instance.BORROWER_NFT_ASSET_ID",
-              "LENDER_NFT_ASSET_ID": "$instance.LENDER_NFT_ASSET_ID",
-              "COLLATERAL_AMOUNT": "$params.COLLATERAL_AMOUNT",
-              "PRINCIPAL_AMOUNT": "$params.PRINCIPAL_AMOUNT",
-              "PRINCIPAL_INTEREST_RATE": "$params.PRINCIPAL_INTEREST_RATE",
-              "LOAN_EXPIRATION_TIME": "$params.LOAN_EXPIRATION_TIME",
+              "COLLATERAL_ASSET_ID": "params.COLLATERAL_ASSET_ID",
+              "PRINCIPAL_ASSET_ID": "params.PRINCIPAL_ASSET_ID",
+              "PROTOCOL_FEE_KEEPER_ASSET_ID": "params.PROTOCOL_FEE_KEEPER_ASSET_ID",
+              "ZERO_HASH": "params.ZERO_HASH",
+              "BORROWER_NFT_ASSET_ID": "instance.BORROWER_NFT_ASSET_ID",
+              "LENDER_NFT_ASSET_ID": "instance.LENDER_NFT_ASSET_ID",
+              "COLLATERAL_AMOUNT": "params.COLLATERAL_AMOUNT",
+              "PRINCIPAL_AMOUNT": "params.PRINCIPAL_AMOUNT",
+              "PRINCIPAL_INTEREST_RATE": "params.PRINCIPAL_INTEREST_RATE",
+              "LOAN_EXPIRATION_TIME": "params.LOAN_EXPIRATION_TIME",
               "CURRENT_DEBT": "params.PRINCIPAL_AMOUNT + params.PRINCIPAL_AMOUNT * params.PRINCIPAL_INTEREST_RATE / 10000",
               "FINALIZED_LENDER_VAULT_COV_HASH": {
                 "type": "tapleaf",

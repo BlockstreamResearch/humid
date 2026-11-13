@@ -89,6 +89,44 @@ describe("what the document alone is refused for", () => {
 		expect((await refused(receive({ manifest }))).reject).toBe("unproducible-witness");
 	});
 
+	test("an input whose id is a namespace a reference reads", async () => {
+		const refusal = await payRefusal((action) => {
+			((action.inputs as Document[])[0] ?? {}).id = "params";
+		});
+
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain('"params"');
+	});
+
+	test("a parameter computed in a way this wallet does not implement, rather than left at its default", async () => {
+		const refusal = await payRefusal((action) => {
+			(action.params as Record<string, Document>).pubkey = {
+				compute: { address: "params.receiver", type: "script_hash" },
+				type: "pubkey",
+			};
+		});
+
+		expect(refusal.reject).toBe("unimplemented-construct");
+	});
+
+	test("a computed field whose contract is not the one its hash pins", async () => {
+		const lending = Fixture.load("lending_v3");
+		const manifest = lending.edited((copy) => {
+			const templates = copy.contract_templates as {
+				lending_contract: {
+					actions: { CreateOffer: { create_instance: { fields: Record<string, Document> } } };
+				};
+			};
+			const fields = templates.lending_contract.actions.CreateOffer.create_instance.fields;
+
+			(fields.LENDER_VAULT_COV_HASH ?? {}).simf_hash = `sha256:${"00".repeat(32)}`;
+		}).manifest;
+		const refusal = await refused(lending.request("CreateOffer", { manifest }));
+
+		expect(refusal.reject).toBe("source-mismatch");
+		expect(refusal.reason).toContain("CreateOffer / LENDER_VAULT_COV_HASH");
+	});
+
 	test("an asset the wallet could not establish", async () => {
 		const refusal = await payRefusal((pay) => {
 			((pay.outputs as Document[])[0] ?? {}).asset = "params.nobody_supplied_this";

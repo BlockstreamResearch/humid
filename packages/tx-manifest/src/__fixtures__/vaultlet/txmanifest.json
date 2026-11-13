@@ -111,7 +111,7 @@
 					],
 					"create_instance": {
 						"fields": {
-							"OWNER_PUB_KEY": "$params.OWNER_PUB_KEY",
+							"OWNER_PUB_KEY": "params.OWNER_PUB_KEY",
 							"VAULT_ASSET_ID": "params.VAULT_ASSET_ID",
 							"VAULT_AMOUNT": "params.VAULT_AMOUNT",
 							"TIMEOUT": "params.TIMEOUT",
@@ -150,6 +150,12 @@
 							"id": "vault_in",
 							"utxo_source": {
 								"utxo_type": "vault"
+							},
+							"witnesses": {
+								"SIGNATURE": {
+									"type": "Signature",
+									"source": { "type": "wallet", "key": "instance.OWNER_PUB_KEY" }
+								}
 							}
 						}
 					],

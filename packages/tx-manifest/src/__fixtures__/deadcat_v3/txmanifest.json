@@ -184,7 +184,7 @@
       },
       "actions": {
         "IssueReissuanceTokens": {
-          "$comment": "The constructor: it is this action, not CreateMarket, that writes the instance file. That is forced by where the asset ids come from — they are derived from the outpoints THIS transaction spends, and nothing downstream can recover them (the reissuance token id and the asset id are sibling hashes of the entropy, so you cannot walk from one to the other). Capturing them here — create_instance reads them straight off the two inputs via $inputs.<id>.<field> — is the only point at which they exist and can still be recorded.\n\nWhy the bootstrap is two transactions at all: CreateMarket pays to the state-0 covenant address, and that address is a function of all four asset ids, which are functions of the outpoints being spent. The engine snapshots compile params BEFORE it resolves any input, so one action cannot both mint an asset and pay it to an address derived from that asset. This action sidesteps it by paying only to the wallet. Upstream Deadcat does both in one transaction (pset/creation.rs) because it computes the ids in Rust before building anything; the two-transaction bootstrap lands the market in exactly the same on-chain state.",
+          "$comment": "The constructor: it is this action, not CreateMarket, that writes the instance file. That is forced by where the asset ids come from — they are derived from the outpoints THIS transaction spends, and nothing downstream can recover them (the reissuance token id and the asset id are sibling hashes of the entropy, so you cannot walk from one to the other). Capturing them here — create_instance reads them straight off the two inputs via inputs.<id>.<field> — is the only point at which they exist and can still be recorded.\n\nWhy the bootstrap is two transactions at all: CreateMarket pays to the state-0 covenant address, and that address is a function of all four asset ids, which are functions of the outpoints being spent. The engine snapshots compile params BEFORE it resolves any input, so one action cannot both mint an asset and pay it to an address derived from that asset. This action sidesteps it by paying only to the wallet. Upstream Deadcat does both in one transaction (pset/creation.rs) because it computes the ids in Rust before building anything; the two-transaction bootstrap lands the market in exactly the same on-chain state.",
           "description": "Step 1 of 2 in bootstrapping a market, and the action that defines it. Mints the YES and NO reissuance tokens — 1 unit each — from two of your L-BTC UTXOs and keeps them in your wallet, then writes the instance file recording the market's full definition: the four asset ids this transaction just fixed, plus the terms you supply below. NOTE: it mints ZERO units of the YES and NO tokens themselves. Only the minting rights exist at this point; outcome tokens appear at InitialIssuance, and they have to, because tokens minted here would be backed by no collateral at all. Run CreateMarket next to lock the two tokens into the covenant.",
           "intent": "define a market backed by {params.COLLATERAL_ASSET_ID:symbol} and mint its minting rights",
           "params": {
@@ -245,7 +245,7 @@
               "id": "yes_reissuance_out",
               "description": "The YES reissuance token, 1 unit, to your wallet. The asset reference reads the id the engine derived from in[0] once it resolved. `inputs.` is the explicit spelling of an input reference; the bare `yes_defining_in.reissuance_token` also works but is ambiguous by shape with every other namespace. Blinded, but with factors the wallet picks. Pinning the protocol constant here would be both pointless and fatal: pointless because only the covenant has to reproduce a factor and the covenant never sees this UTXO — the wallet unblinds its own — and fatal because CreateMarket pays this same token to abf = 1, and an output cannot reuse the abf of the input it comes from. The surjection proof would have a zero shift to prove and no valid secret key to prove it with.",
               "destination": "wallet",
-              "asset": "inputs.yes_defining_in.reissuance_token",
+              "asset": "yes_defining_in.reissuance_token",
               "amount_sat": 1,
               "confidential": true,
               "required_index": 0,
@@ -258,7 +258,7 @@
               "id": "no_reissuance_out",
               "description": "The NO reissuance token, 1 unit, to your wallet.",
               "destination": "wallet",
-              "asset": "inputs.no_defining_in.reissuance_token",
+              "asset": "no_defining_in.reissuance_token",
               "amount_sat": 1,
               "confidential": true,
               "required_index": 1,
@@ -280,18 +280,18 @@
             }
           ],
           "create_instance": {
-            "$comment": "The four asset ids are read straight off the inputs that created them — `$inputs.<id>.<field>` is a string lookup, unlike a bare expression, which is arithmetic and would reject a 32-byte id. Note `issued_asset`, NOT `asset`: on an input carrying an issuance those differ, and `asset` is the asset of the UTXO being spent (L-BTC here). The four terms come from this action's params. All eight are compile params of prediction_market.simf, so from here the market's four covenant addresses are fully determined and every later action can derive them from the instance file alone.",
+            "$comment": "The four asset ids are read straight off the inputs that created them — `inputs.<id>.<field>` is a string lookup, unlike a bare expression, which is arithmetic and would reject a 32-byte id. Note `issued_asset`, NOT `asset`: on an input carrying an issuance those differ, and `asset` is the asset of the UTXO being spent (L-BTC here). The four terms come from this action's params. All eight are compile params of prediction_market.simf, so from here the market's four covenant addresses are fully determined and every later action can derive them from the instance file alone.",
             "fields": {
-              "ORACLE_PUBLIC_KEY": "$params.ORACLE_PUBLIC_KEY",
-              "COLLATERAL_ASSET_ID": "$params.COLLATERAL_ASSET_ID",
-              "COLLATERAL_PER_TOKEN": "$params.COLLATERAL_PER_TOKEN",
-              "EXPIRY_TIME": "$params.EXPIRY_TIME",
-              "YES_TOKEN_ASSET": "$inputs.yes_defining_in.issued_asset",
-              "NO_TOKEN_ASSET": "$inputs.no_defining_in.issued_asset",
-              "YES_REISSUANCE_TOKEN": "$inputs.yes_defining_in.reissuance_token",
-              "NO_REISSUANCE_TOKEN": "$inputs.no_defining_in.reissuance_token",
-              "YES_ISSUANCE_ENTROPY": "$inputs.yes_defining_in.issuance_entropy",
-              "NO_ISSUANCE_ENTROPY": "$inputs.no_defining_in.issuance_entropy"
+              "ORACLE_PUBLIC_KEY": "params.ORACLE_PUBLIC_KEY",
+              "COLLATERAL_ASSET_ID": "params.COLLATERAL_ASSET_ID",
+              "COLLATERAL_PER_TOKEN": "params.COLLATERAL_PER_TOKEN",
+              "EXPIRY_TIME": "params.EXPIRY_TIME",
+              "YES_TOKEN_ASSET": "yes_defining_in.issued_asset",
+              "NO_TOKEN_ASSET": "no_defining_in.issued_asset",
+              "YES_REISSUANCE_TOKEN": "yes_defining_in.reissuance_token",
+              "NO_REISSUANCE_TOKEN": "no_defining_in.reissuance_token",
+              "YES_ISSUANCE_ENTROPY": "yes_defining_in.issuance_entropy",
+              "NO_ISSUANCE_ENTROPY": "no_defining_in.issuance_entropy"
             }
           }
         },

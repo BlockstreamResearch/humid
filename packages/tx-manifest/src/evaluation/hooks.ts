@@ -106,19 +106,19 @@ export function inputHookScope(
 	scope: ReferenceScope,
 	self: Record<string, unknown>,
 ): ReferenceScope {
-	const bare: Record<string, unknown> = {};
+	const attributes: Record<string, unknown> = {};
 
 	for (const key of ["asset", "issuance_entropy", "issued_asset", "reissuance_token"]) {
 		if (self[key] !== undefined) {
-			bare[key] = self[key];
+			attributes[key] = self[key];
 		}
 	}
 
 	if (self.issued_asset !== undefined) {
-		bare.asset = self.issued_asset;
+		attributes.asset = self.issued_asset;
 	}
 
-	return { ...scope, params: { ...scope.params, ...bare } };
+	return { ...scope, self: attributes };
 }
 
 export function withHookValues(scope: ReferenceScope, values: HookValues): ReferenceScope {

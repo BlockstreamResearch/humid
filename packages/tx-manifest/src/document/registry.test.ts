@@ -22,6 +22,23 @@ describe("the constructs a document declares", () => {
 		]);
 	});
 
+	test("look inside a computed value, which a wallet must not half-read", () => {
+		const computed = (compute: Record<string, unknown>) =>
+			findings({ actions: { Open: { create_instance: { fields: { HASH: compute } } } } });
+
+		expect(computed({ simf: "./a.simf", simf_hash: "sha256:00", type: "tapleaf" })).toEqual([]);
+		expect(computed({ lang: "tapleaf", simf: "./a.simf" })).toEqual([
+			{ at: "action Open / create_instance / HASH", key: "lang", state: "unrecognised" },
+		]);
+		expect(
+			findings({
+				actions: { Open: { params: { K: { compute: { depends_on: [], type: "tapleaf" } } } } },
+			}),
+		).toEqual([
+			{ at: "action Open / param K / compute", key: "depends_on", state: "unimplemented" },
+		]);
+	});
+
 	test("look inside a program reference, where a binding changes the address", () => {
 		const declared = findings({
 			actions: { Pay: { outputs: [{ destination: { args: {}, utxo_type: "t" }, id: "o" }] } },

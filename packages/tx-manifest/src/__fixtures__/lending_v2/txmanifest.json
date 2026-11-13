@@ -265,22 +265,22 @@
           "on_pre_broadcast": {
             "set": {
               "instance.FIRST_PARAMETERS_ENCODED": "params.PRINCIPAL_INTEREST_RATE + params.LOAN_EXPIRATION_TIME * 65536 + params.AMOUNTS_DECIMALS * 8796093022208 + params.AMOUNTS_DECIMALS * 140737488355328",
-              "instance.SECOND_PARAMETERS_ENCODED": "params.COLLATERAL_AMOUNT / pow(10, AMOUNTS_DECIMALS) + params.PRINCIPAL_AMOUNT / pow(10, AMOUNTS_DECIMALS) * 33554432"
+              "instance.SECOND_PARAMETERS_ENCODED": "params.COLLATERAL_AMOUNT / pow(10, params.AMOUNTS_DECIMALS) + params.PRINCIPAL_AMOUNT / pow(10, params.AMOUNTS_DECIMALS) * 33554432"
             }
           },
           "create_instance": {
             "fields": {
-              "AMOUNTS_DECIMALS": "$params.AMOUNTS_DECIMALS",
-              "BORROWER_ADDRESS": "$params.BORROWER_ADDRESS",
-              "BORROWER_NFT_ASSET_ID": "$instance.BORROWER_NFT_ASSET_ID",
-              "BORROWER_NFT_OUTPUT_SCRIPT_HASH": "$params.BORROWER_OUTPUT_SCRIPT_HASH",
-              "BORROWER_OUTPUT_SCRIPT_HASH": "$params.BORROWER_OUTPUT_SCRIPT_HASH",
-              "BORROWER_PUB_KEY": "$params.BORROWER_PUB_KEY",
-              "COLLATERAL_AMOUNT": "$params.COLLATERAL_AMOUNT",
-              "COLLATERAL_ASSET_ID": "$params.COLLATERAL_ASSET_ID",
-              "FIRST_PARAMETERS_ENCODED": "$instance.FIRST_PARAMETERS_ENCODED",
-              "FIRST_PARAMETERS_NFT_ASSET_ID": "$instance.FIRST_PARAMETERS_NFT_ASSET_ID",
-              "LENDER_NFT_ASSET_ID": "$instance.LENDER_NFT_ASSET_ID",
+              "AMOUNTS_DECIMALS": "params.AMOUNTS_DECIMALS",
+              "BORROWER_ADDRESS": "params.BORROWER_ADDRESS",
+              "BORROWER_NFT_ASSET_ID": "instance.BORROWER_NFT_ASSET_ID",
+              "BORROWER_NFT_OUTPUT_SCRIPT_HASH": "params.BORROWER_OUTPUT_SCRIPT_HASH",
+              "BORROWER_OUTPUT_SCRIPT_HASH": "params.BORROWER_OUTPUT_SCRIPT_HASH",
+              "BORROWER_PUB_KEY": "params.BORROWER_PUB_KEY",
+              "COLLATERAL_AMOUNT": "params.COLLATERAL_AMOUNT",
+              "COLLATERAL_ASSET_ID": "params.COLLATERAL_ASSET_ID",
+              "FIRST_PARAMETERS_ENCODED": "instance.FIRST_PARAMETERS_ENCODED",
+              "FIRST_PARAMETERS_NFT_ASSET_ID": "instance.FIRST_PARAMETERS_NFT_ASSET_ID",
+              "LENDER_NFT_ASSET_ID": "instance.LENDER_NFT_ASSET_ID",
               "LENDER_PRINCIPAL_COV_HASH": {
                 "type": "tapleaf",
                 "simf": "./asset_auth.simf",
@@ -351,7 +351,7 @@
                   }
                 }
               },
-              "LOAN_EXPIRATION_TIME": "$params.LOAN_EXPIRATION_TIME",
+              "LOAN_EXPIRATION_TIME": "params.LOAN_EXPIRATION_TIME",
               "PARAMETERS_NFT_OUTPUT_SCRIPT_HASH": {
                 "type": "tapleaf",
                 "simf": "./script_auth.simf",
@@ -441,13 +441,13 @@
                   }
                 }
               },
-              "PRINCIPAL_AMOUNT": "$params.PRINCIPAL_AMOUNT",
-              "PRINCIPAL_ASSET_ID": "$params.PRINCIPAL_ASSET_ID",
+              "PRINCIPAL_AMOUNT": "params.PRINCIPAL_AMOUNT",
+              "PRINCIPAL_ASSET_ID": "params.PRINCIPAL_ASSET_ID",
               "PRINCIPAL_INTEREST_AMOUNT": "params.PRINCIPAL_AMOUNT * params.PRINCIPAL_INTEREST_RATE / 10000",
-              "PRINCIPAL_INTEREST_RATE": "$params.PRINCIPAL_INTEREST_RATE",
-              "PRINCIPAL_OUTPUT_SCRIPT_HASH": "$params.BORROWER_OUTPUT_SCRIPT_HASH",
-              "SECOND_PARAMETERS_ENCODED": "$instance.SECOND_PARAMETERS_ENCODED",
-              "SECOND_PARAMETERS_NFT_ASSET_ID": "$instance.SECOND_PARAMETERS_NFT_ASSET_ID"
+              "PRINCIPAL_INTEREST_RATE": "params.PRINCIPAL_INTEREST_RATE",
+              "PRINCIPAL_OUTPUT_SCRIPT_HASH": "params.BORROWER_OUTPUT_SCRIPT_HASH",
+              "SECOND_PARAMETERS_ENCODED": "instance.SECOND_PARAMETERS_ENCODED",
+              "SECOND_PARAMETERS_NFT_ASSET_ID": "instance.SECOND_PARAMETERS_NFT_ASSET_ID"
             }
           },
           "inputs": [

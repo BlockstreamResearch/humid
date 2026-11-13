@@ -17,10 +17,8 @@ describe("the namespaces a reference can name", () => {
 		});
 	});
 
-	test("reads them through the $-prefixed spelling too, which the corpus also writes", () => {
-		expect(resolveReference("$params.amount_sat", "amount", SCOPE)).toMatchObject({
-			value: "1000",
-		});
+	test("has one spelling, without a $ prefix", () => {
+		expect(parseReference("$params.amount_sat")).toBeUndefined();
 	});
 
 	test("reads this deployment's field values", () => {
@@ -44,8 +42,18 @@ describe("the namespaces a reference can name", () => {
 		});
 	});
 
-	test("reads a bare name as a parameter", () => {
-		expect(resolveReference("amount_sat", "amount", SCOPE)).toMatchObject({ value: "1000" });
+	test("reads a bare name as a deployment field where a program argument goes", () => {
+		expect(resolveReference("TIMEOUT", "compileParam", SCOPE)).toMatchObject({ value: "900000" });
+	});
+
+	test("reads a bare name elsewhere only as the fee or an attribute of the input a hook runs on", () => {
+		const scope = { ...SCOPE, fee: 42n, self: { asset: "ab".repeat(32) } };
+
+		expect(resolveReference("fee", "amount", scope).value).toBe(42n);
+		expect(resolveReference("asset", "expression", scope).value).toBe("ab".repeat(32));
+		expect(refusalOf(() => resolveReference("amount_sat", "amount", scope)).reason).toContain(
+			"params.amount_sat",
+		);
 	});
 });
 
@@ -77,14 +85,13 @@ describe("what a position refuses", () => {
 		).toContain("cannot be used as a destination");
 	});
 
-	test("an attribute of a transaction input is recognised in either spelling", () => {
-		for (const text of ["inputs.vault_in.amount_sat", "vault_in.amount_sat"]) {
-			expect(parseReference(text)).toEqual({
-				attribute: "amount_sat",
-				form: "input-attribute",
-				name: "vault_in",
-			});
-		}
+	test("an attribute of a transaction input is written as the input's id and the attribute", () => {
+		expect(parseReference("vault_in.amount_sat")).toEqual({
+			attribute: "amount_sat",
+			form: "input-attribute",
+			name: "vault_in",
+		});
+		expect(parseReference("inputs.vault_in.amount_sat")).toBeUndefined();
 	});
 
 	test("and resolves against the inputs this action actually resolved", () => {

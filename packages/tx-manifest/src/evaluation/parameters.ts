@@ -22,8 +22,16 @@ export function fillParameters(
 
 	for (const [name, entry] of Object.entries(declared)) {
 		const spec = asRecord(entry);
-		const fromWallet =
-			asRecord(spec?.compute)?.type === "wallet" ? asRecord(spec?.compute)?.wallet : undefined;
+		const kind = asRecord(spec?.compute)?.type;
+
+		if (kind !== undefined && kind !== "wallet") {
+			throw new Refusal(
+				`The parameter ${name} is computed by ${JSON.stringify(kind)}, which this wallet does not implement yet.`,
+				"unimplemented-construct",
+			);
+		}
+
+		const fromWallet = kind === "wallet" ? asRecord(spec?.compute)?.wallet : undefined;
 
 		if (fromWallet !== undefined) {
 			if (typeof fromWallet !== "string" || !Object.hasOwn(wallet, fromWallet)) {

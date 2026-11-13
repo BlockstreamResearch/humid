@@ -60,7 +60,7 @@ export function resolveStaticWitnesses(
 	return witnesses;
 }
 
-const NAMED = /\$?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){1,2}/g;
+const NAMED = /[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*/g;
 
 function fill(value: string, scope: ReferenceScope): string {
 	return value.replaceAll(NAMED, (text) => {
