@@ -1,6 +1,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
+import { utf8ToBytes } from "@noble/hashes/utils.js";
 
+import { encodeHex } from "../chain/hex";
 import { STATIC_WITNESS } from "../evaluation/witness";
 import { Refusal } from "../refusal";
 import { asArray, asRecord } from "./json";
@@ -131,7 +132,7 @@ function refuseSourceMismatch(
 			continue;
 		}
 
-		if (hash !== `sha256:${bytesToHex(sha256(utf8ToBytes(source)))}`) {
+		if (hash !== `sha256:${encodeHex(sha256(utf8ToBytes(source)))}`) {
 			return new Refusal(
 				`The contract at ${String(path)} is not the one ${at} pins with ${String(hash)}.`,
 				"source-mismatch",

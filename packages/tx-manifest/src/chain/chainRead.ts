@@ -1,9 +1,9 @@
-import { encodeHex } from "./bytes";
+import { isRecord } from "../document/json";
+import { encodeHex, isHash } from "./hex";
+import type { Outpoint } from "./outpoint";
 import { txOutAt } from "./rawTransaction";
 
-export type OutPoint = { txid: string; vout: number };
-
-export type TxOutAtOutPoint = {
+export type ChainTxOut = {
 	amountSats?: string;
 	rawAssetId?: string;
 	scriptPubKeyHex: string;
@@ -11,7 +11,7 @@ export type TxOutAtOutPoint = {
 	txOutHex: string;
 };
 
-export type ReadTxOut = (outpoint: OutPoint) => Promise<TxOutAtOutPoint>;
+export type ReadTxOut = (outpoint: Outpoint) => Promise<ChainTxOut>;
 
 export type ReadFeeRate = (targetBlocks: number) => Promise<number>;
 
@@ -27,7 +27,7 @@ export function createEsploraTxOutReader(
 	const base = endpoint.url.replace(/\/+$/, "");
 
 	return async ({ txid, vout }) => {
-		if (!/^[0-9a-fA-F]{64}$/.test(txid)) {
+		if (!isHash(txid)) {
 			throw new Error(`Not a transaction id: ${txid}`);
 		}
 
@@ -98,8 +98,4 @@ export type ReadChainTip = () => Promise<number>;
 
 function headersOf(endpoint: EsploraEndpoint): Record<string, string> {
 	return Object.fromEntries((endpoint.headers ?? []).map(({ name, value }) => [name, value]));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }

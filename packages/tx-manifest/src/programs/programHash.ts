@@ -1,6 +1,6 @@
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
+import { decodeHex, encodeHex } from "../chain/hex";
 import { Refusal } from "../refusal";
 
 export const PROGRAM_HASH_SEED = "0".repeat(64);
@@ -38,15 +38,15 @@ export function programHashFrom(
 			throw new Refusal(`the contract did not compile: ${String(error)}`);
 		}
 
-		const hex = scriptPubKeyHex.trim();
+		const script = decodeHex(scriptPubKeyHex.trim());
 
-		if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) {
+		if (!script || script.length === 0) {
 			throw new Refusal(
 				"the compiler did not return a scriptPubKey. A program's hash is the hash of its " +
 					"locking script's bytes, and what came back is not bytes.",
 			);
 		}
 
-		return bytesToHex(sha256(hexToBytes(hex)));
+		return encodeHex(sha256(script));
 	};
 }

@@ -57,3 +57,9 @@ export class Refusal extends Error {
 		}
 	}
 }
+
+export function quoted(value: unknown): string {
+	const text = String(value);
+
+	return `"${text.length > 24 ? `${text.slice(0, 24)}…` : text}"`;
+}

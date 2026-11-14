@@ -92,7 +92,7 @@ function valueOf(expression: string, scope: ReferenceScope): string {
 	try {
 		return String(evaluateExpression(expression, "expression", scope));
 	} catch (error) {
-		const named = Refusal.attempt(() => resolveReference(expression, "expression", scope).value);
+		const named = Refusal.attempt(() => resolveReference(expression, "expression", scope));
 
 		if (typeof named === "string") {
 			return named;

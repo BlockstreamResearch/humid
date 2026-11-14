@@ -73,7 +73,7 @@ export function confirmationModel(
 			utxoType: fromDapp(found.utxoType),
 			verified: computed(found.verified === "matches-chain"),
 		})),
-		feeAsset: computed(input.policyAsset.trim().toLowerCase()),
+		feeAsset: computed(input.policyAsset),
 		feeSats: computed(review.estimatedFeeSats),
 		blindedAmounts: blindedAmounts(review),
 		netEffect: review.movements.map((movement) => ({
@@ -121,10 +121,6 @@ function word(decidedBy: BlindingDecision["decidedBy"] | undefined): string {
 
 export function describeOrigin(origin: Origin): string {
 	switch (origin) {
-		case "chain": {
-			return "read from the network";
-		}
-
 		case "computed": {
 			return "worked out by this wallet";
 		}
@@ -146,7 +142,7 @@ function intentOf(action: Action, scope: ReferenceScope): string | undefined {
 		? intent.replaceAll(/\{(?<ref>[^{}:]+)(?::[^{}]*)?\}/g, (text, ref: string) => {
 				const found = Refusal.attempt(() => resolveReference(ref, "expression", scope));
 
-				return found === undefined ? text : String(found.value);
+				return found === undefined ? text : String(found);
 			})
 		: undefined;
 }

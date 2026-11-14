@@ -1,3 +1,4 @@
+import { decodeHex, encodeHex } from "../chain/hex";
 import { asArray, asRecord } from "../document/json";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { computedValue, computesValue } from "../evaluation/computedValue";
@@ -80,7 +81,7 @@ function encodeLeaf(declared: unknown, index: number, input: { scope: ReferenceS
 		);
 	}
 
-	return bytes.map((byte) => byte.toString(16).padStart(2, "0")).join("");
+	return encodeHex(Uint8Array.from(bytes));
 }
 
 function encodePiece(declared: unknown, at: string, input: { scope: ReferenceScope }): number[] {
@@ -125,7 +126,7 @@ function readValue(declared: unknown, at: string, input: { scope: ReferenceScope
 	let found: unknown;
 
 	try {
-		found = resolveReference(declared, "stateLeaf", input.scope).value;
+		found = resolveReference(declared, "stateLeaf", input.scope);
 	} catch (error) {
 		if (!(error instanceof Refusal)) {
 			throw error;
@@ -138,7 +139,7 @@ function readValue(declared: unknown, at: string, input: { scope: ReferenceScope
 			);
 		}
 
-		if (declared.startsWith("$") || declared.includes(".")) {
+		if (declared.includes(".")) {
 			throw new Refusal(`${at}: ${error.reason}`);
 		}
 
@@ -236,17 +237,7 @@ function padBytes(bytes: number[], padTo: unknown, align: unknown, at: string): 
 }
 
 function hexBytes(text: string): number[] | undefined {
-	const digits = text.trim().replace(/^0x/i, "");
+	const raw = decodeHex(text.trim());
 
-	if (digits.length === 0 || digits.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(digits)) {
-		return undefined;
-	}
-
-	const out: number[] = [];
-
-	for (let index = 0; index < digits.length; index += 2) {
-		out.push(Number.parseInt(digits.slice(index, index + 2), 16));
-	}
-
-	return out;
+	return raw && raw.length > 0 ? [...raw] : undefined;
 }

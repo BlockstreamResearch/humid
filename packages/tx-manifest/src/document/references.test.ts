@@ -11,10 +11,7 @@ const SCOPE: ReferenceScope = {
 
 describe("the namespaces a reference can name", () => {
 	test("reads the request's parameters", () => {
-		expect(resolveReference("params.amount_sat", "amount", SCOPE)).toEqual({
-			form: "params",
-			value: "1000",
-		});
+		expect(resolveReference("params.amount_sat", "amount", SCOPE)).toBe("1000");
 	});
 
 	test("has one spelling, without a $ prefix", () => {
@@ -22,35 +19,28 @@ describe("the namespaces a reference can name", () => {
 	});
 
 	test("reads this deployment's field values", () => {
-		expect(resolveReference("instance.TIMEOUT", "compileParam", SCOPE)).toEqual({
-			form: "instance",
-			value: "900000",
-		});
+		expect(resolveReference("instance.TIMEOUT", "compileParam", SCOPE)).toBe("900000");
 	});
 
 	test("reads an action parameter as a field where the deployment has no such field", () => {
-		expect(resolveReference("instance.amount_sat", "amount", SCOPE)).toMatchObject({
-			value: "1000",
-		});
+		expect(resolveReference("instance.amount_sat", "amount", SCOPE)).toBe("1000");
 	});
 
 	test("but a field the deployment has wins over a parameter of the same name", () => {
 		const scope = { instance: { TIMEOUT: "900000" }, params: { TIMEOUT: "1" } };
 
-		expect(resolveReference("instance.TIMEOUT", "amount", scope)).toMatchObject({
-			value: "900000",
-		});
+		expect(resolveReference("instance.TIMEOUT", "amount", scope)).toBe("900000");
 	});
 
 	test("reads a bare name as a deployment field where a program argument goes", () => {
-		expect(resolveReference("TIMEOUT", "compileParam", SCOPE)).toMatchObject({ value: "900000" });
+		expect(resolveReference("TIMEOUT", "compileParam", SCOPE)).toBe("900000");
 	});
 
 	test("reads a bare name elsewhere only as the fee or an attribute of the input a hook runs on", () => {
 		const scope = { ...SCOPE, fee: 42n, self: { asset: "ab".repeat(32) } };
 
-		expect(resolveReference("fee", "amount", scope).value).toBe(42n);
-		expect(resolveReference("asset", "expression", scope).value).toBe("ab".repeat(32));
+		expect(resolveReference("fee", "amount", scope)).toBe(42n);
+		expect(resolveReference("asset", "expression", scope)).toBe("ab".repeat(32));
 		expect(refusalOf(() => resolveReference("amount_sat", "amount", scope)).reason).toContain(
 			"params.amount_sat",
 		);
@@ -79,7 +69,7 @@ describe("what a name must come from", () => {
 
 describe("what a position refuses", () => {
 	test("a destination takes a parameter or a deployment field, and no input attribute", () => {
-		expect(resolveReference("instance.TIMEOUT", "destination", SCOPE).form).toBe("instance");
+		expect(resolveReference("instance.TIMEOUT", "destination", SCOPE)).toBe("900000");
 		expect(
 			refusalOf(() => resolveReference("vault_in.amount_sat", "destination", SCOPE)).reason,
 		).toContain("cannot be used as a destination");
@@ -100,7 +90,7 @@ describe("what a position refuses", () => {
 			inputs: { vault_in: { amount_sat: 50_000n } },
 		});
 
-		expect(found).toEqual({ form: "input-attribute", value: 50_000n });
+		expect(found).toBe(50_000n);
 	});
 
 	test("and refuses an input this action never resolved, by name", () => {

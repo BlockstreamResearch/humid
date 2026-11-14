@@ -1,3 +1,4 @@
+import { integerOf } from "../chain/integers";
 import { asArray, asRecord } from "../document/json";
 import type { Action } from "../document/manifest";
 import { type ReferenceScope, resolveReference } from "../document/references";
@@ -94,9 +95,7 @@ function resolveSequence(declared: unknown, scope: ReferenceScope): number {
 function wholeCount(declared: unknown, unit: string, scope: ReferenceScope): bigint {
 	const counted =
 		typeof declared === "number"
-			? Number.isSafeInteger(declared) && declared >= 0
-				? BigInt(declared)
-				: undefined
+			? integerOf(declared)
 			: evaluateExpression(String(declared), "expression", scope);
 
 	if (counted === undefined || counted < 0n) {
@@ -113,7 +112,7 @@ function resolveFromAddress(declared: unknown, scope: ReferenceScope): string {
 		throw new Refusal("its from_address is not an address or a reference to one.");
 	}
 
-	const found = resolveReference(declared, "witnessKey", scope).value;
+	const found = resolveReference(declared, "witnessKey", scope);
 
 	if (typeof found !== "string") {
 		throw new Refusal(`${declared} is not an address.`);

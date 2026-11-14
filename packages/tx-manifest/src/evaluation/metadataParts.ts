@@ -1,6 +1,8 @@
+import { reverseHex, withoutHexPrefix } from "../chain/hex";
+import { integerOf } from "../chain/integers";
 import { asArray, asRecord } from "../document/json";
 import { parseReference } from "../document/references";
-import { Refusal } from "../refusal";
+import { quoted, Refusal } from "../refusal";
 
 type PartType = {
 	bytes?: number;
@@ -157,7 +159,7 @@ function encodeInteger(
 	wrong: (found: string) => Refusal,
 ): string {
 	const width = declared.bytes ?? 0;
-	const count = asCount(value);
+	const count = integerOf(value);
 
 	if (count === undefined || count < 0n) {
 		throw wrong(quoted(value));
@@ -169,7 +171,7 @@ function encodeInteger(
 
 	const big = count.toString(16).padStart(width * 2, "0");
 
-	return order === "be" ? big : reverseBytes(big);
+	return order === "be" ? big : reverseHex(big);
 }
 
 function encodeBytes(
@@ -181,8 +183,7 @@ function encodeBytes(
 		throw wrong(quoted(value));
 	}
 
-	const trimmed = value.trim();
-	const digits = /^0x/i.test(trimmed) ? trimmed.slice(2) : trimmed;
+	const digits = withoutHexPrefix(value.trim());
 
 	if (digits.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(digits)) {
 		throw wrong(quoted(value));
@@ -194,29 +195,5 @@ function encodeBytes(
 
 	const lower = digits.toLowerCase();
 
-	return declared.encoding === "reversedBytes" ? reverseBytes(lower) : lower;
-}
-
-function reverseBytes(hex: string): string {
-	return (hex.match(/../g) ?? []).toReversed().join("");
-}
-
-function quoted(value: unknown): string {
-	const text = typeof value === "string" ? value : String(value);
-
-	return `"${text.length > 24 ? `${text.slice(0, 24)}…` : text}"`;
-}
-
-function asCount(value: unknown): bigint | undefined {
-	if (typeof value === "bigint") {
-		return value;
-	}
-
-	if (typeof value === "number") {
-		return Number.isSafeInteger(value) ? BigInt(value) : undefined;
-	}
-
-	return typeof value === "string" && /^-?\d+$/.test(value.trim())
-		? BigInt(value.trim())
-		: undefined;
+	return declared.encoding === "reversedBytes" ? reverseHex(lower) : lower;
 }

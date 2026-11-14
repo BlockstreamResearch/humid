@@ -1,3 +1,4 @@
+import { integerOf } from "../chain/integers";
 import {
 	type ReferenceScope,
 	type ReferencePosition,
@@ -67,7 +68,7 @@ function tokenise(text: string): Token[] | undefined {
 			continue;
 		}
 
-		const name = /^\$?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,2}/.exec(text.slice(at));
+		const name = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?/.exec(text.slice(at));
 
 		if (name) {
 			tokens.push({ kind: "name", text: name[0] });
@@ -212,25 +213,13 @@ function readCall(reader: Reader, name: string): bigint {
 }
 
 function readReference(reader: Reader, token: Token): bigint {
-	const count = asInteger(resolveReference(token.text, reader.position, reader.scope).value);
+	const count = integerOf(resolveReference(token.text, reader.position, reader.scope));
 
 	if (count === undefined) {
 		throw new Refusal(`"${token.text}" is not a number, so it cannot be part of an amount.`);
 	}
 
 	return bounded(count);
-}
-
-function asInteger(value: unknown): bigint | undefined {
-	if (typeof value === "bigint") {
-		return value;
-	}
-
-	if (typeof value === "number") {
-		return Number.isSafeInteger(value) ? BigInt(value) : undefined;
-	}
-
-	return typeof value === "string" && /^-?\d+$/.test(value) ? BigInt(value) : undefined;
 }
 
 function bounded(value: bigint): bigint {

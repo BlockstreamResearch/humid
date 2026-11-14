@@ -1,3 +1,5 @@
+import { reverseHex } from "../chain/hex";
+import { integerOf } from "../chain/integers";
 import { asRecord } from "../document/json";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
@@ -33,16 +35,18 @@ function factorOf(declared: unknown, name: string, scope: ReferenceScope): strin
 		(reason) => `its ${name} ${reason}`,
 	);
 
-	return (scalar.toString(16).padStart(64, "0").match(/../g) ?? []).toReversed().join("");
+	return reverseHex(scalar.toString(16).padStart(64, "0"));
 }
 
 function scalarOf(declared: unknown, scope: ReferenceScope): bigint {
 	if (typeof declared === "number") {
-		if (!Number.isSafeInteger(declared) || declared < 0) {
+		const scalar = integerOf(declared);
+
+		if (scalar === undefined || scalar < 0n) {
 			throw new Refusal(`is ${declared}, which is not a whole number.`);
 		}
 
-		return BigInt(declared);
+		return scalar;
 	}
 
 	if (typeof declared !== "string") {

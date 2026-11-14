@@ -1,7 +1,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
-import { baseUnits } from "../chain/baseUnits";
+import { decodeHex, encodeHex } from "../chain/hex";
+import { baseUnits } from "../chain/integers";
 import type { Outpoint } from "../chain/outpoint";
 import { byOutpoint, outpointKey } from "../chain/outpoint";
 import { confirmationModel, type ReviewedPlan } from "../confirmation";
@@ -54,7 +54,7 @@ import {
 import { programHashFrom } from "../programs/programHash";
 import { Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
-import { resolveActionRequirements } from "../request/requirements";
+import { missingParts } from "../request/requirements";
 import { type AssetHoldings, type FundedAsset, fundAssets } from "./assetFunding";
 import { type SelectableUtxo, toSats } from "./coinSelection";
 import type {
@@ -105,7 +105,7 @@ export class ActionReview {
 		this.#input = input;
 		this.#manifest = new Manifest(request.manifest);
 		this.#deployment = readInstance(request.instance);
-		this.#policyAsset = input.policyAsset.trim().toLowerCase();
+		this.#policyAsset = input.policyAsset;
 
 		const unsupported = refuseUnsupported(this.#manifest, {
 			...(input.compilerVersion === undefined ? {} : { compilerVersion: input.compilerVersion }),
@@ -142,7 +142,7 @@ export class ActionReview {
 			{
 				address: input.walletAddress,
 				key: input.walletKey,
-				script_hash: bytesToHex(sha256(hexToBytes(input.walletScriptPubKeyHex))),
+				script_hash: encodeHex(sha256(walletScript(input.walletScriptPubKeyHex))),
 			},
 		);
 		const malformed = malformedDeclaration(action);
@@ -151,7 +151,7 @@ export class ActionReview {
 			throw new Refusal(malformed);
 		}
 
-		const { missing } = resolveActionRequirements({ ...request, params }, this.#manifest, action);
+		const missing = missingParts({ ...request, params }, this.#manifest, action);
 
 		if (missing.length > 0) {
 			const named = missing
@@ -1113,7 +1113,7 @@ function resolveIssuances(
 	const issuances: PlannedIssuance[] = [];
 	const declarations = new Map<string, Record<string, unknown>>();
 	const reserved: { asset: string; inputId: string; utxo: SelectableUtxo }[] = [];
-	const policyAsset = context.policyAsset.trim().toLowerCase();
+	const policyAsset = context.policyAsset;
 	const pools = new Map<string, SelectableUtxo[]>();
 	const taken = new Set<string>();
 
@@ -1288,6 +1288,16 @@ function withoutDeployedFields(
 	return Object.fromEntries(
 		Object.entries(supplied).filter(([name]) => name in declared || !(name in fields)),
 	);
+}
+
+function walletScript(hex: string): Uint8Array {
+	const script = decodeHex(hex);
+
+	if (!script) {
+		throw new TypeError(`The wallet's script ${hex} is not hex.`);
+	}
+
+	return script;
 }
 
 function sameScript(one: string, other: string): boolean {

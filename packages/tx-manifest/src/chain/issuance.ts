@@ -1,6 +1,6 @@
 import { SHA256, sha256 } from "@noble/hashes/sha2.js";
 
-import { decodeHex, encodeHex } from "./bytes";
+import { decodeHex, encodeHex } from "./hex";
 import type { Outpoint } from "./outpoint";
 
 export type { Outpoint };

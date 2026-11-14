@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
 import { Manifest } from "../document/manifest";
-import type { ParsedLiquidProcessCtParams } from "./request";
-import { resolveActionRequirements } from "./requirements";
+import type { ParsedLiquidProcessCtParams, RequestPart } from "./request";
+import { missingParts } from "./requirements";
 
 const SOURCE_PATH = "./p2pk.simf";
 const PUBKEY = "0".repeat(64);
@@ -31,10 +31,14 @@ function requirements(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
 		throw new Error(`This manifest declares no action named ${asked.action}.`);
 	}
 
-	return resolveActionRequirements(asked, manifest, action);
+	return missingParts(asked, manifest, action);
 }
 
-describe("resolveActionRequirements", () => {
+function parts(overrides: Partial<ParsedLiquidProcessCtParams> = {}): RequestPart[] {
+	return requirements(overrides).map((missing) => missing.part);
+}
+
+describe("missingParts", () => {
 	test("an action the manifest does not declare is not one to ask about", () => {
 		const manifest = new Manifest(MANIFEST);
 
@@ -43,30 +47,29 @@ describe("resolveActionRequirements", () => {
 
 	describe("Pay", () => {
 		test("needs the contract source and the declared parameters", () => {
-			const { required } = requirements();
-
-			expect(required).toContain("contractSources");
-			expect(required).toContain("params");
+			expect(parts({ contractSources: {}, params: {} })).toEqual(["contractSources", "params"]);
 		});
 
 		test("does not need the state file", () => {
-			expect(requirements().required).not.toContain("state");
+			expect(parts()).not.toContain("state");
 		});
 
 		test("is complete when the source and parameters are supplied", () => {
-			expect(requirements().missing).toEqual([]);
+			expect(requirements()).toEqual([]);
 		});
 
 		test("names the contract source that was not supplied", () => {
-			const { missing } = requirements({ contractSources: {} });
-			const entry = missing.find((item) => item.part === "contractSources");
+			const entry = requirements({ contractSources: {} }).find(
+				(item) => item.part === "contractSources",
+			);
 
 			expect(entry?.keys).toEqual([SOURCE_PATH]);
 		});
 
 		test("names each parameter the request did not fill", () => {
-			const { missing } = requirements({ params: { pubkey: PUBKEY } });
-			const entry = missing.find((item) => item.part === "params");
+			const entry = requirements({ params: { pubkey: PUBKEY } }).find(
+				(item) => item.part === "params",
+			);
 
 			expect(entry?.keys).toEqual(["amount_sat"]);
 		});
@@ -76,18 +79,14 @@ describe("resolveActionRequirements", () => {
 		const receive = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
 			requirements({ action: "Receive", params: { pubkey: PUBKEY }, ...overrides });
 
-		test("needs the state file", () => {
-			expect(receive().required).toContain("state");
-		});
-
-		test("refuses without it, saying why", () => {
-			const entry = receive().missing.find((item) => item.part === "state");
+		test("refuses without the state file, saying why", () => {
+			const entry = receive().find((item) => item.part === "state");
 
 			expect(entry?.reason).toContain("state file");
 		});
 
 		test("is complete once the state file is supplied", () => {
-			expect(receive({ state: { utxos: [] } }).missing).toEqual([]);
+			expect(receive({ state: { utxos: [] } })).toEqual([]);
 		});
 	});
 });
@@ -103,24 +102,21 @@ describe("which parameters the request must fill", () => {
 	}
 
 	test("a parameter the wallet supplies is not", () => {
-		const { missing } = paramsOf({
-			key: { compute: { type: "wallet", wallet: "key" }, type: "pubkey" },
-		});
-
-		expect(missing).toEqual([]);
+		expect(
+			paramsOf({ key: { compute: { type: "wallet", wallet: "key" }, type: "pubkey" } }),
+		).toEqual([]);
 	});
 
 	test("a computed parameter is not", () => {
-		const { missing } = paramsOf({ hash: { compute: { simf: "./a.simf", type: "tapleaf" } } });
-
-		expect(missing).toEqual([]);
+		expect(paramsOf({ hash: { compute: { simf: "./a.simf", type: "tapleaf" } } })).toEqual([]);
 	});
 });
 
 describe("wallet inputs and program inputs", () => {
 	function ask(action: Record<string, unknown>) {
-		return requirements({
+		return parts({
 			action: "Open",
+			contractSources: {},
 			manifest: {
 				actions: { Open: action },
 				utxo_types: { v: { script: { source: SOURCE_PATH } } },
@@ -130,27 +126,23 @@ describe("wallet inputs and program inputs", () => {
 	}
 
 	test("a wallet-funded input needs no state file", () => {
-		expect(ask({ inputs: [{ id: "funding", utxo_source: "wallet" }] }).required).not.toContain(
-			"state",
-		);
+		expect(ask({ inputs: [{ id: "funding", utxo_source: "wallet" }] })).not.toContain("state");
 	});
 
 	test("an input spent from a program does", () => {
-		expect(ask({ inputs: [{ id: "held", utxo_source: { utxo_type: "v" } }] }).required).toContain(
+		expect(ask({ inputs: [{ id: "held", utxo_source: { utxo_type: "v" } }] })).toContain("state");
+	});
+
+	test("creating a program does not, because there is nothing yet to locate", () => {
+		expect(ask({ outputs: [{ destination: { utxo_type: "v" }, id: "made" }] })).not.toContain(
 			"state",
 		);
 	});
 
-	test("creating a program does not, because there is nothing yet to locate", () => {
-		expect(
-			ask({ outputs: [{ destination: { utxo_type: "v" }, id: "made" }] }).required,
-		).not.toContain("state");
-	});
-
 	test("a program an output creates still needs its contract source", () => {
-		const { required } = ask({ outputs: [{ destination: { utxo_type: "v" }, id: "made" }] });
-
-		expect(required).toContain("contractSources");
+		expect(ask({ outputs: [{ destination: { utxo_type: "v" }, id: "made" }] })).toContain(
+			"contractSources",
+		);
 	});
 });
 
@@ -172,8 +164,15 @@ describe("when a deployment's field values are needed", () => {
 		});
 	}
 
+	function instanceMissing(
+		method: Record<string, unknown>,
+		params: Record<string, unknown> = {},
+	): boolean {
+		return templateAction(method, params).some((missing) => missing.part === "instance");
+	}
+
 	test("an action reading nothing off the deployment needs no instance file", () => {
-		const { missing, required } = templateAction({
+		const missing = templateAction({
 			outputs: [
 				{
 					amount_sat: "params.amount_sat",
@@ -183,12 +182,11 @@ describe("when a deployment's field values are needed", () => {
 			],
 		});
 
-		expect(required).not.toContain("instance");
 		expect(missing).toEqual([]);
 	});
 
 	test("an action naming the deployment outright does", () => {
-		const { missing, required } = templateAction({
+		const missing = templateAction({
 			outputs: [
 				{
 					amount_sat: "1000",
@@ -201,7 +199,6 @@ describe("when a deployment's field values are needed", () => {
 			],
 		});
 
-		expect(required).toContain("instance");
 		expect(missing.find((entry) => entry.part === "instance")?.keys).toEqual([
 			"action Act / output out / OWNER_PUB_KEY",
 		]);
@@ -218,12 +215,12 @@ describe("when a deployment's field values are needed", () => {
 			],
 		};
 
-		expect(templateAction(wiring).required).toContain("instance");
-		expect(templateAction(wiring, { OWNER_PUB_KEY: PUBKEY }).required).not.toContain("instance");
+		expect(instanceMissing(wiring)).toBe(true);
+		expect(instanceMissing(wiring, { OWNER_PUB_KEY: PUBKEY })).toBe(false);
 	});
 
 	test("a bare value at the same position does not, however name-shaped it looks", () => {
-		const { missing, required } = templateAction({
+		const missing = templateAction({
 			outputs: [
 				{
 					amount_sat: "1000",
@@ -233,20 +230,19 @@ describe("when a deployment's field values are needed", () => {
 			],
 		});
 
-		expect(required).not.toContain("instance");
 		expect(missing).toEqual([]);
 	});
 
 	test("an amount read off the deployment needs it too", () => {
-		const { required } = templateAction({
-			outputs: [{ amount_sat: "instance.TIMEOUT", destination: "wallet", id: "out" }],
-		});
-
-		expect(required).toContain("instance");
+		expect(
+			instanceMissing({
+				outputs: [{ amount_sat: "instance.TIMEOUT", destination: "wallet", id: "out" }],
+			}),
+		).toBe(true);
 	});
 
 	test("a constructor reading a field its own create_instance produces needs no instance file", () => {
-		const { missing, required } = templateAction(
+		const missing = templateAction(
 			{
 				create_instance: {
 					fields: {
@@ -272,24 +268,23 @@ describe("when a deployment's field values are needed", () => {
 			{ OWNER_PUB_KEY: PUBKEY },
 		);
 
-		expect(required).not.toContain("instance");
 		expect(missing).toEqual([]);
 	});
 
 	test("an action reading its own parameter as a field needs no instance file", () => {
-		const { required } = templateAction(
-			{
-				outputs: [{ amount_sat: "instance.tip", destination: "wallet", id: "out" }],
-				params: { tip: { type: "u64" } },
-			},
-			{ tip: 1 },
-		);
-
-		expect(required).not.toContain("instance");
+		expect(
+			instanceMissing(
+				{
+					outputs: [{ amount_sat: "instance.tip", destination: "wallet", id: "out" }],
+					params: { tip: { type: "u64" } },
+				},
+				{ tip: 1 },
+			),
+		).toBe(false);
 	});
 
 	test("but a field its create_instance does not produce is still read from one", () => {
-		const { required } = templateAction({
+		const missing = instanceMissing({
 			create_instance: { fields: { RESERVE_HASH: { simf: "./r.simf", type: "tapleaf" } } },
 			outputs: [
 				{
@@ -303,28 +298,28 @@ describe("when a deployment's field values are needed", () => {
 			],
 		});
 
-		expect(required).toContain("instance");
+		expect(missing).toBe(true);
 	});
 
 	test("a free action reading a deployment's field is satisfied by a value the request supplies", () => {
-		const { missing } = requirements({
-			action: "Free",
-			contractSources: { [SOURCE_PATH]: "fn main() {}" },
-			manifest: {
-				actions: {
-					Free: {
-						outputs: [{ amount_sat: "instance.AMOUNT", destination: "wallet", id: "out" }],
+		expect(
+			requirements({
+				action: "Free",
+				contractSources: { [SOURCE_PATH]: "fn main() {}" },
+				manifest: {
+					actions: {
+						Free: {
+							outputs: [{ amount_sat: "instance.AMOUNT", destination: "wallet", id: "out" }],
+						},
 					},
 				},
-			},
-			params: { AMOUNT: "1" },
-		});
-
-		expect(missing).toEqual([]);
+				params: { AMOUNT: "1" },
+			}),
+		).toEqual([]);
 	});
 
 	test("a free action reading a deployment is unsatisfiable rather than short a file", () => {
-		const { missing, required } = requirements({
+		const missing = requirements({
 			action: "Free",
 			contractSources: { [SOURCE_PATH]: "fn main() {}" },
 			manifest: {
@@ -338,7 +333,6 @@ describe("when a deployment's field values are needed", () => {
 			params: {},
 		});
 
-		expect(required).not.toContain("instance");
 		expect(missing.find((entry) => entry.part === "instance")?.reason).toContain(
 			"declared outside any template",
 		);

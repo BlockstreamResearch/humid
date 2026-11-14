@@ -31,7 +31,7 @@ type Context = {
 };
 
 export function resolveAsset(declared: unknown, at: string, context: Context): string {
-	const policyAsset = context.policyAsset.trim().toLowerCase();
+	const policyAsset = context.policyAsset;
 
 	if (declared === undefined) {
 		return policyAsset;
@@ -52,7 +52,7 @@ export function resolveAsset(declared: unknown, at: string, context: Context): s
 	}
 
 	const found = Refusal.amend(
-		() => resolveReference(stated.reference, "asset", context.scope).value,
+		() => resolveReference(stated.reference, "asset", context.scope),
 		(reason) =>
 			`The asset at ${at} is stated as ${stated.reference}, and this wallet could not ` +
 			`establish what that is: ${reason}`,
@@ -111,7 +111,7 @@ export function assetLedger(
 		return created;
 	};
 
-	entryFor(context.policyAsset.trim().toLowerCase());
+	entryFor(context.policyAsset);
 
 	const walletInputs: { asset: string; id: string }[] = [];
 	const outputs: string[] = [];

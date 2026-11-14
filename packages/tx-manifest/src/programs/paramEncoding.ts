@@ -1,4 +1,5 @@
-import { Refusal } from "../refusal";
+import { reverseHex, withoutHexPrefix } from "../chain/hex";
+import { quoted, Refusal } from "../refusal";
 
 type Encoding = "boolean" | "decimal" | "hex" | "reversedHex";
 
@@ -137,7 +138,7 @@ export function encodeCompileParam(
 				);
 			}
 
-			const ordered = declared.encoding === "reversedHex" ? reverseBytes(digits) : digits;
+			const ordered = declared.encoding === "reversedHex" ? reverseHex(digits) : digits;
 
 			return { type: declared.compiler, value: `0x${ordered}` };
 		}
@@ -150,15 +151,3 @@ const BOOLEANS: Record<string, string> = {
 	false: "false",
 	true: "true",
 };
-
-function withoutHexPrefix(value: string): string {
-	return value.startsWith("0x") || value.startsWith("0X") ? value.slice(2) : value;
-}
-
-function reverseBytes(hex: string): string {
-	return (hex.match(/../g) ?? []).toReversed().join("");
-}
-
-function quoted(value: string): string {
-	return `"${value.length > 24 ? `${value.slice(0, 24)}…` : value}"`;
-}

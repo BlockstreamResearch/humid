@@ -1,3 +1,4 @@
+import { isHash, withoutHexPrefix } from "../chain/hex";
 import { asArray, asRecord } from "../document/json";
 import type { Action } from "../document/manifest";
 import { parseReference, type ReferenceScope, resolveReference } from "../document/references";
@@ -134,11 +135,11 @@ function resolveTarget(
 		const hash =
 			typeof record.script_hash === "string" ? textAt(record.script_hash, scope) : undefined;
 
-		if (typeof hash !== "string" || !HASH.test(hash)) {
+		if (typeof hash !== "string" || !isHash(withoutHexPrefix(hash))) {
 			throw new Refusal("pays a script_hash that is not 32 bytes of hex.");
 		}
 
-		return { hex: `5120${hash.replace(/^0x/, "").toLowerCase()}`, kind: "data" };
+		return { hex: `5120${withoutHexPrefix(hash).toLowerCase()}`, kind: "data" };
 	}
 
 	if (record?.type === "fee") {
@@ -157,7 +158,7 @@ function resolveTarget(
 		() =>
 			encodeMetadataParts(
 				typeof data === "string" ? concatParts(data, declaredTypes) : data,
-				(reference) => resolveReference(reference, "expression", scope).value,
+				(reference) => resolveReference(reference, "expression", scope),
 			),
 		(reason) => `carries data this runtime cannot encode: ${reason}`,
 	);
@@ -169,14 +170,13 @@ function resolveTarget(
 	return { hex: opReturnScript(hex), kind: "data" };
 }
 
-const HASH = /^(0x)?[0-9a-fA-F]{64}$/;
-
 function textAt(text: string, scope: ReferenceScope): unknown {
 	const reference = parseReference(text);
 
-	return HASH.test(text) || (reference?.form !== "params" && reference?.form !== "instance")
+	return isHash(withoutHexPrefix(text)) ||
+		(reference?.form !== "params" && reference?.form !== "instance")
 		? text
-		: resolveReference(text, "destination", scope).value;
+		: resolveReference(text, "destination", scope);
 }
 
 function opReturnScript(payloadHex: string): string {

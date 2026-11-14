@@ -10,11 +10,6 @@ export type ParsedLiquidProcessCtParams = {
 
 export type RequestPart = "contractSources" | "instance" | "params" | "state";
 
-export type ActionRequirements = {
-	missing: MissingPart[];
-	required: RequestPart[];
-};
-
 export type MissingPart = {
 	keys?: string[];
 	part: RequestPart;

@@ -20,12 +20,11 @@ export type AssetFundingContext = {
 };
 
 export function fundAssets(entries: AssetEntry[], context: AssetFundingContext): FundedAsset[] {
-	const policyAsset = context.policyAsset.trim().toLowerCase();
 	const funded: FundedAsset[] = [];
 	const committed = new Set(context.reserved.map(({ utxo }) => outpointKey(utxo)));
 
 	for (const entry of entries) {
-		const isPolicy = entry.asset === policyAsset;
+		const isPolicy = entry.asset === context.policyAsset;
 		const reserved = byOutpoint(
 			context.reserved.filter((held) => held.asset === entry.asset).map((held) => held.utxo),
 		);

@@ -1,4 +1,5 @@
-import { MAX_BASE_UNITS } from "../chain/baseUnits";
+import { isHash, withoutHexPrefix } from "../chain/hex";
+import { integerOf, MAX_BASE_UNITS } from "../chain/integers";
 import {
 	type DerivedIssuance,
 	deriveFromEntropy,
@@ -59,17 +60,6 @@ export function reissuanceOf(
 	}
 
 	return derived;
-}
-
-export function resolveIssuance(
-	input: {
-		declared: Record<string, unknown>;
-		id: string;
-		outpoint: Outpoint;
-	},
-	scope: ReferenceScope,
-): PlannedIssuance {
-	return withIssuedAmounts(issuanceIdentity(input, scope), input.declared, scope);
 }
 
 export function issuanceIdentity(
@@ -166,15 +156,15 @@ function hexOf(declared: unknown, scope: ReferenceScope): string {
 	}
 
 	const found =
-		parseReference(declared) === undefined || /^(0x)?[0-9a-fA-F]{64}$/.test(declared)
+		parseReference(declared) === undefined || isHash(withoutHexPrefix(declared))
 			? declared
-			: resolveReference(declared, "entropy", scope).value;
+			: resolveReference(declared, "entropy", scope);
 
-	if (typeof found !== "string" || !/^(0x)?[0-9a-fA-F]{64}$/.test(found)) {
+	if (typeof found !== "string" || !isHash(withoutHexPrefix(found))) {
 		throw new Refusal(`${declared} is not 32 bytes of hex.`);
 	}
 
-	return found.replace(/^0x/, "").toLowerCase();
+	return withoutHexPrefix(found).toLowerCase();
 }
 
 function amountOf(declared: unknown, scope: ReferenceScope): bigint {
@@ -192,21 +182,9 @@ function amountOf(declared: unknown, scope: ReferenceScope): bigint {
 }
 
 function asCount(value: unknown): bigint | undefined {
-	const counted = toBigInt(value);
+	const counted = integerOf(value);
 
 	return counted !== undefined && counted >= -MAX_BASE_UNITS && counted <= MAX_BASE_UNITS
 		? counted
 		: undefined;
-}
-
-function toBigInt(value: unknown): bigint | undefined {
-	if (typeof value === "bigint") {
-		return value;
-	}
-
-	if (typeof value === "number") {
-		return Number.isSafeInteger(value) ? BigInt(value) : undefined;
-	}
-
-	return typeof value === "string" && /^-?\d+$/.test(value) ? BigInt(value) : undefined;
 }

@@ -32,7 +32,7 @@ export function statedValue(label: string, text: string, scope: ReferenceScope):
 	}
 
 	const found = Refusal.amend(
-		() => resolveReference(text, "field", scope).value,
+		() => resolveReference(text, "field", scope),
 		(reason) => `${label}: ${reason}`,
 	);
 

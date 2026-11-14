@@ -27,7 +27,7 @@ export function resolveCompileParams(
 		let found: unknown;
 
 		try {
-			found = resolveReference(reference, "compileParam", scope).value;
+			found = resolveReference(reference, "compileParam", scope);
 		} catch (error) {
 			if (!(error instanceof Refusal)) {
 				throw error;

@@ -135,7 +135,10 @@ export async function reviewManifestAction(
 	input: ReviewInput,
 ): Promise<ReviewManifestActionResult> {
 	try {
-		return await ActionReview.run(request, input);
+		return await ActionReview.run(request, {
+			...input,
+			policyAsset: input.policyAsset.trim().toLowerCase(),
+		});
 	} catch (error) {
 		if (error instanceof Refusal) {
 			return { reason: error.reason, refused: true, reject: error.reject };

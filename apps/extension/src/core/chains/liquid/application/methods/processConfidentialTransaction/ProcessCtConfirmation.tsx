@@ -11,7 +11,7 @@ export type ProcessCtConfirmationData = {
 	shown: ShownConfirmation;
 };
 
-const ORIGINS = new Set(["chain", "computed", "dapp", "verified"]);
+const ORIGINS = new Set(["computed", "dapp", "verified"]);
 
 const UNSIGNED = /^\d+$/;
 const SIGNED = /^-?\d+$/;

@@ -19,8 +19,6 @@ export type ReferenceScope = {
 	self?: Record<string, unknown>;
 };
 
-export type ReferenceResolution = { form: ReferenceForm; value: unknown };
-
 export type ReferencePosition =
 	| "amount"
 	| "asset"
@@ -110,7 +108,7 @@ export function resolveReference(
 	text: string,
 	position: ReferencePosition,
 	scope: ReferenceScope,
-): ReferenceResolution {
+): unknown {
 	const reference = parseReference(text);
 	const accepted = POSITIONS[position];
 
@@ -122,7 +120,7 @@ export function resolveReference(
 		throw new Refusal(`"${text}" cannot be used as ${accepted.describes}.`);
 	}
 
-	return { form: reference.form, value: lookUp(reference, position, scope) };
+	return lookUp(reference, position, scope);
 }
 
 function lookUp(

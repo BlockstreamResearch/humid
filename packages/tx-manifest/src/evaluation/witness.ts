@@ -66,7 +66,7 @@ function fill(value: string, scope: ReferenceScope): string {
 			throw new Refusal(`"${text}" cannot be used as part of a witness value.`);
 		}
 
-		return String(resolveReference(text, "witnessValue", scope).value);
+		return String(resolveReference(text, "witnessValue", scope));
 	});
 }
 

@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import { deriveNewIssuance } from "../chain/issuance";
 import { refusalOf } from "../review/reviewForTests";
-import { declaredIssuance, issuanceAttributes, resolveIssuance } from "./issuance";
+import {
+	declaredIssuance,
+	issuanceAttributes,
+	issuanceIdentity,
+	withIssuedAmounts,
+} from "./issuance";
 
 const OUTPOINT = { txid: "c".repeat(64), vout: 2 };
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -15,7 +20,13 @@ function resolve(
 	params: Record<string, unknown> = {},
 	outpoint = OUTPOINT,
 ) {
-	return resolveIssuance({ declared, id: "mint_in", outpoint }, { params });
+	const scope = { params };
+
+	return withIssuedAmounts(
+		issuanceIdentity({ declared, id: "mint_in", outpoint }, scope),
+		declared,
+		scope,
+	);
 }
 
 describe("the issuance an input declares", () => {
