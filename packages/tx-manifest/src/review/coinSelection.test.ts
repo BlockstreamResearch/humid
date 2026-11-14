@@ -42,6 +42,10 @@ describe("selectCoins", () => {
 		expect(refusalOf(() => selectCoins([utxo("90000")], 0n)).reject).toBe("shortfall");
 	});
 
+	test("refuses to count an amount it cannot read as nothing", () => {
+		expect(() => selectCoins([utxo("40000"), utxo("4e4")], 50_000n)).toThrow(TypeError);
+	});
+
 	test("keeps amounts beyond a double's range exact", () => {
 		const result = selectCoins([utxo("9007199254740993")], 9_007_199_254_740_993n);
 

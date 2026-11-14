@@ -1,3 +1,4 @@
+import { baseUnits } from "../chain/integers";
 import { byOutpoint } from "../chain/outpoint";
 import { Refusal } from "../refusal";
 
@@ -31,7 +32,7 @@ export function selectCoins(available: SelectableUtxo[], needed: bigint): CoinSe
 		}
 
 		selected.push(utxo);
-		totalSats += toSats(utxo.amount);
+		totalSats += toSats(utxo);
 	}
 
 	if (totalSats < needed) {
@@ -45,8 +46,8 @@ export function selectCoins(available: SelectableUtxo[], needed: bigint): CoinSe
 }
 
 function byLargestFirst(a: SelectableUtxo, b: SelectableUtxo): number {
-	const left = toSats(a.amount);
-	const right = toSats(b.amount);
+	const left = toSats(a);
+	const right = toSats(b);
 
 	if (left === right) {
 		return 0;
@@ -55,10 +56,15 @@ function byLargestFirst(a: SelectableUtxo, b: SelectableUtxo): number {
 	return left > right ? -1 : 1;
 }
 
-export function toSats(amount: string): bigint {
-	try {
-		return BigInt(amount);
-	} catch {
-		return 0n;
+export function toSats(utxo: SelectableUtxo): bigint {
+	const sats = baseUnits(utxo.amount);
+
+	if (sats === undefined) {
+		throw new TypeError(
+			`The wallet lists ${utxo.txid}:${utxo.vout} as holding ${JSON.stringify(utxo.amount)}, ` +
+				"which is not an amount.",
+		);
 	}
+
+	return sats;
 }

@@ -558,6 +558,19 @@ describe("which program output each input spends", () => {
 		expect(spent(await reviewed(request))).toEqual(["b"]);
 	});
 
+	test("refuses an input whose asset is known only once hooks run, rather than spending any output", async () => {
+		const manifest = p2pk.edited((document) => {
+			const action = (document.actions as Record<string, Document>).Receive as Document;
+			const inputs = action.inputs as Document[];
+
+			inputs[0] = { ...inputs[0], asset: "params.held_asset" };
+			action.on_pre_broadcast = { set: { "params.held_asset": "params.lbtc" } };
+		}).manifest;
+		const request = receive({ manifest, params: { lbtc: POLICY_ASSET, pubkey: PUBKEY } });
+
+		expect((await refused(request)).reason).toContain("held_asset");
+	});
+
 	test("spends the output the instance file pins, without a state file", async () => {
 		const request = receive({
 			instance: { provided_inputs: { p2pk_in: { txid: "a".repeat(64), vout: 0 } } },

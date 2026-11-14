@@ -28,7 +28,7 @@ export function fundAssets(entries: AssetEntry[], context: AssetFundingContext):
 		const reserved = byOutpoint(
 			context.reserved.filter((held) => held.asset === entry.asset).map((held) => held.utxo),
 		);
-		const brought = reserved.reduce((total, utxo) => total + toSats(utxo.amount), entry.held);
+		const brought = reserved.reduce((total, utxo) => total + toSats(utxo), entry.held);
 		const fee = isPolicy ? context.feeSats : 0n;
 		const outstanding = entry.needed + fee - brought;
 		let selected = reserved;
@@ -73,7 +73,7 @@ export function fundAssets(entries: AssetEntry[], context: AssetFundingContext):
 
 function shortOf(asset: string, needed: bigint, pool: SelectableUtxo[]): string {
 	const usable = byOutpoint(pool.filter((utxo) => utxo.spendable)).reduce(
-		(sum, utxo) => sum + toSats(utxo.amount),
+		(sum, utxo) => sum + toSats(utxo),
 		0n,
 	);
 

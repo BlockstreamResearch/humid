@@ -331,12 +331,10 @@ export class ActionReview {
 		for (const use of this.#uses("spent")) {
 			// oxlint-disable-next-line no-await-in-loop
 			const derived = await this.#derive(use);
-			const asset = Refusal.attempt(() =>
-				resolveAsset(use.asset, `input ${use.id}`, {
-					policyAsset: this.#input.policyAsset,
-					scope: this.#scope,
-				}),
-			);
+			const asset = resolveAsset(use.asset, `input ${use.id}`, {
+				policyAsset: this.#input.policyAsset,
+				scope: this.#scope,
+			});
 			const outpoint = utxos.claim(use.id, use.utxoType, asset);
 			// oxlint-disable-next-line no-await-in-loop
 			const onChain = await this.#readTxOut(outpoint);
@@ -1125,7 +1123,7 @@ function resolveIssuances(
 		}
 
 		const ordered = byOutpoint(context.holdings(asset).filter((utxo) => utxo.spendable)).toSorted(
-			(one, other) => bySize(toSats(one.amount), toSats(other.amount), asset === policyAsset),
+			(one, other) => bySize(toSats(one), toSats(other), asset === policyAsset),
 		);
 
 		pools.set(asset, ordered);
