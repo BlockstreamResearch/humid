@@ -1,8 +1,8 @@
 import { encodeHex, reverseHex } from "../chain/hex";
-import { parseReference } from "../document/references";
 import type { DataPart } from "../document/schema";
 import { FormatType } from "../programs/formatTypes";
 import { quoted, Refusal } from "../refusal";
+import { parseReference } from "../values/references";
 
 const BYTE_ORDERS: Record<string, "be" | "le"> = { be: "be", le: "le" };
 

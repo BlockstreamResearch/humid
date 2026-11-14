@@ -2,10 +2,10 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { utf8ToBytes } from "@noble/hashes/utils.js";
 
 import { encodeHex } from "../chain/hex";
-import { STATIC_WITNESS } from "../evaluation/witness";
 import { Refusal } from "../refusal";
+import { STATIC_WITNESS } from "../transaction/witness";
+import { RESERVED_INPUT_IDS } from "../values/references";
 import type { Manifest } from "./manifest";
-import { RESERVED_INPUT_IDS } from "./references";
 import type { Witness } from "./schema";
 
 const CAPABILITIES = new Set(["simplicity"]);

@@ -1,7 +1,7 @@
 import { isHash, withoutHexPrefix } from "../chain/hex";
 import type { Action, Output } from "../document/manifest";
-import { parseReference } from "../document/references";
 import { Refusal } from "../refusal";
+import { parseReference } from "../values/references";
 import type { Scope } from "../values/scope";
 import { type BlindingDecision, resolveBlinding } from "./blinding";
 import { type BlindingFactors, resolveBlindingFactors } from "./blindingFactors";

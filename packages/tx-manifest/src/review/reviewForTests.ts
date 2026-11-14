@@ -5,7 +5,7 @@ import { type Action, Manifest } from "../document/manifest";
 import type { ProgramAbi } from "../programs/program";
 import { Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
-import type { SelectableUtxo } from "./coinSelection";
+import type { SelectableUtxo } from "../transaction/coinSelection";
 import {
 	isRefusal,
 	type ManifestReview,

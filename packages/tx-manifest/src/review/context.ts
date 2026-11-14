@@ -5,15 +5,15 @@ import type { Outpoint } from "../chain/outpoint";
 import { type Action, Manifest } from "../document/manifest";
 import { refuseUnsupported } from "../document/refuse";
 import type { ProgramReference } from "../document/schema";
-import { fillParameters } from "../evaluation/parameters";
 import { statedCreatedFields } from "../programs/instance";
 import { deriveProgramAddress, type ProgramDerivation } from "../programs/program";
 import { Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { missingParts } from "../request/requirements";
+import type { SelectableUtxo } from "../transaction/coinSelection";
+import { fillParameters } from "../transaction/parameters";
 import { Scope } from "../values/scope";
-import type { SelectableUtxo } from "./coinSelection";
-import type { ReviewInput, TransactionDraft } from "./index";
+import type { ReviewInput, TransactionDraft } from "./types";
 
 const FEE_TARGET_BLOCKS = 1;
 

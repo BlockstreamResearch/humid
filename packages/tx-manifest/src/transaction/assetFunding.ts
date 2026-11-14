@@ -1,6 +1,6 @@
 import { byOutpoint, outpointKey } from "../chain/outpoint";
-import type { AssetEntry } from "../evaluation/assetLedger";
 import { Refusal } from "../refusal";
+import type { AssetEntry } from "./assetLedger";
 import { type SelectableUtxo, selectCoins, toSats } from "./coinSelection";
 
 export type AssetHoldings = (asset: string) => SelectableUtxo[];

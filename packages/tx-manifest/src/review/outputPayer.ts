@@ -1,11 +1,11 @@
-import type { AssetLedger } from "../evaluation/assetLedger";
-import { type BlindingDecision, resolveChangeBlinding } from "../evaluation/blinding";
-import type { BlindingFactors } from "../evaluation/blindingFactors";
-import type { PlannedOutput, PlannedSpend } from "../evaluation/plan";
 import { Refusal } from "../refusal";
-import type { FundedAsset } from "./assetFunding";
+import type { FundedAsset } from "../transaction/assetFunding";
+import type { AssetLedger } from "../transaction/assetLedger";
+import { type BlindingDecision, resolveChangeBlinding } from "../transaction/blinding";
+import type { BlindingFactors } from "../transaction/blindingFactors";
+import type { PlannedOutput, PlannedSpend } from "../transaction/plan";
 import type { ReviewContext } from "./context";
-import type { ProgramFinding, ReviewedOutput, ReviewedProgramInput } from "./index";
+import type { ProgramFinding, ReviewedOutput, ReviewedProgramInput } from "./types";
 
 const DUST_SATS = 22n;
 

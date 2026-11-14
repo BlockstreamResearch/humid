@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { Refusal } from "../refusal";
 import { refusalOf } from "../review/reviewForTests";
-import { Scope, type ScopeParts } from "../values/scope";
 import { parseReference, type ReferencePosition } from "./references";
+import { Scope, type ScopeParts } from "./scope";
 
 const SCOPE: ScopeParts = {
 	instance: { TIMEOUT: "900000" },

@@ -1,25 +1,25 @@
 import { confirmationModel, type ReviewedPlan } from "../confirmation";
 import { type Action, programOutputs } from "../document/manifest";
-import { inputHookScope, runHook, withHookValues } from "../evaluation/hooks";
-import { resolveInputRules } from "../evaluation/inputRules";
-import { withIssuedAmounts } from "../evaluation/issuance";
-import { planAction } from "../evaluation/plan";
-import { resolveStaticWitnesses } from "../evaluation/witness";
 import { type CreatedInstance, resolveCreatedInstance } from "../programs/instance";
 import { programHashFrom } from "../programs/programHash";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
+import { inputHookScope, runHook, withHookValues } from "../transaction/hooks";
+import { resolveInputRules } from "../transaction/inputRules";
+import { withIssuedAmounts } from "../transaction/issuance";
+import { planAction } from "../transaction/plan";
+import { resolveStaticWitnesses } from "../transaction/witness";
 import type { Scope } from "../values/scope";
 import { ReviewContext } from "./context";
+import { ProgramSpends } from "./programSpends";
+import { Reservations } from "./reservations";
+import { type Settled, Settlement } from "./settlement";
 import type {
 	AssetMovement,
 	ManifestReview,
 	ProgramFinding,
 	ReviewedProgramInput,
 	ReviewInput,
-} from "./index";
-import { ProgramSpends } from "./programSpends";
-import { Reservations } from "./reservations";
-import { type Settled, Settlement } from "./settlement";
+} from "./types";
 
 const MIN_FEE_SATS = 10n;
 

@@ -5,9 +5,9 @@ import {
 	deriveNewIssuance,
 	type Outpoint,
 } from "../chain/issuance";
-import { parseReference } from "../document/references";
 import type { Issuance } from "../document/schema";
 import { Refusal } from "../refusal";
+import { parseReference } from "../values/references";
 import type { Scope } from "../values/scope";
 
 export type IssuanceRequest = {

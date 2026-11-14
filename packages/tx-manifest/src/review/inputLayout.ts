@@ -1,13 +1,13 @@
 import { outpointKey } from "../chain/outpoint";
-import type { AssetLedger } from "../evaluation/assetLedger";
-import { type InputPlacement, type PlaceableInput, placeInputs } from "../evaluation/inputOrder";
-import type { InputRule } from "../evaluation/inputRules";
 import { Refusal } from "../refusal";
-import type { FundedAsset } from "./assetFunding";
-import type { SelectableUtxo } from "./coinSelection";
+import type { FundedAsset } from "../transaction/assetFunding";
+import type { AssetLedger } from "../transaction/assetLedger";
+import type { SelectableUtxo } from "../transaction/coinSelection";
+import { type InputPlacement, type PlaceableInput, placeInputs } from "../transaction/inputOrder";
+import type { InputRule } from "../transaction/inputRules";
 import type { ReviewContext } from "./context";
-import type { PlannedInput, ReviewedProgramInput } from "./index";
 import type { ReservedFunding } from "./reservations";
+import type { PlannedInput, ReviewedProgramInput } from "./types";
 
 export type PlacedInputs = {
 	landedAt: (id: string) => number | undefined;

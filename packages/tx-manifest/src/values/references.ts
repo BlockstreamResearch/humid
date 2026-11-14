@@ -1,6 +1,6 @@
+import { type Action, type Manifest, namedUtxoTypes } from "../document/manifest";
+import type { ProgramReference } from "../document/schema";
 import { Refusal } from "../refusal";
-import { type Action, type Manifest, namedUtxoTypes } from "./manifest";
-import type { ProgramReference } from "./schema";
 
 export type ReferenceForm = "bare" | "input-attribute" | "instance" | "params";
 

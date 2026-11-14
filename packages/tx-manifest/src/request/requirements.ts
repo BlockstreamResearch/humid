@@ -1,5 +1,5 @@
 import { type Action, type Manifest, namedUtxoTypes, programInputs } from "../document/manifest";
-import { instanceReferences, parseReference } from "../document/references";
+import { instanceReferences, parseReference } from "../values/references";
 import type { MissingPart, ParsedLiquidProcessCtParams } from "./request";
 
 export function missingParts(

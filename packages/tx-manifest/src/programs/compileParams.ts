@@ -1,5 +1,5 @@
-import { parseReference } from "../document/references";
 import { Refusal } from "../refusal";
+import { parseReference } from "../values/references";
 import type { Scope } from "../values/scope";
 import { type EncodedArgument, FormatType } from "./formatTypes";
 

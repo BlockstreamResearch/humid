@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseReference } from "../document/references";
 import { refusalOf } from "../review/reviewForTests";
+import { parseReference } from "../values/references";
 import { Scope } from "../values/scope";
 import { resolveCompileParams } from "./compileParams";
 

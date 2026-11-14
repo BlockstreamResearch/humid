@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 import { decodeHex, encodeHex } from "../chain/hex";
-import { parseReference } from "../document/references";
 import { type Leaf, leafSchema } from "../document/schema";
 import { Refusal } from "../refusal";
 import { Expression } from "../values/expression";
+import { parseReference } from "../values/references";
 import { Scope, type ScopeParts } from "../values/scope";
 import { FormatType } from "./formatTypes";
 

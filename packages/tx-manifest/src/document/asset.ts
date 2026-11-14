@@ -1,5 +1,5 @@
 import { isHash } from "../chain/hex";
-import { parseReference } from "./references";
+import { parseReference } from "../values/references";
 
 export type StatedAsset =
 	| { kind: "deferred"; reference: string }

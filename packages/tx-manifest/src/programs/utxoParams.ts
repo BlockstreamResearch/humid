@@ -1,6 +1,6 @@
-import { parseReference } from "../document/references";
 import type { ProgramReference, UtxoType } from "../document/schema";
 import { Refusal } from "../refusal";
+import { parseReference } from "../values/references";
 import { Scope } from "../values/scope";
 
 export type BoundParams = {

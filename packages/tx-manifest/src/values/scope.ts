@@ -1,13 +1,13 @@
 import { integerOf } from "../chain/integers";
+import { Refusal } from "../refusal";
+import { Expression } from "./expression";
 import {
 	acceptedReference,
 	type ParsedReference,
 	parseReference,
 	type ReferencePosition,
 	readsProgramArgument,
-} from "../document/references";
-import { Refusal } from "../refusal";
-import { Expression } from "./expression";
+} from "./references";
 
 type Values = Record<string, unknown>;
 

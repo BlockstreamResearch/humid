@@ -1,8 +1,8 @@
-import type { AssetLedger } from "../evaluation/assetLedger";
-import type { InputRule } from "../evaluation/inputRules";
 import { Refusal } from "../refusal";
+import { type AssetHoldings, type FundedAsset, fundAssets } from "../transaction/assetFunding";
+import type { AssetLedger } from "../transaction/assetLedger";
+import type { InputRule } from "../transaction/inputRules";
 import type { Scope } from "../values/scope";
-import { type AssetHoldings, type FundedAsset, fundAssets } from "./assetFunding";
 import type { ReviewContext } from "./context";
 import { type ReservedFunding, walletAmount } from "./reservations";
 

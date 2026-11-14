@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { deriveFromEntropy, deriveNewIssuance } from "../chain/issuance";
 import { type ManifestReview, reviewManifestAction } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
-import type { SelectableUtxo } from "./coinSelection";
+import type { SelectableUtxo } from "../transaction/coinSelection";
 import {
 	asRefusal,
 	asReview,

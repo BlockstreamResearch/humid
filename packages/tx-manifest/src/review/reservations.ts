@@ -1,19 +1,19 @@
 import { byOutpoint, outpointKey } from "../chain/outpoint";
 import type { Input } from "../document/manifest";
 import type { Issuance } from "../document/schema";
-import { resolveAsset } from "../evaluation/assetLedger";
+import { Refusal } from "../refusal";
+import { resolveAsset } from "../transaction/assetLedger";
+import { type SelectableUtxo, toSats } from "../transaction/coinSelection";
 import {
 	issuanceAttributes,
 	issuanceIdentity,
 	type PlannedIssuance,
 	reissuanceOf,
-} from "../evaluation/issuance";
-import { resolveAmount } from "../evaluation/plan";
-import { Refusal } from "../refusal";
+} from "../transaction/issuance";
+import { resolveAmount } from "../transaction/plan";
 import type { Scope } from "../values/scope";
-import { type SelectableUtxo, toSats } from "./coinSelection";
 import type { ReviewContext } from "./context";
-import type { ReviewedProgramInput } from "./index";
+import type { ReviewedProgramInput } from "./types";
 
 export type ReservedFunding = { asset: string; inputId: string; utxo: SelectableUtxo }[];
 

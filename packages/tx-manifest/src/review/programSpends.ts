@@ -2,16 +2,16 @@ import { baseUnits } from "../chain/integers";
 import type { Outpoint } from "../chain/outpoint";
 import { type ProgramInput, programInputs } from "../document/manifest";
 import type { Blinding } from "../document/schema";
-import { type HeldValue, resolveAsset } from "../evaluation/assetLedger";
-import { resolveBlindingFactors } from "../evaluation/blindingFactors";
-import { resolveAmount } from "../evaluation/plan";
-import { checkWitnessNames, signatureWitness, unusedWitnesses } from "../evaluation/witness";
 import { checkProgramOnChain } from "../programs/program";
 import { Refusal } from "../refusal";
+import { type HeldValue, resolveAsset } from "../transaction/assetLedger";
+import { resolveBlindingFactors } from "../transaction/blindingFactors";
+import { resolveAmount } from "../transaction/plan";
+import { checkWitnessNames, signatureWitness, unusedWitnesses } from "../transaction/witness";
 import type { Scope } from "../values/scope";
 import type { ReviewContext } from "./context";
-import type { ProgramFinding, ReviewedProgramInput } from "./index";
 import { ProgramUtxos } from "./programUtxos";
+import type { ProgramFinding, ReviewedProgramInput } from "./types";
 
 export type SpentPrograms = {
 	findings: ProgramFinding[];

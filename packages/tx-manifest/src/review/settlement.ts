@@ -1,16 +1,16 @@
-import { type AssetLedger, assetLedger, type HeldValue } from "../evaluation/assetLedger";
-import type { InputRule } from "../evaluation/inputRules";
-import type { PlannedIssuance } from "../evaluation/issuance";
-import { planAction, type PlannedSpend } from "../evaluation/plan";
-import { checkPositions, type StatedPosition } from "../evaluation/positions";
 import { Refusal } from "../refusal";
+import { type AssetLedger, assetLedger, type HeldValue } from "../transaction/assetLedger";
+import type { InputRule } from "../transaction/inputRules";
+import type { PlannedIssuance } from "../transaction/issuance";
+import { planAction, type PlannedSpend } from "../transaction/plan";
+import { checkPositions, type StatedPosition } from "../transaction/positions";
 import type { Scope } from "../values/scope";
 import type { ReviewContext } from "./context";
 import { Funding } from "./funding";
-import type { ProgramFinding, ReviewedProgramInput, TransactionDraft } from "./index";
 import { InputLayout, type PlacedInputs } from "./inputLayout";
 import { OutputPayer, type PaidOutputs } from "./outputPayer";
 import type { ReservedFunding } from "./reservations";
+import type { ProgramFinding, ReviewedProgramInput, TransactionDraft } from "./types";
 
 const FEE_ROUNDS = 4;
 

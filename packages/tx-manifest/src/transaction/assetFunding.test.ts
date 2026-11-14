@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import type { AssetEntry } from "../evaluation/assetLedger";
+import { refusalOf } from "../review/reviewForTests";
 import { fundAssets } from "./assetFunding";
+import type { AssetEntry } from "./assetLedger";
 import type { SelectableUtxo } from "./coinSelection";
-import { refusalOf } from "./reviewForTests";
 
 const POLICY = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 const TOKEN = "aa".repeat(32);

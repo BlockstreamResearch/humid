@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import { refusalOf } from "../review/reviewForTests";
 import { type SelectableUtxo, selectCoins } from "./coinSelection";
-import { refusalOf } from "./reviewForTests";
 
 function utxo(amount: string, overrides: Partial<SelectableUtxo> = {}): SelectableUtxo {
 	return {

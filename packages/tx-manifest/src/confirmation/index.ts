@@ -1,11 +1,11 @@
 import type { Action, Manifest } from "../document/manifest";
+import { Refusal } from "../refusal";
+import type { ManifestReview } from "../review";
 import {
 	type BlindingDecision,
 	describeBlinding,
 	describePublishedChange,
-} from "../evaluation/blinding";
-import { Refusal } from "../refusal";
-import type { ManifestReview } from "../review";
+} from "../transaction/blinding";
 import type { Scope } from "../values/scope";
 import { computed, fromDapp, map, type Origin, type Provenanced, verified } from "./provenance";
 

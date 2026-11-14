@@ -1,6 +1,6 @@
 import type { Action, ProgramInput } from "../document/manifest";
-import { parseReference } from "../document/references";
 import { Refusal } from "../refusal";
+import { parseReference } from "../values/references";
 import type { Scope } from "../values/scope";
 
 export type StaticWitness = {
