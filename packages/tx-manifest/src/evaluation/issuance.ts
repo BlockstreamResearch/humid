@@ -1,15 +1,14 @@
 import { isHash, withoutHexPrefix } from "../chain/hex";
-import { integerOf, MAX_BASE_UNITS } from "../chain/integers";
 import {
 	type DerivedIssuance,
 	deriveFromEntropy,
 	deriveNewIssuance,
 	type Outpoint,
 } from "../chain/issuance";
-import { type ReferenceScope, parseReference, resolveReference } from "../document/references";
+import { parseReference } from "../document/references";
 import type { Issuance } from "../document/schema";
 import { Refusal } from "../refusal";
-import { evaluateExpression } from "./evaluate";
+import type { Scope } from "../values/scope";
 
 export type IssuanceRequest = {
 	assetAmountSats: bigint;
@@ -23,11 +22,7 @@ export type PlannedIssuance = DerivedIssuance &
 		outpoint: Outpoint;
 	};
 
-export function reissuanceOf(
-	declared: Issuance,
-	id: string,
-	scope: ReferenceScope,
-): DerivedIssuance {
+export function reissuanceOf(declared: Issuance, id: string, scope: Scope): DerivedIssuance {
 	const entropy = Refusal.amend(
 		() => hexOf(declared.entropy, scope),
 		(reason) => `Input ${id} reissues an asset and does not say which: ${reason}`,
@@ -62,7 +57,7 @@ export function issuanceIdentity(
 		id: string;
 		outpoint: Outpoint;
 	},
-	scope: ReferenceScope,
+	scope: Scope,
 ): PlannedIssuance {
 	const { kind } = input.declared;
 	const derived =
@@ -90,7 +85,7 @@ export function issuanceIdentity(
 export function withIssuedAmounts(
 	planned: PlannedIssuance,
 	declared: Issuance,
-	scope: ReferenceScope,
+	scope: Scope,
 ): PlannedIssuance {
 	const id = planned.inputId;
 	const assetAmountSats = Refusal.amend(
@@ -136,7 +131,7 @@ export function issuanceAttributes(issuance: PlannedIssuance): Record<string, un
 	};
 }
 
-function hexOf(declared: string | undefined, scope: ReferenceScope): string {
+function hexOf(declared: string | undefined, scope: Scope): string {
 	if (declared === undefined) {
 		throw new Refusal("it states none.");
 	}
@@ -144,7 +139,7 @@ function hexOf(declared: string | undefined, scope: ReferenceScope): string {
 	const found =
 		parseReference(declared) === undefined || isHash(withoutHexPrefix(declared))
 			? declared
-			: resolveReference(declared, "entropy", scope);
+			: scope.reference(declared, "entropy");
 
 	if (typeof found !== "string" || !isHash(withoutHexPrefix(found))) {
 		throw new Refusal(`${declared} is not 32 bytes of hex.`);
@@ -153,28 +148,10 @@ function hexOf(declared: string | undefined, scope: ReferenceScope): string {
 	return withoutHexPrefix(found).toLowerCase();
 }
 
-function amountOf(declared: string | number | undefined, scope: ReferenceScope): bigint {
+function amountOf(declared: string | number | undefined, scope: Scope): bigint {
 	if (declared === undefined) {
 		throw new Refusal("it states none.");
 	}
 
-	const literal = asCount(declared);
-
-	if (literal !== undefined) {
-		return literal;
-	}
-
-	if (typeof declared === "number") {
-		throw new Refusal(`${declared} is not a whole number of units.`);
-	}
-
-	return evaluateExpression(declared, "issuedAmount", scope);
-}
-
-function asCount(value: unknown): bigint | undefined {
-	const counted = integerOf(value);
-
-	return counted !== undefined && counted >= -MAX_BASE_UNITS && counted <= MAX_BASE_UNITS
-		? counted
-		: undefined;
+	return scope.integer(declared, "issuedAmount");
 }

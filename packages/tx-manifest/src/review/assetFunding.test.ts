@@ -30,9 +30,11 @@ function fund(
 	holdings: Record<string, SelectableUtxo[]>,
 	feeSats = 500n,
 	mayReturn: (asset: string) => boolean = (asset) => asset === POLICY,
+	floors = new Map<string, bigint>(),
 ) {
 	return fundAssets(entries, {
 		feeSats,
+		floors,
 		holdings: (asset) => holdings[asset] ?? [],
 		mayReturn,
 		policyAsset: POLICY,
@@ -139,12 +141,42 @@ describe("when one asset cannot be funded", () => {
 	});
 });
 
+describe("a minimum an input states", () => {
+	test("raises what is taken of its asset, and the surplus is change", () => {
+		const [funded] = fund(
+			[entry(TOKEN, 100n, { change: CHANGE })],
+			{ [TOKEN]: [utxo("300"), utxo("500"), utxo("50")] },
+			0n,
+			undefined,
+			new Map([[TOKEN, 700n]]),
+		);
+
+		expect(funded?.selected.map((one) => one.amount)).toEqual(["500", "300"]);
+		expect(funded?.changeSats).toBe(700n);
+	});
+
+	test("is refused where the wallet holds less than the minimum", () => {
+		const refusal = refusalOf(() =>
+			fund(
+				[entry(TOKEN, 100n, { change: CHANGE })],
+				{ [TOKEN]: [utxo("300")] },
+				0n,
+				undefined,
+				new Map([[TOKEN, 700n]]),
+			),
+		);
+
+		expect(refusal.reject).toBe("shortfall");
+	});
+});
+
 describe("an output already committed to for an issuance", () => {
 	const reserved = utxo("700");
 
 	function withReserved(entries: AssetEntry[], holdings: Record<string, SelectableUtxo[]>) {
 		return fundAssets(entries, {
 			feeSats: 0n,
+			floors: new Map(),
 			holdings: (asset) => holdings[asset] ?? [],
 			mayReturn: () => false,
 			policyAsset: POLICY,

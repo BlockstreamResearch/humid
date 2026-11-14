@@ -1,7 +1,7 @@
 import { statedAsset } from "../document/asset";
 import type { Action } from "../document/manifest";
-import { type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
+import type { Scope } from "../values/scope";
 import type { PlannedOutput } from "./plan";
 
 export type AssetEntry = {
@@ -26,7 +26,7 @@ export type HeldValue = {
 
 type Context = {
 	policyAsset: string;
-	scope: ReferenceScope;
+	scope: Scope;
 };
 
 export function resolveAsset(declared: string | undefined, at: string, context: Context): string {
@@ -47,7 +47,7 @@ export function resolveAsset(declared: string | undefined, at: string, context: 
 	}
 
 	const found = Refusal.amend(
-		() => resolveReference(stated.reference, "asset", context.scope),
+		() => context.scope.reference(stated.reference, "asset"),
 		(reason) =>
 			`The asset at ${at} is stated as ${stated.reference}, and this wallet could not ` +
 			`establish what that is: ${reason}`,

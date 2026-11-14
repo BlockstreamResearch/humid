@@ -13,6 +13,7 @@ export type FundedAsset = {
 
 export type AssetFundingContext = {
 	feeSats: bigint;
+	floors: Map<string, bigint>;
 	holdings: AssetHoldings;
 	mayReturn: (asset: string) => boolean;
 	policyAsset: string;
@@ -30,7 +31,9 @@ export function fundAssets(entries: AssetEntry[], context: AssetFundingContext):
 		);
 		const brought = reserved.reduce((total, utxo) => total + toSats(utxo), entry.held);
 		const fee = isPolicy ? context.feeSats : 0n;
-		const outstanding = entry.needed + fee - brought;
+		const shortfall = entry.needed + fee - brought;
+		const floor = context.floors.get(entry.asset) ?? 0n;
+		const outstanding = shortfall > floor ? shortfall : floor;
 		let selected = reserved;
 		let total = brought;
 

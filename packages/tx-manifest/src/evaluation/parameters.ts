@@ -1,15 +1,14 @@
 import type { Action } from "../document/manifest";
-import type { ReferenceScope } from "../document/references";
 import type { Compute } from "../document/schema";
 import { Refusal } from "../refusal";
-import { evaluateExpression } from "./evaluate";
+import type { Scope } from "../values/scope";
 
 export type WalletValues = { address: string; key: string; script_hash: string };
 
 export function fillParameters(
 	action: Action,
 	supplied: Record<string, unknown>,
-	scope: ReferenceScope,
+	scope: Scope,
 	wallet: WalletValues,
 ): Record<string, unknown> {
 	const params: Record<string, unknown> = { ...supplied };
@@ -28,7 +27,7 @@ export function fillParameters(
 		if (compute !== undefined) {
 			params[name] = String(
 				Refusal.amend(
-					() => evaluateExpression(compute, "expression", scope),
+					() => scope.integer(compute, "expression"),
 					(reason) => `The parameter ${name} is computed, and ${reason}`,
 				),
 			);

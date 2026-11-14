@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { Action } from "../document/manifest";
 import { refusalOf, actionOf } from "../review/reviewForTests";
+import { Scope } from "../values/scope";
 import { resolveInputRules } from "./inputRules";
 
 function sequenceOf(sequence: unknown, params: Record<string, unknown> = {}) {
@@ -9,7 +10,7 @@ function sequenceOf(sequence: unknown, params: Record<string, unknown> = {}) {
 		inputs: [{ id: "a", sequence, utxo_source: "wallet" }],
 	});
 
-	return resolveInputRules(action, { params })[0]?.sequence;
+	return resolveInputRules(action, new Scope({ params }))[0]?.sequence;
 }
 
 describe("the sequence an input declares", () => {

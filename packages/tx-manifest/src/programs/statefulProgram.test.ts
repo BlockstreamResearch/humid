@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import manifestJson from "../__fixtures__/lending_v3/txmanifest.json";
 import { Manifest } from "../document/manifest";
 import { Refusal } from "../refusal";
+import { Scope } from "../values/scope";
 import { deriveProgramAddress } from "./program";
 
 const manifest = Manifest.parse(manifestJson as unknown as Record<string, unknown>);
@@ -61,7 +62,7 @@ async function leavesOf(utxoType: string, instance: Record<string, string> = INS
 		declaredTypes: DECLARED,
 		includeDebugSymbols: false,
 		network: "liquidtestnet",
-		scope: { instance, params: {} },
+		scope: new Scope({ instance, params: {} }),
 		reference: { compile_params: {}, utxo_type: utxoType },
 	});
 

@@ -1,6 +1,7 @@
 import type { Action, ProgramInput } from "../document/manifest";
-import { type ReferenceScope, parseReference, resolveReference } from "../document/references";
+import { parseReference } from "../document/references";
 import { Refusal } from "../refusal";
+import type { Scope } from "../values/scope";
 
 export type StaticWitness = {
 	name: string;
@@ -9,10 +10,7 @@ export type StaticWitness = {
 
 export const STATIC_WITNESS = "simplicityhl";
 
-export function resolveStaticWitnesses(
-	action: Action,
-	scope: ReferenceScope,
-): Map<string, StaticWitness[]> {
+export function resolveStaticWitnesses(action: Action, scope: Scope): Map<string, StaticWitness[]> {
 	const witnesses = new Map<string, StaticWitness[]>();
 
 	for (const input of action.inputs) {
@@ -50,13 +48,13 @@ export function resolveStaticWitnesses(
 
 const NAMED = /[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*/g;
 
-function fill(value: string, scope: ReferenceScope): string {
+function fill(value: string, scope: Scope): string {
 	return value.replaceAll(NAMED, (text) => {
 		if (parseReference(text)?.form === "input-attribute") {
 			throw new Refusal(`"${text}" cannot be used as part of a witness value.`);
 		}
 
-		return String(resolveReference(text, "witnessValue", scope));
+		return String(scope.reference(text, "witnessValue"));
 	});
 }
 

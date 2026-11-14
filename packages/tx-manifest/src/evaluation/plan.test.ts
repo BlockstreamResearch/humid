@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
 import type { Action } from "../document/manifest";
-import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
 import { actionOf } from "../review/reviewForTests";
+import { Scope } from "../values/scope";
 import { planAction } from "./plan";
 
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -18,8 +18,8 @@ function action(name: string, node: Record<string, unknown>): Action {
 	return actionOf(name, node);
 }
 
-function scope(params: Record<string, unknown>): ReferenceScope {
-	return { params };
+function scope(params: Record<string, unknown>): Scope {
+	return new Scope({ params });
 }
 
 describe("planAction", () => {

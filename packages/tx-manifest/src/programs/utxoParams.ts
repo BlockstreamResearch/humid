@@ -1,10 +1,10 @@
-import { parseReference, type ReferenceScope } from "../document/references";
+import { parseReference } from "../document/references";
 import type { ProgramReference, UtxoType } from "../document/schema";
-import { statedValue } from "../evaluation/computedValue";
 import { Refusal } from "../refusal";
+import { Scope } from "../values/scope";
 
 export type BoundParams = {
-	scope: ReferenceScope;
+	scope: Scope;
 	types: Record<string, string>;
 };
 
@@ -12,7 +12,7 @@ export function bindUtxoParams(
 	utxoType: string,
 	declared: UtxoType,
 	use: ProgramReference,
-	scope: ReferenceScope,
+	scope: Scope,
 ): BoundParams | undefined {
 	const { params } = declared;
 
@@ -48,18 +48,18 @@ export function bindUtxoParams(
 		values[name] =
 			bound === undefined
 				? defaultOf(utxoType, name, fallback, scope)
-				: statedValue(`Argument ${name}`, bound, scope);
+				: scope.text(`Argument ${name}`, bound);
 		types[name] = type;
 	}
 
-	return { scope: { params: values }, types };
+	return { scope: new Scope({ params: values }), types };
 }
 
 function defaultOf(
 	utxoType: string,
 	name: string,
 	declared: string | undefined,
-	scope: ReferenceScope,
+	scope: Scope,
 ): string {
 	if (declared === undefined) {
 		throw new Refusal(
@@ -79,10 +79,10 @@ function defaultOf(
 		);
 	}
 
-	return statedValue(`The default of ${utxoType}'s ${name}`, declared, {
-		instance: scope.instance ?? {},
-		params: {},
-	});
+	return new Scope({ instance: scope.instance ?? {}, params: {} }).text(
+		`The default of ${utxoType}'s ${name}`,
+		declared,
+	);
 }
 
 export function boundWiring(

@@ -10,14 +10,6 @@ export type ParsedReference = {
 	name: string;
 };
 
-export type ReferenceScope = {
-	fee?: bigint;
-	inputs?: Record<string, Record<string, unknown>>;
-	instance?: Record<string, unknown>;
-	params: Record<string, unknown>;
-	self?: Record<string, unknown>;
-};
-
 export type ReferencePosition =
 	| "amount"
 	| "asset"
@@ -103,11 +95,7 @@ export function parseReference(text: string): ParsedReference | undefined {
 	return form ? { form, name: tail } : { attribute: tail, form: "input-attribute", name: head };
 }
 
-export function resolveReference(
-	text: string,
-	position: ReferencePosition,
-	scope: ReferenceScope,
-): unknown {
+export function acceptedReference(text: string, position: ReferencePosition): ParsedReference {
 	const reference = parseReference(text);
 	const accepted = POSITIONS[position];
 
@@ -119,68 +107,11 @@ export function resolveReference(
 		throw new Refusal(`"${text}" cannot be used as ${accepted.describes}.`);
 	}
 
-	return lookUp(reference, position, scope);
+	return reference;
 }
 
-function lookUp(
-	reference: ParsedReference,
-	position: ReferencePosition,
-	scope: ReferenceScope,
-): unknown {
-	switch (reference.form) {
-		case "bare": {
-			const name = reference.name;
-
-			if (PROGRAM_ARGUMENTS.has(position)) {
-				return lookUp({ form: "instance", name }, position, scope);
-			}
-
-			if (name === "fee" && scope.fee !== undefined) {
-				return scope.fee;
-			}
-
-			if (scope.self && Object.hasOwn(scope.self, name)) {
-				return scope.self[name];
-			}
-
-			throw new Refusal(
-				`"${name}" names nothing here: a parameter is params.${name}, a deployment field instance.${name}.`,
-			);
-		}
-
-		case "input-attribute": {
-			const input = scope.inputs?.[reference.name];
-
-			if (!input) {
-				throw new Refusal(`"${reference.name}" is not an input this action resolved.`);
-			}
-
-			return read(input, reference.attribute ?? "", `input ${reference.name}`);
-		}
-
-		case "instance": {
-			const fromParams =
-				!(reference.name in (scope.instance ?? {})) && reference.name in scope.params;
-
-			return read(fromParams ? scope.params : scope.instance, reference.name, "instance");
-		}
-
-		case "params": {
-			return read(scope.params, reference.name, "params");
-		}
-	}
-}
-
-function read(source: Record<string, unknown> | undefined, name: string, label: string): unknown {
-	if (!source) {
-		throw new Refusal(`This request carries no ${label} to resolve "${name}" against.`);
-	}
-
-	if (!(name in source)) {
-		throw new Refusal(`${label} carries no "${name}".`);
-	}
-
-	return source[name];
+export function readsProgramArgument(position: ReferencePosition): boolean {
+	return PROGRAM_ARGUMENTS.has(position);
 }
 
 export type ReferenceOccurrence = {

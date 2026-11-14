@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { actionOf, refusalOf } from "../review/reviewForTests";
+import { Scope } from "../values/scope";
 import { resolveBlindingFactors } from "./blindingFactors";
 
 const ONE = `01${"00".repeat(31)}`;
@@ -8,7 +9,7 @@ const ONE = `01${"00".repeat(31)}`;
 const factors = (blinding: unknown, params: Record<string, unknown> = {}) =>
 	resolveBlindingFactors(
 		actionOf("Spend", { inputs: [{ blinding, utxo_source: "wallet" }] }).inputs[0]!.blinding!,
-		{ params },
+		new Scope({ params }),
 	);
 
 describe("the blinding factors a manifest states", () => {

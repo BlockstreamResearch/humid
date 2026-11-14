@@ -1,5 +1,4 @@
 import type { Action, Manifest } from "../document/manifest";
-import { type ReferenceScope, resolveReference } from "../document/references";
 import {
 	type BlindingDecision,
 	describeBlinding,
@@ -7,6 +6,7 @@ import {
 } from "../evaluation/blinding";
 import { Refusal } from "../refusal";
 import type { ManifestReview } from "../review";
+import type { Scope } from "../values/scope";
 import { computed, fromDapp, map, type Origin, type Provenanced, verified } from "./provenance";
 
 export type NetEffect = {
@@ -58,7 +58,7 @@ export function confirmationModel(
 	review: ReviewedPlan,
 	manifest: Manifest,
 	action: Action,
-	input: { accountLabel: string; policyAsset: string; scope: ReferenceScope },
+	input: { accountLabel: string; policyAsset: string; scope: Scope },
 ): ConfirmationModel {
 	const summary = intentOf(action, input.scope);
 
@@ -135,11 +135,11 @@ export function describeOrigin(origin: Origin): string {
 	}
 }
 
-function intentOf(action: Action, scope: ReferenceScope): string | undefined {
+function intentOf(action: Action, scope: Scope): string | undefined {
 	return action.intent === undefined
 		? undefined
 		: action.intent.replaceAll(/\{(?<ref>[^{}:]+)(?::[^{}]*)?\}/g, (text, ref: string) => {
-				const found = Refusal.attempt(() => resolveReference(ref, "expression", scope));
+				const found = Refusal.attempt(() => scope.reference(ref, "expression"));
 
 				return found === undefined ? text : String(found);
 			});

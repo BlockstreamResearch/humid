@@ -1,6 +1,5 @@
-import { type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
-import { evaluateExpression } from "./evaluate";
+import type { Scope } from "../values/scope";
 
 type HookTarget = "instance" | "params";
 
@@ -8,7 +7,7 @@ const TARGETS: Record<string, HookTarget> = { instance: "instance", params: "par
 
 export type HookValues = Record<HookTarget, Record<string, string>>;
 
-export function runHook(set: Record<string, string>, scope: ReferenceScope): HookValues {
+export function runHook(set: Record<string, string>, scope: Scope): HookValues {
 	const values: HookValues = { instance: {}, params: {} };
 	let running = scope;
 
@@ -37,17 +36,20 @@ export function runHook(set: Record<string, string>, scope: ReferenceScope): Hoo
 		);
 
 		values[lane][name] = value;
-		running = foldInto(running, lane, name, value);
+		running =
+			lane === "params"
+				? running.withParams({ [name]: value })
+				: running.withInstance({ [name]: value });
 	}
 
 	return values;
 }
 
-function valueOf(expression: string, scope: ReferenceScope): string {
+function valueOf(expression: string, scope: Scope): string {
 	try {
-		return String(evaluateExpression(expression, "expression", scope));
+		return String(scope.integer(expression, "expression"));
 	} catch (error) {
-		const named = Refusal.attempt(() => resolveReference(expression, "expression", scope));
+		const named = Refusal.attempt(() => scope.reference(expression, "expression"));
 
 		if (typeof named === "string") {
 			return named;
@@ -57,10 +59,7 @@ function valueOf(expression: string, scope: ReferenceScope): string {
 	}
 }
 
-export function inputHookScope(
-	scope: ReferenceScope,
-	self: Record<string, unknown>,
-): ReferenceScope {
+export function inputHookScope(scope: Scope, self: Record<string, unknown>): Scope {
 	const attributes: Record<string, unknown> = {};
 
 	for (const key of ["asset", "issuance_entropy", "issued_asset", "reissuance_token"]) {
@@ -73,22 +72,9 @@ export function inputHookScope(
 		attributes.asset = self.issued_asset;
 	}
 
-	return { ...scope, self: attributes };
+	return scope.forHook(attributes);
 }
 
-export function withHookValues(scope: ReferenceScope, values: HookValues): ReferenceScope {
-	return {
-		...scope,
-		instance: { ...scope.instance, ...values.instance },
-		params: { ...scope.params, ...values.params },
-	};
-}
-
-function foldInto(
-	scope: ReferenceScope,
-	lane: HookTarget,
-	name: string,
-	value: string,
-): ReferenceScope {
-	return { ...scope, [lane]: { ...scope[lane], [name]: value } };
+export function withHookValues(scope: Scope, values: HookValues): Scope {
+	return scope.withInstance(values.instance).withParams(values.params);
 }

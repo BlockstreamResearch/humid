@@ -252,6 +252,49 @@ describe("which of the wallet's outputs may be spent", () => {
 	});
 });
 
+const tokensSpent = (review: ManifestReview) =>
+	review.selected.filter((chosen) => chosen.txid !== FUNDING_TXID).map((chosen) => chosen.txid);
+
+describe("the amount a wallet input states", () => {
+	const SIZED = "a".repeat(64);
+
+	function stating(amount: unknown, tokens: SelectableUtxo[]) {
+		const manifest = multiasset.editedAction("PayToken", (action) => {
+			(action.inputs as Record<string, unknown>[])[0]!.amount_sat = amount;
+		}).manifest;
+
+		return reviewManifestAction(request({ manifest }), {
+			...deps,
+			fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+			holdingsOf: (asset) => (asset === TOKEN ? tokens : []),
+		});
+	}
+
+	test("spends the one output holding exactly that amount", async () => {
+		const review = asReview(
+			await stating("params.amount_sat", [utxo("4000", TOKEN_TXID), utxo("1000", SIZED)]),
+		);
+
+		expect(tokensSpent(review)).toEqual([SIZED]);
+	});
+
+	test("is refused where no output holds exactly that amount", async () => {
+		const refusal = asRefusal(await stating(1000, [utxo("4000", TOKEN_TXID)]));
+
+		expect(refusal.reject).toBe("shortfall");
+		expect(refusal.reason).toContain("exactly 1000");
+	});
+
+	test("as a minimum, brings at least that much and returns the rest as change", async () => {
+		const review = asReview(
+			await stating({ min_amount: 5000 }, [utxo("4000", TOKEN_TXID), utxo("3000", SIZED)]),
+		);
+
+		expect(tokensSpent(review)).toEqual([TOKEN_TXID, SIZED]);
+		expect(review.outputs.find((output) => output.id === "token_change")?.sats).toBe(6000n);
+	});
+});
+
 describe("an action that creates an asset", () => {
 	function mint(
 		money: SelectableUtxo[] = [utxo("1000", "a".repeat(64)), utxo("1000000", FUNDING_TXID)],

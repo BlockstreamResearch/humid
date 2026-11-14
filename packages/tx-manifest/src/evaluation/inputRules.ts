@@ -1,8 +1,6 @@
-import { integerOf } from "../chain/integers";
 import type { Action, Input } from "../document/manifest";
-import { type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
-import { evaluateExpression } from "./evaluate";
+import type { Scope } from "../values/scope";
 
 export type InputRule = {
 	id: string;
@@ -18,7 +16,7 @@ const TIME_BASED = 0x40_00_00;
 
 const SECONDS_PER_UNIT = 512n;
 
-export function resolveInputRules(action: Action, scope: ReferenceScope): InputRule[] {
+export function resolveInputRules(action: Action, scope: Scope): InputRule[] {
 	return action.inputs.map((input) =>
 		Refusal.amend(
 			() => ({
@@ -35,7 +33,7 @@ export function resolveInputRules(action: Action, scope: ReferenceScope): InputR
 	);
 }
 
-function resolveSequence(declared: NonNullable<Input["sequence"]>, scope: ReferenceScope): number {
+function resolveSequence(declared: NonNullable<Input["sequence"]>, scope: Scope): number {
 	if (typeof declared !== "object") {
 		const raw = wholeCount(declared, "as its value", scope);
 
@@ -74,13 +72,10 @@ function resolveSequence(declared: NonNullable<Input["sequence"]>, scope: Refere
 	throw new Refusal("its sequence is neither a number nor a relative timelock.");
 }
 
-function wholeCount(declared: string | number, unit: string, scope: ReferenceScope): bigint {
-	const counted =
-		typeof declared === "number"
-			? integerOf(declared)
-			: evaluateExpression(declared, "expression", scope);
+function wholeCount(declared: string | number, unit: string, scope: Scope): bigint {
+	const counted = scope.integer(declared, "expression");
 
-	if (counted === undefined || counted < 0n) {
+	if (counted < 0n) {
 		throw new Refusal(
 			`its sequence asks for ${String(declared)} ${unit}, which is not a whole number.`,
 		);
@@ -89,8 +84,8 @@ function wholeCount(declared: string | number, unit: string, scope: ReferenceSco
 	return counted;
 }
 
-function resolveFromAddress(declared: string, scope: ReferenceScope): string {
-	const found = resolveReference(declared, "witnessKey", scope);
+function resolveFromAddress(declared: string, scope: Scope): string {
+	const found = scope.reference(declared, "witnessKey");
 
 	if (typeof found !== "string") {
 		throw new Refusal(`${declared} is not an address.`);

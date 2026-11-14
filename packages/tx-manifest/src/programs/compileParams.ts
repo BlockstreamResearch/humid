@@ -1,5 +1,6 @@
-import { parseReference, type ReferenceScope, resolveReference } from "../document/references";
+import { parseReference } from "../document/references";
 import { Refusal } from "../refusal";
+import type { Scope } from "../values/scope";
 import {
 	encodeCompileParam,
 	type EncodedParam,
@@ -13,7 +14,7 @@ export type ContractArguments = Record<string, EncodedParam>;
 export function resolveCompileParams(
 	wiring: Record<string, unknown>,
 	declaredTypes: Record<string, string>,
-	scope: ReferenceScope,
+	scope: Scope,
 	contract?: DeclaringContract,
 	declaredAtUse?: Record<string, string>,
 ): ContractArguments {
@@ -27,7 +28,7 @@ export function resolveCompileParams(
 		let found: unknown;
 
 		try {
-			found = resolveReference(reference, "compileParam", scope);
+			found = scope.reference(reference, "compileParam");
 		} catch (error) {
 			if (!(error instanceof Refusal)) {
 				throw error;

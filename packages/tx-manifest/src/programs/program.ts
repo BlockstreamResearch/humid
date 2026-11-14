@@ -1,7 +1,7 @@
 import type { Manifest } from "../document/manifest";
-import type { ReferenceScope } from "../document/references";
 import type { ProgramReference } from "../document/schema";
 import { Refusal } from "../refusal";
+import type { Scope } from "../values/scope";
 import { resolveCompileParams } from "./compileParams";
 import type { ProgramAbi, ProgramParamTypes } from "./programParamTypes";
 import { stateLeavesOf } from "./stateLeaves";
@@ -48,7 +48,7 @@ export async function deriveProgramAddress(
 		includeDebugSymbols: boolean;
 		network: string;
 		reference: ProgramReference;
-		scope: ReferenceScope;
+		scope: Scope;
 	},
 ): Promise<ProgramDerivation> {
 	const utxoType = input.reference.utxo_type;

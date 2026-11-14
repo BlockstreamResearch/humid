@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import multiassetManifest from "../__fixtures__/multiasset/txmanifest.json";
 import { type Action, Manifest } from "../document/manifest";
 import { refusalOf, actionOf } from "../review/reviewForTests";
+import { Scope } from "../values/scope";
 import { assetLedger, type HeldValue, resolveAsset } from "./assetLedger";
 import { planAction } from "./plan";
 
@@ -19,7 +20,7 @@ function payToken(params: Record<string, unknown>) {
 		throw new Error("the fixture declares no PayToken");
 	}
 
-	const scope = { params };
+	const scope = new Scope({ params });
 
 	return { action, plan: planAction(action, scope), scope };
 }
@@ -33,7 +34,7 @@ function ledgerOf(params: Record<string, unknown>, held: HeldValue[] = []) {
 const PARAMS = { amount_sat: 1000, fee_sat: 700, pubkey: PUBKEY, token: TOKEN };
 
 describe("which asset a declared input or output is in", () => {
-	const context = { policyAsset: POLICY_ASSET, scope: { params: {} } };
+	const context = { policyAsset: POLICY_ASSET, scope: new Scope({ params: {} }) };
 
 	test("nothing stated means the asset the network charges fees in", () => {
 		expect(resolveAsset(undefined, "output out", context)).toBe(POLICY_ASSET);
@@ -47,7 +48,7 @@ describe("which asset a declared input or output is in", () => {
 		expect(
 			resolveAsset("instance.PRINCIPAL", "output out", {
 				policyAsset: POLICY_ASSET,
-				scope: { instance: { PRINCIPAL: TOKEN }, params: {} },
+				scope: new Scope({ instance: { PRINCIPAL: TOKEN }, params: {} }),
 			}),
 		).toBe(TOKEN);
 	});
@@ -64,7 +65,7 @@ describe("which asset a declared input or output is in", () => {
 		const refusal = refusalOf(() =>
 			resolveAsset("params.token", "output out", {
 				policyAsset: POLICY_ASSET,
-				scope: { params: { token: "instance.PRINCIPAL" } },
+				scope: new Scope({ params: { token: "instance.PRINCIPAL" } }),
 			}),
 		);
 
@@ -73,7 +74,7 @@ describe("which asset a declared input or output is in", () => {
 
 	test("a literal id and a lookup resolving elsewhere stay distinct and exact", () => {
 		const other = "aa".repeat(32);
-		const supplied = { policyAsset: POLICY_ASSET, scope: { params: { token: other } } };
+		const supplied = { policyAsset: POLICY_ASSET, scope: new Scope({ params: { token: other } }) };
 
 		expect(resolveAsset(TOKEN, "output one", supplied)).toBe(TOKEN);
 		expect(resolveAsset("params.token", "output two", supplied)).toBe(other);
@@ -83,7 +84,7 @@ describe("which asset a declared input or output is in", () => {
 		expect(
 			resolveAsset("params.token", "output out", {
 				policyAsset: POLICY_ASSET,
-				scope: { params: { token: "lbtc" } },
+				scope: new Scope({ params: { token: "lbtc" } }),
 			}),
 		).toBe(POLICY_ASSET);
 	});
@@ -136,12 +137,12 @@ describe("reading one action as a statement about several assets", () => {
 			inputs: [{ asset: TOKEN, id: "vault_in", utxo_source: { utxo_type: "vault" } }],
 			outputs: [{ amount_sat: 10, destination: "wallet", id: "out" }],
 		});
-		const plan = planAction(action, { params: {} });
+		const plan = planAction(action, new Scope({ params: {} }));
 		const refusal = refusalOf(() =>
 			assetLedger(action, plan.outputs, {
 				held: [{ asset: POLICY_ASSET, id: "vault_in", sats: 500n }],
 				policyAsset: POLICY_ASSET,
-				scope: { params: {} },
+				scope: new Scope({ params: {} }),
 			}),
 		);
 

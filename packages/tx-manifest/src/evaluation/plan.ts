@@ -1,10 +1,10 @@
 import { isHash, withoutHexPrefix } from "../chain/hex";
 import type { Action, Output } from "../document/manifest";
-import { parseReference, type ReferenceScope, resolveReference } from "../document/references";
+import { parseReference } from "../document/references";
 import { Refusal } from "../refusal";
+import type { Scope } from "../values/scope";
 import { type BlindingDecision, resolveBlinding } from "./blinding";
 import { type BlindingFactors, resolveBlindingFactors } from "./blindingFactors";
-import { evaluateExpression } from "./evaluate";
 import { concatParts, encodeMetadataParts } from "./metadataParts";
 
 export type PlannedOutput = {
@@ -28,7 +28,7 @@ export type PlannedSpend = {
 
 export function planAction(
 	action: Action,
-	scope: ReferenceScope,
+	scope: Scope,
 	declaredTypes: Record<string, string> = {},
 ): PlannedSpend {
 	const outputs: PlannedOutput[] = [];
@@ -96,7 +96,7 @@ export function planAction(
 
 function resolveTarget(
 	{ data, destination }: Output,
-	scope: ReferenceScope,
+	scope: Scope,
 	declaredTypes: Record<string, string>,
 ): PlannedOutput["target"] {
 	switch (destination.kind) {
@@ -140,7 +140,7 @@ function resolveTarget(
 				() =>
 					encodeMetadataParts(
 						typeof data === "string" ? concatParts(data, declaredTypes) : data,
-						(reference) => resolveReference(reference, "expression", scope),
+						(reference) => scope.reference(reference, "expression"),
 					),
 				(reason) => `carries data this runtime cannot encode: ${reason}`,
 			);
@@ -154,13 +154,13 @@ function resolveTarget(
 	}
 }
 
-function textAt(text: string, scope: ReferenceScope): unknown {
+function textAt(text: string, scope: Scope): unknown {
 	const reference = parseReference(text);
 
 	return isHash(withoutHexPrefix(text)) ||
 		(reference?.form !== "params" && reference?.form !== "instance")
 		? text
-		: resolveReference(text, "destination", scope);
+		: scope.reference(text, "destination");
 }
 
 function opReturnScript(payloadHex: string): string {
@@ -173,14 +173,10 @@ function opReturnScript(payloadHex: string): string {
 	return `6a4c${length.toString(16).padStart(2, "0")}${payloadHex}`;
 }
 
-export function resolveAmount(amount: string | number | undefined, scope: ReferenceScope): bigint {
-	if (typeof amount === "number" && Number.isSafeInteger(amount)) {
-		return BigInt(amount);
+export function resolveAmount(amount: string | number | undefined, scope: Scope): bigint {
+	if (amount === undefined) {
+		throw new Refusal("the document states no amount.");
 	}
 
-	if (typeof amount !== "string") {
-		throw new Refusal("the document states no amount this runtime can read.");
-	}
-
-	return evaluateExpression(amount, "amount", scope);
+	return scope.integer(amount, "amount");
 }

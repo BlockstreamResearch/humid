@@ -1,15 +1,14 @@
 import type { Action } from "../document/manifest";
-import type { ReferenceScope } from "../document/references";
 import type { Compute } from "../document/schema";
-import { statedValue } from "../evaluation/computedValue";
 import { Refusal } from "../refusal";
+import type { Scope } from "../values/scope";
 import { resolveCompileParams } from "./compileParams";
 import { PROGRAM_HASH_SEED, type HashProgram, ITERATION_BOUND } from "./programHash";
 import { stateLeavesOf } from "./stateLeaves";
 
 export type CreatedInstance = { fields: Record<string, string>; rounds: number };
 
-export function statedCreatedFields(action: Action, scope: ReferenceScope): Record<string, string> {
+export function statedCreatedFields(action: Action, scope: Scope): Record<string, string> {
 	const stated: Record<string, string> = {};
 
 	for (const [name, value] of Object.entries(action.create_instance?.fields ?? {})) {
@@ -17,7 +16,7 @@ export function statedCreatedFields(action: Action, scope: ReferenceScope): Reco
 			continue;
 		}
 
-		const resolved = Refusal.attempt(() => statedValue(`Field ${name}`, value, scope));
+		const resolved = Refusal.attempt(() => scope.text(`Field ${name}`, value));
 
 		if (resolved !== undefined) {
 			stated[name] = resolved;
@@ -32,7 +31,7 @@ export function resolveCreatedInstance(
 	input: {
 		contractSources: Record<string, string>;
 		hashProgram: HashProgram;
-		scope: ReferenceScope;
+		scope: Scope;
 	},
 ): CreatedInstance {
 	const declared = action.create_instance?.fields;
@@ -46,7 +45,7 @@ export function resolveCreatedInstance(
 
 	for (const [name, value] of Object.entries(declared)) {
 		if (typeof value === "string") {
-			direct[name] = statedValue(`Field ${name}`, value, input.scope);
+			direct[name] = input.scope.text(`Field ${name}`, value);
 
 			continue;
 		}
@@ -90,11 +89,7 @@ export function resolveCreatedInstance(
 
 		for (const { compute, name, source } of ordered) {
 			const withNewFields = { ...direct, ...settled };
-			const scope: ReferenceScope = {
-				...input.scope,
-				instance: { ...input.scope.instance, ...withNewFields },
-				params: { ...input.scope.params, ...withNewFields },
-			};
+			const scope = input.scope.withInstance(withNewFields).withParams(withNewFields);
 			const hash = Refusal.amend(
 				() => {
 					const wiring = tapleafWiring(compute);

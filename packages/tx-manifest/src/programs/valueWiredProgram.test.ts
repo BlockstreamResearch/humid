@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 
 import manifestJson from "../__fixtures__/vaultlet/txmanifest.json";
 import { Manifest } from "../document/manifest";
-import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
+import { Scope } from "../values/scope";
 import { deriveProgramAddress } from "./program";
 import type { ProgramParamTypes } from "./programParamTypes";
 
@@ -30,9 +30,7 @@ const SOURCE = readFileSync(
 
 const manifest = Manifest.parse(manifestJson as unknown as Record<string, unknown>);
 
-function derive(
-	input: { programParamTypes?: () => ProgramParamTypes; scope?: ReferenceScope } = {},
-) {
+function derive(input: { programParamTypes?: () => ProgramParamTypes; scope?: Scope } = {}) {
 	const action = manifest.action("Withdraw");
 
 	if (!action) {
@@ -56,7 +54,7 @@ function derive(
 		declaredTypes: manifest.paramTypes(action),
 		includeDebugSymbols: false,
 		network: "liquid",
-		scope: input.scope ?? { instance: INSTANCE, params: {} },
+		scope: input.scope ?? new Scope({ instance: INSTANCE, params: {} }),
 		reference: { compile_params: {}, utxo_type: "vault" },
 	});
 
@@ -123,7 +121,7 @@ describe("what it refuses rather than getting wrong", () => {
 		const { RESERVE_COV_HASH: _absent, ...short } = INSTANCE;
 		const { derived } = derive({
 			programParamTypes: () => DECLARED,
-			scope: { instance: short, params: {} },
+			scope: new Scope({ instance: short, params: {} }),
 		});
 
 		await expect(derived).rejects.toThrow("RESERVE_COV_HASH");

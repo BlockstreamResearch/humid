@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { deriveNewIssuance } from "../chain/issuance";
 import { actionOf, refusalOf } from "../review/reviewForTests";
+import { Scope } from "../values/scope";
 import { issuanceAttributes, issuanceIdentity, withIssuedAmounts } from "./issuance";
 
 const OUTPOINT = { txid: "c".repeat(64), vout: 2 };
@@ -15,7 +16,7 @@ function resolve(
 	params: Record<string, unknown> = {},
 	outpoint = OUTPOINT,
 ) {
-	const scope = { params };
+	const scope = new Scope({ params });
 	const declared = actionOf("Mint", {
 		inputs: [{ issuance, utxo_source: "wallet" }],
 	}).inputs[0]!.issuance!;

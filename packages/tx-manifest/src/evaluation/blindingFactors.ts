@@ -1,9 +1,7 @@
 import { reverseHex } from "../chain/hex";
-import { integerOf } from "../chain/integers";
-import type { ReferenceScope } from "../document/references";
 import type { Blinding } from "../document/schema";
 import { Refusal } from "../refusal";
-import { evaluateExpression } from "./evaluate";
+import type { Scope } from "../values/scope";
 
 export type BlindingFactors = {
 	assetBlindingFactor?: string;
@@ -12,7 +10,7 @@ export type BlindingFactors = {
 
 const SCALAR_LIMIT = 2n ** 256n;
 
-export function resolveBlindingFactors(declared: Blinding, scope: ReferenceScope): BlindingFactors {
+export function resolveBlindingFactors(declared: Blinding, scope: Scope): BlindingFactors {
 	return {
 		...(declared.asset_bf === undefined
 			? {}
@@ -23,7 +21,7 @@ export function resolveBlindingFactors(declared: Blinding, scope: ReferenceScope
 	};
 }
 
-function factorOf(declared: string | number, name: string, scope: ReferenceScope): string {
+function factorOf(declared: string | number, name: string, scope: Scope): string {
 	const scalar = Refusal.amend(
 		() => scalarOf(declared, scope),
 		(reason) => `its ${name} ${reason}`,
@@ -32,21 +30,12 @@ function factorOf(declared: string | number, name: string, scope: ReferenceScope
 	return reverseHex(scalar.toString(16).padStart(64, "0"));
 }
 
-function scalarOf(declared: string | number, scope: ReferenceScope): bigint {
-	if (typeof declared === "number") {
-		const scalar = integerOf(declared);
-
-		if (scalar === undefined || scalar < 0n) {
-			throw new Refusal(`is ${declared}, which is not a whole number.`);
-		}
-
-		return scalar;
-	}
-
-	const text = declared.trim();
-	const scalar = /^(0x[0-9a-fA-F]{1,64}|\d+)$/.test(text)
-		? BigInt(text)
-		: evaluateExpression(text, "expression", scope);
+function scalarOf(declared: string | number, scope: Scope): bigint {
+	const text = String(declared).trim();
+	const scalar =
+		typeof declared === "string" && /^(0x[0-9a-fA-F]{1,64}|\d+)$/.test(text)
+			? BigInt(text)
+			: scope.integer(declared, "expression");
 
 	if (scalar < 0n || scalar >= SCALAR_LIMIT) {
 		throw new Refusal(`is ${text}, which does not fit in 32 bytes.`);

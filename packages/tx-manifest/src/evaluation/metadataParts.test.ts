@@ -3,9 +3,9 @@ import { describe, expect, test } from "bun:test";
 import lendingV2Manifest from "../__fixtures__/lending_v2/txmanifest.json";
 import lendingManifest from "../__fixtures__/lending_v3/txmanifest.json";
 import { Manifest } from "../document/manifest";
-import type { ReferenceScope } from "../document/references";
 import type { DataPart } from "../document/schema";
 import { Refusal } from "../refusal";
+import { Scope } from "../values/scope";
 import { concatParts, encodeMetadataParts, type PartResolver } from "./metadataParts";
 import { planAction } from "./plan";
 
@@ -56,7 +56,7 @@ describe("encoding object-form data parts", () => {
 	});
 });
 
-const SCOPE: ReferenceScope = {
+const SCOPE = new Scope({
 	instance: {
 		COLLATERAL_AMOUNT: "500000",
 		FACTORY_PROGRAM_ID: "dd1e7f89",
@@ -69,7 +69,7 @@ const SCOPE: ReferenceScope = {
 		REISSUANCE_FLAGS: "0",
 	},
 	params: {},
-};
+});
 
 function publishedRecord(name: string): string {
 	const action = Manifest.parse(lendingManifest as unknown as Record<string, unknown>).action(name);
@@ -107,7 +107,7 @@ describe("string-form data", () => {
 		const key = "ab".repeat(32);
 		const record = planAction(
 			action,
-			{
+			new Scope({
 				instance: {
 					...SCOPE.instance,
 					BORROWER_PUB_KEY: key,
@@ -115,7 +115,7 @@ describe("string-form data", () => {
 					SECOND_PARAMETERS_ENCODED: "1",
 				},
 				params: {},
-			},
+			}),
 			manifest.paramTypes(action),
 		).outputs.find((output) => output.id === "indexer_op_return");
 

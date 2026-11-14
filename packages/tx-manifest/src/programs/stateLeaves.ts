@@ -1,10 +1,11 @@
 import { z } from "zod";
 
 import { decodeHex, encodeHex } from "../chain/hex";
-import { type ReferenceScope, resolveReference } from "../document/references";
+import { parseReference } from "../document/references";
 import { type Leaf, leafSchema } from "../document/schema";
-import { computedValue, computesValue } from "../evaluation/computedValue";
 import { Refusal } from "../refusal";
+import { Expression } from "../values/expression";
+import { Scope, type ScopeParts } from "../values/scope";
 
 export type EncodeStateLeavesResult =
 	| { leaves: string[]; ok: true }
@@ -27,7 +28,7 @@ const WIDTHS: Record<string, Width> = {
 
 export function encodeStateLeaves(
 	declared: unknown,
-	input: { at: string; scope: ReferenceScope },
+	input: { at: string; scope: ScopeParts },
 ): EncodeStateLeavesResult {
 	const parsed = z.array(leafSchema).safeParse(declared);
 
@@ -36,7 +37,10 @@ export function encodeStateLeaves(
 	}
 
 	try {
-		return { leaves: stateLeavesOf(parsed.data, input), ok: true };
+		return {
+			leaves: stateLeavesOf(parsed.data, { at: input.at, scope: new Scope(input.scope) }),
+			ok: true,
+		};
 	} catch (error) {
 		if (error instanceof Refusal) {
 			return { ok: false, reason: error.reason };
@@ -46,10 +50,7 @@ export function encodeStateLeaves(
 	}
 }
 
-export function stateLeavesOf(
-	declared: Leaf[],
-	input: { at: string; scope: ReferenceScope },
-): string[] {
+export function stateLeavesOf(declared: Leaf[], input: { at: string; scope: Scope }): string[] {
 	return declared.map((entry, index) =>
 		Refusal.amend(
 			() => encodeLeaf(entry, index, input),
@@ -58,7 +59,7 @@ export function stateLeavesOf(
 	);
 }
 
-function encodeLeaf(leaf: Leaf, index: number, input: { scope: ReferenceScope }): string {
+function encodeLeaf(leaf: Leaf, index: number, input: { scope: Scope }): string {
 	const at = `state leaf ${index}`;
 
 	if (leaf.type !== "tapdata") {
@@ -90,7 +91,7 @@ function encodeLeaf(leaf: Leaf, index: number, input: { scope: ReferenceScope })
 function encodePiece(
 	declared: Leaf["payload"][number],
 	at: string,
-	input: { scope: ReferenceScope },
+	input: { scope: Scope },
 ): number[] {
 	if (typeof declared === "string") {
 		const raw = hexBytes(declared);
@@ -118,35 +119,33 @@ function encodePiece(
 	return padBytes(orderBytes(natural, declared.endian, at), declared.pad_to, declared.align, at);
 }
 
-function readValue(declared: string, at: string, input: { scope: ReferenceScope }): string {
-	let found: unknown;
-
-	try {
-		found = resolveReference(declared, "stateLeaf", input.scope);
-	} catch (error) {
-		if (!(error instanceof Refusal)) {
-			throw error;
-		}
-
-		if (computesValue(declared)) {
-			return Refusal.amend(
-				() => computedValue(declared, "stateLeaf", input.scope),
-				(reason) => `${at}: ${reason}`,
-			);
-		}
-
-		if (declared.includes(".")) {
-			throw new Refusal(`${at}: ${error.reason}`);
-		}
-
-		return declared;
-	}
+function readValue(declared: string, at: string, input: { scope: Scope }): string {
+	const found = Refusal.amend(
+		() => leafValue(declared, input.scope),
+		(reason) => `${at}: ${reason}`,
+	);
 
 	if (typeof found !== "string") {
 		throw new Refusal(`${at} resolves to a value this runtime cannot encode.`);
 	}
 
 	return found;
+}
+
+function leafValue(declared: string, scope: Scope): unknown {
+	if (Expression.computes(declared)) {
+		return String(scope.integer(declared, "stateLeaf"));
+	}
+
+	const reference = parseReference(declared);
+
+	if (reference === undefined) {
+		return declared;
+	}
+
+	return reference.form === "bare"
+		? (Refusal.attempt(() => scope.reference(declared, "stateLeaf")) ?? declared)
+		: scope.reference(declared, "stateLeaf");
 }
 
 function fromNumber(value: string, bytes: number, at: string): number[] {

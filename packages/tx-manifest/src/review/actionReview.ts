@@ -13,7 +13,6 @@ import {
 	programInputs,
 	programOutputs,
 } from "../document/manifest";
-import type { ReferenceScope } from "../document/references";
 import { refuseUnsupported } from "../document/refuse";
 import type { Blinding, Issuance, ProgramReference } from "../document/schema";
 import {
@@ -57,6 +56,7 @@ import { programHashFrom } from "../programs/programHash";
 import { Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import { missingParts } from "../request/requirements";
+import { Scope } from "../values/scope";
 import { type AssetHoldings, type FundedAsset, fundAssets } from "./assetFunding";
 import { type SelectableUtxo, toSats } from "./coinSelection";
 import type {
@@ -96,11 +96,10 @@ export class ActionReview {
 	readonly #policyAsset: string;
 	readonly #mayReturn: (asset: string) => boolean;
 	readonly #pools = new Map<string, SelectableUtxo[]>();
-	readonly #inputs: Record<string, Record<string, unknown>> = {};
 	readonly #chainHeld: HeldValue[] = [];
 	readonly #programs: ProgramFinding[] = [];
 	readonly #programInputs: ReviewedProgramInput[] = [];
-	#scope: ReferenceScope;
+	#scope: Scope;
 
 	private constructor(request: ParsedLiquidProcessCtParams, input: ReviewInput) {
 		this.#request = request;
@@ -139,7 +138,7 @@ export class ActionReview {
 		const params = fillParameters(
 			action,
 			supplied,
-			{ instance: fields, params: supplied },
+			new Scope({ instance: fields, params: supplied }),
 			{
 				address: input.walletAddress,
 				key: input.walletKey,
@@ -156,10 +155,10 @@ export class ActionReview {
 			throw new Refusal(`This request cannot be built. ${named}`, "incomplete-request");
 		}
 
-		const stated = statedCreatedFields(action, { instance: fields, params });
+		const stated = statedCreatedFields(action, new Scope({ instance: fields, params }));
 
 		this.#declaredTypes = this.#manifest.paramTypes(action);
-		this.#scope = { inputs: this.#inputs, instance: { ...fields, ...stated }, params };
+		this.#scope = new Scope({ instance: { ...fields, ...stated }, params });
 	}
 
 	static run(request: ParsedLiquidProcessCtParams, input: ReviewInput): Promise<ManifestReview> {
@@ -172,12 +171,11 @@ export class ActionReview {
 		const identified = resolveIssuances(this.#action, {
 			programInputs: this.#programInputs,
 			holdings: (asset) => this.#holdings(asset),
-			inputs: this.#inputs,
 			policyAsset: this.#input.policyAsset,
 			scope: this.#scope,
 		});
 
-		this.#scope = runActionHooks(this.#action, this.#scope);
+		this.#scope = runActionHooks(this.#action, identified.scope);
 
 		const issued: ResolvedIssuances = {
 			issuances: identified.identities.map(({ declared, planned }) =>
@@ -191,7 +189,7 @@ export class ActionReview {
 		await this.#createPrograms();
 		this.#attachWitnessValues();
 
-		this.#scope = { ...this.#scope, fee: MIN_FEE_SATS };
+		this.#scope = this.#scope.withFee(MIN_FEE_SATS);
 		planAction(this.#action, this.#scope, this.#declaredTypes);
 
 		const rules = resolveInputRules(this.#action, this.#scope);
@@ -209,7 +207,7 @@ export class ActionReview {
 				);
 			}
 
-			this.#scope = { ...this.#scope, fee: settled.feeSats };
+			this.#scope = this.#scope.withFee(settled.feeSats);
 			// oxlint-disable-next-line no-await-in-loop
 			settled = await this.#settle(issued, rules, timing, feeRateSatsPerKvb);
 		}
@@ -350,7 +348,7 @@ export class ActionReview {
 
 			checkWitnessNames(input, derived.witnessTypes);
 			this.#witnessTypes.set(id, derived.witnessTypes);
-			this.#inputs[id] = { amount_sat: holding.sats, asset: holding.asset };
+			this.#scope = this.#scope.withInput(id, { amount_sat: holding.sats, asset: holding.asset });
 			this.#chainHeld.push({ asset: holding.asset, id, sats: holding.sats });
 			this.#programInputs.push({
 				argumentsJson: derived.argumentsJson,
@@ -509,7 +507,7 @@ export class ActionReview {
 			scope: this.#scope,
 		});
 
-		this.#scope = { ...this.#scope, instance: { ...this.#scope.instance, ...created.fields } };
+		this.#scope = this.#scope.withInstance(created.fields);
 
 		return created;
 	}
@@ -668,11 +666,35 @@ export class ActionReview {
 
 		return fundAssets(ledger.entries, {
 			feeSats: this.#scope.fee ?? 0n,
+			floors: this.#minimums(ledger, issued.reserved),
 			holdings: pinnedHoldings,
 			mayReturn: this.#mayReturn,
 			policyAsset: this.#input.policyAsset,
 			reserved: issued.reserved,
 		});
+	}
+
+	#minimums(ledger: AssetLedger, reserved: ReservedFunding): Map<string, bigint> {
+		const assetOf = new Map(ledger.walletInputs.map((wallet) => [wallet.id, wallet.asset]));
+		const floors = new Map<string, bigint>();
+
+		for (const input of this.#action.inputs) {
+			const stated = input.utxo_source === "wallet" ? walletAmount(input, this.#scope) : undefined;
+			const asset = assetOf.get(input.label);
+
+			if (
+				stated === undefined ||
+				stated.exact ||
+				asset === undefined ||
+				reserved.some((held) => held.inputId === input.label)
+			) {
+				continue;
+			}
+
+			floors.set(asset, (floors.get(asset) ?? 0n) + stated.sats);
+		}
+
+		return floors;
 	}
 
 	#payOutputs(plan: PlannedSpend, ledger: AssetLedger, funded: FundedAsset[]): PaidOutputs {
@@ -1036,6 +1058,7 @@ type ReservedFunding = { asset: string; inputId: string; utxo: SelectableUtxo }[
 type IdentifiedIssuances = {
 	identities: { declared: Issuance; planned: PlannedIssuance }[];
 	reserved: ReservedFunding;
+	scope: Scope;
 };
 
 type ResolvedIssuances = { issuances: PlannedIssuance[]; reserved: ReservedFunding };
@@ -1045,11 +1068,11 @@ function resolveIssuances(
 	context: {
 		programInputs: ReviewedProgramInput[];
 		holdings: AssetHoldings;
-		inputs: Record<string, Record<string, unknown>>;
 		policyAsset: string;
-		scope: ReferenceScope;
+		scope: Scope;
 	},
 ): IdentifiedIssuances {
+	let { scope } = context;
 	const identities: IdentifiedIssuances["identities"] = [];
 	const reserved: ReservedFunding = [];
 	const policyAsset = context.policyAsset;
@@ -1074,8 +1097,30 @@ function resolveIssuances(
 
 	for (const input of action.inputs) {
 		const { issuance, label: id } = input;
+		const stated = input.utxo_source === "wallet" ? walletAmount(input, scope) : undefined;
+		const fits = (utxo: SelectableUtxo) =>
+			stated === undefined ||
+			(stated.exact ? toSats(utxo) === stated.sats : toSats(utxo) >= stated.sats);
 
 		if (!issuance) {
+			if (stated?.exact) {
+				const asset = resolveAsset(input.asset, `input ${id}`, { policyAsset, scope });
+				const funding = candidatesIn(asset).find(
+					(utxo) => !taken.has(outpointKey(utxo)) && fits(utxo),
+				);
+
+				if (!funding) {
+					throw new Refusal(
+						`Input ${id} spends one output of this wallet holding exactly ${stated.sats} of ` +
+							`${asset}, and there is none left to use.`,
+						"shortfall",
+					);
+				}
+
+				taken.add(outpointKey(funding));
+				reserved.push({ asset, inputId: id, utxo: funding });
+			}
+
 			continue;
 		}
 
@@ -1083,10 +1128,10 @@ function resolveIssuances(
 		const program = context.programInputs.find((candidate) => candidate.id === id);
 
 		const asset = reissues
-			? reissuedToken(input, issuance, context)
+			? reissuedToken(input, issuance, { policyAsset, scope })
 			: resolveAsset(input.asset, `input ${id}`, {
 					policyAsset: context.policyAsset,
-					scope: context.scope,
+					scope: scope,
 				});
 
 		if (program) {
@@ -1095,7 +1140,7 @@ function resolveIssuances(
 
 			if (
 				reissues &&
-				(program.blindingSecretsJson === undefined || context.inputs[id]?.asset !== asset)
+				(program.blindingSecretsJson === undefined || scope.inputs[id]?.asset !== asset)
 			) {
 				throw new Refusal(
 					`Input ${id} reissues an asset, which needs the program it spends to hold that ` +
@@ -1111,17 +1156,18 @@ function resolveIssuances(
 				);
 			}
 
-			const issuedHere = issuanceIdentity({ declared: issuance, id, outpoint }, context.scope);
+			const issuedHere = issuanceIdentity({ declared: issuance, id, outpoint }, scope);
 
 			taken.add(key);
 			identities.push({ declared: issuance, planned: issuedHere });
-			context.inputs[id] = { ...context.inputs[id], ...issuanceAttributes(issuedHere) };
+			scope = scope.withInput(id, issuanceAttributes(issuedHere));
 
 			continue;
 		}
 
 		const funding = candidatesIn(asset).find(
-			(utxo) => !taken.has(outpointKey(utxo)) && (!reissues || utxo.confidential === true),
+			(utxo) =>
+				!taken.has(outpointKey(utxo)) && (!reissues || utxo.confidential === true) && fits(utxo),
 		);
 
 		if (!funding) {
@@ -1137,22 +1183,40 @@ function resolveIssuances(
 
 		const resolved = issuanceIdentity(
 			{ declared: issuance, id, outpoint: { txid: funding.txid, vout: funding.vout } },
-			context.scope,
+			scope,
 		);
 
 		taken.add(outpointKey(funding));
 		reserved.push({ asset, inputId: id, utxo: funding });
 		identities.push({ declared: issuance, planned: resolved });
-		context.inputs[id] = { ...context.inputs[id], ...issuanceAttributes(resolved) };
+		scope = scope.withInput(id, issuanceAttributes(resolved));
 	}
 
-	return { identities, reserved };
+	return { identities, reserved, scope };
+}
+
+type WalletAmount = { exact: boolean; sats: bigint };
+
+function walletAmount(input: Input, scope: Scope): WalletAmount | undefined {
+	const declared = input.amount_sat;
+
+	if (declared === undefined) {
+		return undefined;
+	}
+
+	const exact = typeof declared !== "object";
+	const sats = Refusal.amend(
+		() => resolveAmount(exact ? declared : declared.min_amount, scope),
+		(reason) => `Input ${input.label} states an amount this wallet cannot work out: ${reason}`,
+	);
+
+	return { exact, sats };
 }
 
 function reissuedToken(
 	input: Input,
 	issuance: Issuance,
-	context: { policyAsset: string; scope: ReferenceScope },
+	context: { policyAsset: string; scope: Scope },
 ): string {
 	const id = input.label;
 	const token = reissuanceOf(issuance, id, context.scope).reissuanceToken;
@@ -1176,7 +1240,7 @@ function bySize(left: bigint, right: bigint, smallestFirst: boolean): number {
 	return left > right === smallestFirst ? 1 : -1;
 }
 
-function runActionHooks(action: Action, scope: ReferenceScope): ReferenceScope {
+function runActionHooks(action: Action, scope: Scope): Scope {
 	let running = scope;
 
 	for (const input of action.inputs) {

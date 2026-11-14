@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { type Action, Manifest } from "../document/manifest";
 import { Fixture, refusalOf, actionOf } from "../review/reviewForTests";
+import { Scope } from "../values/scope";
 import { resolveCreatedInstance } from "./instance";
 import { PROGRAM_HASH_SEED, programHashFrom, ITERATION_BOUND } from "./programHash";
 
@@ -64,7 +65,7 @@ function open(params: Record<string, unknown> = PARAMS) {
 		result: resolveCreatedInstance(OPEN_VAULT, {
 			contractSources: SOURCES,
 			hashProgram,
-			scope: { params },
+			scope: new Scope({ params }),
 		}),
 	};
 }
@@ -99,7 +100,7 @@ describe("a chain of fields that each read the one before", () => {
 			result: resolveCreatedInstance(chained(), {
 				contractSources: SOURCES,
 				hashProgram,
-				scope: { params: PARAMS },
+				scope: new Scope({ params: PARAMS }),
 			}),
 		};
 	}
@@ -137,7 +138,7 @@ function leafyWith(
 				},
 			},
 		}),
-		{ contractSources: SOURCES, hashProgram, scope: { params: { TIMEOUT: "900000" } } },
+		{ contractSources: SOURCES, hashProgram, scope: new Scope({ params: { TIMEOUT: "900000" } }) },
 	);
 }
 
@@ -205,7 +206,7 @@ describe("the mode the document states its contracts were built in", () => {
 		resolveCreatedInstance(OPEN_VAULT, {
 			contractSources: SOURCES,
 			hashProgram,
-			scope: { params: PARAMS },
+			scope: new Scope({ params: PARAMS }),
 		});
 
 		expect(calls.length).toBeGreaterThan(0);
@@ -218,7 +219,7 @@ describe("the mode the document states its contracts were built in", () => {
 		const debug = resolveCreatedInstance(OPEN_VAULT, {
 			contractSources: SOURCES,
 			hashProgram,
-			scope: { params: PARAMS },
+			scope: new Scope({ params: PARAMS }),
 		});
 
 		expect(debug.fields.RESERVE_COV_HASH).not.toBe(plain.fields.RESERVE_COV_HASH);
@@ -236,7 +237,7 @@ describe("when the compiler cannot produce a hash", () => {
 		return resolveCreatedInstance(OPEN_VAULT, {
 			contractSources: SOURCES,
 			hashProgram: programHashFrom(compile, false),
-			scope: { params: PARAMS },
+			scope: new Scope({ params: PARAMS }),
 		});
 	}
 
@@ -290,7 +291,7 @@ describe("a program hash that names another through the deployment", () => {
 			result: resolveCreatedInstance(dependant(spelling), {
 				contractSources: SOURCES,
 				hashProgram,
-				scope: { params: PARAMS },
+				scope: new Scope({ params: PARAMS }),
 			}),
 		};
 	}
@@ -331,7 +332,7 @@ describe("a program hash that names another through the deployment", () => {
 			{
 				contractSources: SOURCES,
 				hashProgram,
-				scope: { instance: { OLD_HASH: "ab".repeat(32) }, params: {} },
+				scope: new Scope({ instance: { OLD_HASH: "ab".repeat(32) }, params: {} }),
 			},
 		);
 
@@ -352,7 +353,7 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 			resolveCreatedInstance(OPEN_VAULT, {
 				contractSources: { "./reserve.simf": SOURCES["./reserve.simf"] ?? "" },
 				hashProgram,
-				scope: { params: PARAMS },
+				scope: new Scope({ params: PARAMS }),
 			}),
 		);
 
@@ -365,7 +366,7 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 			resolveCreatedInstance(actionNamed(mutual, "Knot"), {
 				contractSources: SOURCES,
 				hashProgram,
-				scope: { params: {} },
+				scope: new Scope({ params: {} }),
 			}),
 		);
 
@@ -382,7 +383,7 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 				actionOf("Odd", {
 					create_instance: { fields: { X: { simf: "./a.simf", type: "simf_fn" } } },
 				}),
-				{ contractSources: SOURCES, hashProgram, scope: { params: {} } },
+				{ contractSources: SOURCES, hashProgram, scope: new Scope({ params: {} }) },
 			),
 		);
 
@@ -395,7 +396,7 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 			resolveCreatedInstance(actionOf("Words", { create_instance: { fields: { X: value } } }), {
 				contractSources: SOURCES,
 				hashProgram,
-				scope: { params: { OWNER: KEY } },
+				scope: new Scope({ params: { OWNER: KEY } }),
 			});
 
 		expect(refusalOf(() => created("OWNER")).reason).toContain("params.OWNER");
