@@ -15,7 +15,7 @@ export {
 	isRefusal,
 	reviewManifestAction,
 } from "./review";
-export type { ProgramAbi } from "./programs/programParamTypes";
+export type { ProgramAbi } from "./programs/program";
 export { type RejectToken, Refusal } from "./refusal";
 
 export { type ShownConfirmation, describeOrigin, toShownConfirmation } from "./confirmation";

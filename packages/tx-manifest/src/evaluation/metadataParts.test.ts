@@ -50,7 +50,8 @@ describe("encoding object-form data parts", () => {
 	});
 
 	test("types and modifiers outside the vocabulary are refused by name", () => {
-		expect(part({ type: "bytes32", value: `0x${"11".repeat(32)}` })).toContain("bytes32");
+		expect(part({ type: "bytes32", value: `0x${"11".repeat(32)}` })).toBe("11".repeat(32));
+		expect(part({ type: "u256", value: "1" })).toContain("u256");
 		expect(part({ pad_to: 8, type: "u8", value: 1 })).toContain("pad_to");
 		expect(part({ endian: "be", type: "bytes", value: "0x0102" })).toContain("endian");
 	});

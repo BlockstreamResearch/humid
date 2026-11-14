@@ -3,7 +3,6 @@ import type { ProgramReference } from "../document/schema";
 import { Refusal } from "../refusal";
 import type { Scope } from "../values/scope";
 import { resolveCompileParams } from "./compileParams";
-import type { ProgramAbi, ProgramParamTypes } from "./programParamTypes";
 import { stateLeavesOf } from "./stateLeaves";
 import { bindUtxoParams, boundWiring } from "./utxoParams";
 
@@ -21,6 +20,11 @@ export type CompileProgram = (input: {
 	network: string;
 	source: string;
 }) => Promise<CompiledProgram> | CompiledProgram;
+
+export type ProgramAbi = {
+	parameters: Record<string, string>;
+	witnesses: Record<string, string>;
+};
 
 export type ProgramAbiOf = (source: string) => Promise<ProgramAbi> | ProgramAbi;
 
@@ -119,7 +123,7 @@ export async function deriveProgramAddress(
 }
 
 function instanceFieldsNamed(
-	declares: ProgramParamTypes,
+	declares: Record<string, string>,
 	instance: Record<string, unknown> | undefined,
 ): Record<string, string> {
 	return Object.fromEntries(

@@ -76,6 +76,8 @@ const REFERENCE = new RegExp(`^(?<head>${NAME})(?:\\.(?<tail>${NAME}))?$`);
 
 export const RESERVED_INPUT_IDS = new Set(Object.keys(NAMESPACES));
 
+const LITERAL_WORDS = new Set(["false", "true"]);
+
 export function parseReference(text: string): ParsedReference | undefined {
 	const groups = REFERENCE.exec(text.trim())?.groups;
 	const head = groups?.head;
@@ -87,7 +89,7 @@ export function parseReference(text: string): ParsedReference | undefined {
 	const tail = groups.tail;
 
 	if (tail === undefined) {
-		return { form: "bare", name: head };
+		return LITERAL_WORDS.has(head) ? undefined : { form: "bare", name: head };
 	}
 
 	const form = NAMESPACES[head];

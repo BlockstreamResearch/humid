@@ -124,6 +124,6 @@ describe("a contract whose address commits to its state", () => {
 			CURRENT_DEBT: "18446744073709551616",
 		});
 
-		expect(refusal?.reason).toContain("does not fit");
+		expect(refusal?.reason).toContain("Got 18446744073709551616");
 	});
 });

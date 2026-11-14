@@ -6,7 +6,6 @@ import { Manifest } from "../document/manifest";
 import { Refusal } from "../refusal";
 import { Scope } from "../values/scope";
 import { deriveProgramAddress } from "./program";
-import type { ProgramParamTypes } from "./programParamTypes";
 
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const ASSET_STATED = `a0${"00".repeat(30)}0a`;
@@ -30,7 +29,7 @@ const SOURCE = readFileSync(
 
 const manifest = Manifest.parse(manifestJson as unknown as Record<string, unknown>);
 
-function derive(input: { programParamTypes?: () => ProgramParamTypes; scope?: Scope } = {}) {
+function derive(input: { programParamTypes?: () => Record<string, string>; scope?: Scope } = {}) {
 	const action = manifest.action("Withdraw");
 
 	if (!action) {

@@ -6,25 +6,13 @@ import { type Leaf, leafSchema } from "../document/schema";
 import { Refusal } from "../refusal";
 import { Expression } from "../values/expression";
 import { Scope, type ScopeParts } from "../values/scope";
+import { FormatType } from "./formatTypes";
 
 export type EncodeStateLeavesResult =
 	| { leaves: string[]; ok: true }
 	| { ok: false; reason: string };
 
 const LEAF_BYTES = 32;
-
-type Width = { bytes: number; reads: "decimal" | "hex" };
-
-const WIDTHS: Record<string, Width> = {
-	bool: { bytes: 1, reads: "decimal" },
-	bytes32: { bytes: 32, reads: "hex" },
-	"liquid.asset_id": { bytes: 32, reads: "hex" },
-	pubkey: { bytes: 32, reads: "hex" },
-	u8: { bytes: 1, reads: "decimal" },
-	u16: { bytes: 2, reads: "decimal" },
-	u32: { bytes: 4, reads: "decimal" },
-	u64: { bytes: 8, reads: "decimal" },
-};
 
 export function encodeStateLeaves(
 	declared: unknown,
@@ -103,18 +91,10 @@ function encodePiece(
 		return raw;
 	}
 
-	const width = WIDTHS[declared.type];
-
-	if (width === undefined) {
-		throw new Refusal(
-			`${at} is declared ${JSON.stringify(declared.type)}, which this runtime does not encode ` +
-				"into a state leaf.",
-		);
-	}
-
-	const value = readValue(declared.value, at, input);
-	const natural =
-		width.reads === "hex" ? fromHex(value, width.bytes, at) : fromNumber(value, width.bytes, at);
+	const natural = Refusal.amend(
+		() => [...FormatType.named(declared.type).bytes(readValue(declared.value, at, input))],
+		(reason) => `${at}: ${reason}`,
+	);
 
 	return padBytes(orderBytes(natural, declared.endian, at), declared.pad_to, declared.align, at);
 }
@@ -137,48 +117,7 @@ function leafValue(declared: string, scope: Scope): unknown {
 		return String(scope.integer(declared, "stateLeaf"));
 	}
 
-	const reference = parseReference(declared);
-
-	if (reference === undefined) {
-		return declared;
-	}
-
-	return reference.form === "bare"
-		? (Refusal.attempt(() => scope.reference(declared, "stateLeaf")) ?? declared)
-		: scope.reference(declared, "stateLeaf");
-}
-
-function fromNumber(value: string, bytes: number, at: string): number[] {
-	const text = value.trim();
-	const parsed = /^\d+$/.test(text) ? BigInt(text) : undefined;
-
-	if (parsed === undefined) {
-		throw new Refusal(`${at} is written as ${JSON.stringify(value)}, which is not a whole number.`);
-	}
-
-	if (parsed >= 1n << BigInt(bytes * 8)) {
-		throw new Refusal(
-			`${at} is ${text}, which does not fit in the ${bytes} bytes its type is wide.`,
-		);
-	}
-
-	return Array.from({ length: bytes }, (_, index) =>
-		Number((parsed >> BigInt((bytes - 1 - index) * 8)) & 0xffn),
-	);
-}
-
-function fromHex(value: string, bytes: number, at: string): number[] {
-	const raw = hexBytes(value);
-
-	if (raw === undefined) {
-		throw new Refusal(`${at} is written as ${JSON.stringify(value)}, which is not bytes.`);
-	}
-
-	if (raw.length !== bytes) {
-		throw new Refusal(`${at} is ${raw.length} bytes, and its type is ${bytes} bytes wide.`);
-	}
-
-	return raw;
+	return parseReference(declared) === undefined ? declared : scope.reference(declared, "stateLeaf");
 }
 
 function orderBytes(bytes: number[], endian: string | undefined, at: string): number[] {

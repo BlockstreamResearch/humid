@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 
 import type { ReadTxOut } from "../chain/chainRead";
 import { type Action, Manifest } from "../document/manifest";
-import type { ProgramAbi } from "../programs/programParamTypes";
+import type { ProgramAbi } from "../programs/program";
 import { Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
 import type { SelectableUtxo } from "./coinSelection";
