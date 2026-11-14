@@ -106,7 +106,7 @@ describe("reading one output out of a transaction's own bytes", () => {
 describe("the Esplora output reader", () => {
 	const built = transaction([explicit(1000n, FIRST_SCRIPT), explicit(500n, "")]);
 
-	test("asks for the raw transaction and reads the numbered output out of it", async () => {
+	test("asks for the raw transaction and reads the numbered output from that transaction", async () => {
 		const [endpoint, fetchImpl] = endpointReturning(built);
 		const read = createEsploraTxOutReader(endpoint, fetchImpl);
 
@@ -114,6 +114,7 @@ describe("the Esplora output reader", () => {
 			amountSats: "1000",
 			rawAssetId: POLICY_ASSET,
 			scriptPubKeyHex: FIRST_SCRIPT,
+			transactionHex: built,
 			txOutHex: explicit(1000n, FIRST_SCRIPT),
 		});
 	});

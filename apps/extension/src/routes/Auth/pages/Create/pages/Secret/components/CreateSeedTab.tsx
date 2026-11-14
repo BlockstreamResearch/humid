@@ -110,7 +110,7 @@ function RevealStep({
 			</div>
 
 			<UiButton type="button" size="lg" onClick={onNext}>
-				I saved it
+				I saved the phrase
 			</UiButton>
 		</>
 	);

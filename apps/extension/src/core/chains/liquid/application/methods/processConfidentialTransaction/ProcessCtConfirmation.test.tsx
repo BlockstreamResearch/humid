@@ -18,7 +18,7 @@ const TOKEN = "aa".repeat(32);
 const MODEL: ShownConfirmation = {
 	account: computed("liquid:testnet account 0"),
 	action: fromDapp("Receive"),
-	covenants: [
+	programs: [
 		{
 			address: verified("tex1p_derived"),
 			cmr: computed("cc".repeat(32)),
@@ -36,13 +36,14 @@ const MODEL: ShownConfirmation = {
 		},
 	],
 	netEffect: [{ asset: computed(FEE_ASSET), sats: computed("-50500") }],
+	payments: [],
 	protocol: fromDapp("p2pk-simplicity"),
 	publishedAmounts: [
 		{
 			id: computed("change"),
 			reason: computed(
 				"nothing says otherwise and this network blinds an output by default, and this " +
-					"wallet publishes it anyway so your next action can spend it",
+					"wallet publishes it anyway so your next action can spend those funds",
 			),
 		},
 	],
@@ -84,7 +85,7 @@ describe("the payload this surface accepts", () => {
 		expect(isProcessCtConfirmationData("a string")).toBe(false);
 	});
 
-	test("refuses its own kind with nothing, or something that is not a model, behind it", () => {
+	test("refuses its own kind backed by nothing, or by something that is not a model", () => {
 		expect(isProcessCtConfirmationData({ kind: PROCESS_CT_CONFIRMATION_KIND })).toBe(false);
 		expect(isProcessCtConfirmationData(payload(null))).toBe(false);
 		expect(isProcessCtConfirmationData(payload("not a model"))).toBe(false);
@@ -134,21 +135,21 @@ describe("the payload this surface accepts", () => {
 		).toBe(false);
 	});
 
-	test("refuses a covenant row that does not carry its type or its verdict", () => {
+	test("refuses a program row that does not carry its type or its verdict", () => {
 		expect(
 			isProcessCtConfirmationData(
-				payload(spoiled("covenants", [{ address: verified("tex1p"), verified: computed(true) }])),
+				payload(spoiled("programs", [{ address: verified("tex1p"), verified: computed(true) }])),
 			),
 		).toBe(false);
 		expect(
 			isProcessCtConfirmationData(
-				payload(spoiled("covenants", [{ address: verified("tex1p"), utxoType: fromDapp("p2pk") }])),
+				payload(spoiled("programs", [{ address: verified("tex1p"), utxoType: fromDapp("p2pk") }])),
 			),
 		).toBe(false);
 		expect(
 			isProcessCtConfirmationData(
 				payload(
-					spoiled("covenants", [
+					spoiled("programs", [
 						{ address: verified("tex1p"), utxoType: fromDapp("p2pk"), verified: computed("yes") },
 					]),
 				),
@@ -274,10 +275,10 @@ describe("what the screen says", () => {
 		expect(html).toContain("checked by this wallet against the network");
 	});
 
-	test("says a covenant it could not compare is not onchain yet", () => {
+	test("says a program it could not compare is not onchain yet", () => {
 		const html = markup({
 			...MODEL,
-			covenants: [
+			programs: [
 				{
 					address: computed("tex1p_derived"),
 					cmr: computed("cc".repeat(32)),
@@ -292,7 +293,7 @@ describe("what the screen says", () => {
 		expect(html).toContain("worked out by this wallet");
 	});
 
-	test("names what the protocol calls each covenant, as the dapp's word", () => {
+	test("names what the protocol calls each program, as the dapp's word", () => {
 		const html = markup();
 		const utxoType = html.indexOf("p2pk_output");
 
@@ -304,7 +305,7 @@ describe("what the screen says", () => {
 		expect(attribution - utxoType).toBeLessThan(200);
 	});
 
-	test("attributes a blinded amount's name separately from the word that blinded it", () => {
+	test("attributes a blinded amount's name separately from the reason for the blinding", () => {
 		const html = markup();
 		const name = html.indexOf("received_out");
 		const decision = html.indexOf("this protocol asks for it to be blinded");
@@ -319,7 +320,7 @@ describe("what the screen says", () => {
 	test("and a published amount's name separately from the reason it was published", () => {
 		const html = markup();
 		const name = html.indexOf(">change<");
-		const reason = html.indexOf("so your next action can spend it");
+		const reason = html.indexOf("so your next action can spend those funds");
 
 		expect(name).toBeGreaterThan(-1);
 		expect(reason).toBeGreaterThan(name);
@@ -356,7 +357,34 @@ describe("what the screen says", () => {
 		const html = markup();
 
 		expect(html).toContain("Amount published onchain");
-		expect(html).toContain("so your next action can spend it");
+		expect(html).toContain("so your next action can spend those funds");
+	});
+
+	test("shows who each payment goes to, as the dapp's word, and how much", () => {
+		const html = markup({
+			...MODEL,
+			payments: [
+				{ address: fromDapp("tlq1_theirs"), asset: computed(FEE_ASSET), sats: computed("500") },
+				{ address: fromDapp("tlq1_other"), asset: computed(TOKEN), sats: computed("7") },
+			],
+		});
+
+		expect(html).toContain("Paid to");
+		expect(html).toContain("tlq1_theirs");
+		expect(html).toContain("0.000005 L-BTC");
+		expect(html).toContain("claimed by the dapp");
+		expect(html).toContain(TOKEN);
+	});
+
+	test("refuses a payment that does not say where it goes", () => {
+		expect(
+			isProcessCtConfirmationData(
+				payload({
+					...MODEL,
+					payments: [{ asset: computed(FEE_ASSET), sats: computed("500") }],
+				}),
+			),
+		).toBe(false);
 	});
 
 	test("shows a protocol's own token in base units, never as L-BTC", () => {

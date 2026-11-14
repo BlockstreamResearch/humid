@@ -1,87 +1,60 @@
-export type Reader = { at: number; bytes: Uint8Array };
+import { encodeHex, reverseHex } from "./hex";
 
-export function decodeHex(hex: string): Uint8Array | undefined {
-	const digits = hex.startsWith("0x") ? hex.slice(2) : hex;
+export class ByteReader {
+	readonly #bytes: Uint8Array;
+	#at = 0;
 
-	if (digits.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(digits)) {
-		return undefined;
+	constructor(bytes: Uint8Array) {
+		this.#bytes = bytes;
 	}
 
-	return Uint8Array.from(digits.match(/../g) ?? [], (pair) => Number.parseInt(pair, 16));
-}
-
-export function encodeHex(bytes: Uint8Array): string {
-	return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-export function skip(reader: Reader, count: number): boolean {
-	if (count < 0 || reader.at + count > reader.bytes.length) {
-		return false;
+	get offset(): number {
+		return this.#at;
 	}
 
-	reader.at += count;
-
-	return true;
-}
-
-export function readHex(reader: Reader, length: number): string | undefined {
-	if (length < 0 || reader.at + length > reader.bytes.length) {
-		return undefined;
+	get remaining(): number {
+		return this.#bytes.length - this.#at;
 	}
 
-	const slice = reader.bytes.slice(reader.at, reader.at + length);
+	take(count: number): Uint8Array | undefined {
+		if (count < 0 || count > this.remaining) {
+			return undefined;
+		}
 
-	reader.at += length;
+		const taken = this.#bytes.subarray(this.#at, this.#at + count);
 
-	return encodeHex(slice);
-}
+		this.#at += count;
 
-export function readReversedHex(reader: Reader, length: number): string | undefined {
-	const forwards = readHex(reader, length);
-
-	return forwards === undefined ? undefined : (forwards.match(/../g) ?? []).toReversed().join("");
-}
-
-export function readUint8(reader: Reader): number | undefined {
-	if (reader.at + 1 > reader.bytes.length) {
-		return undefined;
+		return taken;
 	}
 
-	const byte = reader.bytes[reader.at];
-
-	reader.at += 1;
-
-	return byte;
-}
-
-export function readUint32(reader: Reader): number | undefined {
-	if (reader.at + 4 > reader.bytes.length) {
-		return undefined;
+	skip(count: number): boolean {
+		return this.take(count) !== undefined;
 	}
 
-	let value = 0;
+	hex(count: number): string | undefined {
+		const taken = this.take(count);
 
-	for (let offset = 3; offset >= 0; offset -= 1) {
-		value = value * 256 + (reader.bytes[reader.at + offset] ?? 0);
+		return taken && encodeHex(taken);
 	}
 
-	reader.at += 4;
+	reversedHex(count: number): string | undefined {
+		const forwards = this.hex(count);
 
-	return value >>> 0;
-}
-
-export function readUintBigEndian(reader: Reader, length: number): bigint | undefined {
-	if (reader.at + length > reader.bytes.length) {
-		return undefined;
+		return forwards && reverseHex(forwards);
 	}
 
-	let value = 0n;
-
-	for (let offset = 0; offset < length; offset += 1) {
-		value = value * 256n + BigInt(reader.bytes[reader.at + offset] ?? 0);
+	uint8(): number | undefined {
+		return this.take(1)?.[0];
 	}
 
-	reader.at += length;
+	uintLittleEndian(count: number): bigint | undefined {
+		const taken = this.take(count);
 
-	return value;
+		return taken?.reduceRight((value, byte) => value * 256n + BigInt(byte), 0n);
+	}
+
+	hexSince(offset: number): string {
+		return encodeHex(this.#bytes.subarray(offset, this.#at));
+	}
 }

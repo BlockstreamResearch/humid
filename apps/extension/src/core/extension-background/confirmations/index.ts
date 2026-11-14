@@ -73,7 +73,7 @@ export function createConfirmationResponder(
 				},
 			);
 			// The popup handler only returns after the user decides, so it cannot gate the queue:
-			// timeouts, unlocks elsewhere and cancellation settle the entry without it.
+			// timeouts, unlocks elsewhere and cancellation settle the entry without the popup.
 			messageBus
 				.sendMessage(
 					MsgProtocolRequestMethods.RequestConfirmation,

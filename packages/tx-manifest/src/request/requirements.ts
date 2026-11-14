@@ -1,40 +1,27 @@
-import { asRecord } from "../document/json";
-import type { NormalisedAction, NormalisedManifest } from "../document/normalise";
-import { instanceReferences } from "../document/references";
-import { covenantSites, namedUtxoTypes } from "../document/sites";
-import type { ActionRequirements, MissingPart, ParsedLiquidProcessCtParams } from "./request";
+import { type Action, type Manifest, namedUtxoTypes, programInputs } from "../document/manifest";
+import { instanceReferences, parseReference } from "../values/references";
+import type { MissingPart, ParsedLiquidProcessCtParams } from "./request";
 
-export function resolveActionRequirements(
+export function missingParts(
 	request: ParsedLiquidProcessCtParams,
-	manifest: NormalisedManifest,
-	declared: NormalisedAction,
-): ActionRequirements {
-	const action = declared.node;
-	const required: ActionRequirements["required"] = [];
+	manifest: Manifest,
+	action: Action,
+): MissingPart[] {
 	const missing: MissingPart[] = [];
 
 	const sources = referencedContractSources(manifest, action);
 
-	if (sources.length > 0) {
-		required.push("contractSources");
+	const absent = sources.filter((path) => !(path in request.contractSources));
 
-		const absent = sources.filter((path) => !(path in request.contractSources));
-
-		if (absent.length > 0) {
-			missing.push({
-				keys: absent,
-				part: "contractSources",
-				reason: "The action builds contracts whose source was not supplied.",
-			});
-		}
+	if (absent.length > 0) {
+		missing.push({
+			keys: absent,
+			part: "contractSources",
+			reason: "The action builds contracts whose source was not supplied.",
+		});
 	}
 
-	const params = promptedParams(action);
-	const unfilled = params.filter((name) => !(name in request.params));
-
-	if (params.length > 0) {
-		required.push("params");
-	}
+	const unfilled = promptedParams(action).filter((name) => !(name in request.params));
 
 	if (unfilled.length > 0) {
 		missing.push({
@@ -44,76 +31,61 @@ export function resolveActionRequirements(
 		});
 	}
 
-	const reads = instanceReferences(manifest, declared, request.params);
+	const reads = instanceReferences(manifest, action, request.params);
 
 	if (reads.length > 0) {
-		if (declared.boundTo === undefined) {
-			missing.push({
-				part: "instance",
-				keys: reads.map((occurrence) => occurrence.at),
-				reason:
-					`The action "${declared.name}" reads a deployment's field values and is declared ` +
-					"outside any class, so there is no deployment for it to read.",
-			});
-		} else {
-			required.push("instance");
+		if (action.template === undefined) {
+			const unsupplied = reads.filter(
+				(occurrence) => !((parseReference(occurrence.text)?.name ?? "") in request.params),
+			);
 
-			if (!request.instance) {
+			if (unsupplied.length > 0) {
 				missing.push({
-					keys: reads.map((occurrence) => occurrence.at),
 					part: "instance",
+					keys: unsupplied.map((occurrence) => occurrence.at),
 					reason:
-						`The action "${declared.name}" is a method of ${declared.boundTo} and reads the ` +
-						"field values of one deployment of it.",
+						`The action "${action.name}" reads a deployment's field values and is declared ` +
+						"outside any template, so there is no deployment for it to read.",
 				});
 			}
-		}
-	}
-
-	if (spendsCovenant(action)) {
-		required.push("state");
-
-		if (!request.state) {
+		} else if (!request.instance) {
 			missing.push({
-				part: "state",
-				reason: "The action spends a covenant UTXO, which is located through the state file.",
+				keys: reads.map((occurrence) => occurrence.at),
+				part: "instance",
+				reason:
+					`The action "${action.name}" is an action of ${action.template} and reads the ` +
+					"field values of one deployment of that template.",
 			});
 		}
 	}
 
-	return { missing, required };
-}
+	const pinned = request.instance?.provided_inputs ?? {};
 
-function referencedContractSources(
-	manifest: NormalisedManifest,
-	action: Record<string, unknown>,
-): string[] {
-	const utxoTypes = manifest.utxoTypes;
-	const paths = new Set<string>();
-
-	for (const name of namedUtxoTypes(action)) {
-		const source = asRecord(asRecord(utxoTypes[name])?.script)?.source;
-
-		if (typeof source === "string") {
-			paths.add(source);
-		}
+	if (!request.state && programInputs(action).some((input) => !(input.label in pinned))) {
+		missing.push({
+			part: "state",
+			reason:
+				"The action spends a program UTXO that the instance file does not pin, so the state file has to locate one.",
+		});
 	}
 
-	return [...paths];
+	return missing;
 }
 
-function spendsCovenant(action: Record<string, unknown>): boolean {
-	return covenantSites(action).some((site) => site.role === "spent");
+function referencedContractSources(manifest: Manifest, action: Action): string[] {
+	return [
+		...new Set(
+			namedUtxoTypes(action).flatMap((name) => {
+				const source = manifest.utxoType(name)?.script.source;
+
+				return source === undefined ? [] : [source];
+			}),
+		),
+	];
 }
 
-function promptedParams(action: Record<string, unknown>): string[] {
-	const params = asRecord(action.params) ?? {};
-
-	return Object.entries(params)
-		.filter(([, declared]) => {
-			const record = asRecord(declared);
-
-			return !record || !("source" in record || "compute" in record || "derived" in record);
-		})
+function promptedParams(action: Action): string[] {
+	return Object.entries(action.params)
+		.filter(([, declared]) => declared.compute === undefined)
 		.map(([name]) => name);
 }

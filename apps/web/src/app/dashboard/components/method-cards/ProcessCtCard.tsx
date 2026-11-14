@@ -1,5 +1,5 @@
 import type { LiquidProcessConfidentialTransactionParams } from "@humid/appkit-injected-adapter";
-import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk.manifest.json";
+import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk/txmanifest.json";
 import { useState } from "react";
 
 import { useHumidContext } from "@/contexts/Web3Provider/HumidProvider";
@@ -81,7 +81,7 @@ export function ProcessCtCard() {
 
 			{spending ? (
 				<TextAreaField
-					label='State file — which covenant outputs exist: {"utxos":[{"utxo_type":"p2pk_output","txid":"…","vout":0}]}'
+					label='State file — which program outputs exist: {"utxos":[{"utxo_type":"p2pk_output","txid":"…","vout":0}]}'
 					onChange={setStateFile}
 					value={stateFile}
 				/>
@@ -91,7 +91,7 @@ export function ProcessCtCard() {
 
 			<CheckboxField
 				checked={broadcast}
-				label="Broadcast — leave off to get the signed transaction back without sending it"
+				label="Broadcast — leave off to get the signed transaction back unsent"
 				onChange={setBroadcast}
 			/>
 

@@ -606,7 +606,7 @@ describe("mixed-input PSET signing", () => {
 		expect((await sign(prepared)).pset).toBe(prepared.toString());
 	});
 
-	test("rejects blinding after covenant witnesses are finalized", async () => {
+	test("rejects blinding after program witnesses are finalized", async () => {
 		await expect(sign(withWitness(fixture()))).rejects.toThrow(
 			"PSET must be blinded before signing or finalizing its inputs.",
 		);

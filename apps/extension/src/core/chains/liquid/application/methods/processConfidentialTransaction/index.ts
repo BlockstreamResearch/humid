@@ -6,9 +6,12 @@ import {
 	type ManifestReview,
 	type ParsedLiquidProcessCtParams,
 	parseLiquidProcessCtParams,
+	type ReadAddress,
 	type ReadFeeRate,
+	Refusal,
 	type ReadTxOut,
 	reviewManifestAction,
+	type Unblind,
 	type SelectableUtxo,
 	toShownConfirmation,
 } from "@humid/tx-manifest";
@@ -16,14 +19,18 @@ import {
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 
-import { toScriptPubKeyHex } from "../../../adapters/lwk/wallet/toScriptPubKeyHex";
+import { createLwkNetwork } from "../../../adapters/lwk/createLwkNetwork";
+import { loadLwkWasm } from "../../../adapters/lwk/loadLwkWasm";
+import { addressReader } from "../../../adapters/lwk/wallet/readAddress";
+import { walletKeyOf } from "../../../adapters/lwk/wallet/walletKey";
+import { walletUnblinder } from "../../../adapters/lwk/wallet/walletUnblinder";
 import { withAccountMnemonic } from "../../../adapters/lwk/wallet/withAccountMnemonic";
 import { assembleReviewedTransaction } from "../../../adapters/smplx/assembleReviewedTransaction";
 import {
-	createSmplxCovenantParamTypes,
-	createSmplxCovenantCompiler,
+	createSmplxProgramAbi,
+	createSmplxProgramCompiler,
 	createSmplxScriptPubKeyCompiler,
-} from "../../../adapters/smplx/compileCovenantWithSmplx";
+} from "../../../adapters/smplx/compileProgramWithSmplx";
 import { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
@@ -44,6 +51,8 @@ export type LiquidProcessCtResult = {
 
 const EXTERNAL_CHAIN = 0;
 
+const SIZING_BLINDING_KEY = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+
 const SMPLX_NETWORKS: Record<string, string> = {
 	mainnet: "liquid",
 	regtest: "elements-regtest",
@@ -58,8 +67,10 @@ export type LiquidProcessCtDependencies = {
 	loadSmplx: typeof loadSmplxWasm;
 	readFeeRate: (chain: LiquidChainRecord) => ReadFeeRate;
 	readTxOut: (chain: LiquidChainRecord) => ReadTxOut;
+	readAddress: (chain: LiquidChainRecord) => Promise<ReadAddress>;
 	resolveAccount: typeof resolveDappAccount;
-	scriptPubKeyHexOf: (address: string) => Promise<string>;
+	unblinder: (account: LiquidWalletAccount, scriptPubKeyHex: string) => Promise<Unblind>;
+	walletKeyOf: typeof walletKeyOf;
 	withMnemonic: typeof withAccountMnemonic;
 };
 
@@ -73,8 +84,15 @@ export const liquidProcessCtDependencies: LiquidProcessCtDependencies = {
 	loadSmplx: loadSmplxWasm,
 	readFeeRate: (chain) => createEsploraFeeRateReader(chain.settings.backend),
 	readTxOut: (chain) => createEsploraTxOutReader(chain.settings.backend),
+	readAddress: async (chain) => {
+		const lwk = await loadLwkWasm();
+
+		return addressReader(lwk, createLwkNetwork(lwk, chain));
+	},
 	resolveAccount: resolveDappAccount,
-	scriptPubKeyHexOf: toScriptPubKeyHex,
+	unblinder: async (account, scriptPubKeyHex) =>
+		walletUnblinder(await loadLwkWasm(), account.descriptor, scriptPubKeyHex),
+	walletKeyOf,
 	withMnemonic: withAccountMnemonic,
 };
 
@@ -102,66 +120,68 @@ export const createProcessLiquidConfidentialTransaction = (
 			const account = await dependencies.resolveAccount(context);
 			const smplx = await dependencies.loadSmplx();
 
-			const assembled = await dependencies.withMnemonic(
-				{
-					...(account.accountGroupIndex === undefined
-						? {}
-						: { accountGroupIndex: account.accountGroupIndex }),
-					chain: context.chain,
-					keyManagerState: context.keyManagerState,
-					...(account.keySourceId === undefined ? {} : { keySourceId: account.keySourceId }),
-				},
-				async (mnemonic) => {
-					const signer = new smplx.WalletSigner(mnemonic, network);
+			const signed = await refusedAsRpcError(() =>
+				dependencies.withMnemonic(
+					{
+						...(account.accountGroupIndex === undefined
+							? {}
+							: { accountGroupIndex: account.accountGroupIndex }),
+						chain: context.chain,
+						keyManagerState: context.keyManagerState,
+						...(account.keySourceId === undefined ? {} : { keySourceId: account.keySourceId }),
+					},
+					async (mnemonic) => {
+						const signer = new smplx.Signer(mnemonic, network);
 
-					try {
-						return await assembleReviewedTransaction(review, {
-							blindingPublicKeyHex: signer.blindingPublicKey(),
-							changeScriptPubKeyHex: signer.scriptPubKeyHex(),
-							finalize: (builder, feeRateSatsPerKvb) => {
-								const result = signer.finalizeTransaction(
-									builder as InstanceType<typeof smplx.TransactionBuilder>,
-									feeRateSatsPerKvb,
-								);
+						try {
+							return assembleReviewedTransaction(
+								review,
+								{
+									blindingPublicKeyHex: signer.blindingPublicKey(),
+									signingDerivationPath: signingDerivationPathOf(context, account),
+									smplx,
+								},
+								(builder) => {
+									const result = signer.finalizeStrictFee(builder, review.feeRateSatsPerKvb);
 
-								try {
-									return { feeSats: result.feeSats, hex: result.hex, txid: result.txid };
-								} finally {
-									result.free();
-								}
-							},
-							signingDerivationPath: signingDerivationPathOf(context, account),
-							smplx,
-						});
-					} finally {
-						signer.free();
-					}
-				},
+									try {
+										return { feeSats: result.feeSats, hex: result.hex, txid: result.txid };
+									} finally {
+										result.free();
+									}
+								},
+							);
+						} finally {
+							signer.free();
+						}
+					},
+				),
 			);
 
-			if (!assembled.ok) {
+			if (signed.feeSats !== review.estimatedFeeSats) {
 				throw new WalletRpcInvalidParamsError(
-					assembled.reason,
-					{ reject: assembled.reject },
+					`The signed transaction pays a fee of ${signed.feeSats} sats, and the fee shown ` +
+						`was ${review.estimatedFeeSats} sats.`,
+					{ reject: "built-something-else" },
 					WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
 				);
 			}
 
-			const { feeSats, hex, txid } = assembled.transaction;
-			const signed = { feeSats: feeSats.toString(), transactionHex: hex, txid };
+			const { feeSats, hex, txid } = signed;
+			const result = { feeSats: feeSats.toString(), transactionHex: hex, txid };
 			const deployment =
 				review.createdInstance === undefined ? {} : { deployment: review.createdInstance.fields };
 
 			if (!params.broadcast) {
-				return { broadcast: false, ...deployment, ...signed };
+				return { broadcast: false, ...deployment, ...result };
 			}
 
 			const sent = await dependencies.broadcastTransaction({
 				chain: account.chain,
-				txHex: signed.transactionHex,
+				txHex: result.transactionHex,
 			});
 
-			return { broadcast: true, ...deployment, ...signed, txid: sent.txid };
+			return { broadcast: true, ...deployment, ...result, txid: sent.txid };
 		},
 		id: LIQUID_WALLET_RPC_METHODS.PROCESS_CONFIDENTIAL_TRANSACTION,
 		parse: parseRequest,
@@ -172,22 +192,37 @@ export const createProcessLiquidConfidentialTransaction = (
 
 			await context.walletBackend.syncAccount(account);
 
+			const readAddress = await dependencies.readAddress(context.chain);
+			const signingAddress = context.walletBackend.getSigningAddress(account);
+			const walletScriptPubKeyHex = readAddress(signingAddress.address).scriptPubKeyHex;
 			const result = await reviewManifestAction(params, {
 				accountLabel: accountLabelOf(context, account),
-				compile: createSmplxCovenantCompiler(smplx),
+				compile: createSmplxProgramCompiler(smplx),
 				compilerVersion: SMPLX_COMPILER_VERSION,
-				covenantParamTypes: createSmplxCovenantParamTypes(smplx),
+				estimateFee: (draft, feeRateSatsPerKvb) =>
+					assembleReviewedTransaction(
+						draft,
+						{
+							blindingPublicKeyHex: SIZING_BLINDING_KEY,
+							signingDerivationPath: signingDerivationPathOf(context, account),
+							smplx,
+						},
+						(builder) => smplx.Signer.estimateStrictFee(builder, network, feeRateSatsPerKvb),
+					),
+				programAbi: createSmplxProgramAbi(smplx),
 				fundingUtxos: fundable(context, account, account.rawPolicyAssetId),
 				holdingsOf: (asset) => fundable(context, account, asset),
 				network,
 				policyAsset: account.rawPolicyAssetId,
+				readAddress,
 				readChainTip: async () => context.walletBackend.getTipHeight(account),
 				readFeeRate: dependencies.readFeeRate(context.chain),
 				readTxOut: dependencies.readTxOut(context.chain),
 				scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, network),
-				walletScriptPubKeyHex: await dependencies.scriptPubKeyHexOf(
-					context.walletBackend.getSigningAddress(account).address,
-				),
+				unblind: await dependencies.unblinder(account, walletScriptPubKeyHex),
+				walletAddress: signingAddress.unconfidential,
+				walletKey: dependencies.walletKeyOf(account.descriptor, signingAddress.index),
+				walletScriptPubKeyHex,
 			});
 
 			if (isRefusal(result)) {
@@ -203,6 +238,22 @@ export const createProcessLiquidConfidentialTransaction = (
 	});
 
 export const processLiquidConfidentialTransaction = createProcessLiquidConfidentialTransaction();
+
+async function refusedAsRpcError<T>(run: () => Promise<T>): Promise<T> {
+	try {
+		return await run();
+	} catch (error) {
+		if (error instanceof Refusal) {
+			throw new WalletRpcInvalidParamsError(
+				error.reason,
+				{ reject: error.reject },
+				WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
+			);
+		}
+
+		throw error;
+	}
+}
 
 function parseRequest(params: unknown): ParsedLiquidProcessCtParams {
 	const parsed = parseLiquidProcessCtParams(params);
@@ -222,7 +273,7 @@ function parseRequest(params: unknown): ParsedLiquidProcessCtParams {
  * The wallet's own outputs in one asset, as the review selects from.
  *
  * `getFundingUtxos` answers about every output including the blinded ones, and carries what only
- * this wallet knows: what a blinded output unblinds to, and which key signs it. None of that is
+ * this wallet knows: what a blinded output unblinds to, and which key signs for that output. None of that is
  * ever answered to a dapp, which is why it does not travel on the shape `getUTXOs` returns.
  */
 function fundable(

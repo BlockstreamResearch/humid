@@ -1,55 +1,41 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 
-import multiassetManifest from "../__fixtures__/multiasset.manifest.json";
-import { deriveNewIssuance } from "../chain/issuance";
-import { estimateFeeSats } from "../fee";
-import { isRefusal, reviewManifestAction } from "../index";
+import { deriveFromEntropy, deriveNewIssuance } from "../chain/issuance";
+import { type ManifestReview, reviewManifestAction } from "../index";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
-import type { SelectableUtxo } from "./coinSelection";
+import type { SelectableUtxo } from "../transaction/coinSelection";
+import {
+	asRefusal,
+	asReview,
+	PROGRAM_TXOUT,
+	DERIVED_SCRIPT,
+	dependencies,
+	Fixture,
+	FUNDING_TXID,
+	POLICY_ASSET,
+	PUBKEY,
+	utxo,
+	WALLET_SCRIPT,
+	sizedFee,
+} from "./reviewForTests";
 
-const SOURCE_PATH = "./p2pk.simf";
-const SOURCE = readFileSync(new URL("../__fixtures__/p2pk.simf", import.meta.url), "utf8");
-const MANIFEST = multiassetManifest as unknown as Record<string, unknown>;
-const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
-const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
+const multiasset = Fixture.load("multiasset");
+const MANIFEST = multiasset.manifest;
 const TOKEN = "ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2";
-const DERIVED_SCRIPT = `5120${"11".repeat(32)}`;
-const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
-const MONEY_TXID = "c".repeat(64);
 const TOKEN_TXID = "d".repeat(64);
 
-function utxo(amount: string, txid: string, overrides: Partial<SelectableUtxo> = {}) {
-	return { amount, spendable: true, txOut: "00", txid, vout: 0, ...overrides };
-}
+const deps = dependencies({
+	readTxOut: async () => ({ scriptPubKeyHex: DERIVED_SCRIPT, txOutHex: PROGRAM_TXOUT }),
+});
 
-const COVENANT_TXOUT = `01${"aa".repeat(32)}01000000000000c350000022${"00".repeat(34)}`;
-
-const deps = {
-	accountLabel: "liquid:testnet account 0",
-	compile: () => ({
-		address: "tex1p_derived",
-		cmr: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-		scriptPubKeyHex: DERIVED_SCRIPT,
-		tapleafHash: "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
-	}),
-	network: "liquid",
-	policyAsset: POLICY_ASSET,
-	readFeeRate: async () => 1000,
-	readTxOut: async () => ({ scriptPubKeyHex: DERIVED_SCRIPT, txOutHex: COVENANT_TXOUT }),
-	scriptPubKeyOf: () => DERIVED_SCRIPT,
-	walletScriptPubKeyHex: WALLET_SCRIPT,
-};
+const changeOf = (review: ManifestReview) =>
+	review.outputs.find((output) => output.id === "change_out");
 
 function request(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
-	return {
-		action: "PayToken",
-		broadcast: false,
-		contractSources: { [SOURCE_PATH]: SOURCE },
-		manifest: MANIFEST,
+	return multiasset.request("PayToken", {
 		params: { amount_sat: 1000, fee_sat: 700, pubkey: PUBKEY, token: TOKEN },
 		...overrides,
-	} satisfies ParsedLiquidProcessCtParams;
+	});
 }
 
 function pay(
@@ -59,7 +45,7 @@ function pay(
 		params?: Record<string, unknown>;
 	} = {},
 ) {
-	const money = overrides.money ?? [utxo("1000000", MONEY_TXID)];
+	const money = overrides.money ?? [utxo("1000000", FUNDING_TXID)];
 	const holdings = overrides.holdings ?? { [TOKEN]: [utxo("4000", TOKEN_TXID)] };
 
 	return reviewManifestAction(
@@ -68,87 +54,110 @@ function pay(
 	);
 }
 
+describe("change the action does not declare", () => {
+	function withoutTokenChange(allowChange: string) {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const payToken = (document.actions as Record<string, Record<string, unknown>>).PayToken!;
+
+		payToken.outputs = (payToken.outputs as Record<string, unknown>[]).filter(
+			(output) => output.id !== "token_change",
+		);
+		payToken.allow_change = allowChange;
+
+		return reviewManifestAction(request({ manifest: document }), {
+			...deps,
+			fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+			holdingsOf: () => [utxo("4000", TOKEN_TXID)],
+		});
+	}
+
+	test("is refused in an asset other than the network's own when only L-BTC change is allowed", async () => {
+		const refusal = asRefusal(await withoutTokenChange("lbtc_only"));
+
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain(TOKEN);
+	});
+
+	test("is returned to the wallet in any asset when any change is allowed", async () => {
+		const review = asReview(await withoutTokenChange("any"));
+
+		expect(
+			review.outputs.find((output) => output.asset === TOKEN && output.id === "change"),
+		).toMatchObject({
+			sats: 3000n,
+			scriptPubKeyHex: WALLET_SCRIPT,
+		});
+	});
+});
+
 describe("an action that moves two assets", () => {
 	test("funds each asset out of what the wallet holds in that one", async () => {
-		const result = await pay();
+		const review = asReview(await pay());
 
-		expect(isRefusal(result)).toBe(false);
-
-		if (!isRefusal(result)) {
-			expect(result.selected.map((chosen) => chosen.txid)).toEqual([TOKEN_TXID, MONEY_TXID]);
-		}
+		expect(review.selected.map((chosen) => chosen.txid)).toEqual([TOKEN_TXID, FUNDING_TXID]);
 	});
 
 	test("never adds one asset's amount to another's", async () => {
-		const result = await pay({ holdings: { [TOKEN]: [utxo("900", TOKEN_TXID)] } });
+		const refusal = asRefusal(await pay({ holdings: { [TOKEN]: [utxo("900", TOKEN_TXID)] } }));
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reason).toContain(TOKEN);
-			expect(result.reason).toContain("1000");
-			expect(result.reason).toContain("900");
-		}
+		expect(refusal.reject).toBe("shortfall");
+		expect(refusal.reason).toContain(TOKEN);
+		expect(refusal.reason).toContain("1000");
+		expect(refusal.reason).toContain("900");
 	});
 
 	test("plans an exact change output for the asset that is not the network's own", async () => {
-		const result = await pay();
+		const review = asReview(await pay());
 
-		expect(isRefusal(result)).toBe(false);
-
-		if (!isRefusal(result)) {
-			expect(result.outputs).toEqual([
-				{
-					asset: TOKEN,
-					blinded: false,
-					decidedBy: "output",
-					id: "token_out",
-					sats: 1000n,
-					scriptPubKeyHex: WALLET_SCRIPT,
-				},
-				{
-					asset: POLICY_ASSET,
-					blinded: false,
-					decidedBy: "unblindable",
-					id: "p2pk_out",
-					sats: 700n,
-					scriptPubKeyHex: DERIVED_SCRIPT,
-				},
-				{
-					asset: TOKEN,
-					blinded: false,
-					decidedBy: "spendable-change",
-					id: "token_change",
-					overrode: "chain",
-					sats: 3000n,
-					scriptPubKeyHex: WALLET_SCRIPT,
-				},
-			]);
-		}
+		expect(review.outputs.slice(0, 3)).toEqual([
+			{
+				asset: TOKEN,
+				blinded: false,
+				decidedBy: "output",
+				id: "token_out",
+				sats: 1000n,
+				scriptPubKeyHex: WALLET_SCRIPT,
+			},
+			{
+				asset: POLICY_ASSET,
+				blinded: false,
+				decidedBy: "unblindable",
+				id: "p2pk_out",
+				sats: 700n,
+				scriptPubKeyHex: DERIVED_SCRIPT,
+			},
+			{
+				asset: TOKEN,
+				blinded: false,
+				decidedBy: "spendable-change",
+				id: "token_change",
+				overrode: "chain",
+				sats: 3000n,
+				scriptPubKeyHex: WALLET_SCRIPT,
+			},
+		]);
 	});
 
-	test("and leaves the network asset's change to the builder", async () => {
-		const result = await pay();
+	test("and returns the network asset's change after the fee", async () => {
+		const review = asReview(await pay());
 
-		expect(isRefusal(result) ? [] : result.outputs.map((output) => output.id)).not.toContain(
-			"change_out",
-		);
+		expect(review.outputs[3]).toMatchObject({
+			asset: POLICY_ASSET,
+			id: "change_out",
+			sats: 1_000_000n - 700n - review.estimatedFeeSats,
+		});
 	});
 
 	test("shows one line per asset on the confirmation, and never one line for both", async () => {
-		const result = await pay();
+		const review = asReview(await pay());
 
-		expect(isRefusal(result)).toBe(false);
+		const rows = review.confirmation.netEffect.map((row) => [row.asset.value, row.sats.value]);
 
-		if (!isRefusal(result)) {
-			const rows = result.confirmation.netEffect.map((row) => [row.asset.value, row.sats.value]);
-
-			expect(rows).toEqual([
-				[POLICY_ASSET, -700n - result.estimatedFeeSats],
-				[TOKEN, 0n],
-			]);
-			expect(new Set(rows.map(([asset]) => asset)).size).toBe(2);
-		}
+		expect(rows).toEqual([
+			[POLICY_ASSET, -700n - review.estimatedFeeSats],
+			[TOKEN, 0n],
+		]);
+		expect(new Set(rows.map(([asset]) => asset)).size).toBe(2);
 	});
 
 	test("refuses a surplus in an asset with no declared change output", async () => {
@@ -158,92 +167,137 @@ describe("an action that moves two assets", () => {
 
 		actions.PayToken!.outputs = outputs.filter((output) => output.id !== "token_change");
 
-		const result = await reviewManifestAction(
-			{ ...request(), manifest: withoutChange },
-			{
-				...deps,
-				fundingUtxos: [utxo("1000000", MONEY_TXID)],
-				holdingsOf: () => [utxo("4000", TOKEN_TXID)],
-			},
+		const refusal = asRefusal(
+			await reviewManifestAction(
+				{ ...request(), manifest: withoutChange },
+				{
+					...deps,
+					fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+					holdingsOf: () => [utxo("4000", TOKEN_TXID)],
+				},
+			),
 		);
 
-		expect(isRefusal(result)).toBe(true);
-		expect(isRefusal(result) ? result.reason : "").toContain("destroy");
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("destroy");
 	});
 
 	test("holding nothing in an asset is a shortfall named by that asset", async () => {
-		const result = await reviewManifestAction(request(), {
-			...deps,
-			fundingUtxos: [utxo("1000000", MONEY_TXID)],
-		});
+		const refusal = asRefusal(
+			await reviewManifestAction(request(), {
+				...deps,
+				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+			}),
+		);
 
-		expect(isRefusal(result)).toBe(true);
-		expect(isRefusal(result) ? result.reason : "").toContain(TOKEN);
+		expect(refusal.reject).toBe("shortfall");
+		expect(refusal.reason).toContain(TOKEN);
 	});
 });
 
 describe("which of the wallet's outputs may be spent", () => {
-	test("selects an outpoint at most once, however many objects describe it", async () => {
-		const result = await pay({
-			money: [utxo("900", MONEY_TXID), { ...utxo("900", MONEY_TXID) }, utxo("900", "e".repeat(64))],
-		});
+	test("selects an outpoint at most once, however many objects describe the outpoint", async () => {
+		const review = asReview(
+			await pay({
+				money: [
+					utxo("900", FUNDING_TXID),
+					{ ...utxo("900", FUNDING_TXID) },
+					utxo("900", "e".repeat(64)),
+				],
+			}),
+		);
 
-		expect(isRefusal(result)).toBe(false);
+		const keys = review.selected.map((chosen) => `${chosen.txid}:${chosen.vout}`);
 
-		if (!isRefusal(result)) {
-			const keys = result.selected.map((chosen) => `${chosen.txid}:${chosen.vout}`);
-
-			expect(keys).toEqual([`${TOKEN_TXID}:0`, `${MONEY_TXID}:0`, `${"e".repeat(64)}:0`]);
-		}
+		expect(keys).toEqual([`${TOKEN_TXID}:0`, `${FUNDING_TXID}:0`, `${"e".repeat(64)}:0`]);
 	});
 
 	test("never takes one outpoint for two assets, however it was offered", async () => {
-		const shared = utxo("1000000", MONEY_TXID);
-		const result = await pay({
-			holdings: { [TOKEN]: [{ ...shared }, utxo("4000", TOKEN_TXID)] },
-			money: [shared],
-		});
+		const shared = utxo("1000000", FUNDING_TXID);
+		const review = asReview(
+			await pay({
+				holdings: { [TOKEN]: [{ ...shared }, utxo("4000", TOKEN_TXID)] },
+				money: [shared],
+			}),
+		);
 
-		expect(isRefusal(result)).toBe(false);
+		const keys = review.selected.map((chosen) => `${chosen.txid}:${chosen.vout}`);
 
-		if (!isRefusal(result)) {
-			const keys = result.selected.map((chosen) => `${chosen.txid}:${chosen.vout}`);
-
-			expect(new Set(keys).size).toBe(keys.length);
-			expect(keys).toEqual([`${TOKEN_TXID}:0`, `${MONEY_TXID}:0`]);
-		}
+		expect(new Set(keys).size).toBe(keys.length);
+		expect(keys).toEqual([`${TOKEN_TXID}:0`, `${FUNDING_TXID}:0`]);
 	});
 
 	test("and treats a transaction id in either case as the same output", async () => {
-		const result = await pay({
-			money: [
-				utxo("900", MONEY_TXID),
-				utxo("900", MONEY_TXID.toUpperCase()),
-				utxo("900", "e".repeat(64)),
-			],
-		});
+		const review = asReview(
+			await pay({
+				money: [
+					utxo("900", FUNDING_TXID),
+					utxo("900", FUNDING_TXID.toUpperCase()),
+					utxo("900", "e".repeat(64)),
+				],
+			}),
+		);
 
-		expect(isRefusal(result)).toBe(false);
+		const keys = review.selected.map((chosen) => `${chosen.txid.toLowerCase()}:${chosen.vout}`);
 
-		if (!isRefusal(result)) {
-			const keys = result.selected.map((chosen) => `${chosen.txid.toLowerCase()}:${chosen.vout}`);
-
-			expect(new Set(keys).size).toBe(keys.length);
-		}
+		expect(new Set(keys).size).toBe(keys.length);
 	});
 
 	test("funds from a confidential output like any other", async () => {
-		const result = await pay({
-			holdings: { [TOKEN]: [utxo("1000000", TOKEN_TXID, { confidential: true })] },
-		});
+		asReview(
+			await pay({
+				holdings: { [TOKEN]: [utxo("1000000", TOKEN_TXID, { confidential: true })] },
+			}),
+		);
+	});
+});
 
-		expect(isRefusal(result)).toBe(false);
+const tokensSpent = (review: ManifestReview) =>
+	review.selected.filter((chosen) => chosen.txid !== FUNDING_TXID).map((chosen) => chosen.txid);
+
+describe("the amount a wallet input states", () => {
+	const SIZED = "a".repeat(64);
+
+	function stating(amount: unknown, tokens: SelectableUtxo[]) {
+		const manifest = multiasset.editedAction("PayToken", (action) => {
+			(action.inputs as Record<string, unknown>[])[0]!.amount_sat = amount;
+		}).manifest;
+
+		return reviewManifestAction(request({ manifest }), {
+			...deps,
+			fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+			holdingsOf: (asset) => (asset === TOKEN ? tokens : []),
+		});
+	}
+
+	test("spends the one output holding exactly that amount", async () => {
+		const review = asReview(
+			await stating("params.amount_sat", [utxo("4000", TOKEN_TXID), utxo("1000", SIZED)]),
+		);
+
+		expect(tokensSpent(review)).toEqual([SIZED]);
+	});
+
+	test("is refused where no output holds exactly that amount", async () => {
+		const refusal = asRefusal(await stating(1000, [utxo("4000", TOKEN_TXID)]));
+
+		expect(refusal.reject).toBe("shortfall");
+		expect(refusal.reason).toContain("exactly 1000");
+	});
+
+	test("as a minimum, brings at least that much and returns the rest as change", async () => {
+		const review = asReview(
+			await stating({ min_amount: 5000 }, [utxo("4000", TOKEN_TXID), utxo("3000", SIZED)]),
+		);
+
+		expect(tokensSpent(review)).toEqual([TOKEN_TXID, SIZED]);
+		expect(review.outputs.find((output) => output.id === "token_change")?.sats).toBe(6000n);
 	});
 });
 
 describe("an action that creates an asset", () => {
 	function mint(
-		money: SelectableUtxo[] = [utxo("1000", "a".repeat(64)), utxo("1000000", MONEY_TXID)],
+		money: SelectableUtxo[] = [utxo("1000", "a".repeat(64)), utxo("1000000", FUNDING_TXID)],
 	) {
 		return reviewManifestAction(
 			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
@@ -252,53 +306,43 @@ describe("an action that creates an asset", () => {
 	}
 
 	test("derives the asset from an output it has reserved for the purpose", async () => {
-		const result = await mint();
+		const review = asReview(await mint());
 
-		expect(isRefusal(result)).toBe(false);
+		const [issuance] = review.issuances;
+		const derived = deriveNewIssuance(issuance?.outpoint ?? { txid: "", vout: 0 });
 
-		if (!isRefusal(result)) {
-			const [issuance] = result.issuances;
-			const derived = deriveNewIssuance(issuance?.outpoint ?? { txid: "", vout: 0 });
-
-			expect(issuance?.asset).toBe(derived?.asset ?? "");
-			expect(issuance?.assetAmountSats).toBe(21n);
-			expect(issuance?.inflationAmountSats).toBe(0n);
-			expect(issuance?.inputId).toBe("mint_in");
-		}
+		expect(issuance?.asset).toBe(derived?.asset ?? "");
+		expect(issuance?.assetAmountSats).toBe(21n);
+		expect(issuance?.inflationAmountSats).toBe(0n);
+		expect(issuance?.inputId).toBe("mint_in");
 	});
 
-	test("prices the input that creates the asset as an issuing one", async () => {
-		const result = await mint();
+	test("prices the transaction with the issuance in the transaction", async () => {
+		const priced: number[] = [];
 
-		expect(isRefusal(result)).toBe(false);
+		await reviewManifestAction(
+			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
+			{
+				...deps,
+				estimateFee: (draft, rate) => {
+					priced.push(draft.issuances.length);
 
-		if (!isRefusal(result)) {
-			const shape = {
-				covenantInputs: 0,
-				outputs: result.outputs.length,
-				walletInputs: result.selected.length,
-			};
+					return sizedFee(draft, rate);
+				},
+			},
+		);
 
-			expect(result.estimatedFeeSats).toBe(
-				estimateFeeSats({ ...shape, issuingInputs: 1 }, result.feeRateSatsPerKvb),
-			);
-			expect(result.estimatedFeeSats).toBeGreaterThan(
-				estimateFeeSats({ ...shape, issuingInputs: 0 }, result.feeRateSatsPerKvb),
-			);
-		}
+		expect(priced.length).toBeGreaterThan(0);
+		expect(priced.every((count) => count === 1)).toBe(true);
 	});
 
 	test("shows the created asset and the money it cost as separate lines", async () => {
-		const result = await mint();
+		const review = asReview(await mint());
 
-		expect(isRefusal(result)).toBe(false);
+		const rows = review.confirmation.netEffect.map((row) => [row.asset.value, row.sats.value]);
 
-		if (!isRefusal(result)) {
-			const rows = result.confirmation.netEffect.map((row) => [row.asset.value, row.sats.value]);
-
-			expect(rows).toContainEqual([POLICY_ASSET, -result.estimatedFeeSats]);
-			expect(rows).toContainEqual([result.issuances[0]?.asset ?? "", 21n]);
-		}
+		expect(rows).toContainEqual([POLICY_ASSET, -review.estimatedFeeSats]);
+		expect(rows).toContainEqual([review.issuances[0]?.asset ?? "", 21n]);
 	});
 
 	test("an input's own hook can name the asset that input just created", async () => {
@@ -310,18 +354,36 @@ describe("an action that creates an asset", () => {
 		(inputs[0] ?? {}).on_resolved = { set: { "params.minted": "asset" } };
 		(outputs[0] ?? {}).asset = "params.minted";
 
-		const result = await reviewManifestAction(
-			request({ action: "Mint", manifest: document, params: { pubkey: PUBKEY, supply: 21 } }),
-			{ ...deps, fundingUtxos: [utxo("1000", "a".repeat(64)), utxo("1000000", MONEY_TXID)] },
+		const review = asReview(
+			await reviewManifestAction(
+				request({ action: "Mint", manifest: document, params: { pubkey: PUBKEY, supply: 21 } }),
+				{ ...deps, fundingUtxos: [utxo("1000", "a".repeat(64)), utxo("1000000", FUNDING_TXID)] },
+			),
 		);
 
-		expect(isRefusal(result)).toBe(false);
+		const minted = review.outputs.find((output) => output.id === "minted_out");
 
-		if (!isRefusal(result)) {
-			const minted = result.outputs.find((output) => output.id === "minted_out");
+		expect(minted?.asset).toBe(review.issuances[0]?.asset ?? "");
+	});
 
-			expect(minted?.asset).toBe(result.issuances[0]?.asset ?? "");
-		}
+	test("issues an amount the action's own hook works out before the transaction is built", async () => {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const mintAction = (document.actions as Record<string, Record<string, unknown>>).Mint ?? {};
+		const inputs = mintAction.inputs as Record<string, unknown>[];
+		const outputs = mintAction.outputs as Record<string, unknown>[];
+
+		mintAction.on_pre_broadcast = { set: { "params.doubled": "params.supply * 2" } };
+		((inputs[0] ?? {}).issuance as Record<string, unknown>).asset_amount_sat = "params.doubled";
+		(outputs[0] ?? {}).amount_sat = "params.doubled";
+
+		const review = asReview(
+			await reviewManifestAction(
+				request({ action: "Mint", manifest: document, params: { pubkey: PUBKEY, supply: 21 } }),
+				{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] },
+			),
+		);
+
+		expect(review.issuances[0]?.assetAmountSats).toBe(42n);
 	});
 
 	test("refuses a supply beyond what a transaction can carry", async () => {
@@ -332,116 +394,99 @@ describe("an action that creates an asset", () => {
 		((inputs[0] ?? {}).issuance as Record<string, unknown>).asset_amount_sat =
 			"99999999999999999999999999";
 
-		const result = await reviewManifestAction(
-			request({ action: "Mint", manifest: document, params: { pubkey: PUBKEY, supply: 21 } }),
-			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID)] },
+		const refusal = asRefusal(
+			await reviewManifestAction(
+				request({ action: "Mint", manifest: document, params: { pubkey: PUBKEY, supply: 21 } }),
+				{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] },
+			),
 		);
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reject).toBe("document-fault");
-			expect(result.reason).toContain("mint_in");
-		}
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("mint_in");
 	});
 
 	test("and reserves the smallest of them, leaving the most to pay with", async () => {
-		const result = await mint();
+		const review = asReview(await mint());
 
-		expect(isRefusal(result) ? "" : result.issuances[0]?.outpoint.txid).toBe("a".repeat(64));
+		expect(review.issuances[0]?.outpoint.txid).toBe("a".repeat(64));
 	});
 
 	test("spends the reserved output once and once only", async () => {
-		const result = await mint();
+		const review = asReview(await mint());
 
-		expect(isRefusal(result)).toBe(false);
+		const reserved = review.issuances[0]?.outpoint;
+		const spending = review.selected.filter(
+			(chosen) => chosen.txid === reserved?.txid && chosen.vout === reserved.vout,
+		);
 
-		if (!isRefusal(result)) {
-			const reserved = result.issuances[0]?.outpoint;
-			const spending = result.selected.filter(
-				(chosen) => chosen.txid === reserved?.txid && chosen.vout === reserved.vout,
-			);
-
-			expect(spending).toHaveLength(1);
-		}
+		expect(spending).toHaveLength(1);
 	});
 
 	test("pays the created asset out under the id the issuance derived", async () => {
-		const result = await mint();
+		const review = asReview(await mint());
 
-		expect(isRefusal(result)).toBe(false);
-
-		if (!isRefusal(result)) {
-			expect(result.outputs).toContainEqual({
-				asset: result.issuances[0]?.asset ?? "",
-				blinded: false,
-				decidedBy: "output",
-				id: "minted_out",
-				sats: 21n,
-				scriptPubKeyHex: WALLET_SCRIPT,
-			});
-		}
+		expect(review.outputs).toContainEqual({
+			asset: review.issuances[0]?.asset ?? "",
+			blinded: false,
+			decidedBy: "output",
+			id: "minted_out",
+			sats: 21n,
+			scriptPubKeyHex: WALLET_SCRIPT,
+		});
 	});
 
 	test("does not go looking for the asset it is about to create", async () => {
-		expect(isRefusal(await mint())).toBe(false);
+		asReview(await mint());
 	});
 
 	test("never reserves one outpoint for two issuances, however it was described", async () => {
 		const shared = utxo("1000", "a".repeat(64));
-		const result = await twoIssuances([shared, { ...shared }, utxo("1000000", MONEY_TXID)]);
+		const review = asReview(
+			await twoIssuances([shared, { ...shared }, utxo("1000000", FUNDING_TXID)]),
+		);
 
-		expect(isRefusal(result)).toBe(false);
+		const derivedFrom = review.issuances.map(
+			(issuance) => `${issuance.outpoint.txid}:${issuance.outpoint.vout}`,
+		);
 
-		if (!isRefusal(result)) {
-			const derivedFrom = result.issuances.map(
-				(issuance) => `${issuance.outpoint.txid}:${issuance.outpoint.vout}`,
-			);
-
-			expect(result.issuances).toHaveLength(2);
-			expect(new Set(derivedFrom).size).toBe(2);
-			expect(result.issuances[0]?.asset).not.toBe(result.issuances[1]?.asset ?? "");
-		}
+		expect(review.issuances).toHaveLength(2);
+		expect(new Set(derivedFrom).size).toBe(2);
+		expect(review.issuances[0]?.asset).not.toBe(review.issuances[1]?.asset ?? "");
 	});
 
 	test("takes equal-sized candidates in the order the wallet listed them", async () => {
 		const first = { ...utxo("1000", "a".repeat(64)), vout: 1 };
 		const second = { ...utxo("1000", "a".repeat(64)), vout: 2 };
-		const result = await twoIssuances([first, second, utxo("1000000", MONEY_TXID)]);
+		const review = asReview(await twoIssuances([first, second, utxo("1000000", FUNDING_TXID)]));
 
-		expect(isRefusal(result)).toBe(false);
-		expect(isRefusal(result) ? [] : result.issuances.map((one) => one.outpoint.vout)).toEqual([
-			1, 2,
-		]);
+		expect(review.issuances.map((one) => one.outpoint.vout)).toEqual([1, 2]);
 	});
 
-	test("derives an issuance from a confidential candidate", async () => {
-		const result = await reviewManifestAction(
-			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
-			{
-				...deps,
-				fundingUtxos: [
-					utxo("500", "a".repeat(64), { confidential: true }),
-					{ ...utxo("500", "a".repeat(64), { confidential: true }) },
-				],
-			},
+	test("accepts a confidential candidate for an issuance, falling short only of funds", async () => {
+		const refusal = asRefusal(
+			await reviewManifestAction(
+				request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
+				{
+					...deps,
+					fundingUtxos: [
+						utxo("100", "a".repeat(64), { confidential: true }),
+						{ ...utxo("100", "a".repeat(64), { confidential: true }) },
+					],
+				},
+			),
 		);
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reason).toContain("500");
-			expect(result.reason).not.toContain("cannot spend");
-		}
+		expect(refusal.reject).toBe("shortfall");
+		expect(refusal.reason).not.toContain("cannot spend");
 	});
 
 	test("and takes a confidential candidate once the open ones are used", async () => {
-		const result = await twoIssuances([
-			utxo("1000", "a".repeat(64)),
-			utxo("900000", "b".repeat(64), { confidential: true }),
-		]);
-
-		expect(isRefusal(result)).toBe(false);
+		asReview(
+			await twoIssuances([
+				utxo("1000", "a".repeat(64)),
+				utxo("900000", "b".repeat(64), { confidential: true }),
+			]),
+		);
 	});
 });
 
@@ -456,7 +501,7 @@ function twoIssuances(money: SelectableUtxo[]) {
 
 	outputs.splice(1, 0, {
 		amount_sat: "params.supply",
-		asset: "mint_two.asset",
+		asset: "mint_two.issued_asset",
 		confidential: false,
 		destination: "wallet",
 		id: "minted_two_out",
@@ -471,39 +516,135 @@ function twoIssuances(money: SelectableUtxo[]) {
 	);
 }
 
-describe("the issuances this wallet refuses outright", () => {
-	async function mintDeclaring(issuance: Record<string, unknown>) {
-		const document = structuredClone(MANIFEST) as Record<string, unknown>;
-		const actions = document.actions as Record<string, Record<string, unknown>>;
-		const inputs = actions.Mint?.inputs as Record<string, unknown>[];
+describe("reissuance tokens and reissuance", () => {
+	const YES_ENTROPY = "f8326827828ee2aab3c4d273fb573a8cf89a401bbc6643637d439ff36c60b6b9";
+	const YES_ASSET = "3a8b6b466346d9dbfcecd8c8d7b0c1873aee4e00fd5df0d95086a3f7eecd5a39";
+	const YES_TOKEN = deriveFromEntropy(YES_ENTROPY)?.reissuanceToken ?? "";
 
-		inputs[0]!.issuance = issuance;
+	function mintDeclaring(
+		issuance: Record<string, unknown>,
+		outputs: Record<string, unknown>[] = [],
+	) {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
+		const mint = (document.actions as Record<string, Record<string, unknown>>).Mint!;
+
+		(mint.inputs as Record<string, unknown>[])[0]!.issuance = issuance;
+		mint.outputs = [...(mint.outputs as Record<string, unknown>[]), ...outputs];
 
 		return reviewManifestAction(
 			{
 				...request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
 				manifest: document,
 			},
-			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID)] },
+			{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] },
 		);
 	}
 
-	test("a reissuance, because the request carries no entropy to derive it from", async () => {
-		const result = await mintDeclaring({ asset_amount_sat: 21, kind: "reissue" });
+	function reissue(token: SelectableUtxo[], issued = YES_ASSET) {
+		const document = structuredClone(MANIFEST) as Record<string, unknown>;
 
-		expect(isRefusal(result)).toBe(true);
-		expect(isRefusal(result) ? result.reason : "").toContain("entropy");
+		(document.actions as Record<string, unknown>).Reissue = {
+			inputs: [
+				{
+					asset: "params.token",
+					id: "token_in",
+					issuance: {
+						asset_amount_sat: 50,
+						entropy: "params.entropy",
+						issued_asset: "params.issued",
+						kind: "reissue",
+					},
+					utxo_source: "wallet",
+				},
+			],
+			outputs: [
+				{ amount_sat: 50, asset: "token_in.issued_asset", destination: "wallet", id: "minted_out" },
+				{ amount_sat: 1, asset: "params.token", destination: "wallet", id: "token_back" },
+				{ asset: "lbtc", destination: "change", id: "change_out" },
+			],
+		};
+
+		return reviewManifestAction(
+			{
+				...request({
+					action: "Reissue",
+					params: { entropy: YES_ENTROPY, issued, token: YES_TOKEN },
+				}),
+				manifest: document,
+			},
+			{
+				...deps,
+				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+				holdingsOf: (asset) => (asset === YES_TOKEN ? token : []),
+			},
+		);
+	}
+
+	const blindedToken = utxo("1", TOKEN_TXID, {
+		blindingSecretsJson: "{}",
+		confidential: true,
+		derivationPath: "0/3",
 	});
 
-	test("and a reissuance token, which would have to be confidential to be spendable", async () => {
-		const result = await mintDeclaring({
-			asset_amount_sat: 21,
-			inflation_amount_sat: 1,
-			kind: "new",
-		});
+	test("are minted with the asset and paid to a blinded wallet output, the only kind that can reissue", async () => {
+		const review = asReview(
+			await mintDeclaring({ asset_amount_sat: 21, inflation_amount_sat: 1, kind: "new" }, [
+				{
+					amount_sat: 1,
+					asset: "mint_in.reissuance_token",
+					destination: "wallet",
+					id: "token_out",
+				},
+			]),
+		);
 
-		expect(isRefusal(result)).toBe(true);
-		expect(isRefusal(result) ? result.reason : "").toContain("confidential");
+		expect(review.issuances[0]?.inflationAmountSats).toBe(1n);
+		expect(review.outputs.find((output) => output.id === "token_out")).toMatchObject({
+			asset: review.issuances[0]?.reissuanceToken,
+			blinded: true,
+			sats: 1n,
+		});
+	});
+
+	test("are refused where the action pays them nowhere", async () => {
+		const refusal = asRefusal(
+			await mintDeclaring({ asset_amount_sat: 21, inflation_amount_sat: 1, kind: "new" }),
+		);
+
+		expect(refusal.reject).toBe("document-fault");
+	});
+
+	test("a reissuance spends the wallet's blinded token and mints the asset its entropy derives", async () => {
+		const review = asReview(await reissue([blindedToken]));
+
+		expect(review.issuances).toMatchObject([
+			{
+				asset: YES_ASSET,
+				assetAmountSats: 50n,
+				kind: "reissue",
+				outpoint: { txid: TOKEN_TXID, vout: 0 },
+			},
+		]);
+		expect(review.outputs.find((output) => output.id === "minted_out")?.asset).toBe(YES_ASSET);
+		expect(review.selected).toContainEqual(blindedToken);
+	});
+
+	test("is refused where the wallet holds its token only in the open, which cannot reissue", async () => {
+		const refusal = asRefusal(await reissue([utxo("1", TOKEN_TXID)]));
+
+		expect(refusal.reject).toBe("shortfall");
+		expect(refusal.reason).toContain("blinded");
+	});
+
+	test("is refused where its issued_asset is not the asset its entropy derives", async () => {
+		expect(asRefusal(await reissue([blindedToken], TOKEN)).reason).toContain(TOKEN);
+	});
+
+	test("is refused where it names no entropy to derive the asset from", async () => {
+		const refusal = asRefusal(await mintDeclaring({ asset_amount_sat: 21, kind: "reissue" }));
+
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("mint_in");
 	});
 });
 
@@ -523,74 +664,73 @@ describe("what each output does with the value it carries", () => {
 			{ ...request(), manifest: document },
 			{
 				...deps,
-				fundingUtxos: [utxo("1000000", MONEY_TXID)],
+				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
 				holdingsOf: () => [utxo("4000", TOKEN_TXID)],
 			},
 		);
 	}
 
-	test("an output's own word comes first, over the document's", async () => {
-		const result = await documentSaying((document) => {
-			document.confidential_outputs = true;
-			outputsOf(document)[0]!.confidential = false;
-		});
+	test("an output's own word comes first", async () => {
+		const review = asReview(
+			await documentSaying((document) => {
+				outputsOf(document)[0]!.confidential = false;
+			}),
+		);
 
-		expect(isRefusal(result)).toBe(false);
-		expect(isRefusal(result) ? undefined : result.outputs[0]).toMatchObject({
+		expect(review.outputs[0]).toMatchObject({
 			blinded: false,
 			decidedBy: "output",
 			id: "token_out",
 		});
 	});
 
-	test("the document's word comes next, when the output says nothing", async () => {
-		const result = await documentSaying((document) => {
-			document.confidential_outputs = false;
-			delete outputsOf(document)[0]!.confidential;
-		});
+	test("and silence means blinded, which a wallet output can be and a program's cannot", async () => {
+		const review = asReview(
+			await documentSaying((document) => {
+				delete outputsOf(document)[0]!.confidential;
+			}),
+		);
 
-		expect(isRefusal(result) ? undefined : result.outputs[0]).toMatchObject({
-			blinded: false,
-			decidedBy: "document",
-			id: "token_out",
-		});
-	});
-
-	test("and silence means blinded, which a wallet output can be and a covenant's cannot", async () => {
-		const result = await documentSaying((document) => {
-			delete outputsOf(document)[0]!.confidential;
-		});
-
-		expect(isRefusal(result) ? undefined : result.outputs[0]).toMatchObject({
+		expect(review.outputs[0]).toMatchObject({
 			blinded: true,
 			decidedBy: "chain",
 			id: "token_out",
 		});
 	});
 
-	test("a covenant output is open whatever the document says", async () => {
-		const result = await documentSaying((document) => {
-			document.confidential_outputs = true;
-			outputsOf(document)[1]!.confidential = true;
-		});
+	test("a program output is open unless the protocol asks for it to be blinded", async () => {
+		const review = asReview(await documentSaying(() => {}));
 
-		expect(isRefusal(result) ? undefined : result.outputs[1]).toMatchObject({
+		expect(review.outputs[1]).toMatchObject({
 			blinded: false,
 			decidedBy: "unblindable",
 			id: "p2pk_out",
 		});
 	});
 
-	test("and so is an OP_RETURN", async () => {
-		const result = await documentSaying((document) => {
-			outputsOf(document)[1] = {
-				confidential: true,
-				destination: { type: "op_return" },
-				id: "burn_out",
-			};
-		});
+	test("and blinded with the wallet's own key where the protocol asks", async () => {
+		const review = asReview(
+			await documentSaying((document) => {
+				outputsOf(document)[1]!.confidential = true;
+			}),
+		);
 
-		expect(isRefusal(result) ? undefined : result.outputs[1]).toMatchObject({
+		expect(review.outputs[1]).toMatchObject({ blinded: true, decidedBy: "output", id: "p2pk_out" });
+		expect(review.outputs[1]?.blindingPublicKeyHex).toBeUndefined();
+	});
+
+	test("and so is an OP_RETURN", async () => {
+		const review = asReview(
+			await documentSaying((document) => {
+				outputsOf(document)[1] = {
+					confidential: true,
+					destination: { type: "op_return" },
+					id: "burn_out",
+				};
+			}),
+		);
+
+		expect(review.outputs[1]).toMatchObject({
 			blinded: false,
 			decidedBy: "unblindable",
 			id: "burn_out",
@@ -599,70 +739,59 @@ describe("what each output does with the value it carries", () => {
 	});
 
 	test("a contract action's change is published, carrying the word that was set aside", async () => {
-		const result = await documentSaying((document) => {
-			document.confidential_outputs = true;
+		const review = asReview(
+			await documentSaying((document) => {
+				outputsOf(document)[2]!.confidential = true;
+				outputsOf(document)[3]!.confidential = true;
+			}),
+		);
+
+		expect(changeOf(review)).toMatchObject({ blinded: false, overrode: "output" });
+		expect(review.outputs.find((output) => output.id === "token_change")).toMatchObject({
+			blinded: false,
+			decidedBy: "spendable-change",
+			overrode: "output",
 		});
-
-		expect(isRefusal(result)).toBe(false);
-
-		if (!isRefusal(result)) {
-			expect(result.changeBlinded).toBe(false);
-			expect(result.changeOverrode).toBe("document");
-			expect(result.outputs.find((output) => output.id === "token_change")).toMatchObject({
-				blinded: false,
-				decidedBy: "spendable-change",
-				overrode: "document",
-			});
-		}
 	});
 
 	test("but overrides nothing where the protocol asked for open change itself", async () => {
-		const result = await documentSaying((document) => {
-			outputsOf(document)[3]!.confidential = false;
-		});
-
-		expect(isRefusal(result)).toBe(false);
-
-		if (!isRefusal(result)) {
-			expect(result.changeBlinded).toBe(false);
-			expect(result.changeOverrode).toBeUndefined();
-		}
-	});
-
-	test("and says the same about change the document says nothing about", async () => {
-		const result = await reviewManifestAction(
-			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
-			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID)] },
+		const review = asReview(
+			await documentSaying((document) => {
+				outputsOf(document)[3]!.confidential = false;
+			}),
 		);
 
-		expect(isRefusal(result)).toBe(false);
+		expect(changeOf(review)?.blinded).toBe(false);
+		expect(changeOf(review)?.overrode).toBeUndefined();
+	});
 
-		if (!isRefusal(result)) {
-			expect(result.changeBlinded).toBe(false);
-			expect(result.changeOverrode).toBe("chain");
-		}
+	test("and says the same about change nothing says anything about", async () => {
+		const minted = asReview(
+			await reviewManifestAction(
+				request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
+				{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] },
+			),
+		);
+
+		expect(changeOf(minted)).toMatchObject({ blinded: false, overrode: "chain" });
 	});
 });
 
 describe("change when the wallet funds an action from a blinded output", () => {
 	async function mintFundedFrom(confidential: boolean) {
-		const result = await reviewManifestAction(
-			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
-			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID, { confidential })] },
+		const result = asReview(
+			await reviewManifestAction(
+				request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
+				{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID, { confidential })] },
+			),
 		);
-
-		if (isRefusal(result)) {
-			throw new Error(result.reason);
-		}
 
 		return {
 			blindedAmounts: result.confirmation.blindedAmounts.map((row) => ({
 				decidedBy: row.decidedBy.value,
 				id: row.id.value,
 			})),
-			changeBlinded: result.changeBlinded,
-			changeBlindedBy: result.changeBlindedBy,
-			changeOverrode: result.changeOverrode,
+			change: changeOf(result),
 			publishedAmounts: result.confirmation.publishedAmounts.map((row) => ({
 				id: row.id.value,
 				reason: row.reason.value,
@@ -677,12 +806,10 @@ describe("change when the wallet funds an action from a blinded output", () => {
 					decidedBy:
 						"this action spends a blinded amount, and the network accepts that only if " +
 						"something it pays out is blinded too",
-					id: "change",
+					id: "change_out",
 				},
 			],
-			changeBlinded: true,
-			changeBlindedBy: "confidential-input",
-			changeOverrode: undefined,
+			change: expect.objectContaining({ blinded: true, decidedBy: "confidential-input" }),
 			publishedAmounts: [],
 		});
 	});
@@ -690,22 +817,20 @@ describe("change when the wallet funds an action from a blinded output", () => {
 	test("and publishes it for the next action when every input is open", async () => {
 		expect(await mintFundedFrom(false)).toEqual({
 			blindedAmounts: [],
-			changeBlinded: false,
-			changeBlindedBy: undefined,
-			changeOverrode: "chain",
+			change: expect.objectContaining({ blinded: false, overrode: "chain" }),
 			publishedAmounts: [
 				{
-					id: "change",
+					id: "change_out",
 					reason:
 						"nothing says otherwise and this network blinds an output by default, and this " +
-						"wallet publishes it anyway so your next action can spend it",
+						"wallet publishes it anyway so your next action can spend those funds",
 				},
 			],
 		});
 	});
 });
 
-describe("a covenant that does not state what it holds", () => {
+describe("a program that does not state what it holds", () => {
 	function spendReading(
 		txOut: { amountSats?: string; rawAssetId?: string },
 		options: { asset?: string; named?: boolean } = {},
@@ -716,6 +841,7 @@ describe("a covenant that does not state what it holds", () => {
 		(actions.PayToken!.inputs as Record<string, unknown>[]).push({
 			...(options.named === false ? {} : { id: "vault_in" }),
 			utxo_source: { utxo_type: "p2pk_output" },
+			witnesses: { SIGNATURE: "unused" },
 		});
 
 		if (options.asset === "policy-only") {
@@ -737,66 +863,58 @@ describe("a covenant that does not state what it holds", () => {
 			},
 			{
 				...deps,
-				fundingUtxos: [utxo("1000000", MONEY_TXID)],
+				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
 				holdingsOf: () => [utxo("4000", TOKEN_TXID)],
 				readTxOut: async () => ({
 					...txOut,
 					scriptPubKeyHex: DERIVED_SCRIPT,
-					txOutHex: COVENANT_TXOUT,
+					txOutHex: PROGRAM_TXOUT,
 				}),
 			},
 		);
 	}
 
 	test("is refused where the action moves a second asset", async () => {
-		const result = await spendReading({});
+		const refusal = asRefusal(await spendReading({}));
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reason).toContain("p2pk_output");
-			expect(result.reason).toContain("explicit amount and asset");
-			expect(result.reason).toContain("will not assume a balance");
-		}
+		expect(refusal.reject).toBe("unbuildable-utxo-type");
+		expect(refusal.reason).toContain("p2pk_output");
+		expect(refusal.reason).toContain("blinded to a key this wallet does not hold");
+		expect(refusal.reason).toContain("will not assume a balance");
 	});
 
 	test("and where the action moves nothing but the network's own asset", async () => {
-		const result = await spendReading({}, { asset: "policy-only" });
+		const refusal = asRefusal(await spendReading({}, { asset: "policy-only" }));
 
-		expect(isRefusal(result)).toBe(true);
-		expect(isRefusal(result) ? result.reason : "").toContain("explicit amount and asset");
+		expect(refusal.reject).toBe("unbuildable-utxo-type");
+		expect(refusal.reason).toContain("blinded to a key this wallet does not hold");
 	});
 
 	test("and where the chain reports only one half of what it holds", async () => {
-		const amountOnly = await spendReading({ amountSats: "600" });
-		const assetOnly = await spendReading({ rawAssetId: POLICY_ASSET });
+		const halves = [{ amountSats: "600" }, { rawAssetId: POLICY_ASSET }];
+		const refusals = await Promise.all(
+			halves.map(async (half) => asRefusal(await spendReading(half))),
+		);
 
-		expect(isRefusal(amountOnly)).toBe(true);
-		expect(isRefusal(assetOnly)).toBe(true);
+		expect(refusals.map((refusal) => refusal.reject)).toEqual([
+			"unbuildable-utxo-type",
+			"unbuildable-utxo-type",
+		]);
 	});
 
 	test("and where it states what it holds but the manifest gives the input no id", async () => {
-		const result = await spendReading(
-			{ amountSats: "600", rawAssetId: POLICY_ASSET },
-			{ named: false },
+		const refusal = asRefusal(
+			await spendReading({ amountSats: "600", rawAssetId: POLICY_ASSET }, { named: false }),
 		);
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reason).toContain("no id");
-			expect(result.reason).toContain("600");
-		}
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("no id");
 	});
 
-	test("but is netted against that asset's cost where it states and names it", async () => {
-		const result = await spendReading({ amountSats: "600", rawAssetId: POLICY_ASSET });
+	test("but is netted against that asset's cost where the input states and names the asset", async () => {
+		const review = asReview(await spendReading({ amountSats: "600", rawAssetId: POLICY_ASSET }));
 
-		expect(isRefusal(result)).toBe(false);
-
-		if (!isRefusal(result)) {
-			expect(result.selected.map((chosen) => chosen.txid)).toEqual([TOKEN_TXID, MONEY_TXID]);
-		}
+		expect(review.selected.map((chosen) => chosen.txid)).toEqual([TOKEN_TXID, FUNDING_TXID]);
 	});
 });
 
@@ -821,60 +939,90 @@ describe("an action that pins an input to one address", () => {
 		return document;
 	}
 
-	test("constrains only the asset that input funds, and leaves the others alone", async () => {
-		const result = await reviewManifestAction(
-			request({
-				manifest: pinned({ token_in: "params.borrower" }),
-				params: {
-					amount_sat: 1000,
-					borrower: BORROWER_SCRIPT,
-					fee_sat: 700,
-					pubkey: PUBKEY,
-					token: TOKEN,
+	test("pins funding to the script of the address it names, not to the address's text", async () => {
+		const review = asReview(
+			await reviewManifestAction(
+				request({
+					manifest: pinned({ token_in: "params.borrower" }),
+					params: {
+						amount_sat: 1000,
+						borrower: "tlq1_borrower",
+						fee_sat: 700,
+						pubkey: PUBKEY,
+						token: TOKEN,
+					},
+				}),
+				{
+					...deps,
+					fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+					holdingsOf: (asset) =>
+						asset === TOKEN
+							? [
+									utxo("4000", TOKEN_TXID, { scriptPubKeyHex: OTHER_SCRIPT }),
+									utxo("4000", "e".repeat(64), { scriptPubKeyHex: BORROWER_SCRIPT }),
+								]
+							: [],
+					readAddress: (address) => ({
+						scriptPubKeyHex: address === "tlq1_borrower" ? BORROWER_SCRIPT : address,
+					}),
 				},
-			}),
-			{
-				...deps,
-				fundingUtxos: [utxo("1000000", MONEY_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
-				holdingsOf: (asset) =>
-					asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
-			},
+			),
 		);
 
-		expect(isRefusal(result)).toBe(false);
+		expect(review.selected.map((chosen) => chosen.txid)).toContain("e".repeat(64));
+		expect(review.selected.map((chosen) => chosen.txid)).not.toContain(TOKEN_TXID);
+	});
 
-		if (!isRefusal(result)) {
-			expect(result.selected.map((chosen) => chosen.txid)).toContain(MONEY_TXID);
-		}
+	test("constrains only the asset that input funds, and leaves the others alone", async () => {
+		const review = asReview(
+			await reviewManifestAction(
+				request({
+					manifest: pinned({ token_in: "params.borrower" }),
+					params: {
+						amount_sat: 1000,
+						borrower: BORROWER_SCRIPT,
+						fee_sat: 700,
+						pubkey: PUBKEY,
+						token: TOKEN,
+					},
+				}),
+				{
+					...deps,
+					fundingUtxos: [utxo("1000000", FUNDING_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
+					holdingsOf: (asset) =>
+						asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
+				},
+			),
+		);
+
+		expect(review.selected.map((chosen) => chosen.txid)).toContain(FUNDING_TXID);
 	});
 
 	test("and refuses when the pinned asset is held somewhere else", async () => {
-		const result = await reviewManifestAction(
-			request({
-				manifest: pinned({ token_in: "params.borrower" }),
-				params: {
-					amount_sat: 1000,
-					borrower: BORROWER_SCRIPT,
-					fee_sat: 700,
-					pubkey: PUBKEY,
-					token: TOKEN,
+		const refusal = asRefusal(
+			await reviewManifestAction(
+				request({
+					manifest: pinned({ token_in: "params.borrower" }),
+					params: {
+						amount_sat: 1000,
+						borrower: BORROWER_SCRIPT,
+						fee_sat: 700,
+						pubkey: PUBKEY,
+						token: TOKEN,
+					},
+				}),
+				{
+					...deps,
+					fundingUtxos: [utxo("1000000", FUNDING_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
+					holdingsOf: (asset) =>
+						asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: OTHER_SCRIPT })] : [],
 				},
-			}),
-			{
-				...deps,
-				fundingUtxos: [utxo("1000000", MONEY_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
-				holdingsOf: (asset) =>
-					asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: OTHER_SCRIPT })] : [],
-			},
+			),
 		);
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reject).toBe("no-funds-at-signing-address");
-			expect(result.reason).toContain(TOKEN);
-			expect(result.reason).toContain("token_in");
-		}
+		expect(refusal.reject).toBe("no-funds-at-signing-address");
+		expect(refusal.reason).toContain(TOKEN);
+		expect(refusal.reason).toContain("token_in");
 	});
 
 	test("refuses two inputs in one asset pinned to different scripts", async () => {
@@ -889,34 +1037,32 @@ describe("an action that pins an input to one address", () => {
 			utxo_source: "wallet",
 		});
 
-		const result = await reviewManifestAction(
-			request({
-				manifest: document,
-				params: {
-					amount_sat: 1000,
-					borrower: BORROWER_SCRIPT,
-					fee_sat: 700,
-					lender: OTHER_SCRIPT,
-					pubkey: PUBKEY,
-					token: TOKEN,
+		const refusal = asRefusal(
+			await reviewManifestAction(
+				request({
+					manifest: document,
+					params: {
+						amount_sat: 1000,
+						borrower: BORROWER_SCRIPT,
+						fee_sat: 700,
+						lender: OTHER_SCRIPT,
+						pubkey: PUBKEY,
+						token: TOKEN,
+					},
+				}),
+				{
+					...deps,
+					fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+					holdingsOf: (asset) =>
+						asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
 				},
-			}),
-			{
-				...deps,
-				fundingUtxos: [utxo("1000000", MONEY_TXID)],
-				holdingsOf: (asset) =>
-					asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
-			},
+			),
 		);
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reject).toBe("no-funds-at-signing-address");
-			expect(result.reason).toContain("token_in");
-			expect(result.reason).toContain("token_top_up");
-			expect(result.reason).toContain("one selection");
-		}
+		expect(refusal.reject).toBe("no-funds-at-signing-address");
+		expect(refusal.reason).toContain("token_in");
+		expect(refusal.reason).toContain("token_top_up");
+		expect(refusal.reason).toContain("one selection");
 	});
 
 	test("leaves an issuance alone when the pin is on a different input in another asset", async () => {
@@ -940,27 +1086,27 @@ describe("an action that pins an input to one address", () => {
 			id: "token_out",
 		});
 
-		const result = await reviewManifestAction(
-			request({
-				action: "Mint",
-				manifest: document,
-				params: {
-					borrower: BORROWER_SCRIPT,
-					pubkey: PUBKEY,
-					supply: 21,
-					token: TOKEN,
-					token_amount: 4000,
+		asReview(
+			await reviewManifestAction(
+				request({
+					action: "Mint",
+					manifest: document,
+					params: {
+						borrower: BORROWER_SCRIPT,
+						pubkey: PUBKEY,
+						supply: 21,
+						token: TOKEN,
+						token_amount: 4000,
+					},
+				}),
+				{
+					...deps,
+					fundingUtxos: [utxo("1000000", FUNDING_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
+					holdingsOf: (asset) =>
+						asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
 				},
-			}),
-			{
-				...deps,
-				fundingUtxos: [utxo("1000000", MONEY_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
-				holdingsOf: (asset) =>
-					asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
-			},
+			),
 		);
-
-		expect(isRefusal(result)).toBe(false);
 	});
 
 	test("refuses a pin on an input the wallet does not fund", async () => {
@@ -970,75 +1116,74 @@ describe("an action that pins an input to one address", () => {
 
 		inputs.push({
 			from_address: "params.borrower",
-			id: "covenant_in",
+			id: "program_in",
 			utxo_source: { utxo_type: "p2pk_output" },
 		});
 
-		const result = await reviewManifestAction(
-			request({
-				manifest: document,
-				params: {
-					amount_sat: 1000,
-					borrower: BORROWER_SCRIPT,
-					fee_sat: 700,
-					pubkey: PUBKEY,
-					token: TOKEN,
-				},
-				state: { utxos: [{ txid: "e".repeat(64), utxo_type: "p2pk_output", vout: 0 }] },
-			}),
-			{
-				...deps,
-				readTxOut: async () => ({
-					amountSats: "10000",
-					rawAssetId: POLICY_ASSET,
-					scriptPubKeyHex: DERIVED_SCRIPT,
-					txOutHex: COVENANT_TXOUT,
+		const refusal = asRefusal(
+			await reviewManifestAction(
+				request({
+					manifest: document,
+					params: {
+						amount_sat: 1000,
+						borrower: BORROWER_SCRIPT,
+						fee_sat: 700,
+						pubkey: PUBKEY,
+						token: TOKEN,
+					},
+					state: { utxos: [{ txid: "e".repeat(64), utxo_type: "p2pk_output", vout: 0 }] },
 				}),
-				fundingUtxos: [utxo("1000000", MONEY_TXID)],
-				holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),
-			},
+				{
+					...deps,
+					readTxOut: async () => ({
+						amountSats: "10000",
+						rawAssetId: POLICY_ASSET,
+						scriptPubKeyHex: DERIVED_SCRIPT,
+						txOutHex: PROGRAM_TXOUT,
+					}),
+					fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+					holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),
+				},
+			),
 		);
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reject).toBe("document-fault");
-			expect(result.reason).toContain("covenant_in");
-		}
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toContain("program_in");
 	});
 
 	test("refuses an issuance derived from an output outside that input's own pin", async () => {
-		const result = await reviewManifestAction(
-			request({
-				action: "Mint",
-				manifest: pinned({ mint_in: "params.borrower" }),
-				params: { borrower: BORROWER_SCRIPT, pubkey: PUBKEY, supply: 21 },
-			}),
-			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID, { scriptPubKeyHex: OTHER_SCRIPT })] },
+		const refusal = asRefusal(
+			await reviewManifestAction(
+				request({
+					action: "Mint",
+					manifest: pinned({ mint_in: "params.borrower" }),
+					params: { borrower: BORROWER_SCRIPT, pubkey: PUBKEY, supply: 21 },
+				}),
+				{
+					...deps,
+					fundingUtxos: [utxo("1000000", FUNDING_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
+				},
+			),
 		);
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reject).toBe("no-funds-at-signing-address");
-			expect(result.reason).toContain("mint_in");
-		}
+		expect(refusal.reject).toBe("no-funds-at-signing-address");
+		expect(refusal.reason).toContain("mint_in");
 	});
 
 	test("and accepts one derived from an output that is there", async () => {
-		const result = await reviewManifestAction(
-			request({
-				action: "Mint",
-				manifest: pinned({ mint_in: "params.borrower" }),
-				params: { borrower: BORROWER_SCRIPT, pubkey: PUBKEY, supply: 21 },
-			}),
-			{
-				...deps,
-				fundingUtxos: [utxo("1000000", MONEY_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })],
-			},
+		asReview(
+			await reviewManifestAction(
+				request({
+					action: "Mint",
+					manifest: pinned({ mint_in: "params.borrower" }),
+					params: { borrower: BORROWER_SCRIPT, pubkey: PUBKEY, supply: 21 },
+				}),
+				{
+					...deps,
+					fundingUtxos: [utxo("1000000", FUNDING_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })],
+				},
+			),
 		);
-
-		expect(isRefusal(result)).toBe(false);
 	});
 });
 
@@ -1063,46 +1208,37 @@ describe("a document that names one surplus twice", () => {
 
 		return reviewManifestAction(request({ manifest: document }), {
 			...deps,
-			fundingUtxos: [utxo("1000000", MONEY_TXID)],
+			fundingUtxos: [utxo("1000000", FUNDING_TXID)],
 			holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),
 		});
 	}
 
 	test("pays that surplus once, into the one change output, and moves nothing else", async () => {
-		const single = await pay();
-		const result = await twoTokenChanges();
+		const single = asReview(await pay());
+		const twice = asReview(await twoTokenChanges());
 
-		expect(isRefusal(result)).toBe(false);
-		expect(isRefusal(single)).toBe(false);
-
-		if (!isRefusal(result) && !isRefusal(single)) {
-			expect(
-				result.outputs
-					.filter((output) => output.asset === TOKEN && output.scriptPubKeyHex === WALLET_SCRIPT)
-					.map((output) => [output.id, output.sats]),
-			).toEqual([
-				["token_out", 1000n],
-				["token_change", 3000n],
-			]);
-			expect(result.outputs).toEqual(single.outputs);
-		}
+		expect(
+			twice.outputs
+				.filter((output) => output.asset === TOKEN && output.scriptPubKeyHex === WALLET_SCRIPT)
+				.map((output) => [output.id, output.sats]),
+		).toEqual([
+			["token_out", 1000n],
+			["token_change", 3000n],
+		]);
+		expect(twice.outputs).toEqual(single.outputs);
 	});
 
 	test.each([
 		["the first", { first: -2 }],
 		["the second", { again: -1 }],
 	])("is still refused when %s of them states a position", async (_which, positions) => {
-		const result = await twoTokenChanges(positions);
+		const refusal = asRefusal(await twoTokenChanges(positions));
 
-		expect(isRefusal(result)).toBe(true);
-
-		if (isRefusal(result)) {
-			expect(result.reject).toBe("document-fault");
-			expect(result.reason).toBe(
-				`PayToken declares change for ${TOKEN} twice, at token_change and token_change_again. ` +
-					"One surplus cannot go to two places, and this wallet will not choose between them.",
-			);
-		}
+		expect(refusal.reject).toBe("document-fault");
+		expect(refusal.reason).toBe(
+			`PayToken declares change for ${TOKEN} twice, at token_change and token_change_again. ` +
+				"One surplus cannot go to two places, and this wallet will not choose between them.",
+		);
 	});
 
 	type PolicyPositions = { change_out?: number; token_change?: number };
@@ -1127,24 +1263,20 @@ describe("a document that names one surplus twice", () => {
 
 		return reviewManifestAction(
 			request({ manifest: document, params: { ...request().params, token: POLICY_ASSET } }),
-			{ ...deps, fundingUtxos: [utxo("1000000", MONEY_TXID)], holdingsOf: () => [] },
+			{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)], holdingsOf: () => [] },
 		);
 	}
 
-	test("in the network's own asset, leaves the one change output to the builder", async () => {
-		const single = await policyChanges({ withoutTokenChange: true });
-		const result = await policyChanges();
+	test("in the network's own asset, pays that surplus once, into the first change output", async () => {
+		const single = asReview(await policyChanges({ withoutTokenChange: true }));
+		const twice = asReview(await policyChanges());
 
-		expect(isRefusal(result)).toBe(false);
-		expect(isRefusal(single)).toBe(false);
-
-		if (!isRefusal(result) && !isRefusal(single)) {
-			expect(result.outputs.map((output) => [output.id, output.asset, output.sats])).toEqual([
-				["token_out", POLICY_ASSET, 1000n],
-				["p2pk_out", POLICY_ASSET, 700n],
-			]);
-			expect(result.outputs).toEqual(single.outputs);
-		}
+		expect(twice.outputs.map((output) => [output.id, output.asset])).toEqual([
+			["token_out", POLICY_ASSET],
+			["p2pk_out", POLICY_ASSET],
+			["token_change", POLICY_ASSET],
+		]);
+		expect(twice.outputs[2]?.sats).toBe(single.outputs[2]?.sats);
 	});
 
 	test.each([
@@ -1153,17 +1285,13 @@ describe("a document that names one surplus twice", () => {
 	])(
 		"in the network's own asset, is still refused when %s of them states a position",
 		async (_which, positions) => {
-			const result = await policyChanges({ positions });
+			const refusal = asRefusal(await policyChanges({ positions }));
 
-			expect(isRefusal(result)).toBe(true);
-
-			if (isRefusal(result)) {
-				expect(result.reject).toBe("document-fault");
-				expect(result.reason).toBe(
-					`PayToken declares change for ${POLICY_ASSET} twice, at token_change and change_out. ` +
-						"One surplus cannot go to two places, and this wallet will not choose between them.",
-				);
-			}
+			expect(refusal.reject).toBe("document-fault");
+			expect(refusal.reason).toBe(
+				`PayToken declares change for ${POLICY_ASSET} twice, at token_change and change_out. ` +
+					"One surplus cannot go to two places, and this wallet will not choose between them.",
+			);
 		},
 	);
 });

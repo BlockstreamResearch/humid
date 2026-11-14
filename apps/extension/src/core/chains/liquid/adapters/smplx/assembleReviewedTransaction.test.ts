@@ -1,15 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { type ManifestReview, computed, fromDapp } from "@humid/tx-manifest";
+import { type ManifestReview, Refusal, computed, fromDapp } from "@humid/tx-manifest";
 
-import {
-	type AssembledTransaction,
-	type AssemblingBuilder,
-	assembleReviewedTransaction,
-} from "./assembleReviewedTransaction";
+import { type AssemblingBuilder, assembleReviewedTransaction } from "./assembleReviewedTransaction";
 
-const COVENANT_SCRIPT = `5120${"11".repeat(32)}`;
-const COVENANT_BUILD = {
+const PROGRAM_SCRIPT = `5120${"11".repeat(32)}`;
+const PROGRAM_BUILD = {
 	argumentsJson: '{"PUB_KEY":{"type":"Pubkey","value":"0x00"}}',
 	cmr: "cc".repeat(32),
 	extraLeavesJson: "[]",
@@ -17,74 +13,20 @@ const COVENANT_BUILD = {
 	source: "fn main() { }",
 	sourcePath: "./p2pk.simf",
 	tapleafHash: "1e".repeat(32),
+	witnessTypes: {},
 };
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
-const CHANGE_SCRIPT = `0014${"44".repeat(20)}`;
 const ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-const CONFIDENTIAL_VALUE = `08${"44".repeat(32)}`;
-const CONFIDENTIAL_ASSET = `0a${"33".repeat(32)}`;
-const NONCE = `02${"55".repeat(32)}`;
-
-function txIn({
-	issuance,
-	txid,
-	vout,
-}: {
-	issuance?: boolean;
-	txid: string;
-	vout: number;
-}): string {
-	const reversed = (txid.match(/../g) ?? []).toReversed().join("");
-	const marked = (issuance ? vout | 0x80_00_00_00 : vout) >>> 0;
-	const index = (marked.toString(16).padStart(8, "0").match(/../g) ?? []).toReversed().join("");
-	const declared = issuance ? `${"00".repeat(32)}${"aa".repeat(32)}${"01".padEnd(18, "0")}00` : "";
-
-	return `${reversed}${index}00ffffffff${declared}`;
-}
-
-function outputBytes(
-	scriptHex: string,
-	{ asset = ASSET, blinded = false, sats = 1000n } = {},
-): string {
-	const length = (scriptHex.length / 2).toString(16).padStart(2, "0");
-
-	if (blinded) {
-		return `${CONFIDENTIAL_ASSET}${CONFIDENTIAL_VALUE}${NONCE}${length}${scriptHex}`;
-	}
-
-	const reversed = (asset.match(/../g) ?? []).toReversed().join("");
-
-	return `01${reversed}01${sats.toString(16).padStart(16, "0")}00${length}${scriptHex}`;
-}
-
-const FEE_OUT = outputBytes("", { sats: 300n });
-const COVENANT_OUT = outputBytes(COVENANT_SCRIPT, { sats: 50_000n });
-const CHANGE_OUT = outputBytes(CHANGE_SCRIPT, { sats: 900n });
-const RECEIVED_OUT = outputBytes(WALLET_SCRIPT, { sats: 50_000n });
-const COVENANT_TXID = "e".repeat(64);
+const PROGRAM_TXID = "e".repeat(64);
 const SIGNING_PATH = "0/0";
-
-function signedHex(spends: Parameters<typeof txIn>[0][], outs: string[]): string {
-	const inputCount = spends.length.toString(16).padStart(2, "0");
-	const outputCount = outs.length.toString(16).padStart(2, "0");
-
-	return `0200000000${inputCount}${spends.map((spend) => txIn(spend)).join("")}${outputCount}${outs.join("")}00000000`;
-}
-
-function signed(
-	spends: Parameters<typeof txIn>[0][] = [{ txid: "c".repeat(64), vout: 0 }],
-	outs: string[] = [COVENANT_OUT, CHANGE_OUT, FEE_OUT],
-): AssembledTransaction {
-	return { feeSats: 300n, hex: signedHex(spends, outs), txid: "f".repeat(64) };
-}
-
-const SIGNED: AssembledTransaction = signed();
+const BLINDING_KEY = `02${"55".repeat(32)}`;
+const SIGNED = { feeSats: 300n, hex: "00", txid: "f".repeat(64) };
 const TXOUT_HEX = `01${"49".repeat(32)}0100000000000186a000160014${"00".repeat(20)}`;
 
 type Recorded = {
-	changes: { blindingKey: string | null | undefined; script: string }[];
-	covenants: {
+	programs: {
 		argumentsJson: string | undefined;
+		blindingSecretsJson?: string;
 		derivationPath: string | undefined;
 		extraLeavesJson: string | undefined;
 		includeDebugSymbols: boolean | undefined;
@@ -110,13 +52,23 @@ type Recorded = {
 	}[];
 	outputs: {
 		asset: string;
+		assetBlindingFactor?: string | null;
 		blindingKey: string | null | undefined;
+		valueBlindingFactor?: string | null;
 		sats: bigint;
 		script: string;
 	}[];
 	locktimes: number[];
-	sequences: number[];
+	sequences: { inputIndex: number; sequence: number }[];
+	reissues: {
+		assetAmountSats: bigint;
+		blindingSecretsJson?: string;
+		entropy: string;
+		txid: string;
+		vout: number;
+	}[];
 	spends: { txOut: string; txid: string; vout: number }[];
+	unused: { inputIndex: number; names: string[] }[];
 };
 
 const ISSUED = {
@@ -141,16 +93,27 @@ const plannedIssuance = () => ({
 function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): SmplxModule {
 	return {
 		TransactionBuilder: class {
-			addChange(script: string, blindingKey?: string | null) {
-				recorded.changes.push({ blindingKey, script });
+			addOutput(
+				script: string,
+				sats: bigint,
+				asset: string,
+				blindingKey?: string | null,
+				assetBlindingFactor?: string | null,
+				valueBlindingFactor?: string | null,
+			) {
+				recorded.outputs.push({
+					asset,
+					blindingKey,
+					sats,
+					script,
+					...(assetBlindingFactor ? { assetBlindingFactor } : {}),
+					...(valueBlindingFactor ? { valueBlindingFactor } : {}),
+				});
 			}
-			addOutput(script: string, sats: bigint, asset: string, blindingKey?: string | null) {
-				recorded.outputs.push({ asset, blindingKey, sats, script });
-			}
-			addWalletInput(txid: string, vout: number, txOut: string) {
+			addInput(txid: string, vout: number, txOut: string) {
 				recorded.spends.push({ txOut, txid, vout });
 			}
-			addWalletIssuanceInput(
+			addIssuanceInput(
 				txid: string,
 				vout: number,
 				txOut: string,
@@ -173,14 +136,55 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 
 				return {
 					assetId: reports.asset ?? ISSUED.asset,
-					entropy: reports.entropy ?? ISSUED.entropy,
+					assetEntropy: reports.entropy ?? ISSUED.entropy,
 					free: () => {
 						recorded.freedReports += 1;
 					},
-					reissuanceTokenId: reports.reissuanceToken ?? ISSUED.reissuanceToken,
+					inflationAssetId: reports.reissuanceToken ?? ISSUED.reissuanceToken,
 				};
 			}
-			addCovenantInput(
+			addReissuanceInput(
+				txid: string,
+				vout: number,
+				_txOut: string,
+				assetAmountSats: bigint,
+				entropy: string,
+			) {
+				recorded.reissues.push({ assetAmountSats, entropy, txid, vout });
+
+				return {
+					assetId: reports.asset ?? ISSUED.asset,
+					assetEntropy: entropy,
+					free: () => {
+						recorded.freedReports += 1;
+					},
+					inflationAssetId: reports.reissuanceToken ?? ISSUED.reissuanceToken,
+				};
+			}
+			addProgramReissuanceInput(
+				txid: string,
+				vout: number,
+				_txOutHex: string,
+				_source: string,
+				_argumentsJson: string | undefined,
+				_witnessJson: string | undefined,
+				_programSignature: string | undefined,
+				assetAmountSats: bigint,
+				entropy: string,
+				blindingSecretsJson: string,
+			) {
+				recorded.reissues.push({ assetAmountSats, blindingSecretsJson, entropy, txid, vout });
+
+				return {
+					assetId: reports.asset ?? ISSUED.asset,
+					assetEntropy: entropy,
+					free: () => {
+						recorded.freedReports += 1;
+					},
+					inflationAssetId: reports.reissuanceToken ?? ISSUED.reissuanceToken,
+				};
+			}
+			addProgramInput(
 				txid: string,
 				vout: number,
 				txOutHex: string,
@@ -188,12 +192,14 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 				argumentsJson?: string,
 				witnessJson?: string,
 				signatureWitness?: string,
+				blindingSecretsJson?: string,
 				extraLeavesJson?: string,
 				includeDebugSymbols?: boolean,
 				derivationPath?: string,
 			) {
-				recorded.covenants.push({
+				recorded.programs.push({
 					argumentsJson,
+					...(blindingSecretsJson === undefined ? {} : { blindingSecretsJson }),
 					derivationPath,
 					extraLeavesJson,
 					includeDebugSymbols,
@@ -205,7 +211,7 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 					witnessJson,
 				});
 			}
-			addCovenantIssuanceInput(
+			addProgramIssuanceInput(
 				txid: string,
 				vout: number,
 				txOutHex: string,
@@ -216,11 +222,12 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 				assetAmountSats: bigint,
 				inflationAmountSats: bigint,
 				_issuerContractHex: string | undefined,
+				_blindingSecretsJson?: string,
 				extraLeavesJson?: string,
 				includeDebugSymbols?: boolean,
 				derivationPath?: string,
 			) {
-				recorded.covenants.push({
+				recorded.programs.push({
 					argumentsJson,
 					derivationPath,
 					extraLeavesJson,
@@ -236,18 +243,21 @@ function substitute(recorded: Recorded, reports: Partial<typeof ISSUED> = {}): S
 
 				return {
 					assetId: reports.asset ?? ISSUED.asset,
-					entropy: reports.entropy ?? ISSUED.entropy,
+					assetEntropy: reports.entropy ?? ISSUED.entropy,
 					free: () => {
 						recorded.freedReports += 1;
 					},
-					reissuanceTokenId: reports.reissuanceToken ?? ISSUED.reissuanceToken,
+					inflationAssetId: reports.reissuanceToken ?? ISSUED.reissuanceToken,
 				};
 			}
 			setLocktimeHeight(height: number) {
 				recorded.locktimes.push(height);
 			}
-			setSequence(sequence: number) {
-				recorded.sequences.push(sequence);
+			setInputSequence(inputIndex: number, sequence: number) {
+				recorded.sequences.push({ inputIndex, sequence });
+			}
+			setUnusedWitnesses(inputIndex: number, names: string[]) {
+				recorded.unused.push({ inputIndex, names });
 			}
 			free() {
 				recorded.freed += 1;
@@ -273,7 +283,7 @@ function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
 		? {
 				...built,
 				inputOrder: [
-					...built.covenantInputs.map((covenant) => ({ covenant, source: "covenant" as const })),
+					...built.programInputs.map((program) => ({ program, source: "program" as const })),
 					...built.selected.map((utxo) => ({ source: "wallet" as const, utxo })),
 				],
 			}
@@ -286,33 +296,31 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 		confirmation: {
 			account: computed("liquid:testnet account 0"),
 			action: fromDapp("Pay"),
-			covenants: [],
+			programs: [],
 			feeAsset: computed(ASSET),
 			feeSats: computed(344n),
 			blindedAmounts: [],
 			netEffect: [{ asset: computed(ASSET), sats: computed(-50_344n) }],
+			payments: [],
 			protocol: fromDapp("p2pk-simplicity"),
 			publishedAmounts: [],
 		},
-		covenantInputs: [],
+		programInputs: [],
 		inputOrder: [{ source: "wallet", utxo: WALLET_UTXO }],
-		covenants: [
+		programs: [
 			{
 				address: "tex1p_derived",
-				...COVENANT_BUILD,
+				...PROGRAM_BUILD,
 				role: "created",
-				scriptPubKeyHex: COVENANT_SCRIPT,
+				scriptPubKeyHex: PROGRAM_SCRIPT,
 				utxoType: "p2pk_output",
 				verified: "not-yet-onchain",
 			},
 		],
-		changeBlinded: false,
-		changeOverrode: "chain",
 		estimatedFeeSats: 344n,
 		feeRateSatsPerKvb: 1000,
 		issuances: [],
 		movements: [{ asset: ASSET, sats: -50_344n }],
-		normalisation: [],
 		outputs: [
 			{
 				asset: ASSET,
@@ -320,7 +328,7 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 				decidedBy: "unblindable",
 				id: "p2pk_out",
 				sats: 50_000n,
-				scriptPubKeyHex: COVENANT_SCRIPT,
+				scriptPubKeyHex: PROGRAM_SCRIPT,
 			},
 		],
 		policyAsset: ASSET,
@@ -330,34 +338,55 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 	};
 }
 
-function subject(
-	overrides: Partial<ManifestReview> = {},
-	finalize = () => SIGNED,
-	extra: { blindingPublicKeyHex?: string; reports?: Partial<typeof ISSUED> } = {},
-) {
-	const recorded: Recorded = {
-		changes: [],
-		covenants: [],
+function emptyRecord(): Recorded {
+	return {
+		programs: [],
 		freed: 0,
 		freedReports: 0,
 		issues: [],
 		locktimes: [],
 		outputs: [],
 		sequences: [],
+		reissues: [],
 		spends: [],
+		unused: [],
 	};
+}
+
+type Attempt = { ok: false; reason: string; reject: string } | { ok: true; transaction: unknown };
+
+function attempt(run: () => unknown): Attempt {
+	try {
+		return { ok: true, transaction: run() };
+	} catch (error) {
+		if (error instanceof Refusal) {
+			return { ok: false, reason: error.reason, reject: error.reject };
+		}
+
+		throw error;
+	}
+}
+
+function subject(
+	overrides: Partial<ManifestReview> = {},
+	finish: (builder: AssemblingBuilder) => unknown = () => SIGNED,
+	extra: { blindingPublicKeyHex?: string; reports?: Partial<typeof ISSUED> } = {},
+) {
+	const recorded = emptyRecord();
 
 	return {
-		assemble: () =>
-			assembleReviewedTransaction(review(overrides), {
-				...(extra.blindingPublicKeyHex === undefined
-					? {}
-					: { blindingPublicKeyHex: extra.blindingPublicKeyHex }),
-				changeScriptPubKeyHex: CHANGE_SCRIPT,
-				finalize,
-				signingDerivationPath: SIGNING_PATH,
-				smplx: substitute(recorded, extra.reports),
-			}),
+		assemble: async () =>
+			attempt(() =>
+				assembleReviewedTransaction(
+					review(overrides),
+					{
+						blindingPublicKeyHex: extra.blindingPublicKeyHex ?? BLINDING_KEY,
+						signingDerivationPath: SIGNING_PATH,
+						smplx: substitute(recorded, extra.reports),
+					},
+					finish,
+				),
+			),
 		recorded,
 	};
 }
@@ -377,7 +406,7 @@ describe("assembleReviewedTransaction", () => {
 		await assemble();
 
 		expect(recorded.outputs).toEqual([
-			{ asset: ASSET, blindingKey: undefined, sats: 50_000n, script: COVENANT_SCRIPT },
+			{ asset: ASSET, blindingKey: undefined, sats: 50_000n, script: PROGRAM_SCRIPT },
 		]);
 	});
 
@@ -393,37 +422,19 @@ describe("assembleReviewedTransaction", () => {
 		}
 	});
 
-	test("returns change to the script the caller named, and to nothing else", async () => {
-		const { assemble, recorded } = subject();
-
-		await assemble();
-
-		expect(recorded.changes).toEqual([{ blindingKey: undefined, script: CHANGE_SCRIPT }]);
-	});
-
-	test("passes no blinding key with the change", async () => {
-		const { assemble, recorded } = subject();
-
-		await assemble();
-
-		expect(recorded.changes[0]?.blindingKey).toBeUndefined();
-	});
-
-	test("hands the finalizer the rate the review established, and returns what it made", async () => {
-		const rates: number[] = [];
-		const { assemble } = subject({}, ((_builder: AssemblingBuilder, rate: number) => {
-			rates.push(rate);
+	test("hands the finisher the builder it assembled, and returns what the finisher made", async () => {
+		const handed: AssemblingBuilder[] = [];
+		const { assemble } = subject({}, (builder) => {
+			handed.push(builder);
 
 			return SIGNED;
-		}) as () => AssembledTransaction);
+		});
 
-		const result = await assemble();
-
-		expect(rates).toEqual([1000]);
-		expect(result).toEqual({ ok: true, transaction: SIGNED });
+		expect(await assemble()).toEqual({ ok: true, transaction: SIGNED });
+		expect(handed).toHaveLength(1);
 	});
 
-	test("signs nothing itself: the finalizer is the only thing that finishes a transaction", async () => {
+	test("signs nothing itself: the finisher is the only thing that finishes a transaction", async () => {
 		let finalized = 0;
 		const { assemble } = subject({}, () => {
 			finalized += 1;
@@ -445,7 +456,7 @@ describe("assembleReviewedTransaction", () => {
 			expect(recorded.freed).toBe(1);
 		});
 
-		test("releases the builder when the finalizer fails", async () => {
+		test("releases the builder when the finisher fails", async () => {
 			const { assemble, recorded } = subject({}, () => {
 				throw new Error("could not balance");
 			});
@@ -461,92 +472,48 @@ describe("assembleReviewedTransaction", () => {
 		});
 
 		test("releases the builder when an output the module will not take throws", async () => {
-			const recorded: Recorded = {
-				changes: [],
-				covenants: [],
-				freed: 0,
-				freedReports: 0,
-				issues: [],
-				locktimes: [],
-				outputs: [],
-				sequences: [],
-				spends: [],
-			};
+			const recorded = emptyRecord();
 			const smplx = substitute(recorded);
 
 			smplx.TransactionBuilder.prototype.addOutput = () => {
 				throw new Error("Invalid script: Odd number of digits");
 			};
 
-			const result = await assembleReviewedTransaction(review(), {
-				changeScriptPubKeyHex: CHANGE_SCRIPT,
-				finalize: () => SIGNED,
-				signingDerivationPath: SIGNING_PATH,
-				smplx,
-			});
+			const result = attempt(() =>
+				assembleReviewedTransaction(
+					review(),
+					{ blindingPublicKeyHex: BLINDING_KEY, signingDerivationPath: SIGNING_PATH, smplx },
+					() => SIGNED,
+				),
+			);
 
-			expect(result).toMatchObject({ ok: false });
+			expect(result).toMatchObject({ ok: false, reject: "built-something-else" });
 			expect(recorded.freed).toBe(1);
-		});
-
-		test("releases the builder when the change script is refused", async () => {
-			const recorded: Recorded = {
-				changes: [],
-				covenants: [],
-				freed: 0,
-				freedReports: 0,
-				issues: [],
-				locktimes: [],
-				outputs: [],
-				sequences: [],
-				spends: [],
-			};
-			let finalized = 0;
-			const smplx = substitute(recorded);
-
-			smplx.TransactionBuilder.prototype.addChange = () => {
-				throw new Error("Invalid script: Odd number of digits");
-			};
-
-			const result = await assembleReviewedTransaction(review(), {
-				changeScriptPubKeyHex: "tex1q_wallet",
-				finalize: () => {
-					finalized += 1;
-
-					return SIGNED;
-				},
-				signingDerivationPath: SIGNING_PATH,
-				smplx,
-			});
-
-			expect(result).toMatchObject({ ok: false });
-			expect(recorded.freed).toBe(1);
-			expect(finalized).toBe(0);
 		});
 	});
 
-	describe("an action that spends a covenant", () => {
-		const covenantInput = {
-			argumentsJson: COVENANT_BUILD.argumentsJson,
-			extraLeavesJson: COVENANT_BUILD.extraLeavesJson,
+	describe("an action that spends a program", () => {
+		const programInput = {
+			argumentsJson: PROGRAM_BUILD.argumentsJson,
+			extraLeavesJson: PROGRAM_BUILD.extraLeavesJson,
 			id: "p2pk_in",
-			includeDebugSymbols: COVENANT_BUILD.includeDebugSymbols,
+			includeDebugSymbols: PROGRAM_BUILD.includeDebugSymbols,
 			signatureWitness: "SIGNATURE",
-			source: COVENANT_BUILD.source,
+			source: PROGRAM_BUILD.source,
 			txOutHex: TXOUT_HEX,
-			txid: COVENANT_TXID,
+			txid: PROGRAM_TXID,
 			utxoType: "p2pk_output",
 			vout: 1,
 		};
 		const spendingPlan = (overrides: Partial<ManifestReview> = {}): Partial<ManifestReview> => ({
 			action: "Receive",
-			covenantInputs: [covenantInput],
-			covenants: [
+			programInputs: [programInput],
+			programs: [
 				{
 					address: "tex1p_derived",
-					...COVENANT_BUILD,
+					...PROGRAM_BUILD,
 					role: "spent",
-					scriptPubKeyHex: COVENANT_SCRIPT,
+					scriptPubKeyHex: PROGRAM_SCRIPT,
 					utxoType: "p2pk_output",
 					verified: "matches-chain",
 				},
@@ -563,29 +530,22 @@ describe("assembleReviewedTransaction", () => {
 			],
 			...overrides,
 		});
-		const spent = () =>
-			signed(
-				[
-					{ txid: COVENANT_TXID, vout: 1 },
-					{ txid: "c".repeat(64), vout: 0 },
-				],
-				[RECEIVED_OUT, CHANGE_OUT, FEE_OUT],
-			);
+		const spent = () => SIGNED;
 
-		test("hands the module everything the review verified the covenant under", async () => {
+		test("hands the module everything the review verified the program under", async () => {
 			const { assemble, recorded } = subject(spendingPlan(), spent);
 
 			expect(await assemble()).toMatchObject({ ok: true });
-			expect(recorded.covenants).toEqual([
+			expect(recorded.programs).toEqual([
 				{
-					argumentsJson: COVENANT_BUILD.argumentsJson,
+					argumentsJson: PROGRAM_BUILD.argumentsJson,
 					derivationPath: SIGNING_PATH,
 					extraLeavesJson: "[]",
 					includeDebugSymbols: false,
 					signatureWitness: "SIGNATURE",
-					source: COVENANT_BUILD.source,
+					source: PROGRAM_BUILD.source,
 					txOutHex: TXOUT_HEX,
-					txid: COVENANT_TXID,
+					txid: PROGRAM_TXID,
 					vout: 1,
 					witnessJson: undefined,
 				},
@@ -595,12 +555,10 @@ describe("assembleReviewedTransaction", () => {
 		test("passes the stated witness values through as the compiler's own shape", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
-					covenantInputs: [
+					programInputs: [
 						{
-							...covenantInput,
-							witnessValues: [
-								{ name: "BRANCH", simplicityType: "Either<(), ()>", value: "Left(())" },
-							],
+							...programInput,
+							witnessValues: [{ name: "BRANCH", type: "Either<(), ()>", value: "Left(())" }],
 						},
 					],
 				}),
@@ -608,65 +566,58 @@ describe("assembleReviewedTransaction", () => {
 			);
 
 			expect(await assemble()).toMatchObject({ ok: true });
-			expect(recorded.covenants[0]?.witnessJson).toBe(
+			expect(recorded.programs[0]?.witnessJson).toBe(
 				JSON.stringify({ BRANCH: { type: "Either<(), ()>", value: "Left(())" } }),
 			);
 		});
 
-		test("signs the covenant with the wallet's signing key, not the signer's default", async () => {
+		test("signs the program with the wallet's signing key, not the signer's default", async () => {
 			const { assemble, recorded } = subject(spendingPlan(), spent);
 
 			expect(await assemble()).toMatchObject({ ok: true });
-			expect(recorded.covenants.map((covenant) => covenant.derivationPath)).toEqual([SIGNING_PATH]);
+			expect(recorded.programs.map((program) => program.derivationPath)).toEqual([SIGNING_PATH]);
 		});
 
 		test("asks for no signature where the document declares none", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
-					covenantInputs: [{ ...covenantInput, signatureWitness: undefined }],
+					programInputs: [{ ...programInput, signatureWitness: undefined }],
 				}),
 				spent,
 			);
 
 			expect(await assemble()).toMatchObject({ ok: true });
-			expect(recorded.covenants[0]?.signatureWitness).toBeUndefined();
+			expect(recorded.programs[0]?.signatureWitness).toBeUndefined();
 		});
 
-		test("adds the inputs in the order the plan states, not covenants first", async () => {
+		test("adds the inputs in the order the plan states, not programs first", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
 					inputOrder: [
 						{ source: "wallet", utxo: WALLET_UTXO },
-						{ covenant: covenantInput, source: "covenant" },
+						{ program: programInput, source: "program" },
 					],
 				}),
-				() =>
-					signed(
-						[
-							{ txid: "c".repeat(64), vout: 0 },
-							{ txid: COVENANT_TXID, vout: 1 },
-						],
-						[RECEIVED_OUT, CHANGE_OUT, FEE_OUT],
-					),
+				() => SIGNED,
 			);
 
 			expect(await assemble()).toMatchObject({ ok: true });
 			expect(recorded.spends).toHaveLength(1);
-			expect(recorded.covenants).toHaveLength(1);
+			expect(recorded.programs).toHaveLength(1);
 		});
 
-		test("builds an action funded entirely by the covenant it spends", async () => {
+		test("builds an action funded entirely by the program it spends", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
-					inputOrder: [{ covenant: covenantInput, source: "covenant" }],
+					inputOrder: [{ program: programInput, source: "program" }],
 					selected: [],
 				}),
-				() => signed([{ txid: COVENANT_TXID, vout: 1 }], [RECEIVED_OUT, CHANGE_OUT, FEE_OUT]),
+				() => SIGNED,
 			);
 
 			expect(await assemble()).toMatchObject({ ok: true });
 			expect(recorded.spends).toEqual([]);
-			expect(recorded.covenants).toHaveLength(1);
+			expect(recorded.programs).toHaveLength(1);
 		});
 
 		test("refuses when there is nothing funding it at all", async () => {
@@ -675,15 +626,82 @@ describe("assembleReviewedTransaction", () => {
 			expect(await assemble()).toMatchObject({ ok: false });
 		});
 
-		test("declares the locktime and the sequence the plan carries", async () => {
+		test("zero-fills the witnesses the spend leaves unused, at the program's own input", async () => {
 			const { assemble, recorded } = subject(
-				spendingPlan({ locktimeHeight: 3_210_987, sequence: 4_294_967_294 }),
+				spendingPlan({
+					inputOrder: [
+						{ source: "wallet", utxo: WALLET_UTXO },
+						{ program: { ...programInput, unusedWitnesses: ["HOT_SIG"] }, source: "program" },
+					],
+				}),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.unused).toEqual([{ inputIndex: 1, names: ["HOT_SIG"] }]);
+		});
+
+		test("leaves every witness as stated where the spend uses them all", async () => {
+			const { assemble, recorded } = subject(spendingPlan());
+
+			await assemble();
+
+			expect(recorded.unused).toEqual([]);
+		});
+
+		test("reissues from the token a program holds, through the module's program call", async () => {
+			const secrets = '{"value":"1"}';
+			const { assemble, recorded } = subject(
+				spendingPlan({
+					issuances: [
+						{
+							...plannedIssuance(),
+							entropy: `01${"00".repeat(31)}`,
+							kind: "reissue",
+							outpoint: { txid: PROGRAM_TXID, vout: 1 },
+						},
+					],
+					programInputs: [{ ...programInput, blindingSecretsJson: secrets }],
+				}),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.reissues).toEqual([
+				{
+					assetAmountSats: 1000n,
+					blindingSecretsJson: secrets,
+					entropy: `${"00".repeat(31)}01`,
+					txid: PROGRAM_TXID,
+					vout: 1,
+				},
+			]);
+			expect(recorded.programs).toEqual([]);
+		});
+
+		test("opens a blinded program output with the secrets the review built", async () => {
+			const secrets = '{"value":"1"}';
+			const { assemble, recorded } = subject(
+				spendingPlan({ programInputs: [{ ...programInput, blindingSecretsJson: secrets }] }),
+			);
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.programs[0]?.blindingSecretsJson).toBe(secrets);
+		});
+
+		test("declares the locktime the plan carries, and each input's own sequence", async () => {
+			const { assemble, recorded } = subject(
+				spendingPlan({
+					inputOrder: [
+						{ source: "wallet", utxo: WALLET_UTXO },
+						{ program: programInput, sequence: 25_920, source: "program" },
+					],
+					locktimeHeight: 3_210_987,
+				}),
 				spent,
 			);
 
 			expect(await assemble()).toMatchObject({ ok: true });
 			expect(recorded.locktimes).toEqual([3_210_987]);
-			expect(recorded.sequences).toEqual([4_294_967_294]);
+			expect(recorded.sequences).toEqual([{ inputIndex: 1, sequence: 25_920 }]);
 		});
 
 		test("declares neither where the plan carries neither", async () => {
@@ -696,48 +714,31 @@ describe("assembleReviewedTransaction", () => {
 		});
 
 		test("releases the builder whatever the module hands back", async () => {
-			const { assemble, recorded } = subject(spendingPlan(), () =>
-				signed([{ txid: "c".repeat(64), vout: 0 }], [RECEIVED_OUT, CHANGE_OUT, FEE_OUT]),
-			);
+			const { assemble, recorded } = subject(spendingPlan(), () => SIGNED);
 
 			await assemble();
 
 			expect(recorded.freed).toBe(1);
 		});
 
-		test("adds a covenant that also issues exactly once, through the one call that does both", async () => {
+		test("adds a program that also issues exactly once, through the one call that does both", async () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
-					issuances: [{ ...plannedIssuance(), outpoint: { txid: COVENANT_TXID, vout: 1 } }],
+					issuances: [{ ...plannedIssuance(), outpoint: { txid: PROGRAM_TXID, vout: 1 } }],
 				}),
-				() =>
-					signed(
-						[
-							{ issuance: true, txid: COVENANT_TXID, vout: 1 },
-							{ txid: "c".repeat(64), vout: 0 },
-						],
-						[RECEIVED_OUT, CHANGE_OUT, FEE_OUT],
-					),
+				() => SIGNED,
 			);
 
 			expect(await assemble()).toMatchObject({ ok: true });
-			expect(recorded.covenants).toHaveLength(1);
-			expect(recorded.covenants[0]?.derivationPath).toBe(SIGNING_PATH);
-			expect(recorded.covenants[0]?.issued).toEqual({
+			expect(recorded.programs).toHaveLength(1);
+			expect(recorded.programs[0]?.derivationPath).toBe(SIGNING_PATH);
+			expect(recorded.programs[0]?.issued).toEqual({
 				assetAmountSats: 1000n,
 				inflationAmountSats: 0n,
 			});
 			expect(recorded.issues).toEqual([]);
 			expect(recorded.freedReports).toBe(1);
 		});
-	});
-
-	test("builds an action whose only output is the change it pays", async () => {
-		const { assemble, recorded } = subject({ changeDeferred: true, outputs: [] });
-
-		expect(await assemble()).toMatchObject({ ok: true });
-		expect(recorded.outputs).toEqual([]);
-		expect(recorded.changes).toEqual([{ blindingKey: undefined, script: CHANGE_SCRIPT }]);
 	});
 
 	describe("what it will not build", () => {
@@ -786,6 +787,27 @@ describe("assembleReviewedTransaction", () => {
 
 	describe("an input that creates an asset", () => {
 		const issuing = { issuances: [plannedIssuance()] };
+
+		test("reissues through the module's own call, handing it the entropy in the module's byte order", async () => {
+			const token = {
+				...WALLET_UTXO,
+				blindingSecretsJson: '{"value":1}',
+				confidential: true,
+				derivationPath: "0/3",
+				txid: ISSUANCE_TXID,
+			};
+			const { assemble, recorded } = subject({
+				issuances: [{ ...plannedIssuance(), entropy: `01${"00".repeat(31)}`, kind: "reissue" }],
+				selected: [token],
+			});
+
+			expect(await assemble()).toMatchObject({ ok: true });
+			expect(recorded.reissues).toEqual([
+				{ assetAmountSats: 1000n, entropy: `${"00".repeat(31)}01`, txid: ISSUANCE_TXID, vout: 0 },
+			]);
+			expect(recorded.issues).toEqual([]);
+			expect(recorded.freedReports).toBe(1);
+		});
 
 		test("is added as an issuance, with the amounts the review resolved", async () => {
 			const { assemble, recorded } = subject(issuing);
@@ -945,7 +967,6 @@ describe("assembleReviewedTransaction", () => {
 	});
 
 	describe("blinding", () => {
-		const BLINDING_KEY = `02${"55".repeat(32)}`;
 		const blindedAndOpen = {
 			outputs: [
 				{
@@ -962,10 +983,30 @@ describe("assembleReviewedTransaction", () => {
 					decidedBy: "unblindable" as const,
 					id: "p2pk_out",
 					sats: 50_000n,
-					scriptPubKeyHex: COVENANT_SCRIPT,
+					scriptPubKeyHex: PROGRAM_SCRIPT,
 				},
 			],
 		};
+
+		test("blinds an output with the factors the review chose", async () => {
+			const factor = `03${"00".repeat(31)}`;
+			const { assemble, recorded } = subject({
+				outputs: [
+					{
+						...blindedAndOpen.outputs[0]!,
+						assetBlindingFactor: factor,
+						valueBlindingFactor: factor,
+					},
+				],
+			});
+
+			await assemble();
+
+			expect(recorded.outputs[0]).toMatchObject({
+				assetBlindingFactor: factor,
+				valueBlindingFactor: factor,
+			});
+		});
 
 		test("passes the key only to the outputs the review says are blinded", async () => {
 			const { assemble, recorded } = subject(blindedAndOpen, () => SIGNED, {
@@ -976,46 +1017,8 @@ describe("assembleReviewedTransaction", () => {
 
 			expect(recorded.outputs).toEqual([
 				{ asset: ASSET, blindingKey: BLINDING_KEY, sats: 10n, script: WALLET_SCRIPT },
-				{ asset: ASSET, blindingKey: undefined, sats: 50_000n, script: COVENANT_SCRIPT },
+				{ asset: ASSET, blindingKey: undefined, sats: 50_000n, script: PROGRAM_SCRIPT },
 			]);
-		});
-
-		test("passes no key for change the review returns in the open", async () => {
-			const { assemble, recorded } = subject({}, () => SIGNED, {
-				blindingPublicKeyHex: BLINDING_KEY,
-			});
-
-			await assemble();
-
-			expect(recorded.changes).toEqual([{ blindingKey: undefined, script: CHANGE_SCRIPT }]);
-		});
-
-		test("and passes it for change the review says must be blinded", async () => {
-			const { assemble, recorded } = subject({ changeBlinded: true }, () => SIGNED, {
-				blindingPublicKeyHex: BLINDING_KEY,
-			});
-
-			await assemble();
-
-			expect(recorded.changes).toEqual([{ blindingKey: BLINDING_KEY, script: CHANGE_SCRIPT }]);
-		});
-
-		test("refuses a blinded output it was given no key for, building nothing", async () => {
-			const { assemble, recorded } = subject(blindedAndOpen);
-
-			const result = await assemble();
-
-			expect(result).toMatchObject({ ok: false });
-			expect(recorded.freed).toBe(0);
-			expect(recorded.outputs).toEqual([]);
-
-			if (!result.ok) {
-				expect(result.reason).toContain("paid_out");
-			}
-		});
-
-		test("and refuses blinded change it was given no key for", async () => {
-			expect(await subject({ changeBlinded: true }).assemble()).toMatchObject({ ok: false });
 		});
 	});
 });

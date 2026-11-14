@@ -69,7 +69,7 @@ const wollet = (txs: unknown[]) =>
 const A = "aa".repeat(32);
 const B = "bb".repeat(32);
 
-describe("the wallet's own outputs that hide nothing", () => {
+describe("the wallet's own outputs that are not blinded", () => {
 	test("the public UTXO response includes an explicit redemption reserve", () => {
 		const account = {
 			chainId: "bip122:" + "11".repeat(16),

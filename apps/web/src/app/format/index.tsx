@@ -3,7 +3,7 @@ import { type ConstructRegistryEntry, describeRegistry } from "@humid/tx-manifes
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-import { WHERE_IT_SITS } from "./positions";
+import { WHERE_IT_SITS } from "./constructKinds";
 
 export default function FormatSupport() {
 	const entries = describeRegistry();
@@ -15,7 +15,7 @@ export default function FormatSupport() {
 					<CardTitle>What this wallet reads of the format</CardTitle>
 					<CardDescription>
 						Every field the transaction-manifest format defines, against what this wallet does with
-						it. Nothing here depends on a document — it is the same table the wallet decides by,
+						each. Nothing here depends on a document: this is the same table the wallet decides by,
 						printed.
 					</CardDescription>
 				</CardHeader>
@@ -28,11 +28,6 @@ export default function FormatSupport() {
 				title="Not implemented"
 				description="The format defines these and this wallet does not act on them. A document using one is refused rather than read past."
 				entries={entries.filter((entry) => entry.state === "unimplemented")}
-			/>
-			<Section
-				title="Deliberately read by nothing"
-				description="Known, and read by nothing here or in the reference implementation. A document using one is not refused, because being wrong about it cannot change what gets signed."
-				entries={entries.filter((entry) => entry.state === "never-read")}
 			/>
 			<Section
 				title="Read, and shown to a person"
@@ -76,14 +71,13 @@ function Section({
 						<tbody>
 							{entries.map((entry) => (
 								<tr
-									key={`${entry.site ?? "everywhere"}/${entry.key}`}
+									key={`${entry.kind}/${entry.key}`}
 									className="border-border/50 border-b align-top"
 								>
 									<td className="py-2 pr-4 font-mono whitespace-nowrap">{entry.key}</td>
-									<td className="text-muted-foreground py-2 pr-4 whitespace-nowrap">
-										{WHERE_IT_SITS[entry.site ?? "everywhere"]}
+									<td className="text-muted-foreground py-2 whitespace-nowrap">
+										{WHERE_IT_SITS[entry.kind]}
 									</td>
-									<td className="text-muted-foreground py-2">{entry.reason}</td>
 								</tr>
 							))}
 						</tbody>
@@ -95,12 +89,7 @@ function Section({
 }
 
 function summaryOf(entries: ConstructRegistryEntry[]): string {
-	const positioned = entries.filter((entry) => entry.site !== undefined);
-	const kinds = new Set(positioned.map((entry) => entry.site)).size;
-	const everywhere = entries.length - positioned.length;
+	const kinds = new Set(entries.map((entry) => entry.kind)).size;
 
-	return (
-		`${positioned.length} fields at ${kinds} kinds of position, plus ${everywhere} that any ` +
-		"JSON document may carry anywhere. Each one this wallet does not act on says why."
-	);
+	return `${entries.length} fields at ${kinds} kinds of position.`;
 }

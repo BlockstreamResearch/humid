@@ -11,7 +11,7 @@ export type ProcessCtConfirmationData = {
 	shown: ShownConfirmation;
 };
 
-const ORIGINS = new Set(["chain", "computed", "dapp", "verified"]);
+const ORIGINS = new Set(["computed", "dapp", "verified"]);
 
 const UNSIGNED = /^\d+$/;
 const SIGNED = /^-?\d+$/;
@@ -61,7 +61,15 @@ export function isProcessCtConfirmationData(value: unknown): value is ProcessCtC
 			(row) => isRecord(row) && provenancedString(row.asset) && provenancedAmount(row.sats, SIGNED),
 		) &&
 		everyRow(
-			shown.covenants,
+			shown.payments,
+			(row) =>
+				isRecord(row) &&
+				provenancedString(row.address) &&
+				provenancedString(row.asset) &&
+				provenancedAmount(row.sats, UNSIGNED),
+		) &&
+		everyRow(
+			shown.programs,
 			(row) =>
 				isRecord(row) &&
 				provenancedString(row.address) &&
@@ -131,8 +139,8 @@ export function ProcessCtUnreadable({ onDecline }: { onDecline: () => void }) {
 			<header className="p-4 pb-3 text-center">
 				<h2 className="cn-font-heading text-xl font-bold">This cannot be shown to you</h2>
 				<p className="text-muted-foreground mt-1 text-sm">
-					The wallet could not read what it was asked to put on this screen, so it will not ask you
-					to approve it. Nothing has been signed and nothing has been sent.
+					The wallet could not read what it was asked to put on this screen, so it will not ask for
+					your approval. Nothing has been signed and nothing has been sent.
 				</p>
 			</header>
 
@@ -190,6 +198,30 @@ export function ProcessCtConfirmation({
 					);
 				})}
 
+				{shown.payments.map((payment, at) => {
+					const inFeeAsset = payment.asset.value === shown.feeAsset.value;
+
+					return (
+						<div className="flex flex-col gap-1" key={`${payment.address.value}:${at}`}>
+							<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+								Paid to
+							</span>
+							<span className="font-mono text-xs break-all">{payment.address.value}</span>
+							<span className="text-muted-foreground text-xs">
+								{describeOrigin(payment.address.origin)}
+							</span>
+							<span className="text-sm font-medium">
+								{inFeeAsset ? feeLine(payment.sats.value) : payment.sats.value}
+							</span>
+							{inFeeAsset ? null : (
+								<span className="text-muted-foreground text-xs break-all">
+									{payment.asset.value}
+								</span>
+							)}
+						</div>
+					);
+				})}
+
 				<Shown
 					label="Network fee"
 					value={{ ...shown.feeSats, value: feeLine(shown.feeSats.value) } as Provenanced<string>}
@@ -228,26 +260,26 @@ export function ProcessCtConfirmation({
 					</div>
 				))}
 
-				{shown.covenants.map((covenant) => (
-					<div className="flex flex-col gap-1" key={covenant.address.value}>
+				{shown.programs.map((program) => (
+					<div className="flex flex-col gap-1" key={program.address.value}>
 						<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-							{covenant.verified.value ? "Contract, checked" : "Contract, not yet onchain"}
+							{program.verified.value ? "Contract, checked" : "Contract, not yet onchain"}
 						</span>
-						<span className="font-mono text-xs break-all">{covenant.address.value}</span>
+						<span className="font-mono text-xs break-all">{program.address.value}</span>
 						<span className="text-muted-foreground text-xs">
-							{describeOrigin(covenant.address.origin)}
+							{describeOrigin(program.address.origin)}
 						</span>
-						<span className="text-sm">{covenant.utxoType.value}</span>
+						<span className="text-sm">{program.utxoType.value}</span>
 						<span className="text-muted-foreground text-xs">
-							{describeOrigin(covenant.utxoType.origin)}
+							{describeOrigin(program.utxoType.origin)}
 						</span>
 						{/* The address says where the funds sit and moves with the arguments and the
 						    network. These say what the contract is, so a person who has seen this
 						    contract before has something that does not change to recognise it by. */}
 						<span className="text-muted-foreground text-xs">Contract hash</span>
-						<span className="font-mono text-xs break-all">{covenant.cmr.value}</span>
+						<span className="font-mono text-xs break-all">{program.cmr.value}</span>
 						<span className="text-muted-foreground text-xs">Leaf it is spent from</span>
-						<span className="font-mono text-xs break-all">{covenant.tapleafHash.value}</span>
+						<span className="font-mono text-xs break-all">{program.tapleafHash.value}</span>
 					</div>
 				))}
 
