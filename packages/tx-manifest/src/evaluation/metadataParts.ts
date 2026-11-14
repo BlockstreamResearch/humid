@@ -1,7 +1,7 @@
 import { reverseHex, withoutHexPrefix } from "../chain/hex";
 import { integerOf } from "../chain/integers";
-import { asArray, asRecord } from "../document/json";
 import { parseReference } from "../document/references";
+import type { DataPart } from "../document/schema";
 import { quoted, Refusal } from "../refusal";
 
 type PartType = {
@@ -25,7 +25,7 @@ const PART_TYPES: Record<string, PartType> = {
 
 const BYTE_ORDERS: Record<string, "be" | "le"> = { be: "be", le: "le" };
 
-const UNSUPPORTED_MODIFIERS = ["align", "pad_to"];
+const UNSUPPORTED_MODIFIERS = ["align", "pad_to"] as const;
 
 export type PartResolver = (reference: string) => unknown;
 
@@ -34,7 +34,7 @@ const CONCAT = /^concat\((?<items>.*)\)$/s;
 export function concatParts(
 	expression: string,
 	declaredTypes: Record<string, string>,
-): { parts: Record<string, string>[] } {
+): { parts: DataPart[] } {
 	const items = CONCAT.exec(expression.trim())?.groups?.items;
 
 	if (items === undefined) {
@@ -57,51 +57,31 @@ export function concatParts(
 }
 
 export function encodeMetadataParts(
-	data: unknown,
+	data: { parts: DataPart[] },
 	resolve: PartResolver = (reference) => reference,
 ): string {
-	const declared = asRecord(data)?.parts;
-
-	if (!Array.isArray(declared)) {
-		throw new Refusal("Object-form data carries no parts list.");
-	}
-
-	return asArray(declared)
-		.map((entry, at) => {
-			const part = asRecord(entry);
-
-			if (!part) {
-				throw new Refusal(`Data part ${at + 1} is not a typed value.`);
-			}
-
-			return encodePart(part, at + 1, resolve);
-		})
-		.join("");
+	return data.parts.map((part, at) => encodePart(part, at + 1, resolve)).join("");
 }
 
-function encodePart(
-	part: Record<string, unknown>,
-	position: number,
-	resolve: PartResolver,
-): string {
+function encodePart(part: DataPart, position: number, resolve: PartResolver): string {
 	for (const key of UNSUPPORTED_MODIFIERS) {
-		if (key in part) {
+		if (part[key] !== undefined) {
 			throw new Refusal(
 				`Data part ${position} carries ${key}, which this runtime does not encode in data parts.`,
 			);
 		}
 	}
 
-	const type = part.type;
-	const declared = typeof type === "string" ? PART_TYPES[type] : undefined;
+	const { type } = part;
+	const declared = PART_TYPES[type];
 
 	if (!declared) {
 		throw new Refusal(
-			`Data part ${position} is declared ${String(type)}, which object-form data does not have.`,
+			`Data part ${position} is declared ${type}, which object-form data does not have.`,
 		);
 	}
 
-	if (!("value" in part)) {
+	if (part.value === undefined) {
 		throw new Refusal(`Data part ${position}, declared ${type}, carries no value.`);
 	}
 
@@ -120,7 +100,7 @@ function encodePart(
 				);
 	const wrong = (found: string) =>
 		new Refusal(
-			`Data part ${position} is declared ${String(type)}, which is ${declared.shape}. Got ${found}.`,
+			`Data part ${position} is declared ${type}, which is ${declared.shape}. Got ${found}.`,
 		);
 
 	return declared.encoding === "integer"
@@ -128,12 +108,8 @@ function encodePart(
 		: encodeBytes(declared, value, wrong);
 }
 
-function byteOrder(
-	part: Record<string, unknown>,
-	position: number,
-	declared: PartType,
-): "be" | "le" {
-	if (!("endian" in part)) {
+function byteOrder(part: DataPart, position: number, declared: PartType): "be" | "le" {
+	if (part.endian === undefined) {
 		return "le";
 	}
 

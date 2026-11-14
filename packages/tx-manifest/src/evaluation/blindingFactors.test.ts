@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
-import { refusalOf } from "../review/reviewForTests";
+import { actionOf, refusalOf } from "../review/reviewForTests";
 import { resolveBlindingFactors } from "./blindingFactors";
 
 const ONE = `01${"00".repeat(31)}`;
 
-const factors = (declared: unknown, params: Record<string, unknown> = {}) =>
-	resolveBlindingFactors(declared, { params });
+const factors = (blinding: unknown, params: Record<string, unknown> = {}) =>
+	resolveBlindingFactors(
+		actionOf("Spend", { inputs: [{ blinding, utxo_source: "wallet" }] }).inputs[0]!.blinding!,
+		{ params },
+	);
 
 describe("the blinding factors a manifest states", () => {
 	test("are scalars, written in the byte order the signer reads", () => {

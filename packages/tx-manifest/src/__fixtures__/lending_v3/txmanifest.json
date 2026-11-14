@@ -1,5 +1,4 @@
 {
-  "$schema": "../../schema/txmanifest.schema.json",
   "$comment": "lending_v3 targets the DEPLOYED simplicity-lending indexer (odev). Interop constants are fixed: factory params (2,0), NUMS key, protocol-fee keeper 38fca2d9…, and the program-id tags below. Change a covenant .simf and you must recompute the matching *_PROGRAM_ID + covenant address.",
   "manifest_version": "0.3.1",
   "protocol": "simplicity-lending",
@@ -21,7 +20,7 @@
       "asset": "FACTORY_ASSET_ID"
     },
     "lending_collateral": {
-      "description": "The lending (collateral) covenant — out[5] of an offer-creation tx. Holds COLLATERAL_AMOUNT of the collateral asset with 2 taproot storage slots (slot0 = is_active, slot1 = current_debt). Its address is the CMR of lending.simf compiled with the full offer params + the 5 nested AssetAuth/AssetAuthVault cov-hashes (task 07), folded with the 2 storage leaves (task 01/02). Reproduced byte-exactly for live offer 43ab4efe (txmanifest_lib/tests/interop/lending_collateral.rs). NOTE: slot1 (current_debt) is dynamic; expressing it as a computed 32-byte storage leaf needs the engine extension tracked in upnext/10.",
+      "description": "The lending (collateral) covenant: out[5] of an offer-creation tx. Holds COLLATERAL_AMOUNT of the collateral asset with 2 taproot storage slots (slot0 = is_active, slot1 = current_debt). Its address is the CMR of lending.simf compiled with the full offer params and the 5 nested AssetAuth/AssetAuthVault cov-hashes, folded with the 2 storage leaves. Reproduced byte-exactly for live offer 43ab4efe.",
       "script": {
         "type": "simplicity",
         "source": "./lending.simf",
@@ -65,7 +64,7 @@
       "asset": "COLLATERAL_ASSET_ID"
     },
     "lending_collateral_active": {
-      "description": "The lending (collateral) covenant in the ACTIVE state (after AcceptOffer). Identical to lending_collateral except storage slot0 = is_active = 1 (value 1, byte[31]=0x01), which changes the covenant address. slot1 = CURRENT_DEBT (unchanged on a fresh accept). De-risked by txmanifest_lib/tests/interop/lending_active.rs (address flips vs pending).",
+      "description": "The lending (collateral) covenant: out[5] of an offer-creation tx. Holds COLLATERAL_AMOUNT of the collateral asset with 2 taproot storage slots (slot0 = is_active, slot1 = current_debt). Its address is the CMR of lending.simf compiled with the full offer params and the 5 nested AssetAuth/AssetAuthVault cov-hashes, folded with the 2 storage leaves. Reproduced byte-exactly for live offer 43ab4efe.",
       "script": {
         "type": "simplicity",
         "source": "./lending.simf",
@@ -161,7 +160,7 @@
       "asset": "PRINCIPAL_ASSET_ID"
     },
     "lender_nft_script_auth": {
-      "description": "ScriptAuth covenant holding the lender NFT during a pending offer — out[3]. Keyed by SCRIPT_HASH = sha256(lending covenant scriptPubKey, INCLUDING its 2 storage slots) i.e. the pending offer's own script hash (ScriptAuth::from_simplex_program). NOTE: the manifest's tapleaf/script-hash compute currently hashes the storage-less covenant; hashing a covenant-with-storage needs the engine extension tracked in upnext/11.",
+      "description": "ScriptAuth covenant holding the lender NFT during a pending offer: out[3]. Keyed by SCRIPT_HASH = sha256(lending covenant scriptPubKey, including its 2 storage slots), i.e. the pending offer's own script hash (ScriptAuth::from_simplex_program).",
       "script": {
         "type": "simplicity",
         "source": "./script_auth.simf",
@@ -208,7 +207,7 @@
             "FACTORY_PROGRAM_ID": {
               "type": "bytes",
               "default": "dd1e7f89",
-              "description": "The 4-byte protocol message-type tag that prefixes the factory-creation OP_RETURN (out[2]). The indexer's IssuanceFactory::try_from_tx rejects the tx unless these bytes match. This is a fixed constant, NOT a per-run input — do not override. How it is derived (recompute ONLY if you edit issuance_factory.simf, which also changes the covenant address): the first 4 bytes of SHA-256 of the LF-normalized issuance_factory.simf source text. (Value verified against on-chain data; the engine no longer computes it — it's a plain constant so the tx-encoder stays protocol-agnostic.)"
+              "description": "The 4-byte protocol message-type tag that prefixes the factory-creation OP_RETURN (out[2]). The indexer's IssuanceFactory::try_from_tx rejects the tx unless these bytes match. This is a fixed constant, NOT a per-run input — do not override. How it is derived (recompute ONLY if you edit issuance_factory.simf, which also changes the covenant address): the first 4 bytes of SHA-256 of the LF-normalized issuance_factory.simf source text. Value verified against on-chain data."
             }
           },
           "create_instance": {
@@ -316,7 +315,7 @@
       }
     },
     "lending_contract": {
-      "description": "A single P2P lending offer minted from an issuance factory (lending_v3). CreateOffer computes the lending (collateral) covenant address (out[5]) from the offer terms and the nested AssetAuth/AssetAuthVault cov-hash chain (task 07), matching simplicity-lending's LendingOfferParameters::build_arguments. The 5 nested hashes reproduce live offer 43ab4efe out[5] byte-exactly (txmanifest_lib/tests/interop/lending_collateral.rs). Full on-chain assembly (dynamic storage leaves, script_auth-over-storage) is tracked in task 06 + upnext/10-11.",
+      "description": "A single P2P lending offer minted from an issuance factory (lending_v3). CreateOffer computes the lending (collateral) covenant address (out[5]) from the offer terms and the nested AssetAuth/AssetAuthVault cov-hash chain, matching simplicity-lending's LendingOfferParameters::build_arguments. The 5 nested hashes reproduce live offer 43ab4efe out[5] byte-exactly.",
       "fields": {
         "FACTORY_ASSET_ID": {
           "type": "liquid.asset_id",
@@ -397,12 +396,12 @@
         "ZERO_HASH": {
           "type": "bytes32",
           "default": "0000000000000000000000000000000000000000000000000000000000000000",
-          "description": "The all-zero FINALIZED_VAULT_COV_HASH baked into the finalized (non-active) AssetAuthVault variants. A fixed constant, kept as a field so the *_vault_finalized utxo_types can reference it by name and inherit its declared bytes32 type. Do not inline the zeros as a literal in compile_params: 64 zero characters are all ASCII digits, so the engine's value-based type inference would type it u64 and mis-compile the covenant."
+          "description": "The all-zero FINALIZED_VAULT_COV_HASH baked into the finalized (non-active) AssetAuthVault variants. A fixed constant, kept as a field so the *_vault_finalized utxo_types can reference it by name and inherit its declared bytes32 type. Do not inline the zeros as a literal in compile_params: a literal carries no type, and this wallet encodes a 32-byte value only by a name that declares one."
         }
       },
       "actions": {
         "CreateOffer": {
-          "description": "Mint a pending offer from the factory: spend the factory auth NFT (in[0]) + factory covenant issuing the borrower NFT (in[1], IssueAssets{output_index:0}) + collateral input issuing the lender NFT (in[2]); recreate the factory covenant (out[1]), pay borrower NFT to wallet (out[2]), lock lender NFT in a ScriptAuth keyed to the offer (out[3]), publish the 50-byte lending metadata OP_RETURN (out[4]), and lock collateral in the lending covenant with 2 storage slots (out[5]). create_instance computes the nested cov-hash chain that fixes the out[5] address (task 07).",
+          "description": "Mint a pending offer from the factory: spend the factory auth NFT (in[0]) + factory covenant issuing the borrower NFT (in[1], IssueAssets{output_index:0}) + collateral input issuing the lender NFT (in[2]); recreate the factory covenant (out[1]), pay borrower NFT to wallet (out[2]), lock lender NFT in a ScriptAuth keyed to the offer (out[3]), publish the 50-byte lending metadata OP_RETURN (out[4]), and lock collateral in the lending covenant with 2 storage slots (out[5]). create_instance computes the nested cov-hash chain that fixes the out[5] address.",
           "params": {
             "FACTORY_ASSET_ID": {
               "type": "liquid.asset_id",
@@ -444,7 +443,7 @@
             "LENDING_PROGRAM_ID": {
               "type": "bytes",
               "default": "f80c6162",
-              "description": "The 4-byte protocol message-type tag that prefixes the offer-creation OP_RETURN (out[4]); the indexer keys offer detection on it. Fixed constant, NOT a per-run input — do not override. Derived (recompute ONLY if you edit lending.simf, which also changes the covenant address) as the first 4 bytes of SHA-256 of the LF-normalized lending.simf source text. Verified against on-chain data; the engine treats it as a plain constant so the tx-encoder stays protocol-agnostic."
+              "description": "The 4-byte protocol message-type tag that prefixes the offer-creation OP_RETURN (out[4]); the indexer keys offer detection on it. Fixed constant, NOT a per-run input — do not override. Derived (recompute ONLY if you edit lending.simf, which also changes the covenant address) as the first 4 bytes of SHA-256 of the LF-normalized lending.simf source text. Verified against on-chain data."
             }
           },
           "create_instance": {
@@ -734,7 +733,7 @@
             },
             {
               "id": "factory_covenant_in",
-              "description": "The issuance_factory covenant UTXO (input 1). Spent via the IssueAssets path, issuing the borrower NFT from this covenant's outpoint; the covenant is recreated at out[1]. Covenant-sourced issuance — task 03.",
+              "description": "The issuance_factory covenant UTXO (input 1). Spent via the IssueAssets path, issuing the borrower NFT from this covenant's outpoint; the covenant is recreated at out[1]. Covenant-sourced issuance.",
               "utxo_source": {
                 "utxo_type": "issuance_factory"
               },
@@ -857,7 +856,7 @@
             },
             {
               "id": "creation_op_return",
-              "description": "Lending creation metadata OP_RETURN (output 4), 50 bytes: program_id(lending.simf)[4] || principal_asset_id[32, internal] || principal_amount[8, u64 LE] || loan_expiration[4, u32 LE] || interest_rate[2, u16 LE]. Matches lending metadata::encode (task 04). Interest rate is u16 in the OP_RETURN even though it is u64 in the covenant params.",
+              "description": "Lending creation metadata OP_RETURN (output 4), 50 bytes: program_id(lending.simf)[4] || principal_asset_id[32, internal] || principal_amount[8, u64 LE] || loan_expiration[4, u32 LE] || interest_rate[2, u16 LE]. Matches lending metadata::encode. Interest rate is u16 in the OP_RETURN even though it is u64 in the covenant params.",
               "destination": {
                 "type": "op_return"
               },

@@ -1,7 +1,6 @@
 import { Refusal } from "../refusal";
-import { asArray, asRecord } from "./json";
-import { type Action, type Manifest } from "./manifest";
-import { namedUtxoTypes } from "./programUses";
+import { type Action, type Manifest, namedUtxoTypes } from "./manifest";
+import type { ProgramReference } from "./schema";
 
 export type ReferenceForm = "bare" | "input-attribute" | "instance" | "params";
 
@@ -190,8 +189,6 @@ export type ReferenceOccurrence = {
 	text: string;
 };
 
-const DESTINATION_KEYWORDS = new Set(["change", "wallet"]);
-
 export function actionReferences(manifest: Manifest, action: Action): ReferenceOccurrence[] {
 	const found: ReferenceOccurrence[] = [];
 	const where = `action ${action.name}`;
@@ -201,66 +198,62 @@ export function actionReferences(manifest: Manifest, action: Action): ReferenceO
 			found.push({ at, position, text: value });
 		}
 	};
-
-	const addWiring = (
+	const addAll = (
 		at: string,
-		wiring: unknown,
-		position: ReferencePosition = "compileParam",
+		values: Record<string, string> | undefined,
+		position: ReferencePosition,
 	): void => {
-		for (const [name, value] of Object.entries(asRecord(wiring) ?? {})) {
+		for (const [name, value] of Object.entries(values ?? {})) {
 			add(position, `${at} / ${name}`, value);
 		}
 	};
-	const addProgramUse = (at: string, reference: unknown): void => {
-		addWiring(at, asRecord(reference)?.compile_params);
-		addWiring(at, asRecord(reference)?.args, "field");
+	const addProgram = (at: string, reference: ProgramReference): void => {
+		addAll(at, reference.compile_params, "compileParam");
+		addAll(at, reference.args, "field");
 	};
 
-	for (const declared of asArray(action.node.inputs)) {
-		const input = asRecord(declared);
-
-		addProgramUse(`${where} / input ${identifierOf(input)}`, input?.utxo_source);
-	}
-
-	for (const declared of asArray(action.node.outputs)) {
-		const output = asRecord(declared);
-		const at = `${where} / output ${identifierOf(output)}`;
-		const destination = output?.destination;
-
-		addProgramUse(at, destination);
-		add("amount", `${at} / amount_sat`, output?.amount_sat);
-
-		if (typeof destination === "string" && !DESTINATION_KEYWORDS.has(destination)) {
-			add("destination", `${at} / destination`, destination);
+	for (const input of action.inputs) {
+		if (input.utxo_source !== "wallet") {
+			addProgram(`${where} / input ${input.label}`, input.utxo_source);
 		}
 	}
 
-	for (const [name, value] of Object.entries(
-		asRecord(asRecord(action.node.create_instance)?.fields) ?? {},
-	)) {
+	for (const output of action.outputs) {
+		const at = `${where} / output ${output.label}`;
+		const { destination } = output;
+
+		if (destination.kind === "program") {
+			addProgram(at, destination.reference);
+		}
+
+		add("amount", `${at} / amount_sat`, output.amount_sat);
+
+		if (destination.kind === "address") {
+			add("destination", `${at} / destination`, destination.address);
+		}
+	}
+
+	for (const [name, value] of Object.entries(action.create_instance?.fields ?? {})) {
 		const at = `${where} / new deployment / ${name}`;
 
 		add("compileParam", at, value);
 
-		for (const [param, spec] of Object.entries(asRecord(asRecord(value)?.params) ?? {})) {
-			add(
-				"compileParam",
-				`${at} / ${param}`,
-				typeof spec === "string" ? spec : asRecord(spec)?.value,
-			);
+		if (typeof value !== "string") {
+			for (const [param, wired] of Object.entries(value.params)) {
+				add("compileParam", `${at} / ${param}`, typeof wired === "string" ? wired : wired.value);
+			}
 		}
 	}
 
-	for (const name of namedUtxoTypes(action.node)) {
+	for (const name of namedUtxoTypes(action)) {
 		const declared = manifest.utxoType(name);
-		const params = asRecord(declared?.params);
 
-		if (params === undefined) {
-			addWiring(`utxo type ${name} / script`, asRecord(declared?.script)?.compile_params);
+		if (declared?.params === undefined) {
+			addAll(`utxo type ${name} / script`, declared?.script.compile_params, "compileParam");
 		}
 
-		for (const [param, definition] of Object.entries(params ?? {})) {
-			add("field", `utxo type ${name} / param ${param}`, asRecord(definition)?.default);
+		for (const [param, definition] of Object.entries(declared?.params ?? {})) {
+			add("field", `utxo type ${name} / param ${param}`, definition.default);
 		}
 	}
 
@@ -273,10 +266,7 @@ export function instanceReferences(
 	supplied: Record<string, unknown>,
 ): ReferenceOccurrence[] {
 	const fields = manifest.templateFields(action);
-	const created = new Set(
-		Object.keys(asRecord(asRecord(action.node.create_instance)?.fields) ?? {}),
-	);
-	const params = asRecord(action.node.params) ?? {};
+	const created = new Set(Object.keys(action.create_instance?.fields ?? {}));
 
 	return actionReferences(manifest, action).filter((occurrence) => {
 		const reference = parseReference(occurrence.text);
@@ -286,7 +276,7 @@ export function instanceReferences(
 		}
 
 		if (reference.form === "instance") {
-			return !(reference.name in params);
+			return !(reference.name in action.params);
 		}
 
 		return (
@@ -296,8 +286,4 @@ export function instanceReferences(
 			!(reference.name in supplied)
 		);
 	});
-}
-
-function identifierOf(node: Record<string, unknown> | undefined): string {
-	return typeof node?.id === "string" ? node.id : "(unnamed)";
 }

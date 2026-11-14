@@ -1,6 +1,6 @@
-import { asRecord } from "../document/json";
 import type { Action } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
+import type { Compute } from "../document/schema";
 import { statedValue } from "../evaluation/computedValue";
 import { Refusal } from "../refusal";
 import { resolveCompileParams } from "./compileParams";
@@ -9,19 +9,10 @@ import { stateLeavesOf } from "./stateLeaves";
 
 export type CreatedInstance = { fields: Record<string, string>; rounds: number };
 
-export function createsInstance(action: Action): boolean {
-	return asRecord(action.node.create_instance) !== undefined;
-}
-
-function computeKind(node: Record<string, unknown>): string | undefined {
-	return typeof node.type === "string" ? node.type : undefined;
-}
-
 export function statedCreatedFields(action: Action, scope: ReferenceScope): Record<string, string> {
-	const declared = asRecord(asRecord(action.node.create_instance)?.fields);
 	const stated: Record<string, string> = {};
 
-	for (const [name, value] of Object.entries(declared ?? {})) {
+	for (const [name, value] of Object.entries(action.create_instance?.fields ?? {})) {
 		if (typeof value !== "string") {
 			continue;
 		}
@@ -44,16 +35,10 @@ export function resolveCreatedInstance(
 		scope: ReferenceScope;
 	},
 ): CreatedInstance {
-	const block = asRecord(action.node.create_instance);
-
-	if (!block) {
-		throw new Refusal("This action does not create an instance.");
-	}
-
-	const declared = asRecord(block.fields);
+	const declared = action.create_instance?.fields;
 
 	if (!declared) {
-		throw new Refusal("The action creates an instance and declares no fields for the instance.");
+		throw new Refusal("This action does not create an instance.");
 	}
 
 	const direct: Record<string, string> = {};
@@ -66,25 +51,17 @@ export function resolveCreatedInstance(
 			continue;
 		}
 
-		const node = asRecord(value);
-
-		if (!node) {
-			throw new Refusal(`Field ${name} is neither a reference nor a computed value.`);
-		}
-
-		const kind = computeKind(node);
-
-		if (kind !== "tapleaf") {
+		if (value.type !== "tapleaf") {
 			throw new Refusal(
-				`Field ${name} is computed by "${String(kind)}", which this runtime does not ` +
+				`Field ${name} is computed by "${value.type}", which this runtime does not ` +
 					"implement. Honouring it means executing a contract while building the " +
 					"transaction, not merely compiling one.",
 			);
 		}
 
-		const simf = node.simf;
+		const { simf } = value;
 
-		if (typeof simf !== "string") {
+		if (simf === undefined) {
 			throw new Refusal(`Field ${name} names no contract to compute from.`);
 		}
 
@@ -94,7 +71,7 @@ export function resolveCreatedInstance(
 			throw new Refusal(`The source of ${simf} was not supplied.`);
 		}
 
-		computed.push({ name, node, source });
+		computed.push({ compute: value, name, source });
 	}
 
 	if (computed.length === 0) {
@@ -111,7 +88,7 @@ export function resolveCreatedInstance(
 		const next: Record<string, string> = {};
 		const settled: Record<string, string> = { ...values };
 
-		for (const { name, node, source } of ordered) {
+		for (const { compute, name, source } of ordered) {
 			const withNewFields = { ...direct, ...settled };
 			const scope: ReferenceScope = {
 				...input.scope,
@@ -120,7 +97,7 @@ export function resolveCreatedInstance(
 			};
 			const hash = Refusal.amend(
 				() => {
-					const wiring = tapleafWiring(node);
+					const wiring = tapleafWiring(compute);
 
 					return input.hashProgram({
 						argumentsJson: JSON.stringify(
@@ -133,7 +110,7 @@ export function resolveCreatedInstance(
 							),
 						),
 						extraLeavesJson: JSON.stringify(
-							stateLeavesOf(node.extra_leaves, { at: `Field ${name}`, scope }),
+							stateLeavesOf(compute.extra_leaves, { at: `Field ${name}`, scope }),
 						),
 						source,
 					});
@@ -161,7 +138,7 @@ export function resolveCreatedInstance(
 	);
 }
 
-type ComputedField = { name: string; node: Record<string, unknown>; source: string };
+type ComputedField = { compute: Compute; name: string; source: string };
 
 const NAME_IN_TEXT = /[A-Za-z_][A-Za-z0-9_]*/g;
 
@@ -204,14 +181,9 @@ function inDependencyOrder(computed: ComputedField[]): ComputedField[] {
 }
 
 function dependenciesOf(field: ComputedField, names: Set<string>): Set<string> {
-	const wiring = Refusal.attempt(() => tapleafWiring(field.node));
 	const found = new Set<string>();
 
-	for (const value of Object.values(wiring?.wiring ?? {})) {
-		if (typeof value !== "string") {
-			continue;
-		}
-
+	for (const value of Object.values(tapleafWiring(field.compute).wiring)) {
 		for (const word of value.match(NAME_IN_TEXT) ?? []) {
 			if (names.has(word)) {
 				found.add(word);
@@ -224,63 +196,44 @@ function dependenciesOf(field: ComputedField, names: Set<string>): Set<string> {
 
 type TapleafWiring = {
 	declaredAtUse: Record<string, string>;
-	wiring: Record<string, unknown>;
+	wiring: Record<string, string>;
 };
 
-function tapleafWiring(node: Record<string, unknown>): TapleafWiring {
-	const declared = asRecord(node.params);
-
-	if (!declared) {
-		return { declaredAtUse: {}, wiring: {} };
-	}
-
+function tapleafWiring(compute: Compute): TapleafWiring {
 	const declaredAtUse: Record<string, string> = {};
-	const wiring: Record<string, unknown> = {};
+	const wiring: Record<string, string> = {};
 
-	for (const [name, spec] of Object.entries(declared)) {
+	for (const [name, spec] of Object.entries(compute.params)) {
 		if (typeof spec === "string") {
 			wiring[name] = spec;
 
 			continue;
 		}
 
-		const value = asRecord(spec)?.value;
-
-		if (typeof value !== "string") {
-			throw new Refusal(`Parameter ${name} names no value to compile with.`);
+		if (spec.type !== undefined) {
+			declaredAtUse[name] = spec.type;
 		}
 
-		const type = asRecord(spec)?.type;
-
-		if (typeof type === "string") {
-			declaredAtUse[name] = type;
-		}
-
-		wiring[name] = value;
+		wiring[name] = spec.value;
 	}
 
 	return { declaredAtUse, wiring };
 }
 
-function fieldTypes(declared: Record<string, unknown>): Record<string, string> {
+function fieldTypes(declared: Record<string, string | Compute>): Record<string, string> {
 	const types: Record<string, string> = {};
 
 	for (const [name, value] of Object.entries(declared)) {
-		const node = asRecord(value);
-
-		if (!node || computeKind(node) !== "tapleaf") {
+		if (typeof value === "string" || value.type !== "tapleaf") {
 			continue;
 		}
 
 		types[name] = "bytes32";
 
-		for (const [param, spec] of Object.entries(asRecord(node.params) ?? {})) {
-			const type = asRecord(spec)?.type;
-			const target = asRecord(spec)?.value;
-
-			if (typeof type === "string" && typeof target === "string") {
-				types[target] = type;
-				types[param] ??= type;
+		for (const [param, spec] of Object.entries(value.params)) {
+			if (typeof spec !== "string" && spec.type !== undefined) {
+				types[spec.value] = spec.type;
+				types[param] ??= spec.type;
 			}
 		}
 	}

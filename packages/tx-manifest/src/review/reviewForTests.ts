@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 
 import type { ReadTxOut } from "../chain/chainRead";
+import { type Action, Manifest } from "../document/manifest";
 import type { ProgramAbi } from "../programs/programParamTypes";
 import { Refusal } from "../refusal";
 import type { ParsedLiquidProcessCtParams } from "../request/request";
@@ -195,4 +196,18 @@ export function refusalOf(run: () => unknown): Refusal {
 	}
 
 	throw new Error("Ran where a refusal was expected.");
+}
+
+export function actionOf(name: string, declared: Document, manifest: Document = {}): Action {
+	const action = Manifest.parse({
+		manifest_version: "0.3.1",
+		...manifest,
+		actions: { [name]: declared },
+	}).action(name);
+
+	if (!action) {
+		throw new Error(`No action ${name} was parsed.`);
+	}
+
+	return action;
 }

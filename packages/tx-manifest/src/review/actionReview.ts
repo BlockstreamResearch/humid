@@ -5,11 +5,17 @@ import { baseUnits } from "../chain/integers";
 import type { Outpoint } from "../chain/outpoint";
 import { byOutpoint, outpointKey } from "../chain/outpoint";
 import { confirmationModel, type ReviewedPlan } from "../confirmation";
-import { asArray, asRecord } from "../document/json";
-import { type Action, type InstanceFile, Manifest, readInstance } from "../document/manifest";
-import { type ProgramUse, programUses } from "../document/programUses";
+import {
+	type Action,
+	type Input,
+	Manifest,
+	type ProgramInput,
+	programInputs,
+	programOutputs,
+} from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { refuseUnsupported } from "../document/refuse";
+import type { Blinding, Issuance, ProgramReference } from "../document/schema";
 import {
 	type AssetLedger,
 	assetLedger,
@@ -18,17 +24,10 @@ import {
 } from "../evaluation/assetLedger";
 import { type BlindingDecision, resolveChangeBlinding } from "../evaluation/blinding";
 import { type BlindingFactors, resolveBlindingFactors } from "../evaluation/blindingFactors";
-import {
-	actionHook,
-	inputHook,
-	inputHookScope,
-	runHook,
-	withHookValues,
-} from "../evaluation/hooks";
+import { inputHookScope, runHook, withHookValues } from "../evaluation/hooks";
 import { type InputPlacement, type PlaceableInput, placeInputs } from "../evaluation/inputOrder";
 import { type InputRule, resolveInputRules } from "../evaluation/inputRules";
 import {
-	declaredIssuance,
 	issuanceAttributes,
 	reissuanceOf,
 	type PlannedIssuance,
@@ -38,11 +37,14 @@ import {
 import { fillParameters } from "../evaluation/parameters";
 import { type PlannedSpend, planAction, resolveAmount } from "../evaluation/plan";
 import { checkPositions, type StatedPosition } from "../evaluation/positions";
-import { checkWitnessNames, resolveStaticWitnesses } from "../evaluation/witness";
-import { declaredParamTypes } from "../programs/declaredTypes";
+import {
+	checkWitnessNames,
+	resolveStaticWitnesses,
+	signatureWitness,
+	unusedWitnesses,
+} from "../evaluation/witness";
 import {
 	type CreatedInstance,
-	createsInstance,
 	resolveCreatedInstance,
 	statedCreatedFields,
 } from "../programs/instance";
@@ -86,7 +88,7 @@ export class ActionReview {
 	readonly #request: ParsedLiquidProcessCtParams;
 	readonly #input: ReviewInput;
 	readonly #manifest: Manifest;
-	readonly #deployment: InstanceFile;
+	readonly #pinned: Record<string, Outpoint>;
 	readonly #action: Action;
 	readonly #includeDebugSymbols: boolean;
 	readonly #declaredTypes: Record<string, string>;
@@ -103,8 +105,8 @@ export class ActionReview {
 	private constructor(request: ParsedLiquidProcessCtParams, input: ReviewInput) {
 		this.#request = request;
 		this.#input = input;
-		this.#manifest = new Manifest(request.manifest);
-		this.#deployment = readInstance(request.instance);
+		this.#manifest = Manifest.parse(request.manifest);
+		this.#pinned = request.instance?.provided_inputs ?? {};
 		this.#policyAsset = input.policyAsset;
 
 		const unsupported = refuseUnsupported(this.#manifest, {
@@ -127,13 +129,12 @@ export class ActionReview {
 
 		this.#action = action;
 
-		const allowed = allowChange(action);
-
 		this.#mayReturn = (asset) =>
-			allowed === "any" || (allowed === "lbtc_only" && asset === this.#policyAsset);
+			action.allow_change === "any" ||
+			(action.allow_change === "lbtc_only" && asset === this.#policyAsset);
 		this.#includeDebugSymbols = this.#manifest.includeDebugSymbols;
 
-		const fields = this.#deployment.fields;
+		const fields = request.instance?.instance?.fields ?? {};
 		const supplied = withoutDeployedFields(action, request.params, fields);
 		const params = fillParameters(
 			action,
@@ -145,12 +146,6 @@ export class ActionReview {
 				script_hash: encodeHex(sha256(walletScript(input.walletScriptPubKeyHex))),
 			},
 		);
-		const malformed = malformedDeclaration(action);
-
-		if (malformed) {
-			throw new Refusal(malformed);
-		}
-
 		const missing = missingParts({ ...request, params }, this.#manifest, action);
 
 		if (missing.length > 0) {
@@ -161,11 +156,9 @@ export class ActionReview {
 			throw new Refusal(`This request cannot be built. ${named}`, "incomplete-request");
 		}
 
-		const stated = createsInstance(action)
-			? statedCreatedFields(action, { instance: fields, params })
-			: {};
+		const stated = statedCreatedFields(action, { instance: fields, params });
 
-		this.#declaredTypes = declaredParamTypes(this.#manifest, action);
+		this.#declaredTypes = this.#manifest.paramTypes(action);
 		this.#scope = { inputs: this.#inputs, instance: { ...fields, ...stated }, params };
 	}
 
@@ -187,10 +180,10 @@ export class ActionReview {
 		this.#scope = runActionHooks(this.#action, this.#scope);
 
 		const issued: ResolvedIssuances = {
-			...identified,
-			issuances: identified.issuances.map((planned) =>
-				withIssuedAmounts(planned, identified.declarations.get(planned.inputId) ?? {}, this.#scope),
+			issuances: identified.identities.map(({ declared, planned }) =>
+				withIssuedAmounts(planned, declared, this.#scope),
 			),
+			reserved: identified.reserved,
 		};
 
 		const created = this.#createInstance();
@@ -226,7 +219,7 @@ export class ActionReview {
 
 		const reviewed: ReviewedPlan = {
 			...draft,
-			...(this.#action.boundTo === undefined ? {} : { boundTo: this.#action.boundTo }),
+			...(this.#action.template === undefined ? {} : { boundTo: this.#action.template }),
 			programInputs: this.#programInputs,
 			programs: this.#programs,
 			...(created === undefined ? {} : { createdInstance: created }),
@@ -306,11 +299,7 @@ export class ActionReview {
 		return pool;
 	}
 
-	#uses(role: ProgramUse["role"]): ProgramUse[] {
-		return programUses(this.#action.node).filter((use) => use.role === role);
-	}
-
-	#derive(use: ProgramUse): Promise<ProgramDerivation> {
+	#derive(reference: ProgramReference): Promise<ProgramDerivation> {
 		return deriveProgramAddress(this.#manifest, {
 			compile: this.#input.compile,
 			programAbi: this.#input.programAbi,
@@ -318,62 +307,65 @@ export class ActionReview {
 			declaredTypes: this.#declaredTypes,
 			includeDebugSymbols: this.#includeDebugSymbols,
 			network: this.#input.network,
+			reference,
 			scope: this.#scope,
-			utxoType: use.utxoType,
-			...(use.args === undefined ? {} : { args: use.args }),
-			wiring: use.wiring,
 		});
 	}
 
 	async #spendPrograms(): Promise<void> {
-		const utxos = new ProgramUtxos(this.#request.state, this.#deployment.providedInputs);
+		const utxos = new ProgramUtxos(this.#request.state, this.#pinned);
 
-		for (const use of this.#uses("spent")) {
+		for (const input of programInputs(this.#action)) {
+			const id = input.label;
+			const utxoType = input.utxo_source.utxo_type;
+
+			if (input.id === undefined) {
+				throw new Refusal(
+					`The ${utxoType} spent by input ${id} is given no id, so this wallet cannot ` +
+						"account for what it brings.",
+				);
+			}
+
 			// oxlint-disable-next-line no-await-in-loop
-			const derived = await this.#derive(use);
-			const asset = resolveAsset(use.asset, `input ${use.id}`, {
+			const derived = await this.#derive(input.utxo_source);
+			const asset = resolveAsset(input.asset, `input ${id}`, {
 				policyAsset: this.#input.policyAsset,
 				scope: this.#scope,
 			});
-			const outpoint = utxos.claim(use.id, use.utxoType, asset);
+			const outpoint = utxos.claim(id, utxoType, asset);
 			// oxlint-disable-next-line no-await-in-loop
 			const onChain = await this.#readTxOut(outpoint);
 
 			checkProgramOnChain(derived, onChain.scriptPubKeyHex);
 
-			if (!use.id) {
-				throw new Refusal(
-					`The ${use.utxoType} at ${outpoint.txid}:${outpoint.vout} is spent by an input the ` +
-						"manifest gives no id, so this wallet cannot account for what it brings.",
-				);
-			}
-
 			const holding =
-				use.blinding !== undefined
-					? this.#blindedHolding(use)
+				input.blinding !== undefined
+					? this.#blindedHolding({ ...input, blinding: input.blinding })
 					: onChain.amountSats !== undefined && onChain.rawAssetId !== undefined
-						? explicitHolding(use, outpoint, onChain.amountSats, onChain.rawAssetId)
+						? explicitHolding(utxoType, outpoint, onChain.amountSats, onChain.rawAssetId)
 						: // oxlint-disable-next-line no-await-in-loop
-							await this.#reopenedHolding(use, outpoint, onChain.transactionHex);
+							await this.#reopenedHolding(input, outpoint, onChain.transactionHex);
+			const signature = signatureWitness(input);
+			const unused = unusedWitnesses(input);
 
-			checkWitnessNames(use, derived.witnessTypes);
-			this.#witnessTypes.set(use.id, derived.witnessTypes);
-			this.#inputs[use.id] = { amount_sat: holding.sats, asset: holding.asset };
-			this.#chainHeld.push({ asset: holding.asset, id: use.id, sats: holding.sats });
+			checkWitnessNames(input, derived.witnessTypes);
+			this.#witnessTypes.set(id, derived.witnessTypes);
+			this.#inputs[id] = { amount_sat: holding.sats, asset: holding.asset };
+			this.#chainHeld.push({ asset: holding.asset, id, sats: holding.sats });
 			this.#programInputs.push({
 				argumentsJson: derived.argumentsJson,
 				extraLeavesJson: derived.extraLeavesJson,
-				id: use.id,
+				id,
 				includeDebugSymbols: derived.includeDebugSymbols,
-				...(use.signatureWitness === undefined ? {} : { signatureWitness: use.signatureWitness }),
+				...(signature === undefined ? {} : { signatureWitness: signature }),
 				...(holding.blindingSecretsJson === undefined
 					? {}
 					: { blindingSecretsJson: holding.blindingSecretsJson }),
 				source: derived.source,
 				txOutHex: onChain.txOutHex,
 				txid: outpoint.txid,
-				...(use.unusedWitnesses === undefined ? {} : { unusedWitnesses: use.unusedWitnesses }),
-				utxoType: use.utxoType,
+				...(unused.length === 0 ? {} : { unusedWitnesses: unused }),
+				utxoType,
 				vout: outpoint.vout,
 			});
 			this.#programs.push({ ...derived, role: "spent", verified: "matches-chain" });
@@ -406,10 +398,10 @@ export class ActionReview {
 		}
 	}
 
-	#blindedHolding(use: ProgramUse): Holding {
-		const at = `Input ${use.id}`;
+	#blindedHolding(input: ProgramInput & { blinding: Blinding }): Holding {
+		const at = `Input ${input.label}`;
 		const { assetBlindingFactor, valueBlindingFactor } = Refusal.amend(
-			() => resolveBlindingFactors(use.blinding, this.#scope),
+			() => resolveBlindingFactors(input.blinding, this.#scope),
 			(reason) => `${at} ${reason}`,
 		);
 
@@ -420,12 +412,12 @@ export class ActionReview {
 			);
 		}
 
-		const asset = resolveAsset(use.asset, `input ${use.id}`, {
+		const asset = resolveAsset(input.asset, `input ${input.label}`, {
 			policyAsset: this.#input.policyAsset,
 			scope: this.#scope,
 		});
 		const sats = Refusal.amend(
-			() => resolveAmount(use.amount, this.#scope),
+			() => resolveAmount(exactAmount(input), this.#scope),
 			(reason) =>
 				`${at} spends a blinded output, which states its amount only through amount_sat: ${reason}`,
 		);
@@ -443,10 +435,11 @@ export class ActionReview {
 	}
 
 	async #reopenedHolding(
-		use: ProgramUse,
+		input: ProgramInput,
 		outpoint: Outpoint,
 		transactionHex: string | undefined,
 	): Promise<Holding> {
+		const utxoType = input.utxo_source.utxo_type;
 		const opened =
 			transactionHex === undefined
 				? undefined
@@ -454,32 +447,30 @@ export class ActionReview {
 
 		if (!opened) {
 			throw new Refusal(
-				`The ${use.utxoType} at ${outpoint.txid}:${outpoint.vout} is blinded to a key this ` +
-					`wallet does not hold, and input ${use.id} states no blinding factors to open it ` +
+				`The ${utxoType} at ${outpoint.txid}:${outpoint.vout} is blinded to a key this ` +
+					`wallet does not hold, and input ${input.label} states no blinding factors to open it ` +
 					"with. This wallet will not assume a balance for an output it is about to spend.",
 				"unbuildable-utxo-type",
 			);
 		}
 
 		const declaredAsset =
-			use.asset === undefined
+			input.asset === undefined
 				? undefined
-				: resolveAsset(use.asset, `input ${use.id}`, {
+				: resolveAsset(input.asset, `input ${input.label}`, {
 						policyAsset: this.#input.policyAsset,
 						scope: this.#scope,
 					});
-		const declaredSats =
-			typeof use.amount === "number" || typeof use.amount === "string"
-				? resolveAmount(use.amount, this.#scope)
-				: undefined;
+		const stated = exactAmount(input);
+		const declaredSats = stated === undefined ? undefined : resolveAmount(stated, this.#scope);
 
 		if (
 			(declaredAsset !== undefined && declaredAsset !== opened.asset) ||
 			(declaredSats !== undefined && declaredSats !== opened.sats)
 		) {
 			throw new Refusal(
-				`Input ${use.id} expects ${declaredSats ?? "an amount"} of ${declaredAsset ?? "an asset"}, ` +
-					`and the ${use.utxoType} it spends holds ${opened.sats} of ${opened.asset}.`,
+				`Input ${input.label} expects ${declaredSats ?? "an amount"} of ${declaredAsset ?? "an asset"}, ` +
+					`and the ${utxoType} it spends holds ${opened.sats} of ${opened.asset}.`,
 				"program-mismatch",
 			);
 		}
@@ -508,7 +499,7 @@ export class ActionReview {
 	}
 
 	#createInstance(): CreatedInstance | undefined {
-		if (!createsInstance(this.#action)) {
+		if (this.#action.create_instance === undefined) {
 			return undefined;
 		}
 
@@ -524,9 +515,9 @@ export class ActionReview {
 	}
 
 	async #createPrograms(): Promise<void> {
-		for (const use of this.#uses("created")) {
+		for (const output of programOutputs(this.#action)) {
 			// oxlint-disable-next-line no-await-in-loop
-			const derived = await this.#derive(use);
+			const derived = await this.#derive(output.reference);
 
 			this.#programs.push({ ...derived, role: "created", verified: "not-yet-onchain" });
 		}
@@ -891,14 +882,8 @@ export class ActionReview {
 
 		const placeable: PlaceableInput<PlannedInput>[] = [];
 
-		for (const declared of asArray(this.#action.node.inputs).map((entry) => asRecord(entry))) {
-			if (!declared) {
-				continue;
-			}
-
-			const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
+		for (const { label: id, required_index: wanted } of this.#action.inputs) {
 			const program = this.#programInputs.find((candidate) => candidate.id === id);
-			const wanted = statedIndex(declared.required_index);
 
 			placeable.push({
 				id,
@@ -942,46 +927,20 @@ export class ActionReview {
 	#checkPositions(placed: PlacedInputs, paid: PaidOutputs): void {
 		const positions: StatedPosition[] = [];
 
-		for (const entry of asArray(this.#action.node.inputs)) {
-			const declared = asRecord(entry);
-
-			if (!declared || declared.required_index === undefined) {
-				continue;
+		for (const { label: id, required_index: stated } of this.#action.inputs) {
+			if (stated !== undefined) {
+				positions.push({
+					at: placed.landedAt(id) ?? placed.placement.order.length,
+					id,
+					kind: "input",
+					stated,
+				});
 			}
-
-			const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
-			const wanted = statedIndex(declared.required_index);
-
-			if (wanted === undefined) {
-				throw new Refusal(
-					`Input ${id} states a position of ${JSON.stringify(declared.required_index)}, which is not a place in a transaction.`,
-					"unbuildable-position",
-				);
-			}
-
-			positions.push({
-				at: placed.landedAt(id) ?? placed.placement.order.length,
-				id,
-				kind: "input",
-				stated: wanted,
-			});
 		}
 
-		for (const entry of asArray(this.#action.node.outputs)) {
-			const declared = asRecord(entry);
-
-			if (!declared || declared.required_index === undefined) {
+		for (const { id, required_index: stated } of this.#action.outputs) {
+			if (stated === undefined) {
 				continue;
-			}
-
-			const id = typeof declared.id === "string" ? declared.id : undefined;
-			const wanted = statedIndex(declared.required_index);
-
-			if (wanted === undefined) {
-				throw new Refusal(
-					`Output ${id ?? "(unnamed)"} states a position of ${JSON.stringify(declared.required_index)}, which is not a place in a transaction.`,
-					"unbuildable-position",
-				);
 			}
 
 			if (id === undefined) {
@@ -992,12 +951,7 @@ export class ActionReview {
 				);
 			}
 
-			positions.push({
-				at: paid.at.get(id) ?? paid.outputs.length,
-				id,
-				kind: "output",
-				stated: wanted,
-			});
+			positions.push({ at: paid.at.get(id) ?? paid.outputs.length, id, kind: "output", stated });
 		}
 
 		checkPositions(positions, {
@@ -1033,7 +987,7 @@ const DUST_SATS = 22n;
 type Holding = { asset: string; blindingSecretsJson?: string; sats: bigint };
 
 function explicitHolding(
-	use: ProgramUse,
+	utxoType: string,
 	outpoint: Outpoint,
 	amountSats: string,
 	asset: string,
@@ -1042,7 +996,7 @@ function explicitHolding(
 
 	if (sats === undefined) {
 		throw new Refusal(
-			`The ${use.utxoType} at ${outpoint.txid}:${outpoint.vout} came back holding ` +
+			`The ${utxoType} at ${outpoint.txid}:${outpoint.vout} came back holding ` +
 				`${JSON.stringify(amountSats)}, which is not an amount this wallet can read. It will ` +
 				"not spend an output it cannot say the value of.",
 			"unbuildable-utxo-type",
@@ -1077,26 +1031,14 @@ const UNDECLARED_CHANGE: BlindingDecision = {
 	overrode: "chain",
 };
 
-const ALLOW_CHANGE = new Set(["none", "lbtc_only", "any"]);
+type ReservedFunding = { asset: string; inputId: string; utxo: SelectableUtxo }[];
 
-function allowChange(action: Action): string {
-	const declared = action.node.allow_change ?? "none";
-
-	if (typeof declared !== "string" || !ALLOW_CHANGE.has(declared)) {
-		throw new Refusal(
-			`${action.name} sets allow_change to ${JSON.stringify(declared)}, and the format ` +
-				'allows only "none", "lbtc_only" or "any".',
-		);
-	}
-
-	return declared;
-}
-
-type ResolvedIssuances = {
-	declarations: Map<string, Record<string, unknown>>;
-	issuances: PlannedIssuance[];
-	reserved: { asset: string; inputId: string; utxo: SelectableUtxo }[];
+type IdentifiedIssuances = {
+	identities: { declared: Issuance; planned: PlannedIssuance }[];
+	reserved: ReservedFunding;
 };
+
+type ResolvedIssuances = { issuances: PlannedIssuance[]; reserved: ReservedFunding };
 
 function resolveIssuances(
 	action: Action,
@@ -1107,10 +1049,9 @@ function resolveIssuances(
 		policyAsset: string;
 		scope: ReferenceScope;
 	},
-): ResolvedIssuances {
-	const issuances: PlannedIssuance[] = [];
-	const declarations = new Map<string, Record<string, unknown>>();
-	const reserved: { asset: string; inputId: string; utxo: SelectableUtxo }[] = [];
+): IdentifiedIssuances {
+	const identities: IdentifiedIssuances["identities"] = [];
+	const reserved: ReservedFunding = [];
 	const policyAsset = context.policyAsset;
 	const pools = new Map<string, SelectableUtxo[]>();
 	const taken = new Set<string>();
@@ -1131,21 +1072,19 @@ function resolveIssuances(
 		return ordered;
 	};
 
-	for (const entry of asArray(action.node.inputs)) {
-		const declared = asRecord(entry);
-		const issuance = declared && declaredIssuance(declared);
+	for (const input of action.inputs) {
+		const { issuance, label: id } = input;
 
-		if (!declared || !issuance) {
+		if (!issuance) {
 			continue;
 		}
 
-		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
 		const reissues = issuance.kind === "reissue";
 		const program = context.programInputs.find((candidate) => candidate.id === id);
 
 		const asset = reissues
-			? reissuedToken(declared, issuance, id, context)
-			: resolveAsset(declared.asset, `input ${id}`, {
+			? reissuedToken(input, issuance, context)
+			: resolveAsset(input.asset, `input ${id}`, {
 					policyAsset: context.policyAsset,
 					scope: context.scope,
 				});
@@ -1174,10 +1113,8 @@ function resolveIssuances(
 
 			const issuedHere = issuanceIdentity({ declared: issuance, id, outpoint }, context.scope);
 
-			declarations.set(id, issuance);
-
 			taken.add(key);
-			issuances.push(issuedHere);
+			identities.push({ declared: issuance, planned: issuedHere });
 			context.inputs[id] = { ...context.inputs[id], ...issuanceAttributes(issuedHere) };
 
 			continue;
@@ -1203,24 +1140,23 @@ function resolveIssuances(
 			context.scope,
 		);
 
-		declarations.set(id, issuance);
 		taken.add(outpointKey(funding));
 		reserved.push({ asset, inputId: id, utxo: funding });
-		issuances.push(resolved);
+		identities.push({ declared: issuance, planned: resolved });
 		context.inputs[id] = { ...context.inputs[id], ...issuanceAttributes(resolved) };
 	}
 
-	return { declarations, issuances, reserved };
+	return { identities, reserved };
 }
 
 function reissuedToken(
-	declared: Record<string, unknown>,
-	issuance: Record<string, unknown>,
-	id: string,
+	input: Input,
+	issuance: Issuance,
 	context: { policyAsset: string; scope: ReferenceScope },
 ): string {
+	const id = input.label;
 	const token = reissuanceOf(issuance, id, context.scope).reissuanceToken;
-	const spent = resolveAsset(declared.asset, `input ${id}`, context);
+	const spent = resolveAsset(input.asset, `input ${id}`, context);
 
 	if (spent !== token) {
 		throw new Refusal(
@@ -1243,37 +1179,21 @@ function bySize(left: bigint, right: bigint, smallestFirst: boolean): number {
 function runActionHooks(action: Action, scope: ReferenceScope): ReferenceScope {
 	let running = scope;
 
-	for (const entry of asArray(action.node.inputs)) {
-		const declared = asRecord(entry);
-
-		if (!declared) {
-			continue;
+	for (const input of action.inputs) {
+		if (input.on_resolved !== undefined) {
+			running = withHookValues(
+				running,
+				runHook(
+					input.on_resolved.set,
+					inputHookScope(running, running.inputs?.[input.label] ?? {}),
+				),
+			);
 		}
-
-		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
-		const hook = inputHook(declared);
-
-		if (hook.kind === "malformed") {
-			throw new Refusal(`Input ${id}: ${hook.reason}`);
-		}
-
-		if (hook.kind === "absent") {
-			continue;
-		}
-
-		running = withHookValues(
-			running,
-			runHook(hook.set, inputHookScope(running, running.inputs?.[id] ?? {})),
-		);
 	}
 
-	const hook = actionHook(action);
-
-	if (hook.kind === "malformed") {
-		throw new Refusal(`${action.name}: ${hook.reason}`);
-	}
-
-	return hook.kind === "absent" ? running : withHookValues(running, runHook(hook.set, running));
+	return action.on_pre_broadcast === undefined
+		? running
+		: withHookValues(running, runHook(action.on_pre_broadcast.set, running));
 }
 
 function withoutDeployedFields(
@@ -1281,11 +1201,20 @@ function withoutDeployedFields(
 	supplied: Record<string, unknown>,
 	fields: Record<string, unknown>,
 ): Record<string, unknown> {
-	const declared = asRecord(action.node.params) ?? {};
-
 	return Object.fromEntries(
-		Object.entries(supplied).filter(([name]) => name in declared || !(name in fields)),
+		Object.entries(supplied).filter(([name]) => name in action.params || !(name in fields)),
 	);
+}
+
+function exactAmount(input: ProgramInput): string | number | undefined {
+	if (typeof input.amount_sat === "object") {
+		throw new Refusal(
+			`Input ${input.label} spends a program output, whose amount is stated exactly rather ` +
+				"than as a minimum.",
+		);
+	}
+
+	return input.amount_sat;
 }
 
 function walletScript(hex: string): Uint8Array {
@@ -1300,43 +1229,4 @@ function walletScript(hex: string): Uint8Array {
 
 function sameScript(one: string, other: string): boolean {
 	return one.trim().toLowerCase() === other.trim().toLowerCase();
-}
-
-function statedIndex(declared: unknown): number | undefined {
-	return typeof declared === "number" && Number.isSafeInteger(declared) ? declared : undefined;
-}
-
-function malformedDeclaration(action: Action): string | undefined {
-	const node = action.node;
-
-	for (const key of ["inputs", "outputs"] as const) {
-		if (node[key] !== undefined && !Array.isArray(node[key])) {
-			return `${action.name} declares ${key} as something other than a list, so this wallet cannot read what it declares.`;
-		}
-
-		for (const [at, entry] of asArray(node[key]).entries()) {
-			if (!asRecord(entry)) {
-				return `${action.name} declares ${key} ${at} as something this wallet cannot read.`;
-			}
-		}
-	}
-
-	if (node.params !== undefined && !asRecord(node.params)) {
-		return `${action.name} declares params as something other than a set of parameters, so this wallet cannot fill any of them.`;
-	}
-
-	for (const entry of asArray(node.inputs)) {
-		const input = asRecord(entry) ?? {};
-		const id = typeof input.id === "string" ? input.id : "(unnamed)";
-
-		if (input.witnesses !== undefined && !asRecord(input.witnesses)) {
-			return `Input ${id} declares witnesses this wallet cannot read.`;
-		}
-
-		if (input.issuance !== undefined && !asRecord(input.issuance)) {
-			return `Input ${id} declares an issuance this wallet cannot read.`;
-		}
-	}
-
-	return undefined;
 }

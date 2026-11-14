@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import { type Action, Manifest } from "../document/manifest";
-import { Fixture, refusalOf } from "../review/reviewForTests";
-import { createsInstance, resolveCreatedInstance } from "./instance";
+import { Fixture, refusalOf, actionOf } from "../review/reviewForTests";
+import { resolveCreatedInstance } from "./instance";
 import { PROGRAM_HASH_SEED, programHashFrom, ITERATION_BOUND } from "./programHash";
 
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -35,8 +35,8 @@ function recordingCompiler(debugSymbols = false) {
 	};
 }
 
-const vaultlet = new Manifest(VAULTLET.manifest);
-const mutual = new Manifest(MUTUAL.manifest);
+const vaultlet = Manifest.parse(VAULTLET.manifest);
+const mutual = Manifest.parse(MUTUAL.manifest);
 
 function actionNamed(manifest: typeof vaultlet, name: string): Action {
 	const found = manifest.action(name);
@@ -88,11 +88,7 @@ describe("a chain of fields that each read the one before", () => {
 			};
 		}
 
-		return {
-			isConstructor: true,
-			name: "Chain",
-			node: { create_instance: { fields } },
-		};
+		return actionOf("Chain", { create_instance: { fields } });
 	}
 
 	function settleChain() {
@@ -134,17 +130,13 @@ function leafyWith(
 	hashProgram: ReturnType<typeof recordingCompiler>["hashProgram"],
 ) {
 	return resolveCreatedInstance(
-		{
-			isConstructor: true,
-			name: "Leafy",
-			node: {
-				create_instance: {
-					fields: {
-						X: { type: "tapleaf", extra_leaves: extraLeaves, simf: "./reserve.simf" },
-					},
+		actionOf("Leafy", {
+			create_instance: {
+				fields: {
+					X: { type: "tapleaf", extra_leaves: extraLeaves, simf: "./reserve.simf" },
 				},
 			},
-		},
+		}),
 		{ contractSources: SOURCES, hashProgram, scope: { params: { TIMEOUT: "900000" } } },
 	);
 }
@@ -155,8 +147,8 @@ function leafy(extraLeaves: unknown[]) {
 
 describe("which actions create a deployment", () => {
 	test("the one carrying the block does, and the one that only spends does not", () => {
-		expect(createsInstance(OPEN_VAULT)).toBe(true);
-		expect(createsInstance(actionNamed(vaultlet, "Withdraw"))).toBe(false);
+		expect(OPEN_VAULT.create_instance).toBeDefined();
+		expect(actionNamed(vaultlet, "Withdraw").create_instance).toBeUndefined();
 	});
 });
 
@@ -268,10 +260,8 @@ describe("when the compiler cannot produce a hash", () => {
 	});
 });
 
-const dependant = (spelling: string): Action => ({
-	isConstructor: true,
-	name: "Open",
-	node: {
+const dependant = (spelling: string): Action =>
+	actionOf("Open", {
 		create_instance: {
 			fields: {
 				RESERVE_COV_HASH: {
@@ -289,8 +279,7 @@ const dependant = (spelling: string): Action => ({
 				},
 			},
 		},
-	},
-});
+	});
 
 describe("a program hash that names another through the deployment", () => {
 	function settle(spelling: string) {
@@ -328,21 +317,17 @@ describe("a program hash that names another through the deployment", () => {
 	test("without hiding the deployment the request supplied", () => {
 		const { hashProgram } = recordingCompiler();
 		const result = resolveCreatedInstance(
-			{
-				isConstructor: true,
-				name: "Open",
-				node: {
-					create_instance: {
-						fields: {
-							GUARD_COV_HASH: {
-								params: { RESERVE_COV_HASH: { type: "bytes32", value: "instance.OLD_HASH" } },
-								simf: "./guard.simf",
-								type: "tapleaf",
-							},
+			actionOf("Open", {
+				create_instance: {
+					fields: {
+						GUARD_COV_HASH: {
+							params: { RESERVE_COV_HASH: { type: "bytes32", value: "instance.OLD_HASH" } },
+							simf: "./guard.simf",
+							type: "tapleaf",
 						},
 					},
 				},
-			},
+			}),
 			{
 				contractSources: SOURCES,
 				hashProgram,
@@ -394,11 +379,9 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 		const { hashProgram } = recordingCompiler();
 		const result = refusalOf(() =>
 			resolveCreatedInstance(
-				{
-					isConstructor: true,
-					name: "Odd",
-					node: { create_instance: { fields: { X: { simf: "./a.simf", type: "simf_fn" } } } },
-				},
+				actionOf("Odd", {
+					create_instance: { fields: { X: { simf: "./a.simf", type: "simf_fn" } } },
+				}),
 				{ contractSources: SOURCES, hashProgram, scope: { params: {} } },
 			),
 		);
@@ -409,10 +392,11 @@ describe("what it refuses rather than recording a value nobody chose", () => {
 	test("a bare word, which names neither a parameter nor a field, rather than recording the word", () => {
 		const { hashProgram } = recordingCompiler();
 		const created = (value: string) =>
-			resolveCreatedInstance(
-				{ isConstructor: true, name: "Words", node: { create_instance: { fields: { X: value } } } },
-				{ contractSources: SOURCES, hashProgram, scope: { params: { OWNER: KEY } } },
-			);
+			resolveCreatedInstance(actionOf("Words", { create_instance: { fields: { X: value } } }), {
+				contractSources: SOURCES,
+				hashProgram,
+				scope: { params: { OWNER: KEY } },
+			});
 
 		expect(refusalOf(() => created("OWNER")).reason).toContain("params.OWNER");
 		expect(created("2").fields.X).toBe("2");

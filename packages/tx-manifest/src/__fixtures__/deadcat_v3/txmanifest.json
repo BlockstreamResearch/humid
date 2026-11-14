@@ -1,13 +1,12 @@
 {
-  "$schema": "../../schema/txmanifest.schema.json",
-  "$comment": "A fork of Deadcat's prediction market that this engine can run. The reissuance tokens stay confidential (Elements requires it), but each recreated token advances both blinding factors by exactly one, so the covenant checks the outputs as a translation of the inputs and needs no output-side witnesses. The factors are therefore derivable from the previous spend's on-chain witness and nothing has to be persisted; the first pair is the constant abf = vbf = 1, set by CreateMarket. The fee is checked at num_outputs - 1 on every path, which lets these actions declare an L-BTC change output instead of paying the surplus to miners. Different CMR, different addresses, NOT interoperable with Deadcat. Original header follows. Ported from Deadcat.Live (github.com/Resolvr-io/deadcat, src-tauri/crates/deadcat-sdk). prediction_market.simf is a verbatim copy of that crate's contract/prediction_market.simf — do not edit it, every byte feeds the CMR and therefore all four covenant addresses. The upstream SDK builds these transactions in Rust (src/pset/*.rs); this manifest is the same seven spending paths expressed declaratively. Deadcat's OTHER covenant, maker_order.simf, is deliberately NOT modelled: it tweaks the MAKER's key as the taproot internal key, while this engine hardcodes the NUMS internal key (covenant.rs::NUMS_KEY_BYTES), so no address it computed would be correct.",
+  "$comment": "A fork of Deadcat's prediction market (github.com/Resolvr-io/deadcat). The reissuance tokens stay confidential, and each recreated token advances both blinding factors by exactly one, so the covenant checks its outputs as a translation of its inputs and needs no output-side witnesses; CreateMarket sets the first pair to abf = vbf = 1. The fee is checked at num_outputs - 1 on every path, so these actions declare an L-BTC change output. Those changes give prediction_market.simf a different CMR and different addresses, so this market does not interoperate with Deadcat. Deadcat's maker_order.simf is not modelled: it uses the maker's key as the taproot internal key, and these programs use the NUMS key.",
   "manifest_version": "0.3.1",
   "protocol": "deadcat-prediction-market-v3",
   "description": "Deadcat v3 — a binary (YES/NO) prediction market on Liquid. Collateral is locked in a covenant that mints matched YES/NO token pairs at 2 x COLLATERAL_PER_TOKEN per pair; an off-chain oracle commits the outcome ON-CHAIN as a state transition, and winners then burn tokens to draw the whole pair's collateral. The market's state (0 dormant, 1 unresolved, 2 resolved-YES, 3 resolved-NO) is not stored in a variable — it is a tapdata leaf in the covenant's tap tree, so each state is a DIFFERENT address and the covenant proves its own state by comparing the address it is being spent from. Modelled as one template: one instance per market.",
   "chain": "liquid",
   "requires": ["simplicity"],
   "simplicity_hl": { "version": "0.9.0",
-    "$comment": "Deadcat compiles with debug symbols OFF (contract.rs: template.instantiate(args, false)). Flipping this changes every fail-node commitment, hence the CMR, hence all four addresses.",
+    "$comment": "Debug symbols stay off, as Deadcat builds them. Turning them on changes every fail-node commitment, so the CMR and all four addresses.",
     "debug_symbols": false
   },
   "utxo_types": {
@@ -29,7 +28,7 @@
         },
         "extra_leaves": [
           {
-            "$comment": "state = 0. jet::tapdata_init() + sha_256_ctx_8_add_8(state) hashes exactly 8 big-endian bytes, so no pad_to here — unlike the lending example's 32-byte storage slots.",
+            "$comment": "State 0, as 8 big-endian bytes: the covenant hashes the state with sha_256_ctx_8_add_8, so the leaf carries no padding. This wallet builds 32-byte storage leaves only, so it refuses the market's addresses.",
             "type": "tapdata",
             "payload": [
               {
@@ -184,7 +183,7 @@
       },
       "actions": {
         "IssueReissuanceTokens": {
-          "$comment": "The constructor: it is this action, not CreateMarket, that writes the instance file. That is forced by where the asset ids come from — they are derived from the outpoints THIS transaction spends, and nothing downstream can recover them (the reissuance token id and the asset id are sibling hashes of the entropy, so you cannot walk from one to the other). Capturing them here — create_instance reads them straight off the two inputs via inputs.<id>.<field> — is the only point at which they exist and can still be recorded.\n\nWhy the bootstrap is two transactions at all: CreateMarket pays to the state-0 covenant address, and that address is a function of all four asset ids, which are functions of the outpoints being spent. The engine snapshots compile params BEFORE it resolves any input, so one action cannot both mint an asset and pay it to an address derived from that asset. This action sidesteps it by paying only to the wallet. Upstream Deadcat does both in one transaction (pset/creation.rs) because it computes the ids in Rust before building anything; the two-transaction bootstrap lands the market in exactly the same on-chain state.",
+          "$comment": "The constructor. This action, not CreateMarket, writes the instance file, because the four asset ids derive from the outpoints this transaction spends and cannot be recovered later. The bootstrap is split in two: this action records the ids and pays only to the wallet, and CreateMarket pays to the state-0 address they determine.",
           "description": "Step 1 of 2 in bootstrapping a market, and the action that defines it. Mints the YES and NO reissuance tokens — 1 unit each — from two of your L-BTC UTXOs and keeps them in your wallet, then writes the instance file recording the market's full definition: the four asset ids this transaction just fixed, plus the terms you supply below. NOTE: it mints ZERO units of the YES and NO tokens themselves. Only the minting rights exist at this point; outcome tokens appear at InitialIssuance, and they have to, because tokens minted here would be backed by no collateral at all. Run CreateMarket next to lock the two tokens into the covenant.",
           "intent": "define a market backed by {params.COLLATERAL_ASSET_ID:symbol} and mint its minting rights",
           "params": {
@@ -243,7 +242,7 @@
           "outputs": [
             {
               "id": "yes_reissuance_out",
-              "description": "The YES reissuance token, 1 unit, to your wallet. The asset reference reads the id the engine derived from in[0] once it resolved. `inputs.` is the explicit spelling of an input reference; the bare `yes_defining_in.reissuance_token` also works but is ambiguous by shape with every other namespace. Blinded, but with factors the wallet picks. Pinning the protocol constant here would be both pointless and fatal: pointless because only the covenant has to reproduce a factor and the covenant never sees this UTXO — the wallet unblinds its own — and fatal because CreateMarket pays this same token to abf = 1, and an output cannot reuse the abf of the input it comes from. The surjection proof would have a zero shift to prove and no valid secret key to prove it with.",
+              "description": "The YES reissuance token, 1 unit, to your wallet. Blinded, but with factors the wallet picks. Pinning the protocol constant here would be both pointless and fatal: pointless because only the covenant has to reproduce a factor and the covenant never sees this UTXO — the wallet unblinds its own — and fatal because CreateMarket pays this same token to abf = 1, and an output cannot reuse the abf of the input it comes from. The surjection proof would have a zero shift to prove and no valid secret key to prove it with.",
               "destination": "wallet",
               "asset": "yes_defining_in.reissuance_token",
               "amount_sat": 1,
@@ -280,7 +279,7 @@
             }
           ],
           "create_instance": {
-            "$comment": "The four asset ids are read straight off the inputs that created them — `inputs.<id>.<field>` is a string lookup, unlike a bare expression, which is arithmetic and would reject a 32-byte id. Note `issued_asset`, NOT `asset`: on an input carrying an issuance those differ, and `asset` is the asset of the UTXO being spent (L-BTC here). The four terms come from this action's params. All eight are compile params of prediction_market.simf, so from here the market's four covenant addresses are fully determined and every later action can derive them from the instance file alone.",
+            "$comment": "The four asset ids are read off the inputs that issued them, as <id>.issued_asset and <id>.reissuance_token; <id>.asset would be the asset of the UTXO spent (L-BTC here). With the four terms from this action's params, these are the eight compile params of prediction_market.simf, so every later action derives the market's addresses from the instance file alone.",
             "fields": {
               "ORACLE_PUBLIC_KEY": "params.ORACLE_PUBLIC_KEY",
               "COLLATERAL_ASSET_ID": "params.COLLATERAL_ASSET_ID",
@@ -296,7 +295,7 @@
           }
         },
         "CreateMarket": {
-          "$comment": "Run IssueReissuanceTokens first: it writes the instance file this action reads. Every value here comes from `instance.*` — the four asset ids and the four terms — which is why this action takes no params at all. Those fields are loaded into the context before the engine snapshots compile params, so the state-0 address computes correctly even though the assets were minted in a different transaction.",
+          "$comment": "Run IssueReissuanceTokens first: it writes the instance file this action reads. Every value comes from instance.*, so this action takes no params.",
           "description": "Step 2 of 2: lock the minting rights into the covenant. A PLAIN Elements transaction — no covenant input, nothing validated on-chain, so a malformed creation simply produces unspendable UTXOs — that moves both reissuance tokens from your wallet to the state-0 (dormant) address. No outcome tokens are minted and no collateral is deposited; that is InitialIssuance's job. Anyone evaluating a Deadcat market should re-check this transaction by hand: the covenant vouches for everything after it, and for nothing in it.",
           "intent": "lock the minting rights into a market backed by {instance.COLLATERAL_ASSET_ID:symbol}",
           "inputs": [
@@ -388,8 +387,7 @@
           ]
         },
         "PrepareInitialIssuance": {
-          "$comment": "A funding action, not a protocol one: nothing here touches the covenant. It exists because InitialIssuance declares no change output — the covenant pins the fee at output index 5, and a change output would displace it — so whatever L-BTC the collateral input carries beyond the collateral IS the fee. Feeding it an ordinary wallet UTXO therefore pays the entire remainder to miners. This action cuts a UTXO of exactly the right size first, which turns that behaviour from a hazard into an intent: the surplus becomes FEE_ALLOWANCE and nothing more.",
-          "description": "Cut an exactly-sized collateral UTXO for InitialIssuance. Reads COLLATERAL_PER_TOKEN and COLLATERAL_ASSET_ID from the instance and takes the number of pairs you intend to mint, so the output is PAIRS x 2 x COLLATERAL_PER_TOKEN plus a fee allowance — the exact amount InitialIssuance consumes. Run this first, then InitialIssuance, which will select the UTXO this produced (pin it with --input collateral_in=<txid>:<vout> if your wallet holds other L-BTC of a similar size).",
+          "description": "Cut an exactly-sized collateral UTXO for InitialIssuance. Reads COLLATERAL_PER_TOKEN and COLLATERAL_ASSET_ID from the instance and takes the number of pairs you intend to mint, so the output is PAIRS x 2 x COLLATERAL_PER_TOKEN plus a fee allowance — the exact amount InitialIssuance consumes. Run this first, then InitialIssuance, which will select the UTXO this produced.",
           "intent": "cut a {params.PAIRS}-pair collateral UTXO for opening the market",
           "params": {
             "PAIRS": {
@@ -443,7 +441,7 @@
           ]
         },
         "InitialIssuance": {
-          "$comment": "Path 1. Fee MUST land at output index 5, which it does only because no change output is declared here: the engine appends declared outputs, then any change, then the fee. Declaring a change output would push the fee to index 6 and the covenant would reject the spend. Size the collateral input exactly (see `prepare`) — surplus L-BTC is swallowed by the fee.",
+          "$comment": "Path 1: the market's first issuance of YES and NO pairs.",
           "description": "First covenant-validated transaction: state 0 -> 1. Reissues the first batch of YES/NO pairs, deposits their collateral, and moves all three covenant UTXOs to the state-1 address. Collateral comes from your wallet, not from the covenant — in the dormant state there is no collateral UTXO yet.",
           "intent": "open the market: mint {params.PAIRS} YES/NO pairs and lock their collateral",
           "params": {
@@ -469,7 +467,7 @@
                 "issued_asset": "instance.YES_TOKEN_ASSET"
               },
               "blinding": {
-                "$comment": "The pair CreateMarket wrote. These describe the UTXO being spent, not a choice: the engine rebuilds the confidential prevout from them, and Elements takes the abf as the reissuance's assetBlindingNonce. The outputs advance both to 2.",
+                "$comment": "The pair CreateMarket wrote. They describe the output being spent, not a choice: they open it, and Elements takes the abf as the reissuance's assetBlindingNonce. The outputs advance both to 2.",
                 "asset_bf": "1",
                 "value_bf": "1"
               },
@@ -705,7 +703,7 @@
           ]
         },
         "MintPairs": {
-          "$comment": "Path 2. Same index-5 fee requirement as InitialIssuance, so again no change output is declared. The difference from path 1 is input 2: the existing collateral UTXO is consumed and re-emitted as old + new, which is what keeps the market to exactly one collateral UTXO.",
+          "$comment": "Path 2. Like path 1, except the existing collateral UTXO is consumed and re-emitted as old + new, which keeps the market to exactly one collateral UTXO.",
           "description": "Mint more pairs into a live market (state 1 -> 1). Permissionless: anyone who deposits collateral gets tokens, there is no issuer and no allowlist. Consumes the market's collateral UTXO and re-emits the consolidated total.",
           "intent": "mint {params.PAIRS} more YES/NO pairs into the market",
           "params": {
@@ -715,7 +713,7 @@
             },
             "RT_FACTOR": {
               "type": "u64",
-              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and the engine does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
+              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and this wallet does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
             }
           },
           "inputs": [
@@ -1006,7 +1004,7 @@
           ]
         },
         "ResolveYes": {
-          "$comment": "Path 3 with ORACLE_OUTCOME_YES = true. Modelled as two actions rather than one with a runtime outcome because the destination address IS the outcome — state 2 and state 3 are different covenant addresses, and the engine has no conditional destination. The covenant demands exactly 4 outputs, so no change output may be declared: the fee absorbs any L-BTC surplus, which lands it at index 3 as required.",
+          "$comment": "Path 3 with ORACLE_OUTCOME_YES = true. Modelled as two actions because the destination address is the outcome: state 2 and state 3 are different covenant addresses, and the format has no conditional destination.",
           "description": "Commit a YES outcome on-chain (state 1 -> 2). Permissionless to submit: the oracle signs a message that mentions only the market, never this transaction, so anyone holding the attestation can post it. Nothing moves except the three covenant UTXOs, which all shift to the state-2 address; the collateral amount is preserved exactly.",
           "intent": "resolve the market YES using the oracle's attestation",
           "params": {
@@ -1016,7 +1014,7 @@
             },
             "RT_FACTOR": {
               "type": "u64",
-              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and the engine does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
+              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and this wallet does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
             }
           },
           "inputs": [
@@ -1263,7 +1261,7 @@
           ]
         },
         "ResolveNo": {
-          "$comment": "Path 3 with ORACLE_OUTCOME_YES = false. Identical to ResolveYes except the signed outcome byte is 0x00 and every covenant output goes to state 3. Same 4-output rule: declare no change.",
+          "$comment": "Path 3 with ORACLE_OUTCOME_YES = false: ResolveYes with the outcome byte 0x00 and every covenant output at state 3.",
           "description": "Commit a NO outcome on-chain (state 1 -> 3). Whichever of ResolveYes / ResolveNo confirms first wins — that is the equivocation protection. An oracle that signs both outcomes cannot start a race to drain the pool, because after the first resolve there is no path back to state 1 and none between states 2 and 3.",
           "intent": "resolve the market NO using the oracle's attestation",
           "params": {
@@ -1273,7 +1271,7 @@
             },
             "RT_FACTOR": {
               "type": "u64",
-              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and the engine does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
+              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and this wallet does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
             }
           },
           "inputs": [
@@ -1615,7 +1613,7 @@
             },
             {
               "id": "yes_tokens_burn",
-              "description": "The YES tokens destroyed (output 1). The covenant requires a ZERO-LENGTH scriptPubKey here — sha256 of the empty script — not the 1-byte OP_RETURN this engine emits.",
+              "description": "The YES tokens destroyed (output 1). The covenant requires a ZERO-LENGTH scriptPubKey here — sha256 of the empty script — not the 1-byte OP_RETURN this wallet emits.",
               "destination": {
                 "type": "burn"
               },
@@ -1789,7 +1787,7 @@
         },
         "RedeemExpired": {
           "allow_change": "lbtc_only",
-          "$comment": "Path 5, partial form. NOT EXECUTABLE YET: this is the one Deadcat path that calls jet::check_lock_height(EXPIRY_TIME), an absolute CLTV, and the engine cannot set a transaction nLockTime — see meta/tasks/upnext/12-engine-absolute-locktime.md. (The pre-expiry paths are fine: they assert lock_time < EXPIRY_TIME, which a locktime of 0 satisfies.) BURN_TOKEN_ASSET must be supplied byte-reversed, because witness values are parsed as raw SimplicityHL literals with no liquid.asset_id type hint to trigger the reversal that compile params get.",
+          "$comment": "Path 5, partial form: the one path that calls jet::check_lock_height(EXPIRY_TIME). This wallet locks every program spend to the chain's height, so the path builds once the chain passes EXPIRY_TIME; the earlier paths assert lock_time < EXPIRY_TIME. BURN_TOKEN_ASSET is supplied byte-reversed: a witness value is a raw SimplicityHL literal, with no liquid.asset_id type to reverse it as a compile param is.",
           "description": "Redeem after the market expired unresolved (state 1, at or after EXPIRY_TIME). Both sides redeem at 1 x COLLATERAL_PER_TOKEN — half the winner's rate — so YES and NO holders are made whole together and the pool drains exactly. This is the escape hatch for an oracle that never attests.",
           "intent": "redeem {params.TOKENS_BURNED} tokens from the expired market",
           "params": {
@@ -1809,7 +1807,7 @@
           "inputs": [
             {
               "id": "collateral_in",
-              "description": "The market's collateral UTXO, still at the state-1 address, input 0. The sequence below is ENABLE_LOCKTIME_NO_RBF: any value other than 0xFFFFFFFF enables the nLockTime that check_lock_height reads. The engine will warn that the BIP68 disable bit is set — expected, since this timeout is an absolute height.",
+              "description": "The market's collateral UTXO, still at the state-1 address, input 0. The sequence below is ENABLE_LOCKTIME_NO_RBF: any value other than 0xFFFFFFFF enables the nLockTime that check_lock_height reads. Its BIP68 disable bit is set, as an absolute height expects.",
               "utxo_source": {
                 "utxo_type": "market_unresolved"
               },
@@ -2084,7 +2082,7 @@
             },
             "RT_FACTOR": {
               "type": "u64",
-              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and the engine does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
+              "description": "The blinding factor the market's reissuance tokens currently carry — its spend depth. Both factors of both tokens are this one number: CreateMarket sets it to 1 and every covenant spend advances it by exactly one, so it is the count of covenant spends so far. Nothing on chain reports it in a readable form and this wallet does not track it, so you supply it: read it off the previous spend's Simplicity witness on an explorer (the four *_REISSUANCE_INPUT_ABF/VBF values, plus one), or keep a note beside the market. A wrong value cannot produce a valid transaction — the rebuilt input commitments will not be the ones on chain — so it fails before signing."
             }
           },
           "inputs": [

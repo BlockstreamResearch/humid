@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { Manifest } from "./manifest";
 import { inspectConstructs } from "./registry";
 
-const findings = (raw: Record<string, unknown>) => inspectConstructs(new Manifest(raw));
+const findings = (raw: Record<string, unknown>) => inspectConstructs(raw);
 
 describe("the constructs a document declares", () => {
 	test("pass where the format defines and this wallet handles them", () => {
@@ -37,6 +36,12 @@ describe("the constructs a document declares", () => {
 		).toEqual([
 			{ at: "action Open / param K / compute", key: "depends_on", state: "unimplemented" },
 		]);
+	});
+
+	test("take $schema at the root only, as an editor hint, and $comment anywhere", () => {
+		expect(
+			findings({ $schema: "./s.json", actions: { Pay: { $comment: "x", $schema: "./s.json" } } }),
+		).toEqual([{ at: "action Pay", key: "$schema", state: "unrecognised" }]);
 	});
 
 	test("look inside a program reference, where a binding changes the address", () => {

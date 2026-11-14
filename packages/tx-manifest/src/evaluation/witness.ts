@@ -1,6 +1,4 @@
-import { asArray, asRecord } from "../document/json";
-import type { Action } from "../document/manifest";
-import type { ProgramUse } from "../document/programUses";
+import type { Action, ProgramInput } from "../document/manifest";
 import { type ReferenceScope, parseReference, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
 
@@ -17,26 +15,18 @@ export function resolveStaticWitnesses(
 ): Map<string, StaticWitness[]> {
 	const witnesses = new Map<string, StaticWitness[]>();
 
-	for (const entry of asArray(action.node.inputs)) {
-		const input = asRecord(entry);
-
-		if (!input) {
-			continue;
-		}
-
-		const id = typeof input.id === "string" ? input.id : "(unnamed)";
+	for (const input of action.inputs) {
+		const id = input.label;
 		const stated: StaticWitness[] = [];
 
-		for (const [name, declared] of Object.entries(asRecord(input.witnesses) ?? {})) {
-			const witness = asRecord(declared);
-
-			if (witness?.type !== STATIC_WITNESS) {
+		for (const [name, witness] of Object.entries(input.witnesses)) {
+			if (witness === "unused" || witness.type !== STATIC_WITNESS) {
 				continue;
 			}
 
-			const value = witness.value;
+			const { value } = witness;
 
-			if (typeof value !== "string") {
+			if (value === undefined) {
 				throw new Refusal(
 					`The witness ${name} on input ${id} is a stated value, and the document states no value.`,
 				);
@@ -70,20 +60,31 @@ function fill(value: string, scope: ReferenceScope): string {
 	});
 }
 
-export function checkWitnessNames(use: ProgramUse, declared: Record<string, string>): void {
-	const named = new Set(use.witnessNames);
+export function checkWitnessNames(input: ProgramInput, declared: Record<string, string>): void {
+	const named = new Set(Object.keys(input.witnesses));
 	const missing = Object.keys(declared).find((name) => !named.has(name));
 	const unknown = [...named].find((name) => !Object.hasOwn(declared, name));
 
 	if (missing !== undefined) {
 		throw new Refusal(
-			`Input ${use.id} leaves out the witness ${missing}, which its ${use.utxoType} program reads.`,
+			`Input ${input.label} leaves out the witness ${missing}, which its ${input.utxo_source.utxo_type} program reads.`,
 		);
 	}
 
 	if (unknown !== undefined) {
 		throw new Refusal(
-			`Input ${use.id} names a witness ${unknown}, which its ${use.utxoType} program does not declare.`,
+			`Input ${input.label} names a witness ${unknown}, which its ${input.utxo_source.utxo_type} program does not declare.`,
 		);
 	}
+}
+
+export function signatureWitness(input: ProgramInput): string | undefined {
+	return Object.entries(input.witnesses).find(
+		([, witness]) =>
+			witness !== "unused" && witness.type === "Signature" && witness.source?.type === "wallet",
+	)?.[0];
+}
+
+export function unusedWitnesses(input: ProgramInput): string[] {
+	return Object.keys(input.witnesses).filter((name) => input.witnesses[name] === "unused");
 }

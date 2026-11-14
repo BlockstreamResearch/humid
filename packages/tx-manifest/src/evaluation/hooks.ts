@@ -1,5 +1,3 @@
-import { asRecord } from "../document/json";
-import type { Action } from "../document/manifest";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
 import { evaluateExpression } from "./evaluate";
@@ -10,46 +8,7 @@ const TARGETS: Record<string, HookTarget> = { instance: "instance", params: "par
 
 export type HookValues = Record<HookTarget, Record<string, string>>;
 
-export type DeclaredHook =
-	| { kind: "absent" }
-	| { kind: "malformed"; reason: string }
-	| { kind: "present"; set: Record<string, unknown> };
-
-export function actionHook(action: Action): DeclaredHook {
-	return declaredHook(action.node.on_pre_broadcast, "on_pre_broadcast");
-}
-
-export function inputHook(input: Record<string, unknown>): DeclaredHook {
-	return declaredHook(input.on_resolved, "on_resolved");
-}
-
-function declaredHook(declared: unknown, at: string): DeclaredHook {
-	if (declared === undefined) {
-		return { kind: "absent" };
-	}
-
-	const node = asRecord(declared);
-
-	if (!node) {
-		return { kind: "malformed", reason: `${at} is not a block of assignments.` };
-	}
-
-	const set = asRecord(node.set);
-
-	if (!set) {
-		return {
-			kind: "malformed",
-			reason:
-				node.set === undefined
-					? `${at} declares a hook and nothing for it to set.`
-					: `${at} sets something that is not a list of assignments.`,
-		};
-	}
-
-	return { kind: "present", set };
-}
-
-export function runHook(set: Record<string, unknown>, scope: ReferenceScope): HookValues {
+export function runHook(set: Record<string, string>, scope: ReferenceScope): HookValues {
 	const values: HookValues = { instance: {}, params: {} };
 	let running = scope;
 
@@ -70,10 +29,6 @@ export function runHook(set: Record<string, unknown>, scope: ReferenceScope): Ho
 			throw new Refusal(
 				`A hook assigns to "${target}", and "${namespace}" is not something this runtime can set.`,
 			);
-		}
-
-		if (typeof expression !== "string") {
-			throw new Refusal(`The hook's value for ${target} is not an expression.`);
 		}
 
 		const value = Refusal.amend(

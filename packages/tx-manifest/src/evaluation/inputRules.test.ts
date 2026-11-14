@@ -1,15 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Action } from "../document/manifest";
-import { refusalOf } from "../review/reviewForTests";
+import { refusalOf, actionOf } from "../review/reviewForTests";
 import { resolveInputRules } from "./inputRules";
 
 function sequenceOf(sequence: unknown, params: Record<string, unknown> = {}) {
-	const action: Action = {
-		isConstructor: false,
-		name: "Act",
-		node: { inputs: [{ id: "a", sequence }] },
-	};
+	const action: Action = actionOf("Act", {
+		inputs: [{ id: "a", sequence, utxo_source: "wallet" }],
+	});
 
 	return resolveInputRules(action, { params })[0]?.sequence;
 }

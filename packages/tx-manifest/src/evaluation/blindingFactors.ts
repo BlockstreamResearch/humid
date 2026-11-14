@@ -1,7 +1,7 @@
 import { reverseHex } from "../chain/hex";
 import { integerOf } from "../chain/integers";
-import { asRecord } from "../document/json";
 import type { ReferenceScope } from "../document/references";
+import type { Blinding } from "../document/schema";
 import { Refusal } from "../refusal";
 import { evaluateExpression } from "./evaluate";
 
@@ -12,24 +12,18 @@ export type BlindingFactors = {
 
 const SCALAR_LIMIT = 2n ** 256n;
 
-export function resolveBlindingFactors(declared: unknown, scope: ReferenceScope): BlindingFactors {
-	const record = asRecord(declared);
-
-	if (!record) {
-		throw new Refusal("states blinding factors this wallet cannot read.");
-	}
-
+export function resolveBlindingFactors(declared: Blinding, scope: ReferenceScope): BlindingFactors {
 	return {
-		...(record.asset_bf === undefined
+		...(declared.asset_bf === undefined
 			? {}
-			: { assetBlindingFactor: factorOf(record.asset_bf, "asset_bf", scope) }),
-		...(record.value_bf === undefined
+			: { assetBlindingFactor: factorOf(declared.asset_bf, "asset_bf", scope) }),
+		...(declared.value_bf === undefined
 			? {}
-			: { valueBlindingFactor: factorOf(record.value_bf, "value_bf", scope) }),
+			: { valueBlindingFactor: factorOf(declared.value_bf, "value_bf", scope) }),
 	};
 }
 
-function factorOf(declared: unknown, name: string, scope: ReferenceScope): string {
+function factorOf(declared: string | number, name: string, scope: ReferenceScope): string {
 	const scalar = Refusal.amend(
 		() => scalarOf(declared, scope),
 		(reason) => `its ${name} ${reason}`,
@@ -38,7 +32,7 @@ function factorOf(declared: unknown, name: string, scope: ReferenceScope): strin
 	return reverseHex(scalar.toString(16).padStart(64, "0"));
 }
 
-function scalarOf(declared: unknown, scope: ReferenceScope): bigint {
+function scalarOf(declared: string | number, scope: ReferenceScope): bigint {
 	if (typeof declared === "number") {
 		const scalar = integerOf(declared);
 
@@ -47,10 +41,6 @@ function scalarOf(declared: unknown, scope: ReferenceScope): bigint {
 		}
 
 		return scalar;
-	}
-
-	if (typeof declared !== "string") {
-		throw new Refusal("is neither a number nor text.");
 	}
 
 	const text = declared.trim();

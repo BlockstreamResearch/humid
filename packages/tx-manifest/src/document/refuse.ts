@@ -4,14 +4,10 @@ import { utf8ToBytes } from "@noble/hashes/utils.js";
 import { encodeHex } from "../chain/hex";
 import { STATIC_WITNESS } from "../evaluation/witness";
 import { Refusal } from "../refusal";
-import { asArray, asRecord } from "./json";
 import type { Manifest } from "./manifest";
 import { RESERVED_INPUT_IDS } from "./references";
-import { inspectConstructs } from "./registry";
+import type { Witness } from "./schema";
 
-const FORMAT_MAJOR = 0;
-const FORMAT_MINOR = 3;
-const CHAINS = new Set(["elements", "liquid"]);
 const CAPABILITIES = new Set(["simplicity"]);
 
 export function refuseUnsupported(
@@ -19,9 +15,6 @@ export function refuseUnsupported(
 	input: { compilerVersion?: string; contractSources: Record<string, string> },
 ): Refusal | undefined {
 	return (
-		refuseForeignFormat(manifest) ??
-		refuseForeignChain(manifest) ??
-		refuseConstructs(manifest) ??
 		refuseReservedInputIds(manifest) ??
 		refuseCapabilities(manifest) ??
 		refuseUnbuildableUtxoType(manifest) ??
@@ -31,61 +24,13 @@ export function refuseUnsupported(
 	);
 }
 
-function refuseForeignFormat(manifest: Manifest): Refusal | undefined {
-	const declared = manifest.node.manifest_version;
-	const [major, minor] = typeof declared === "string" ? declared.split(".").map(Number) : [];
-
-	if (major === FORMAT_MAJOR && minor === FORMAT_MINOR) {
-		return undefined;
-	}
-
-	return new Refusal(
-		`This document is written in manifest format ${JSON.stringify(declared)}, and this wallet reads ${FORMAT_MAJOR}.${FORMAT_MINOR}.`,
-		"foreign-format",
-	);
-}
-
-function refuseForeignChain(manifest: Manifest): Refusal | undefined {
-	const declared = manifest.node.chain;
-
-	if (declared === undefined || (typeof declared === "string" && CHAINS.has(declared))) {
-		return undefined;
-	}
-
-	return new Refusal(
-		`This protocol is for ${JSON.stringify(declared)}, and this wallet builds Liquid transactions.`,
-		"foreign-chain",
-	);
-}
-
-function refuseConstructs(manifest: Manifest): Refusal | undefined {
-	const found = inspectConstructs(manifest)[0];
-
-	if (!found) {
-		return undefined;
-	}
-
-	return found.state === "unimplemented"
-		? new Refusal(
-				`This protocol uses "${found.key}" at ${found.at}, which this wallet does not implement yet.`,
-				"unimplemented-construct",
-			)
-		: new Refusal(
-				`The manifest is malformed: the format defines no "${found.key}" at ${found.at}.`,
-				"document-fault",
-			);
-}
-
 function refuseReservedInputIds(manifest: Manifest): Refusal | undefined {
 	for (const action of manifest.actions) {
-		const reserved = asArray(action.node.inputs)
-			.map((input) => asRecord(input)?.id)
-			.find((id) => typeof id === "string" && RESERVED_INPUT_IDS.has(id));
+		const reserved = action.inputs.find(({ id }) => id !== undefined && RESERVED_INPUT_IDS.has(id));
 
 		if (reserved !== undefined) {
 			return new Refusal(
-				`The manifest is malformed: ${action.name} names an input "${String(reserved)}", which is a namespace.`,
-				"document-fault",
+				`The manifest is malformed: ${action.name} names an input "${reserved.label}", which is a namespace.`,
 			);
 		}
 	}
@@ -94,9 +39,7 @@ function refuseReservedInputIds(manifest: Manifest): Refusal | undefined {
 }
 
 function refuseCapabilities(manifest: Manifest): Refusal | undefined {
-	const missing = asArray(manifest.node.requires).find(
-		(capability) => typeof capability !== "string" || !CAPABILITIES.has(capability),
-	);
+	const missing = manifest.requires.find((capability) => !CAPABILITIES.has(capability));
 
 	return missing === undefined
 		? undefined
@@ -108,11 +51,11 @@ function refuseCapabilities(manifest: Manifest): Refusal | undefined {
 
 function refuseUnbuildableUtxoType(manifest: Manifest): Refusal | undefined {
 	for (const [name, declared] of Object.entries(manifest.utxoTypes)) {
-		const scriptType = asRecord(asRecord(declared)?.script)?.type;
+		const scriptType = declared.script.type;
 
 		if (scriptType !== undefined && scriptType !== "simplicity") {
 			return new Refusal(
-				`The ${name} contract is a ${String(scriptType)} script, and this wallet builds Simplicity programs.`,
+				`The ${name} contract is a ${scriptType} script, and this wallet builds Simplicity programs.`,
 				"unbuildable-utxo-type",
 			);
 		}
@@ -126,7 +69,7 @@ function refuseSourceMismatch(
 	contractSources: Record<string, string>,
 ): Refusal | undefined {
 	for (const { at, hash, path } of programReferences(manifest)) {
-		const source = typeof path === "string" ? contractSources[path] : undefined;
+		const source = contractSources[path];
 
 		if (hash === undefined || source === undefined) {
 			continue;
@@ -134,7 +77,7 @@ function refuseSourceMismatch(
 
 		if (hash !== `sha256:${encodeHex(sha256(utf8ToBytes(source)))}`) {
 			return new Refusal(
-				`The contract at ${String(path)} is not the one ${at} pins with ${String(hash)}.`,
+				`The contract at ${path} is not the one ${at} pins with ${hash}.`,
 				"source-mismatch",
 			);
 		}
@@ -153,16 +96,14 @@ function refuseForeignCompiler(
 		return undefined;
 	}
 
-	const documentRange = asRecord(manifest.node.simplicity_hl)?.version;
-
 	for (const { at, path, range } of programReferences(manifest)) {
-		const source = typeof path === "string" ? input.contractSources[path] : undefined;
+		const source = input.contractSources[path];
 		const directive = source === undefined ? undefined : simcDirective(source);
 
-		for (const required of [range ?? documentRange, directive]) {
-			if (typeof required === "string" && !satisfies(shipped, required)) {
+		for (const required of [range ?? manifest.simplicityHl.version, directive]) {
+			if (required !== undefined && !satisfies(shipped, required)) {
 				return new Refusal(
-					`The contract at ${String(path)}, used by ${at}, asks for SimplicityHL ${required}, and this wallet compiles with ${shipped}.`,
+					`The contract at ${path}, used by ${at}, asks for SimplicityHL ${required}, and this wallet compiles with ${shipped}.`,
 					"foreign-compiler",
 				);
 			}
@@ -174,16 +115,13 @@ function refuseForeignCompiler(
 
 function refuseUnproducibleWitness(manifest: Manifest): Refusal | undefined {
 	for (const action of manifest.actions) {
-		for (const declared of asArray(action.node.inputs)) {
-			const input = asRecord(declared);
-			const id = typeof input?.id === "string" ? input.id : "(unnamed)";
-
-			for (const [name, witness] of Object.entries(asRecord(input?.witnesses) ?? {})) {
-				const reason = witness === "unused" ? undefined : unproducible(asRecord(witness));
+		for (const input of action.inputs) {
+			for (const [name, witness] of Object.entries(input.witnesses)) {
+				const reason = unproducible(witness);
 
 				if (reason) {
 					return new Refusal(
-						`The witness ${name} at ${action.name} / input ${id} ${reason}.`,
+						`The witness ${name} at ${action.name} / input ${input.label} ${reason}.`,
 						"unproducible-witness",
 					);
 				}
@@ -194,51 +132,43 @@ function refuseUnproducibleWitness(manifest: Manifest): Refusal | undefined {
 	return undefined;
 }
 
-function unproducible(witness: Record<string, unknown> | undefined): string | undefined {
-	if (witness?.type === STATIC_WITNESS) {
-		return typeof witness.value === "string" ? undefined : "states no value";
+function unproducible(witness: Witness): string | undefined {
+	if (witness === "unused") {
+		return undefined;
 	}
 
-	if (witness?.type !== "Signature") {
-		return `is a ${String(witness?.type)}, and this wallet only produces signatures and stated values`;
+	if (witness.type === STATIC_WITNESS) {
+		return witness.value === undefined ? "states no value" : undefined;
 	}
 
-	if (asRecord(witness.source)?.type !== "wallet") {
+	if (witness.type !== "Signature") {
+		return `is a ${witness.type}, and this wallet only produces signatures and stated values`;
+	}
+
+	if (witness.source?.type !== "wallet") {
 		return "is a signature from a key this wallet does not hold";
 	}
 
 	return witness.sig_type === undefined || witness.sig_type === "sig_hash_all"
 		? undefined
-		: `asks for ${String(witness.sig_type)}, and this wallet signs over the whole transaction`;
+		: `asks for ${witness.sig_type}, and this wallet signs over the whole transaction`;
 }
 
-type ProgramReference = { at: string; hash: unknown; path: unknown; range: unknown };
+type ProgramReference = { at: string; hash?: string; path: string; range?: string };
 
 function programReferences(manifest: Manifest): ProgramReference[] {
-	const scripts = Object.entries(manifest.utxoTypes).flatMap(([name, declared]) => {
-		const script = asRecord(asRecord(declared)?.script);
-
-		return script
-			? [
-					{
-						at: `the ${name} contract`,
-						hash: script.source_hash,
-						path: script.source,
-						range: script.simplicity_hl_version,
-					},
-				]
-			: [];
-	});
+	const scripts = Object.entries(manifest.utxoTypes).map(([name, { script }]) => ({
+		at: `the ${name} contract`,
+		hash: script.source_hash,
+		path: script.source,
+		range: script.simplicity_hl_version,
+	}));
 	const computes = manifest.actions.flatMap((action) =>
 		[
-			...Object.entries(asRecord(asRecord(action.node.create_instance)?.fields) ?? {}),
-			...Object.entries(asRecord(action.node.params) ?? {}).map(
-				([name, param]) => [name, asRecord(param)?.compute] as const,
-			),
-		].flatMap(([name, declared]) => {
-			const compute = asRecord(declared);
-
-			return compute?.simf === undefined
+			...Object.entries(action.create_instance?.fields ?? {}),
+			...Object.entries(action.params).map(([name, param]) => [name, param.compute] as const),
+		].flatMap(([name, compute]) =>
+			typeof compute !== "object" || compute.simf === undefined
 				? []
 				: [
 						{
@@ -247,8 +177,8 @@ function programReferences(manifest: Manifest): ProgramReference[] {
 							path: compute.simf,
 							range: compute.simplicity_hl_version,
 						},
-					];
-		}),
+					],
+		),
 	);
 
 	return [...scripts, ...computes];

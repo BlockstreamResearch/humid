@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
-import { parseLiquidProcessCtParams } from "./validation";
+import { parseLiquidProcessCtParams } from "./request";
 
 const base = {
 	action: "Pay",

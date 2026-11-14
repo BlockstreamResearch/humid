@@ -24,7 +24,7 @@ function request(
 
 function requirements(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
 	const asked = request(overrides);
-	const manifest = new Manifest(asked.manifest);
+	const manifest = Manifest.parse({ manifest_version: "0.3.1", ...asked.manifest });
 	const action = manifest.action(asked.action);
 
 	if (!action) {
@@ -40,7 +40,7 @@ function parts(overrides: Partial<ParsedLiquidProcessCtParams> = {}): RequestPar
 
 describe("missingParts", () => {
 	test("an action the manifest does not declare is not one to ask about", () => {
-		const manifest = new Manifest(MANIFEST);
+		const manifest = Manifest.parse(MANIFEST);
 
 		expect(manifest.action("Withdraw")).toBeUndefined();
 	});

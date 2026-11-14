@@ -5,7 +5,7 @@ import { Manifest } from "../document/manifest";
 import { Refusal } from "../refusal";
 import { deriveProgramAddress } from "./program";
 
-const manifest = new Manifest(manifestJson as unknown as Record<string, unknown>);
+const manifest = Manifest.parse(manifestJson as unknown as Record<string, unknown>);
 
 const CURRENT_DEBT = "1000";
 
@@ -62,8 +62,7 @@ async function leavesOf(utxoType: string, instance: Record<string, string> = INS
 		includeDebugSymbols: false,
 		network: "liquidtestnet",
 		scope: { instance, params: {} },
-		utxoType,
-		wiring: {},
+		reference: { compile_params: {}, utxo_type: utxoType },
 	});
 
 	const refusal = await derived.then(

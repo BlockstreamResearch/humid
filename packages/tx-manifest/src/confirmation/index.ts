@@ -136,15 +136,13 @@ export function describeOrigin(origin: Origin): string {
 }
 
 function intentOf(action: Action, scope: ReferenceScope): string | undefined {
-	const intent = action.node.intent;
-
-	return typeof intent === "string"
-		? intent.replaceAll(/\{(?<ref>[^{}:]+)(?::[^{}]*)?\}/g, (text, ref: string) => {
+	return action.intent === undefined
+		? undefined
+		: action.intent.replaceAll(/\{(?<ref>[^{}:]+)(?::[^{}]*)?\}/g, (text, ref: string) => {
 				const found = Refusal.attempt(() => resolveReference(ref, "expression", scope));
 
 				return found === undefined ? text : String(found);
-			})
-		: undefined;
+			});
 }
 
 type ShownAmount = { asset: Provenanced<string>; sats: Provenanced<string> };

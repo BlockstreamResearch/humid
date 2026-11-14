@@ -336,7 +336,7 @@ describe("the build mode a document declares", () => {
 		const refusal = asRefusal(await result);
 
 		expect(refusal.reject).toBe("unreadable-build-mode");
-		expect(refusal.reason).toContain("neither on nor off");
+		expect(refusal.reason).toContain("simplicity_hl / debug_symbols");
 		expect(compiled).toHaveLength(0);
 	});
 });

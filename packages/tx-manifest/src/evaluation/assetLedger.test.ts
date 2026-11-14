@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import multiassetManifest from "../__fixtures__/multiasset/txmanifest.json";
 import { type Action, Manifest } from "../document/manifest";
-import { refusalOf } from "../review/reviewForTests";
+import { refusalOf, actionOf } from "../review/reviewForTests";
 import { assetLedger, type HeldValue, resolveAsset } from "./assetLedger";
 import { planAction } from "./plan";
 
@@ -10,7 +10,7 @@ const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585
 const TOKEN = "ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2";
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 
-const manifest = new Manifest(multiassetManifest as unknown as Record<string, unknown>);
+const manifest = Manifest.parse(multiassetManifest as unknown as Record<string, unknown>);
 
 function payToken(params: Record<string, unknown>) {
 	const action = manifest.action("PayToken");
@@ -127,28 +127,15 @@ describe("reading one action as a statement about several assets", () => {
 		]);
 	});
 
-	test("refuses a plan that does not line up with the outputs the document declares", () => {
-		const { action, plan, scope } = payToken(PARAMS);
-		const refusal = refusalOf(() =>
-			assetLedger(action, plan.outputs.slice(1), { held: [], policyAsset: POLICY_ASSET, scope }),
-		);
-
-		expect(refusal.reject).toBe("document-fault");
-	});
-
 	test("and refuses an asset it cannot establish rather than assuming one", () => {
 		expect(refusalOf(() => ledgerOf({ ...PARAMS, token: undefined })).reject).toBe("foreign-asset");
 	});
 
 	test("refuses a program input the chain says holds a different asset", () => {
-		const action: Action = {
-			isConstructor: false,
-			name: "Spend",
-			node: {
-				inputs: [{ asset: TOKEN, id: "vault_in", utxo_source: { utxo_type: "vault" } }],
-				outputs: [{ amount_sat: 10, destination: "wallet", id: "out" }],
-			},
-		};
+		const action: Action = actionOf("Spend", {
+			inputs: [{ asset: TOKEN, id: "vault_in", utxo_source: { utxo_type: "vault" } }],
+			outputs: [{ amount_sat: 10, destination: "wallet", id: "out" }],
+		});
 		const plan = planAction(action, { params: {} });
 		const refusal = refusalOf(() =>
 			assetLedger(action, plan.outputs, {

@@ -1,6 +1,5 @@
 {
-  "$schema": "../../schema/txmanifest.schema.json",
-  "$comment": "Ported from Mosaik's tessera.simf (github.com/kaleidoswap/mosaik, crates/tessera/contracts/tessera.simf). Upstream substitutes the four offer terms as inline TESSERA_PARAM literals; here they are ordinary compile params. Change tessera.simf and every offer address changes — the terms live in the tapleaf. NOTE: the Refund method is not executable until upnext/12 (absolute nLockTime) lands; see its description.",
+  "$comment": "Ported from Mosaik's tessera.simf (github.com/kaleidoswap/mosaik, crates/tessera/contracts/tessera.simf). Upstream substitutes the four offer terms as inline TESSERA_PARAM literals; here they are ordinary compile params. Change tessera.simf and every offer address changes: the terms live in the tapleaf.",
   "manifest_version": "0.3.1",
   "protocol": "tessera-dex",
   "description": "Tessera — a keyless atomic swap offer on Liquid, the primitive a Mosaik DEX is built from. One UTXO is one all-or-nothing offer: it holds asset A and is spendable by ANYONE who pays AMOUNT_B of ASSET_B to the maker (Settle), or, after TIMEOUT, by anyone who returns asset A to the maker (Refund). No signature on either path — the covenant is pure transaction introspection, and the maker is identified only by a scriptPubKey hash. Modelled as a class: one instance per offer.",
@@ -202,7 +201,7 @@
           "inputs": [
             {
               "id": "offer_in",
-              "description": "The Tessera offer UTXO being filled, located via the state file. amount_sat is declared because covenant inputs are never chain-fetched: the engine takes an input's amount from --inputs-file, then the state file, then this spec — and silently falls back to 0 if all three are absent. MakeOffer funds the offer with exactly OFFER_AMOUNT, so the instance always knows it.",
+              "description": "The Tessera offer UTXO being filled, located via the state file. MakeOffer funds the offer with exactly OFFER_AMOUNT, which amount_sat states.",
               "utxo_source": {
                 "utxo_type": "tessera_offer"
               },
@@ -297,12 +296,12 @@
           ]
         },
         "Refund": {
-          "description": "Sweep an expired offer back to the maker. Permissionless and keyless like Settle: after TIMEOUT anyone may run this, but the covenant forces the asset back to MAKER_SPK, so a stranger's only power is to pay the fee on the maker's behalf (or, at worst, burn MAX_FEE). NOT EXECUTABLE YET: the refund path calls jet::check_lock_height(TIMEOUT), an absolute CLTV, and the engine cannot set a transaction nLockTime — see meta/tasks/upnext/12-engine-absolute-locktime.md. Same limitation as the lending example's liquidation path. Modelled here so the covenant's second path is documented and ready once task 12 lands; the sequence below already enables locktime.",
+          "description": "Sweep an expired offer back to the maker. Permissionless and keyless like Settle: after TIMEOUT anyone may run this, but the covenant forces the asset back to MAKER_SPK, so a stranger's only power is to pay the fee on the maker's behalf (or, at worst, burn MAX_FEE). The refund path calls jet::check_lock_height(TIMEOUT); this wallet locks the spend to the chain's height, so it builds once the chain passes TIMEOUT.",
           "intent": "refund the expired offer: return {instance.OFFER_AMOUNT} of {instance.OFFER_ASSET_ID:symbol} to the maker",
           "inputs": [
             {
               "id": "offer_in",
-              "description": "The expired Tessera offer UTXO, located via the state file. The sequence below is ENABLE_LOCKTIME_NO_RBF (0xFFFFFFFE): anything other than 0xFFFFFFFF enables the transaction nLockTime that check_lock_height reads. The engine warns that this has the BIP68 disable bit set — that is expected and correct here, since Tessera's timeout is an absolute height, not a relative one.",
+              "description": "The expired Tessera offer UTXO, located via the state file. The sequence below is ENABLE_LOCKTIME_NO_RBF (0xFFFFFFFE): anything other than 0xFFFFFFFF enables the transaction nLockTime that check_lock_height reads. Its BIP68 disable bit is set, as Tessera's absolute timeout expects.",
               "utxo_source": {
                 "utxo_type": "tessera_offer"
               },
@@ -367,7 +366,7 @@
           "inputs": [
             {
               "id": "payout_in",
-              "description": "The maker_payout covenant UTXO holding the proceeds. With --state (the normal flow, since Settle writes one) the amount and asset are read straight off the UTXO record and the values below are ignored entirely. They exist only as the fallback for pinning the outpoint with --input and no state file, and they describe the post-Settle claim: the payout holds exactly AMOUNT_B of ASSET_B. After a Refund it holds asset A instead — that claim needs --state, which is fine, since Refund is not executable yet anyway.",
+              "description": "The maker_payout covenant UTXO holding the proceeds, located via the state file Settle writes. The values below describe the post-Settle claim: the payout holds exactly AMOUNT_B of ASSET_B. After a Refund it holds asset A instead.",
               "utxo_source": {
                 "utxo_type": "maker_payout"
               },

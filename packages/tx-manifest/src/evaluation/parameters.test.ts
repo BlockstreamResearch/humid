@@ -1,22 +1,19 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Action } from "../document/manifest";
+import { actionOf } from "../review/reviewForTests";
 import { fillParameters } from "./parameters";
 
 const WALLET = { address: "tex1q_mine", key: "aa".repeat(32), script_hash: "bb".repeat(32) };
 
 const filling = (supplied: Record<string, unknown>) => {
-	const action: Action = {
-		isConstructor: false,
-		name: "Act",
-		node: {
-			params: {
-				HASH: { compute: { type: "wallet", wallet: "script_hash" } },
-				KEY: { compute: { type: "wallet", wallet: "key" } },
-				PAYOUT: { compute: { type: "wallet", wallet: "address" } },
-			},
+	const action: Action = actionOf("Act", {
+		params: {
+			HASH: { compute: { type: "wallet", wallet: "script_hash" } },
+			KEY: { compute: { type: "wallet", wallet: "key" } },
+			PAYOUT: { compute: { type: "wallet", wallet: "address" } },
 		},
-	};
+	});
 
 	return fillParameters(action, supplied, { params: supplied }, WALLET);
 };

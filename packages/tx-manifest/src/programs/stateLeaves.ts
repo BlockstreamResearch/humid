@@ -1,6 +1,8 @@
+import { z } from "zod";
+
 import { decodeHex, encodeHex } from "../chain/hex";
-import { asArray, asRecord } from "../document/json";
 import { type ReferenceScope, resolveReference } from "../document/references";
+import { type Leaf, leafSchema } from "../document/schema";
 import { computedValue, computesValue } from "../evaluation/computedValue";
 import { Refusal } from "../refusal";
 
@@ -27,8 +29,14 @@ export function encodeStateLeaves(
 	declared: unknown,
 	input: { at: string; scope: ReferenceScope },
 ): EncodeStateLeavesResult {
+	const parsed = z.array(leafSchema).safeParse(declared);
+
+	if (!parsed.success) {
+		return { ok: false, reason: `${input.at}: ${z.prettifyError(parsed.error)}` };
+	}
+
 	try {
-		return { leaves: stateLeavesOf(declared, input), ok: true };
+		return { leaves: stateLeavesOf(parsed.data, input), ok: true };
 	} catch (error) {
 		if (error instanceof Refusal) {
 			return { ok: false, reason: error.reason };
@@ -39,10 +47,10 @@ export function encodeStateLeaves(
 }
 
 export function stateLeavesOf(
-	declared: unknown,
+	declared: Leaf[],
 	input: { at: string; scope: ReferenceScope },
 ): string[] {
-	return asArray(declared).map((entry, index) =>
+	return declared.map((entry, index) =>
 		Refusal.amend(
 			() => encodeLeaf(entry, index, input),
 			(reason) => `${input.at}: ${reason}`,
@@ -50,22 +58,17 @@ export function stateLeavesOf(
 	);
 }
 
-function encodeLeaf(declared: unknown, index: number, input: { scope: ReferenceScope }): string {
-	const node = asRecord(declared);
+function encodeLeaf(leaf: Leaf, index: number, input: { scope: ReferenceScope }): string {
 	const at = `state leaf ${index}`;
 
-	if (!node) {
-		throw new Refusal(`${at} is not a leaf this runtime can read.`);
-	}
-
-	if (node.type !== "tapdata") {
+	if (leaf.type !== "tapdata") {
 		throw new Refusal(
-			`${at} is written as ${JSON.stringify(node.type)}, and tapdata is the only kind of ` +
+			`${at} is written as ${JSON.stringify(leaf.type)}, and tapdata is the only kind of ` +
 				"leaf a contract's state is carried in.",
 		);
 	}
 
-	const payload = asArray(node.payload);
+	const { payload } = leaf;
 
 	if (payload.length === 0) {
 		throw new Refusal(`${at} carries no payload, so there is nothing to commit to.`);
@@ -84,7 +87,11 @@ function encodeLeaf(declared: unknown, index: number, input: { scope: ReferenceS
 	return encodeHex(Uint8Array.from(bytes));
 }
 
-function encodePiece(declared: unknown, at: string, input: { scope: ReferenceScope }): number[] {
+function encodePiece(
+	declared: Leaf["payload"][number],
+	at: string,
+	input: { scope: ReferenceScope },
+): number[] {
 	if (typeof declared === "string") {
 		const raw = hexBytes(declared);
 
@@ -95,34 +102,23 @@ function encodePiece(declared: unknown, at: string, input: { scope: ReferenceSco
 		return raw;
 	}
 
-	const node = asRecord(declared);
-
-	if (!node) {
-		throw new Refusal(`${at} is neither bytes nor a value to encode.`);
-	}
-
-	const declaredType = typeof node.type === "string" ? node.type : undefined;
-	const width = declaredType === undefined ? undefined : WIDTHS[declaredType];
+	const width = WIDTHS[declared.type];
 
 	if (width === undefined) {
 		throw new Refusal(
-			`${at} is declared ${JSON.stringify(node.type)}, which this runtime does not encode ` +
+			`${at} is declared ${JSON.stringify(declared.type)}, which this runtime does not encode ` +
 				"into a state leaf.",
 		);
 	}
 
-	const value = readValue(node.value, at, input);
+	const value = readValue(declared.value, at, input);
 	const natural =
 		width.reads === "hex" ? fromHex(value, width.bytes, at) : fromNumber(value, width.bytes, at);
 
-	return padBytes(orderBytes(natural, node.endian, at), node.pad_to, node.align, at);
+	return padBytes(orderBytes(natural, declared.endian, at), declared.pad_to, declared.align, at);
 }
 
-function readValue(declared: unknown, at: string, input: { scope: ReferenceScope }): string {
-	if (typeof declared !== "string") {
-		throw new Refusal(`${at} names no value to encode.`);
-	}
-
+function readValue(declared: string, at: string, input: { scope: ReferenceScope }): string {
 	let found: unknown;
 
 	try {
@@ -186,7 +182,7 @@ function fromHex(value: string, bytes: number, at: string): number[] {
 	return raw;
 }
 
-function orderBytes(bytes: number[], endian: unknown, at: string): number[] {
+function orderBytes(bytes: number[], endian: string | undefined, at: string): number[] {
 	if (bytes.length === 1 || endian === "be") {
 		return bytes;
 	}
@@ -201,12 +197,17 @@ function orderBytes(bytes: number[], endian: unknown, at: string): number[] {
 	);
 }
 
-function padBytes(bytes: number[], padTo: unknown, align: unknown, at: string): number[] {
+function padBytes(
+	bytes: number[],
+	padTo: number | undefined,
+	align: string | undefined,
+	at: string,
+): number[] {
 	if (padTo === undefined) {
 		return bytes;
 	}
 
-	if (typeof padTo !== "number" || !Number.isInteger(padTo) || padTo < 0) {
+	if (!Number.isInteger(padTo) || padTo < 0) {
 		throw new Refusal(`${at} is padded to ${JSON.stringify(padTo)}, which is not a width.`);
 	}
 

@@ -4,6 +4,7 @@ import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
 import type { Action } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
+import { actionOf } from "../review/reviewForTests";
 import { planAction } from "./plan";
 
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -14,7 +15,7 @@ const PAY = action(
 );
 
 function action(name: string, node: Record<string, unknown>): Action {
-	return { isConstructor: false, name, node };
+	return actionOf(name, node);
 }
 
 function scope(params: Record<string, unknown>): ReferenceScope {
@@ -60,14 +61,6 @@ describe("planAction", () => {
 
 	test("refuses an output that would pay nothing", () => {
 		expect(() => planAction(PAY, scope({ amount_sat: 0, pubkey: PUBKEY }))).toThrow(Refusal);
-	});
-
-	test("refuses a destination it does not resolve", () => {
-		const odd = action("Odd", {
-			outputs: [{ amount_sat: 1, destination: { if: "something" }, id: "odd" }],
-		});
-
-		expect(() => planAction(odd, scope({ amount_sat: 1, pubkey: PUBKEY }))).toThrow(Refusal);
 	});
 
 	test("refuses an action with no outputs", () => {

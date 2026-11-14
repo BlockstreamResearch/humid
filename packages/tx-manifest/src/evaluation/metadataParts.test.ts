@@ -4,12 +4,12 @@ import lendingV2Manifest from "../__fixtures__/lending_v2/txmanifest.json";
 import lendingManifest from "../__fixtures__/lending_v3/txmanifest.json";
 import { Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
-import { declaredParamTypes } from "../programs/declaredTypes";
+import type { DataPart } from "../document/schema";
 import { Refusal } from "../refusal";
 import { concatParts, encodeMetadataParts, type PartResolver } from "./metadataParts";
 import { planAction } from "./plan";
 
-function part(declared: Record<string, unknown>, resolve?: PartResolver): string {
+function part(declared: DataPart, resolve?: PartResolver): string {
 	try {
 		return encodeMetadataParts({ parts: [declared] }, resolve);
 	} catch (error) {
@@ -72,7 +72,7 @@ const SCOPE: ReferenceScope = {
 };
 
 function publishedRecord(name: string): string {
-	const action = new Manifest(lendingManifest as unknown as Record<string, unknown>).action(name);
+	const action = Manifest.parse(lendingManifest as unknown as Record<string, unknown>).action(name);
 
 	if (!action) {
 		throw new Error(`the document declares no ${name}`);
@@ -97,7 +97,7 @@ describe("the OP_RETURN records the lending protocol publishes", () => {
 
 describe("string-form data", () => {
 	test("a concat record joins its values, reversing the one declared an asset id", () => {
-		const manifest = new Manifest(lendingV2Manifest as unknown as Record<string, unknown>);
+		const manifest = Manifest.parse(lendingV2Manifest as unknown as Record<string, unknown>);
 		const action = manifest.action("LockCollateral");
 
 		if (!action) {
@@ -116,7 +116,7 @@ describe("string-form data", () => {
 				},
 				params: {},
 			},
-			declaredParamTypes(manifest, action),
+			manifest.paramTypes(action),
 		).outputs.find((output) => output.id === "indexer_op_return");
 
 		expect(record?.target).toEqual({ hex: `6a40${key}${PUBLISHED_ASSET}`, kind: "data" });

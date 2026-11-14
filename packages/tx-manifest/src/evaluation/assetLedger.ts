@@ -1,5 +1,4 @@
 import { statedAsset } from "../document/asset";
-import { asArray, asRecord } from "../document/json";
 import type { Action } from "../document/manifest";
 import { type ReferenceScope, resolveReference } from "../document/references";
 import { Refusal } from "../refusal";
@@ -30,18 +29,14 @@ type Context = {
 	scope: ReferenceScope;
 };
 
-export function resolveAsset(declared: unknown, at: string, context: Context): string {
-	const policyAsset = context.policyAsset;
+export function resolveAsset(declared: string | undefined, at: string, context: Context): string {
+	const { policyAsset } = context;
 
 	if (declared === undefined) {
 		return policyAsset;
 	}
 
-	if (typeof declared !== "string") {
-		throw new Refusal(`The asset at ${at} is not written as text.`, "foreign-asset");
-	}
-
-	const stated = statedAsset(declared, context.policyAsset);
+	const stated = statedAsset(declared, policyAsset);
 
 	if (stated.kind === "network") {
 		return policyAsset;
@@ -67,7 +62,7 @@ export function resolveAsset(declared: unknown, at: string, context: Context): s
 		);
 	}
 
-	const resolved = statedAsset(found, context.policyAsset);
+	const resolved = statedAsset(found, policyAsset);
 
 	if (resolved.kind === "deferred") {
 		throw new Refusal(
@@ -85,17 +80,6 @@ export function assetLedger(
 	planned: PlannedOutput[],
 	context: Context & { held: HeldValue[] },
 ): AssetLedger {
-	const declaredOutputs = asArray(action.node.outputs)
-		.map((entry) => asRecord(entry))
-		.filter((entry) => entry !== undefined);
-
-	if (declaredOutputs.length !== planned.length) {
-		throw new Refusal(
-			`${action.name} plans ${planned.length} outputs against ${declaredOutputs.length} ` +
-				"declared ones, so this wallet cannot say which asset each one pays in.",
-		);
-	}
-
 	const entries = new Map<string, AssetEntry>();
 	const entryFor = (asset: string): AssetEntry => {
 		const existing = entries.get(asset);
@@ -120,53 +104,36 @@ export function assetLedger(
 		context.held.filter((value) => value.created !== true).map((value) => [value.id, value]),
 	);
 
-	for (const entry of asArray(action.node.inputs)) {
-		const declared = asRecord(entry);
-
-		if (!declared) {
-			continue;
-		}
-
-		const id = typeof declared.id === "string" ? declared.id : "(unnamed)";
-		const asset = resolveAsset(declared.asset, `input ${id}`, context);
+	for (const input of action.inputs) {
+		const asset = resolveAsset(input.asset, `input ${input.label}`, context);
 
 		entryFor(asset);
 
-		if (typeof asRecord(declared.utxo_source)?.utxo_type === "string") {
-			const held = heldById.get(id);
-
-			if (declared.asset !== undefined && held && held.asset !== asset) {
-				throw new Refusal(
-					`${action.name} says input ${id} is in ${asset}, and the output it spends ` +
-						`holds ${held.asset}.`,
-					"foreign-asset",
-				);
-			}
+		if (input.utxo_source === "wallet") {
+			walletInputs.push({ asset, id: input.label });
 
 			continue;
 		}
 
-		walletInputs.push({ asset, id });
+		const held = heldById.get(input.label);
+
+		if (input.asset !== undefined && held && held.asset !== asset) {
+			throw new Refusal(
+				`${action.name} says input ${input.label} is in ${asset}, and the output it spends ` +
+					`holds ${held.asset}.`,
+				"foreign-asset",
+			);
+		}
 	}
 
-	for (const [at, declared] of declaredOutputs.entries()) {
+	for (const [at, declared] of action.outputs.entries()) {
 		const output = planned[at];
 
 		if (!output) {
 			continue;
 		}
 
-		const id = typeof declared.id === "string" ? declared.id : "";
-
-		if (id !== output.id) {
-			throw new Refusal(
-				`${action.name} declares ${id || "(unnamed)"} where its plan has ` +
-					`${output.id || "(unnamed)"}, so this wallet cannot say which asset that output ` +
-					"pays in.",
-			);
-		}
-
-		const asset = resolveAsset(declared.asset, `output ${id || "(unnamed)"}`, context);
+		const asset = resolveAsset(declared.asset, `output ${declared.label}`, context);
 		const entry = entryFor(asset);
 
 		outputs.push(asset);
@@ -178,13 +145,13 @@ export function assetLedger(
 				}
 
 				throw new Refusal(
-					`${action.name} declares change for ${asset} twice, at ` +
-						`${entry.change.id || "(unnamed)"} and ${id || "(unnamed)"}. One surplus cannot ` +
-						"go to two places, and this wallet will not choose between them.",
+					`${action.name} declares change for ${asset} twice, at ${entry.change.id} and ` +
+						`${declared.label}. One surplus cannot go to two places, and this wallet will ` +
+						"not choose between them.",
 				);
 			}
 
-			entry.change = { blinded: output.blinding.blinding === "blinded", id };
+			entry.change = { blinded: output.blinding.blinding === "blinded", id: declared.label };
 
 			if (declared.required_index !== undefined) {
 				positionedChange.add(asset);

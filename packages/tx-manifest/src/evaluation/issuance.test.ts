@@ -1,13 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import { deriveNewIssuance } from "../chain/issuance";
-import { refusalOf } from "../review/reviewForTests";
-import {
-	declaredIssuance,
-	issuanceAttributes,
-	issuanceIdentity,
-	withIssuedAmounts,
-} from "./issuance";
+import { actionOf, refusalOf } from "../review/reviewForTests";
+import { issuanceAttributes, issuanceIdentity, withIssuedAmounts } from "./issuance";
 
 const OUTPOINT = { txid: "c".repeat(64), vout: 2 };
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -16,11 +11,14 @@ const YES_ASSET = "3a8b6b466346d9dbfcecd8c8d7b0c1873aee4e00fd5df0d95086a3f7eecd5
 const reversed = (hex: string) => (hex.match(/../g) ?? []).toReversed().join("");
 
 function resolve(
-	declared: Record<string, unknown>,
+	issuance: Record<string, unknown>,
 	params: Record<string, unknown> = {},
 	outpoint = OUTPOINT,
 ) {
 	const scope = { params };
+	const declared = actionOf("Mint", {
+		inputs: [{ issuance, utxo_source: "wallet" }],
+	}).inputs[0]!.issuance!;
 
 	return withIssuedAmounts(
 		issuanceIdentity({ declared, id: "mint_in", outpoint }, scope),
@@ -28,13 +26,6 @@ function resolve(
 		scope,
 	);
 }
-
-describe("the issuance an input declares", () => {
-	test("is found where the input declares one, and nowhere else", () => {
-		expect(declaredIssuance({ issuance: { kind: "new" } })).toEqual({ kind: "new" });
-		expect(declaredIssuance({ id: "funding_in" })).toBeUndefined();
-	});
-});
 
 describe("what this wallet will mint", () => {
 	test("a new asset, derived from the very output the input spends", () => {
@@ -138,7 +129,7 @@ describe("what it will not mint", () => {
 		const refusal = refusalOf(() => resolve({ asset_amount_sat: 1000, kind: "burn" }));
 
 		expect(refusal.reject).toBe("document-fault");
-		expect(refusal.reason).toContain('"burn"');
+		expect(refusal.reason).toContain("issuance / kind");
 	});
 
 	test("an amount it cannot work out, rather than one nobody chose", () => {

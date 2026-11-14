@@ -1,6 +1,6 @@
-import { asRecord } from "../document/json";
 import type { Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
+import type { ProgramReference } from "../document/schema";
 import { Refusal } from "../refusal";
 import { resolveCompileParams } from "./compileParams";
 import type { ProgramAbi, ProgramParamTypes } from "./programParamTypes";
@@ -47,25 +47,19 @@ export async function deriveProgramAddress(
 		declaredTypes: Record<string, string>;
 		includeDebugSymbols: boolean;
 		network: string;
+		reference: ProgramReference;
 		scope: ReferenceScope;
-		utxoType: string;
-		args?: unknown;
-		wiring: Record<string, unknown>;
 	},
 ): Promise<ProgramDerivation> {
-	const declared = manifest.utxoType(input.utxoType);
+	const utxoType = input.reference.utxo_type;
+	const declared = manifest.utxoType(utxoType);
 
 	if (!declared) {
-		throw new Refusal(`The manifest declares no utxo type named "${input.utxoType}".`);
+		throw new Refusal(`The manifest declares no utxo type named "${utxoType}".`);
 	}
 
-	const script = asRecord(declared.script);
-	const sourcePath = script?.source;
-
-	if (typeof sourcePath !== "string") {
-		throw new Refusal(`Utxo type "${input.utxoType}" names no contract source.`);
-	}
-
+	const { script } = declared;
+	const sourcePath = script.source;
 	const source = input.contractSources[sourcePath];
 
 	if (source === undefined) {
@@ -81,20 +75,20 @@ export async function deriveProgramAddress(
 	}
 
 	const declaring = { declares: abi.parameters, source: sourcePath };
-	const bound = bindUtxoParams(input.utxoType, declared, input, input.scope);
+	const bound = bindUtxoParams(utxoType, declared, input.reference, input.scope);
 	const scope = bound?.scope ?? input.scope;
 	const wiring = bound
-		? { ...boundWiring(bound, declaring.declares), ...asRecord(script?.compile_params) }
+		? { ...boundWiring(bound, declaring.declares), ...script.compile_params }
 		: {
 				...instanceFieldsNamed(declaring.declares, input.scope.instance),
-				...asRecord(script?.compile_params),
-				...input.wiring,
+				...script.compile_params,
+				...input.reference.compile_params,
 			};
 	const argumentsJson = JSON.stringify(
 		resolveCompileParams(wiring, bound?.types ?? input.declaredTypes, scope, declaring),
 	);
 	const extraLeavesJson = JSON.stringify(
-		stateLeavesOf(script?.extra_leaves, { at: `Utxo type "${input.utxoType}"`, scope }),
+		stateLeavesOf(script.extra_leaves, { at: `Utxo type "${utxoType}"`, scope }),
 	);
 
 	try {
@@ -116,7 +110,7 @@ export async function deriveProgramAddress(
 			source,
 			sourcePath,
 			tapleafHash: compiled.tapleafHash,
-			utxoType: input.utxoType,
+			utxoType,
 			witnessTypes: abi.witnesses,
 		};
 	} catch (error) {

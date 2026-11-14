@@ -1,5 +1,5 @@
-import { asRecord } from "../document/json";
 import { parseReference, type ReferenceScope } from "../document/references";
+import type { ProgramReference, UtxoType } from "../document/schema";
 import { statedValue } from "../evaluation/computedValue";
 import { Refusal } from "../refusal";
 
@@ -10,11 +10,11 @@ export type BoundParams = {
 
 export function bindUtxoParams(
 	utxoType: string,
-	declared: Record<string, unknown>,
-	use: { args?: unknown; wiring: Record<string, unknown> },
+	declared: UtxoType,
+	use: ProgramReference,
 	scope: ReferenceScope,
 ): BoundParams | undefined {
-	const params = asRecord(declared.params);
+	const { params } = declared;
 
 	if (!params) {
 		if (use.args !== undefined) {
@@ -26,13 +26,13 @@ export function bindUtxoParams(
 		return undefined;
 	}
 
-	if (Object.keys(use.wiring).length > 0) {
+	if (Object.keys(use.compile_params).length > 0) {
 		throw new Refusal(
 			`An input or output gives ${utxoType} compile_params, and the type declares params, which are bound with args.`,
 		);
 	}
 
-	const args = asRecord(use.args) ?? {};
+	const args = use.args ?? {};
 	const unknown = Object.keys(args).find((name) => !Object.hasOwn(params, name));
 
 	if (unknown !== undefined) {
@@ -42,23 +42,12 @@ export function bindUtxoParams(
 	const values: Record<string, string> = {};
 	const types: Record<string, string> = {};
 
-	for (const [name, entry] of Object.entries(params)) {
-		const type = asRecord(entry)?.type;
+	for (const [name, { default: fallback, type }] of Object.entries(params)) {
 		const bound = args[name];
-
-		if (typeof type !== "string") {
-			throw new Refusal(`The ${utxoType} param ${name} declares no type.`);
-		}
-
-		if (bound !== undefined && typeof bound !== "string") {
-			throw new Refusal(
-				`An input or output binds ${utxoType}'s ${name} to something that is not text.`,
-			);
-		}
 
 		values[name] =
 			bound === undefined
-				? defaultOf(utxoType, name, asRecord(entry)?.default, scope)
+				? defaultOf(utxoType, name, fallback, scope)
 				: statedValue(`Argument ${name}`, bound, scope);
 		types[name] = type;
 	}
@@ -69,10 +58,10 @@ export function bindUtxoParams(
 function defaultOf(
 	utxoType: string,
 	name: string,
-	declared: unknown,
+	declared: string | undefined,
 	scope: ReferenceScope,
 ): string {
-	if (typeof declared !== "string") {
+	if (declared === undefined) {
 		throw new Refusal(
 			`An input or output leaves ${utxoType}'s ${name} unbound, and the param has no default to fall back on.`,
 		);

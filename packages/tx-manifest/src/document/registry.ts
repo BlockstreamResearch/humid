@@ -1,5 +1,4 @@
 import { asArray, asRecord } from "./json";
-import type { Manifest } from "./manifest";
 
 export type ConstructState = "acted-on" | "shown" | "unimplemented";
 
@@ -144,7 +143,7 @@ const CONSTRUCTS = {
 
 export type ConstructKind = keyof typeof CONSTRUCTS;
 
-const IGNORED = new Set(["$comment", "$schema"]);
+const IGNORED = new Set(["$comment"]);
 
 export type ConstructRegistryEntry = {
 	key: string;
@@ -168,7 +167,7 @@ export type ConstructFinding = {
 	state: "unimplemented" | "unrecognised";
 };
 
-export function inspectConstructs(manifest: Manifest): ConstructFinding[] {
+export function inspectConstructs(manifest: Record<string, unknown>): ConstructFinding[] {
 	const findings: ConstructFinding[] = [];
 
 	walkConstructs(manifest, (node, kind, at) => {
@@ -177,7 +176,7 @@ export function inspectConstructs(manifest: Manifest): ConstructFinding[] {
 		for (const key of Object.keys(node)) {
 			const construct = constructs[key];
 
-			if (IGNORED.has(key) || (!construct && kind === "ui")) {
+			if (IGNORED.has(key) || (key === "$schema" && kind === "manifest")) {
 				continue;
 			}
 
@@ -192,9 +191,13 @@ export function inspectConstructs(manifest: Manifest): ConstructFinding[] {
 	return findings;
 }
 
+function entries(node: unknown): [string, unknown][] {
+	return Object.entries(asRecord(node) ?? {});
+}
+
 type ConstructVisitor = (node: Record<string, unknown>, kind: ConstructKind, at: string) => void;
 
-function walkConstructs(manifest: Manifest, visit: ConstructVisitor): void {
+function walkConstructs(manifest: Record<string, unknown>, visit: ConstructVisitor): void {
 	const at = (where: string, node: unknown, kind: ConstructKind) => {
 		const record = asRecord(node);
 
@@ -202,35 +205,40 @@ function walkConstructs(manifest: Manifest, visit: ConstructVisitor): void {
 			visit(record, kind, where);
 		}
 	};
+	const templates = entries(manifest.contract_templates);
 
-	at("manifest", manifest.node, "manifest");
-	at("simplicity_hl", manifest.node.simplicity_hl, "simplicityHl");
+	at("manifest", manifest, "manifest");
+	at("simplicity_hl", manifest.simplicity_hl, "simplicityHl");
 
-	for (const [name, template] of Object.entries(asRecord(manifest.node.contract_templates) ?? {})) {
+	for (const [name, template] of templates) {
 		at(`template ${name}`, template, "template");
 	}
 
-	for (const action of manifest.actions) {
-		const where = `action ${action.name}`;
+	const actions = [
+		...entries(manifest.actions),
+		...templates.flatMap(([, template]) => entries(asRecord(template)?.actions)),
+	];
 
-		at(where, action.node, "action");
-		at(`${where} / create_instance`, action.node.create_instance, "createInstance");
+	for (const [actionName, action] of actions) {
+		const where = `action ${actionName}`;
+		const node = asRecord(action);
 
-		for (const [name, field] of Object.entries(
-			asRecord(asRecord(action.node.create_instance)?.fields) ?? {},
-		)) {
-			at(`${where} / create_instance / ${name}`, field, "compute");
+		at(where, node, "action");
+		at(`${where} / create_instance`, node?.create_instance, "createInstance");
+
+		for (const [field, declared] of entries(asRecord(node?.create_instance)?.fields)) {
+			at(`${where} / create_instance / ${field}`, declared, "compute");
 		}
 
-		for (const [name, param] of Object.entries(asRecord(action.node.params) ?? {})) {
-			at(`${where} / param ${name}`, param, "param");
-			at(`${where} / param ${name} / compute`, asRecord(param)?.compute, "compute");
+		for (const [param, declared] of entries(node?.params)) {
+			at(`${where} / param ${param}`, declared, "param");
+			at(`${where} / param ${param} / compute`, asRecord(declared)?.compute, "compute");
 		}
 
 		for (const kind of ["input", "output"] as const) {
-			for (const declared of asArray(action.node[`${kind}s`])) {
+			for (const [index, declared] of asArray(node?.[`${kind}s`]).entries()) {
 				const entry = asRecord(declared);
-				const entryAt = `${where} / ${kind} ${typeof entry?.id === "string" ? entry.id : "(unnamed)"}`;
+				const entryAt = `${where} / ${kind} ${typeof entry?.id === "string" ? entry.id : `#${index + 1}`}`;
 
 				at(entryAt, entry, kind);
 				at(entryAt, entry?.ui, "ui");
@@ -240,17 +248,17 @@ function walkConstructs(manifest: Manifest, visit: ConstructVisitor): void {
 					"programReference",
 				);
 
-				for (const [name, witness] of Object.entries(asRecord(entry?.witnesses) ?? {})) {
+				for (const [name, witness] of entries(entry?.witnesses)) {
 					at(`${entryAt} / witness ${name}`, witness, "witness");
 				}
 			}
 		}
 	}
 
-	for (const [name, declared] of Object.entries(manifest.utxoTypes)) {
+	for (const [name, declared] of entries(manifest.utxo_types)) {
 		at(`utxo type ${name}`, declared, "utxoType");
 
-		for (const [param, definition] of Object.entries(asRecord(asRecord(declared)?.params) ?? {})) {
+		for (const [param, definition] of entries(asRecord(declared)?.params)) {
 			at(`utxo type ${name} / param ${param}`, definition, "utxoParam");
 		}
 

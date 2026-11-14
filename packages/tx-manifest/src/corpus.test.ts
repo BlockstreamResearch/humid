@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { SMPLX_COMPILER_VERSION } from "../../smplx-compiler/src/compilerVersion";
 import { Manifest } from "./document/manifest";
 import { refuseUnsupported, satisfies } from "./document/refuse";
+import { Refusal } from "./refusal";
 
 const EXAMPLES = ["dex", "last_will", "lending_v2", "lending_v3", "p2pk"];
 
@@ -20,7 +21,7 @@ function example(name: string) {
 		}
 	}
 
-	return { contractSources, manifest: new Manifest(raw), raw };
+	return { contractSources, manifest: Manifest.parse(raw), raw };
 }
 
 function outcome(name: string) {
@@ -39,8 +40,17 @@ describe("the reference examples", () => {
 });
 
 const p2pk = () => example("p2pk");
-const refusal = (raw: Record<string, unknown>, contractSources = p2pk().contractSources) =>
-	refuseUnsupported(new Manifest(raw), { contractSources })?.reject;
+function refusal(raw: Record<string, unknown>, contractSources = p2pk().contractSources) {
+	try {
+		return refuseUnsupported(Manifest.parse(raw), { contractSources })?.reject;
+	} catch (error) {
+		if (error instanceof Refusal) {
+			return error.reject;
+		}
+
+		throw error;
+	}
+}
 
 describe("what a document is refused for", () => {
 	test("a format version this wallet does not read", () => {

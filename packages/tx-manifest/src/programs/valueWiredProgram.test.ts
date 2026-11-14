@@ -5,7 +5,6 @@ import manifestJson from "../__fixtures__/vaultlet/txmanifest.json";
 import { Manifest } from "../document/manifest";
 import type { ReferenceScope } from "../document/references";
 import { Refusal } from "../refusal";
-import { declaredParamTypes } from "./declaredTypes";
 import { deriveProgramAddress } from "./program";
 import type { ProgramParamTypes } from "./programParamTypes";
 
@@ -29,7 +28,7 @@ const SOURCE = readFileSync(
 	"utf8",
 );
 
-const manifest = new Manifest(manifestJson as unknown as Record<string, unknown>);
+const manifest = Manifest.parse(manifestJson as unknown as Record<string, unknown>);
 
 function derive(
 	input: { programParamTypes?: () => ProgramParamTypes; scope?: ReferenceScope } = {},
@@ -54,12 +53,11 @@ function derive(
 		},
 		programAbi: () => ({ parameters: input.programParamTypes?.() ?? {}, witnesses: {} }),
 		contractSources: { "./vault.simf": SOURCE },
-		declaredTypes: declaredParamTypes(manifest, action),
+		declaredTypes: manifest.paramTypes(action),
 		includeDebugSymbols: false,
 		network: "liquid",
 		scope: input.scope ?? { instance: INSTANCE, params: {} },
-		utxoType: "vault",
-		wiring: {},
+		reference: { compile_params: {}, utxo_type: "vault" },
 	});
 
 	return { calls, derived };

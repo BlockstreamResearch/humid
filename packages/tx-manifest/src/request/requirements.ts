@@ -1,15 +1,12 @@
-import { asRecord } from "../document/json";
-import { type Action, type Manifest, readInstance } from "../document/manifest";
-import { programUses, namedUtxoTypes } from "../document/programUses";
+import { type Action, type Manifest, namedUtxoTypes, programInputs } from "../document/manifest";
 import { instanceReferences, parseReference } from "../document/references";
 import type { MissingPart, ParsedLiquidProcessCtParams } from "./request";
 
 export function missingParts(
 	request: ParsedLiquidProcessCtParams,
 	manifest: Manifest,
-	declared: Action,
+	action: Action,
 ): MissingPart[] {
-	const action = declared.node;
 	const missing: MissingPart[] = [];
 
 	const sources = referencedContractSources(manifest, action);
@@ -34,10 +31,10 @@ export function missingParts(
 		});
 	}
 
-	const reads = instanceReferences(manifest, declared, request.params);
+	const reads = instanceReferences(manifest, action, request.params);
 
 	if (reads.length > 0) {
-		if (declared.boundTo === undefined) {
+		if (action.template === undefined) {
 			const unsupplied = reads.filter(
 				(occurrence) => !((parseReference(occurrence.text)?.name ?? "") in request.params),
 			);
@@ -47,7 +44,7 @@ export function missingParts(
 					part: "instance",
 					keys: unsupplied.map((occurrence) => occurrence.at),
 					reason:
-						`The action "${declared.name}" reads a deployment's field values and is declared ` +
+						`The action "${action.name}" reads a deployment's field values and is declared ` +
 						"outside any template, so there is no deployment for it to read.",
 				});
 			}
@@ -56,18 +53,15 @@ export function missingParts(
 				keys: reads.map((occurrence) => occurrence.at),
 				part: "instance",
 				reason:
-					`The action "${declared.name}" is an action of ${declared.boundTo} and reads the ` +
+					`The action "${action.name}" is an action of ${action.template} and reads the ` +
 					"field values of one deployment of that template.",
 			});
 		}
 	}
 
-	const pinned = readInstance(request.instance).providedInputs;
+	const pinned = request.instance?.provided_inputs ?? {};
 
-	if (
-		!request.state &&
-		programUses(action).some((use) => use.role === "spent" && !(use.id in pinned))
-	) {
+	if (!request.state && programInputs(action).some((input) => !(input.label in pinned))) {
 		missing.push({
 			part: "state",
 			reason:
@@ -78,28 +72,20 @@ export function missingParts(
 	return missing;
 }
 
-function referencedContractSources(manifest: Manifest, action: Record<string, unknown>): string[] {
-	const paths = new Set<string>();
+function referencedContractSources(manifest: Manifest, action: Action): string[] {
+	return [
+		...new Set(
+			namedUtxoTypes(action).flatMap((name) => {
+				const source = manifest.utxoType(name)?.script.source;
 
-	for (const name of namedUtxoTypes(action)) {
-		const source = asRecord(manifest.utxoType(name)?.script)?.source;
-
-		if (typeof source === "string") {
-			paths.add(source);
-		}
-	}
-
-	return [...paths];
+				return source === undefined ? [] : [source];
+			}),
+		),
+	];
 }
 
-function promptedParams(action: Record<string, unknown>): string[] {
-	const params = asRecord(action.params) ?? {};
-
-	return Object.entries(params)
-		.filter(([, declared]) => {
-			const record = asRecord(declared);
-
-			return !record || !("compute" in record);
-		})
+function promptedParams(action: Action): string[] {
+	return Object.entries(action.params)
+		.filter(([, declared]) => declared.compute === undefined)
 		.map(([name]) => name);
 }

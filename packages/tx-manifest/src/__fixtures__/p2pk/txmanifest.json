@@ -1,5 +1,4 @@
 {
-    "$schema": "../../schema/txmanifest.schema.json",
     "manifest_version": "0.3.1",
     "protocol": "p2pk-simplicity",
     "description": "Hello World — Pay-to-public-key using a Simplicity checksig program on Liquid.",

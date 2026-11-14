@@ -6,8 +6,8 @@ import {
 	deriveNewIssuance,
 	type Outpoint,
 } from "../chain/issuance";
-import { asRecord } from "../document/json";
 import { type ReferenceScope, parseReference, resolveReference } from "../document/references";
+import type { Issuance } from "../document/schema";
 import { Refusal } from "../refusal";
 import { evaluateExpression } from "./evaluate";
 
@@ -23,14 +23,8 @@ export type PlannedIssuance = DerivedIssuance &
 		outpoint: Outpoint;
 	};
 
-export function declaredIssuance(
-	input: Record<string, unknown>,
-): Record<string, unknown> | undefined {
-	return asRecord(input.issuance);
-}
-
 export function reissuanceOf(
-	declared: Record<string, unknown>,
+	declared: Issuance,
 	id: string,
 	scope: ReferenceScope,
 ): DerivedIssuance {
@@ -64,21 +58,13 @@ export function reissuanceOf(
 
 export function issuanceIdentity(
 	input: {
-		declared: Record<string, unknown>;
+		declared: Issuance;
 		id: string;
 		outpoint: Outpoint;
 	},
 	scope: ReferenceScope,
 ): PlannedIssuance {
-	const kind = input.declared.kind;
-
-	if (kind !== "new" && kind !== "reissue") {
-		throw new Refusal(
-			`Input ${input.id} declares an issuance of kind ${JSON.stringify(kind)}, and the ` +
-				'format defines "new" and "reissue".',
-		);
-	}
-
+	const { kind } = input.declared;
 	const derived =
 		kind === "reissue"
 			? reissuanceOf(input.declared, input.id, scope)
@@ -103,7 +89,7 @@ export function issuanceIdentity(
 
 export function withIssuedAmounts(
 	planned: PlannedIssuance,
-	declared: Record<string, unknown>,
+	declared: Issuance,
 	scope: ReferenceScope,
 ): PlannedIssuance {
 	const id = planned.inputId;
@@ -150,9 +136,9 @@ export function issuanceAttributes(issuance: PlannedIssuance): Record<string, un
 	};
 }
 
-function hexOf(declared: unknown, scope: ReferenceScope): string {
-	if (typeof declared !== "string") {
-		throw new Refusal("it is not written as text.");
+function hexOf(declared: string | undefined, scope: ReferenceScope): string {
+	if (declared === undefined) {
+		throw new Refusal("it states none.");
 	}
 
 	const found =
@@ -167,15 +153,19 @@ function hexOf(declared: unknown, scope: ReferenceScope): string {
 	return withoutHexPrefix(found).toLowerCase();
 }
 
-function amountOf(declared: unknown, scope: ReferenceScope): bigint {
+function amountOf(declared: string | number | undefined, scope: ReferenceScope): bigint {
+	if (declared === undefined) {
+		throw new Refusal("it states none.");
+	}
+
 	const literal = asCount(declared);
 
 	if (literal !== undefined) {
 		return literal;
 	}
 
-	if (typeof declared !== "string") {
-		throw new Refusal("it is neither a number nor a name.");
+	if (typeof declared === "number") {
+		throw new Refusal(`${declared} is not a whole number of units.`);
 	}
 
 	return evaluateExpression(declared, "issuedAmount", scope);

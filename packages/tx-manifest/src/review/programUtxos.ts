@@ -1,55 +1,29 @@
 import { type Outpoint, outpointKey } from "../chain/outpoint";
-import { asArray, asRecord } from "../document/json";
 import { Refusal } from "../refusal";
+import type { StateFile } from "../request/request";
 
-type ListedUtxo = Outpoint & { asset?: string; utxoType: unknown };
+type ListedUtxo = NonNullable<StateFile["utxos"]>[number];
 
 export class ProgramUtxos {
 	readonly #claimed = new Set<string>();
 	readonly #listed: ListedUtxo[];
-	readonly #pinned: Record<string, unknown>;
+	readonly #pinned: Record<string, Outpoint>;
 
-	constructor(state: Record<string, unknown> | undefined, pinned: Record<string, unknown>) {
-		const reserved = new Set(
-			Object.values(pinned).flatMap((pin) => {
-				const outpoint = outpointOf(pin);
-
-				return outpoint ? [outpointKey(outpoint)] : [];
-			}),
-		);
+	constructor(state: StateFile | undefined, pinned: Record<string, Outpoint>) {
+		const reserved = new Set(Object.values(pinned).map((pin) => outpointKey(pin)));
 
 		this.#pinned = pinned;
-		this.#listed = asArray(state?.utxos).flatMap((entry) => {
-			const outpoint = outpointOf(entry);
-			const record = asRecord(entry);
-
-			if (!outpoint || reserved.has(outpointKey(outpoint))) {
-				return [];
-			}
-
-			const asset = typeof record?.asset === "string" ? record.asset.toLowerCase() : undefined;
-
-			return [
-				{ ...outpoint, ...(asset === undefined ? {} : { asset }), utxoType: record?.utxo_type },
-			];
-		});
+		this.#listed = (state?.utxos ?? []).filter((utxo) => !reserved.has(outpointKey(utxo)));
 	}
 
-	claim(inputId: string, utxoType: string, asset?: string): Outpoint {
-		const outpoint =
-			inputId in this.#pinned
-				? outpointOf(this.#pinned[inputId])
-				: this.#listedFor(utxoType, asset);
+	claim(inputId: string, utxoType: string, asset: string): Outpoint {
+		const outpoint = this.#pinned[inputId] ?? this.#listedFor(utxoType, asset);
 
 		if (!outpoint) {
-			throw inputId in this.#pinned
-				? new Refusal(
-						`The instance file pins input ${inputId} to something that is not an outpoint.`,
-					)
-				: new Refusal(
-						`The state file lists no ${utxoType} left for input ${inputId} to spend.`,
-						"no-utxo-to-spend",
-					);
+			throw new Refusal(
+				`The state file lists no ${utxoType} left for input ${inputId} to spend.`,
+				"no-utxo-to-spend",
+			);
 		}
 
 		const key = outpointKey(outpoint);
@@ -62,23 +36,14 @@ export class ProgramUtxos {
 
 		this.#claimed.add(key);
 
-		return outpoint;
+		return { txid: outpoint.txid, vout: outpoint.vout };
 	}
 
-	#listedFor(utxoType: string, asset: string | undefined): Outpoint | undefined {
+	#listedFor(utxoType: string, asset: string): Outpoint | undefined {
 		const open = this.#listed.filter(
-			(utxo) => utxo.utxoType === utxoType && !this.#claimed.has(outpointKey(utxo)),
+			(utxo) => utxo.utxo_type === utxoType && !this.#claimed.has(outpointKey(utxo)),
 		);
-		const found = open.find((utxo) => utxo.asset === asset) ?? open[0];
 
-		return found && { txid: found.txid, vout: found.vout };
+		return open.find((utxo) => utxo.asset?.toLowerCase() === asset) ?? open[0];
 	}
-}
-
-function outpointOf(value: unknown): Outpoint | undefined {
-	const record = asRecord(value);
-
-	return typeof record?.txid === "string" && typeof record.vout === "number"
-		? { txid: record.txid, vout: record.vout }
-		: undefined;
 }
