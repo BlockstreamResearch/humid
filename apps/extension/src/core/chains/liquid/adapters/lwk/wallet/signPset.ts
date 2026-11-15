@@ -1,6 +1,4 @@
-import { Buffer } from "buffer";
-
-import type { Pset, PsetBalance, Wollet } from "lwk_wasm";
+import type { Pset, Wollet } from "lwk_wasm";
 
 import {
 	WALLET_RPC_ERROR_REASONS,
@@ -14,8 +12,10 @@ import type {
 import type { LiquidSignPsetReview } from "../../../domain/pset/types";
 import { type LwkWasmModule, loadLwkWasm } from "../loadLwkWasm";
 import { getSyncWorkerClient } from "../sync-worker/createSyncWorkerClient";
-import { blindPset, PsetReader } from "./blindPset";
+import { blindPset } from "./blindPset";
 import { getLwkImplementation } from "./getLwkImplementation";
+import { invalidPset, PsetMaps } from "./PsetMaps";
+import { WalletCoins } from "./WalletCoins";
 
 export async function blindAndInspectPset(
 	account: LiquidWalletAccount,
@@ -23,19 +23,25 @@ export async function blindAndInspectPset(
 ): Promise<LiquidSignPsetReview> {
 	const lwk = await loadLwkWasm();
 	const { wollet } = getLwkImplementation(account);
+	const coins = WalletCoins.of(wollet);
 	const pset = new lwk.Pset(psetBase64);
 	let blindedPset: Pset | undefined;
 	try {
 		pset.addDetails(wollet);
-		blindedPset = blindPset(lwk, wollet, pset);
-		return inspectPset(lwk, wollet, blindedPset);
+		blindedPset = blindPset(lwk, wollet, coins, pset);
+		return inspectPset(lwk, wollet, coins, blindedPset);
 	} finally {
 		if (blindedPset !== pset) blindedPset?.free();
 		pset.free();
 	}
 }
 
-function inspectPset(lwk: LwkWasmModule, wollet: Wollet, pset: Pset): LiquidSignPsetReview {
+function inspectPset(
+	lwk: LwkWasmModule,
+	wollet: Wollet,
+	coins: WalletCoins,
+	pset: Pset,
+): LiquidSignPsetReview {
 	const resources: { free(): void }[] = [];
 	const own = <T extends { free(): void }>(value: T): T => {
 		resources.push(value);
@@ -46,64 +52,28 @@ function inspectPset(lwk: LwkWasmModule, wollet: Wollet, pset: Pset): LiquidSign
 		inputs.forEach(own);
 		const outputs = pset.outputs();
 		outputs.forEach(own);
-		const projection = readPsetMaps(pset);
 		const explicitBalances = new Map<string, bigint>();
-		const addExplicit = (asset: string, amount: bigint) => {
+		const add = (asset: string, amount: bigint) => {
 			explicitBalances.set(asset, (explicitBalances.get(asset) ?? 0n) + amount);
 		};
-		let balance: PsetBalance | undefined;
-		for (let attempt = 0; attempt <= inputs.length + outputs.length; attempt++) {
-			const inspection = new lwk.Pset(writePsetMaps(projection));
-			try {
-				balance = own(own(wollet.psetDetails(inspection)).balance());
-				break;
-			} catch (error) {
-				const match = /^(Input|Output) #(\d+) is not blinded$/.exec(
-					typeof error === "object" &&
-						error !== null &&
-						"message" in error &&
-						typeof error.message === "string"
-						? error.message
-						: "",
-				);
-				if (!match) throw error;
-				const index = Number(match[2]);
-				const isInput = match[1] === "Input";
-				const map = (isInput ? projection.inputs : projection.outputs)[index];
-				if (!map) throw error;
-				const derivations = [...map.keys()].filter((key) =>
-					(isInput ? ["06", "16"] : ["02", "07"]).includes(key.slice(0, 2)),
-				);
-				if (!derivations.length) throw error;
-				if (isInput) {
-					const utxo = map.get("01");
-					if (!utxo || utxo.length < 44 || utxo[0] !== 1 || utxo[33] !== 1 || utxo[42] !== 0)
-						throw error;
-					addExplicit(
-						Buffer.from(utxo.subarray(1, 33)).reverse().toString("hex"),
-						-utxo.readBigUInt64BE(34),
-					);
-				} else {
-					if (
-						[1, 3, 4, 5, 6, 7, 9, 10].some((field) =>
-							map.has(`fc0470736574${field.toString(16).padStart(2, "0")}`),
-						)
-					)
-						throw error;
-					const amount = outputs[index]!.amount();
-					const asset = outputs[index]!.asset();
-					if (amount === undefined || !asset) throw error;
-					addExplicit(own(asset).toString(), amount);
-				}
-				for (const key of derivations) map.delete(key);
-			} finally {
-				inspection.free();
-			}
+		const review = markOwnership(lwk, wollet, pset);
+		for (const input of review.inputs.filter((entry) => entry.isOwned)) {
+			const coin = coins.find(input.outpoint);
+			if (!coin) throw invalidPset("PSET spends a wallet output the wallet does not hold.");
+			add(coin.rawAssetId, -BigInt(coin.amountSats));
+			input.disown();
 		}
-		if (!balance) throw new Error("Could not inspect the Liquid PSET.");
+		for (const [index, output] of review.outputs.entries()) {
+			if (!output.isOwned || !output.isExplicit) continue;
+			const amount = outputs[index]!.amount();
+			const asset = outputs[index]!.asset();
+			if (amount === undefined || !asset) throw invalidPset("PSET output lacks its amount.");
+			add(own(asset).toString(), amount);
+			output.disown();
+		}
+		const balance = own(own(wollet.psetDetails(own(new lwk.Pset(review.toString())))).balance());
 		const fees = own(balance.fees());
-		const balances = own(balance.balances());
-		const netBalances = new Map(balances.entries() as Map<string, bigint>);
+		const netBalances = new Map(own(balance.balances()).entries() as Map<string, bigint>);
 		for (const [asset, amount] of explicitBalances) {
 			netBalances.set(asset, (netBalances.get(asset) ?? 0n) + amount);
 		}
@@ -154,9 +124,8 @@ export async function signPset(
 	try {
 		const lwk = await loadLwkWasm();
 		pset = new lwk.Pset(params.reviewedPset);
-		const inputs = pset.inputs();
-		const inputCount = inputs.length;
-		for (const input of inputs) input.free();
+		const signaturesBefore = readInputSignatures(pset);
+		const inputCount = signaturesBefore.length;
 
 		for (const input of params.signInputs) {
 			if (input.index >= inputCount) {
@@ -172,7 +141,6 @@ export async function signPset(
 		}
 
 		const requestedIndexes = new Set(params.signInputs.map((requested) => requested.index));
-		const signaturesBefore = readInputSignatures(pset);
 
 		// sign and finalize consume their input, including when they throw.
 		const signingPset = pset;
@@ -236,64 +204,17 @@ export async function signPset(
 }
 
 function readInputSignatures(pset: Pset) {
-	const reader = new PsetReader(Buffer.from(pset.toString(), "base64"));
-	reader.map();
-	const inputs = pset.inputs();
-	try {
-		return inputs.map(
-			() =>
-				new Map(
-					[...reader.map().entries()].filter(([key]) =>
-						["02", "13", "14"].includes(key.slice(0, 2)),
-					),
-				),
-		);
-	} finally {
-		for (const input of inputs) input.free();
-	}
+	return PsetMaps.parse(pset.toString()).inputs.map((input) => input.signatures);
 }
 
-type PsetMaps = {
-	global: Map<string, Buffer>;
-	inputs: Map<string, Buffer>[];
-	outputs: Map<string, Buffer>[];
-};
-
-function readPsetMaps(pset: Pset): PsetMaps {
-	const bytes = Buffer.from(pset.toString(), "base64");
-	const reader = new PsetReader(bytes);
-	const inputs = pset.inputs();
-	const outputs = pset.outputs();
+function markOwnership(lwk: LwkWasmModule, wollet: Wollet, pset: Pset): PsetMaps {
+	const maps = PsetMaps.parse(pset.toString());
+	for (const entries of [...maps.inputs, ...maps.outputs]) entries.disown();
+	const marked = new lwk.Pset(maps.toString());
 	try {
-		const maps = {
-			global: reader.map(),
-			inputs: inputs.map(() => reader.map()),
-			outputs: outputs.map(() => reader.map()),
-		};
-		if (reader.offset !== bytes.length) throw new Error("Unexpected trailing PSET data.");
-		return maps;
+		marked.addDetails(wollet);
+		return PsetMaps.parse(marked.toString());
 	} finally {
-		for (const input of inputs) input.free();
-		for (const output of outputs) output.free();
+		marked.free();
 	}
-}
-
-function writePsetMaps(maps: PsetMaps): string {
-	const compactSize = (length: number): Buffer => {
-		if (length < 253) return Buffer.from([length]);
-		const encoded = Buffer.alloc(length <= 0xffff ? 3 : 5);
-		encoded[0] = encoded.length === 3 ? 253 : 254;
-		if (encoded.length === 3) encoded.writeUInt16LE(length, 1);
-		else encoded.writeUInt32LE(length, 1);
-		return encoded;
-	};
-	const buffers: Buffer[] = [Buffer.from("70736574ff", "hex")];
-	for (const map of [maps.global, ...maps.inputs, ...maps.outputs]) {
-		for (const [key, value] of map) {
-			const keyBytes = Buffer.from(key, "hex");
-			buffers.push(compactSize(keyBytes.length), keyBytes, compactSize(value.length), value);
-		}
-		buffers.push(Buffer.alloc(1));
-	}
-	return Buffer.concat(buffers).toString("base64");
 }
