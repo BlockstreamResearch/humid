@@ -148,7 +148,7 @@ export class ProgramSpends {
 		const opened =
 			transactionHex === undefined
 				? undefined
-				: await this.#context.dependencies.unblind?.(transactionHex, outpoint.vout);
+				: await this.#context.dependencies.wallet.unblind?.(transactionHex, outpoint.vout);
 
 		if (!opened) {
 			throw new Refusal(

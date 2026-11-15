@@ -1,11 +1,10 @@
-import type { reviewManifestAction } from "@humid/tx-manifest";
+import type { ReviewDependencies } from "@humid/tx-manifest";
 
 import type { SmplxWasmModule } from "./loadSmplxWasm";
 
-type ReviewInput = Parameters<typeof reviewManifestAction>[1];
-type CompileProgram = ReviewInput["compile"];
-type ProgramAbiOf = ReviewInput["programAbi"];
-type CompileScriptPubKey = ReviewInput["scriptPubKeyOf"];
+type CompileProgram = ReviewDependencies["compiler"]["compile"];
+type ProgramAbiOf = ReviewDependencies["compiler"]["abi"];
+type CompileScriptPubKey = ReviewDependencies["compiler"]["scriptPubKeyOf"];
 
 export function createSmplxProgramCompiler(
 	smplx: Pick<SmplxWasmModule, "Program">,

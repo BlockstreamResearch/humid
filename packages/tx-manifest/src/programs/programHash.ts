@@ -20,7 +20,7 @@ export type HashProgram = (input: {
 	source: string;
 }) => string;
 
-export function programHashFrom(
+export function createProgramHasher(
 	compile: CompileScriptPubKey,
 	includeDebugSymbols: boolean,
 ): HashProgram {

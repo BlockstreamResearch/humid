@@ -1,7 +1,7 @@
 import { Refusal } from "../refusal";
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import type { ActionRequest } from "../request/request";
 import { ActionReview } from "./actionReview";
-import type { ReviewInput, ReviewManifestActionResult, ReviewRefusal } from "./types";
+import type { ReviewDependencies, ReviewManifestActionResult, ReviewRefusal } from "./types";
 
 export type {
 	AssetMovement,
@@ -10,7 +10,7 @@ export type {
 	PlannedInput,
 	ProgramFinding,
 	ReadAddress,
-	ReviewInput,
+	ReviewDependencies,
 	ReviewManifestActionResult,
 	ReviewRefusal,
 	ReviewedOutput,
@@ -26,13 +26,15 @@ export function isRefusal(result: ReviewManifestActionResult): result is ReviewR
 }
 
 export async function reviewManifestAction(
-	request: ParsedLiquidProcessCtParams,
-	input: ReviewInput,
+	request: ActionRequest,
+	dependencies: ReviewDependencies,
 ): Promise<ReviewManifestActionResult> {
+	const { chain } = dependencies;
+
 	try {
 		return await ActionReview.run(request, {
-			...input,
-			policyAsset: input.policyAsset.trim().toLowerCase(),
+			...dependencies,
+			chain: { ...chain, policyAsset: chain.policyAsset.trim().toLowerCase() },
 		});
 	} catch (error) {
 		if (error instanceof Refusal) {

@@ -4,8 +4,8 @@ import {
 	createEsploraTxOutReader,
 	isRefusal,
 	type ManifestReview,
-	type ParsedLiquidProcessCtParams,
-	parseLiquidProcessCtParams,
+	type ActionRequest,
+	parseActionRequest,
 	type ReadAddress,
 	type ReadFeeRate,
 	Refusal,
@@ -99,12 +99,7 @@ export const liquidProcessCtDependencies: LiquidProcessCtDependencies = {
 export const createProcessLiquidConfidentialTransaction = (
 	dependencies: LiquidProcessCtDependencies = liquidProcessCtDependencies,
 ) =>
-	createWalletMethod<
-		ParsedLiquidProcessCtParams,
-		LiquidProcessCtContext,
-		ManifestReview,
-		LiquidProcessCtResult
-	>({
+	createWalletMethod<ActionRequest, LiquidProcessCtContext, ManifestReview, LiquidProcessCtResult>({
 		confirmation: ({ params, review }) => ({
 			data: {
 				broadcast: params.broadcast,
@@ -197,8 +192,20 @@ export const createProcessLiquidConfidentialTransaction = (
 			const walletScriptPubKeyHex = readAddress(signingAddress.address).scriptPubKeyHex;
 			const result = await reviewManifestAction(params, {
 				accountLabel: accountLabelOf(context, account),
-				compile: createSmplxProgramCompiler(smplx),
-				compilerVersion: SMPLX_COMPILER_VERSION,
+				chain: {
+					network,
+					policyAsset: account.rawPolicyAssetId,
+					readAddress,
+					readChainTip: async () => context.walletBackend.getTipHeight(account),
+					readFeeRate: dependencies.readFeeRate(context.chain),
+					readTxOut: dependencies.readTxOut(context.chain),
+				},
+				compiler: {
+					abi: createSmplxProgramAbi(smplx),
+					compile: createSmplxProgramCompiler(smplx),
+					scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, network),
+					version: SMPLX_COMPILER_VERSION,
+				},
 				estimateFee: (draft, feeRateSatsPerKvb) =>
 					assembleReviewedTransaction(
 						draft,
@@ -209,20 +216,13 @@ export const createProcessLiquidConfidentialTransaction = (
 						},
 						(builder) => smplx.Signer.estimateStrictFee(builder, network, feeRateSatsPerKvb),
 					),
-				programAbi: createSmplxProgramAbi(smplx),
-				fundingUtxos: fundable(context, account, account.rawPolicyAssetId),
-				holdingsOf: (asset) => fundable(context, account, asset),
-				network,
-				policyAsset: account.rawPolicyAssetId,
-				readAddress,
-				readChainTip: async () => context.walletBackend.getTipHeight(account),
-				readFeeRate: dependencies.readFeeRate(context.chain),
-				readTxOut: dependencies.readTxOut(context.chain),
-				scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, network),
-				unblind: await dependencies.unblinder(account, walletScriptPubKeyHex),
-				walletAddress: signingAddress.unconfidential,
-				walletKey: dependencies.walletKeyOf(account.descriptor, signingAddress.index),
-				walletScriptPubKeyHex,
+				wallet: {
+					address: signingAddress.unconfidential,
+					holdingsOf: (asset) => fundable(context, account, asset),
+					key: dependencies.walletKeyOf(account.descriptor, signingAddress.index),
+					scriptPubKeyHex: walletScriptPubKeyHex,
+					unblind: await dependencies.unblinder(account, walletScriptPubKeyHex),
+				},
 			});
 
 			if (isRefusal(result)) {
@@ -255,8 +255,8 @@ async function refusedAsRpcError<T>(run: () => Promise<T>): Promise<T> {
 	}
 }
 
-function parseRequest(params: unknown): ParsedLiquidProcessCtParams {
-	const parsed = parseLiquidProcessCtParams(params);
+function parseRequest(params: unknown): ActionRequest {
+	const parsed = parseActionRequest(params);
 
 	if (!parsed.ok) {
 		throw new WalletRpcInvalidParamsError(

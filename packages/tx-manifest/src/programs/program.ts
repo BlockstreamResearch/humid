@@ -3,7 +3,7 @@ import type { ProgramReference } from "../document/schema";
 import { Refusal } from "../refusal";
 import type { Scope } from "../values/scope";
 import { resolveCompileParams } from "./compileParams";
-import { stateLeavesOf } from "./stateLeaves";
+import { resolveStateLeaves } from "./stateLeaves";
 import { bindUtxoParams, boundWiring } from "./utxoParams";
 
 export type CompiledProgram = {
@@ -92,7 +92,7 @@ export async function deriveProgramAddress(
 		resolveCompileParams(wiring, bound?.types ?? input.declaredTypes, scope, declaring),
 	);
 	const extraLeavesJson = JSON.stringify(
-		stateLeavesOf(script.extra_leaves, { at: `Utxo type "${utxoType}"`, scope }),
+		resolveStateLeaves(script.extra_leaves, { at: `Utxo type "${utxoType}"`, scope }),
 	);
 
 	try {

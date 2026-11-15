@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import type { ActionRequest } from "../request/request";
 import { abiOf, type Document, Fixture, PUBKEY, refused, reviewed, TXID } from "./reviewForTests";
 
 const PUB_KEY_ARGUMENT = JSON.stringify({ PUB_KEY: { type: "Pubkey", value: `0x${PUBKEY}` } });
@@ -37,7 +37,7 @@ function closed(
 	});
 }
 
-const pay = (fixture: Fixture, overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+const pay = (fixture: Fixture, overrides: Partial<ActionRequest> = {}) =>
 	fixture.request("Pay", { params: { amount_sat: 1000, pubkey: PUBKEY }, ...overrides });
 
 const receive = (fixture: Fixture) =>

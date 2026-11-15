@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { deriveFromEntropy, deriveNewIssuance } from "../chain/issuance";
 import { type ManifestReview, reviewManifestAction } from "../index";
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import type { ActionRequest } from "../request/request";
 import type { SelectableUtxo } from "../transaction/coinSelection";
 import {
 	asRefusal,
@@ -10,6 +10,7 @@ import {
 	PROGRAM_TXOUT,
 	DERIVED_SCRIPT,
 	dependencies,
+	type Overrides,
 	Fixture,
 	FUNDING_TXID,
 	POLICY_ASSET,
@@ -24,14 +25,14 @@ const MANIFEST = multiasset.manifest;
 const TOKEN = "ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2";
 const TOKEN_TXID = "d".repeat(64);
 
-const deps = dependencies({
+const deps: Overrides = {
 	readTxOut: async () => ({ scriptPubKeyHex: DERIVED_SCRIPT, txOutHex: PROGRAM_TXOUT }),
-});
+};
 
 const changeOf = (review: ManifestReview) =>
 	review.outputs.find((output) => output.id === "change_out");
 
-function request(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
+function request(overrides: Partial<ActionRequest> = {}) {
 	return multiasset.request("PayToken", {
 		params: { amount_sat: 1000, fee_sat: 700, pubkey: PUBKEY, token: TOKEN },
 		...overrides,
@@ -50,7 +51,7 @@ function pay(
 
 	return reviewManifestAction(
 		request(overrides.params === undefined ? {} : { params: overrides.params }),
-		{ ...deps, fundingUtxos: money, holdingsOf: (asset) => holdings[asset] ?? [] },
+		dependencies({ ...deps, fundingUtxos: money, holdingsOf: (asset) => holdings[asset] ?? [] }),
 	);
 }
 
@@ -64,11 +65,14 @@ describe("change the action does not declare", () => {
 		);
 		payToken.allow_change = allowChange;
 
-		return reviewManifestAction(request({ manifest: document }), {
-			...deps,
-			fundingUtxos: [utxo("1000000", FUNDING_TXID)],
-			holdingsOf: () => [utxo("4000", TOKEN_TXID)],
-		});
+		return reviewManifestAction(
+			request({ manifest: document }),
+			dependencies({
+				...deps,
+				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+				holdingsOf: () => [utxo("4000", TOKEN_TXID)],
+			}),
+		);
 	}
 
 	test("is refused in an asset other than the network's own when only L-BTC change is allowed", async () => {
@@ -170,11 +174,11 @@ describe("an action that moves two assets", () => {
 		const refusal = asRefusal(
 			await reviewManifestAction(
 				{ ...request(), manifest: withoutChange },
-				{
+				dependencies({
 					...deps,
 					fundingUtxos: [utxo("1000000", FUNDING_TXID)],
 					holdingsOf: () => [utxo("4000", TOKEN_TXID)],
-				},
+				}),
 			),
 		);
 
@@ -184,10 +188,13 @@ describe("an action that moves two assets", () => {
 
 	test("holding nothing in an asset is a shortfall named by that asset", async () => {
 		const refusal = asRefusal(
-			await reviewManifestAction(request(), {
-				...deps,
-				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
-			}),
+			await reviewManifestAction(
+				request(),
+				dependencies({
+					...deps,
+					fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+				}),
+			),
 		);
 
 		expect(refusal.reject).toBe("shortfall");
@@ -263,11 +270,14 @@ describe("the amount a wallet input states", () => {
 			(action.inputs as Record<string, unknown>[])[0]!.amount_sat = amount;
 		}).manifest;
 
-		return reviewManifestAction(request({ manifest }), {
-			...deps,
-			fundingUtxos: [utxo("1000000", FUNDING_TXID)],
-			holdingsOf: (asset) => (asset === TOKEN ? tokens : []),
-		});
+		return reviewManifestAction(
+			request({ manifest }),
+			dependencies({
+				...deps,
+				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+				holdingsOf: (asset) => (asset === TOKEN ? tokens : []),
+			}),
+		);
 	}
 
 	test("spends the one output holding exactly that amount", async () => {
@@ -301,7 +311,7 @@ describe("an action that creates an asset", () => {
 	) {
 		return reviewManifestAction(
 			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
-			{ ...deps, fundingUtxos: money },
+			dependencies({ ...deps, fundingUtxos: money }),
 		);
 	}
 
@@ -322,14 +332,14 @@ describe("an action that creates an asset", () => {
 
 		await reviewManifestAction(
 			request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
-			{
+			dependencies({
 				...deps,
 				estimateFee: (draft, rate) => {
 					priced.push(draft.issuances.length);
 
 					return sizedFee(draft, rate);
 				},
-			},
+			}),
 		);
 
 		expect(priced.length).toBeGreaterThan(0);
@@ -357,7 +367,10 @@ describe("an action that creates an asset", () => {
 		const review = asReview(
 			await reviewManifestAction(
 				request({ action: "Mint", manifest: document, params: { pubkey: PUBKEY, supply: 21 } }),
-				{ ...deps, fundingUtxos: [utxo("1000", "a".repeat(64)), utxo("1000000", FUNDING_TXID)] },
+				dependencies({
+					...deps,
+					fundingUtxos: [utxo("1000", "a".repeat(64)), utxo("1000000", FUNDING_TXID)],
+				}),
 			),
 		);
 
@@ -379,7 +392,7 @@ describe("an action that creates an asset", () => {
 		const review = asReview(
 			await reviewManifestAction(
 				request({ action: "Mint", manifest: document, params: { pubkey: PUBKEY, supply: 21 } }),
-				{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] },
+				dependencies({ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] }),
 			),
 		);
 
@@ -397,7 +410,7 @@ describe("an action that creates an asset", () => {
 		const refusal = asRefusal(
 			await reviewManifestAction(
 				request({ action: "Mint", manifest: document, params: { pubkey: PUBKEY, supply: 21 } }),
-				{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] },
+				dependencies({ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] }),
 			),
 		);
 
@@ -466,13 +479,13 @@ describe("an action that creates an asset", () => {
 		const refusal = asRefusal(
 			await reviewManifestAction(
 				request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
-				{
+				dependencies({
 					...deps,
 					fundingUtxos: [
 						utxo("100", "a".repeat(64), { confidential: true }),
 						{ ...utxo("100", "a".repeat(64), { confidential: true }) },
 					],
-				},
+				}),
 			),
 		);
 
@@ -512,7 +525,7 @@ function twoIssuances(money: SelectableUtxo[]) {
 			...request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
 			manifest: document,
 		},
-		{ ...deps, fundingUtxos: money },
+		dependencies({ ...deps, fundingUtxos: money }),
 	);
 }
 
@@ -536,7 +549,7 @@ describe("reissuance tokens and reissuance", () => {
 				...request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
 				manifest: document,
 			},
-			{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] },
+			dependencies({ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] }),
 		);
 	}
 
@@ -572,11 +585,11 @@ describe("reissuance tokens and reissuance", () => {
 				}),
 				manifest: document,
 			},
-			{
+			dependencies({
 				...deps,
 				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
 				holdingsOf: (asset) => (asset === YES_TOKEN ? token : []),
-			},
+			}),
 		);
 	}
 
@@ -662,11 +675,11 @@ describe("what each output does with the value it carries", () => {
 
 		return reviewManifestAction(
 			{ ...request(), manifest: document },
-			{
+			dependencies({
 				...deps,
 				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
 				holdingsOf: () => [utxo("4000", TOKEN_TXID)],
-			},
+			}),
 		);
 	}
 
@@ -769,7 +782,7 @@ describe("what each output does with the value it carries", () => {
 		const minted = asReview(
 			await reviewManifestAction(
 				request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
-				{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] },
+				dependencies({ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)] }),
 			),
 		);
 
@@ -782,7 +795,7 @@ describe("change when the wallet funds an action from a blinded output", () => {
 		const result = asReview(
 			await reviewManifestAction(
 				request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
-				{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID, { confidential })] },
+				dependencies({ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID, { confidential })] }),
 			),
 		);
 
@@ -861,7 +874,7 @@ describe("a program that does not state what it holds", () => {
 				manifest: document,
 				state: { utxos: [{ txid: "f".repeat(64), utxo_type: "p2pk_output", vout: 0 }] },
 			},
-			{
+			dependencies({
 				...deps,
 				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
 				holdingsOf: () => [utxo("4000", TOKEN_TXID)],
@@ -870,7 +883,7 @@ describe("a program that does not state what it holds", () => {
 					scriptPubKeyHex: DERIVED_SCRIPT,
 					txOutHex: PROGRAM_TXOUT,
 				}),
-			},
+			}),
 		);
 	}
 
@@ -952,7 +965,7 @@ describe("an action that pins an input to one address", () => {
 						token: TOKEN,
 					},
 				}),
-				{
+				dependencies({
 					...deps,
 					fundingUtxos: [utxo("1000000", FUNDING_TXID)],
 					holdingsOf: (asset) =>
@@ -965,7 +978,7 @@ describe("an action that pins an input to one address", () => {
 					readAddress: (address) => ({
 						scriptPubKeyHex: address === "tlq1_borrower" ? BORROWER_SCRIPT : address,
 					}),
-				},
+				}),
 			),
 		);
 
@@ -986,12 +999,12 @@ describe("an action that pins an input to one address", () => {
 						token: TOKEN,
 					},
 				}),
-				{
+				dependencies({
 					...deps,
 					fundingUtxos: [utxo("1000000", FUNDING_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
 					holdingsOf: (asset) =>
 						asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
-				},
+				}),
 			),
 		);
 
@@ -1011,12 +1024,12 @@ describe("an action that pins an input to one address", () => {
 						token: TOKEN,
 					},
 				}),
-				{
+				dependencies({
 					...deps,
 					fundingUtxos: [utxo("1000000", FUNDING_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
 					holdingsOf: (asset) =>
 						asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: OTHER_SCRIPT })] : [],
-				},
+				}),
 			),
 		);
 
@@ -1050,12 +1063,12 @@ describe("an action that pins an input to one address", () => {
 						token: TOKEN,
 					},
 				}),
-				{
+				dependencies({
 					...deps,
 					fundingUtxos: [utxo("1000000", FUNDING_TXID)],
 					holdingsOf: (asset) =>
 						asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
-				},
+				}),
 			),
 		);
 
@@ -1099,12 +1112,12 @@ describe("an action that pins an input to one address", () => {
 						token_amount: 4000,
 					},
 				}),
-				{
+				dependencies({
 					...deps,
 					fundingUtxos: [utxo("1000000", FUNDING_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
 					holdingsOf: (asset) =>
 						asset === TOKEN ? [utxo("4000", TOKEN_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })] : [],
-				},
+				}),
 			),
 		);
 	});
@@ -1133,7 +1146,7 @@ describe("an action that pins an input to one address", () => {
 					},
 					state: { utxos: [{ txid: "e".repeat(64), utxo_type: "p2pk_output", vout: 0 }] },
 				}),
-				{
+				dependencies({
 					...deps,
 					readTxOut: async () => ({
 						amountSats: "10000",
@@ -1143,7 +1156,7 @@ describe("an action that pins an input to one address", () => {
 					}),
 					fundingUtxos: [utxo("1000000", FUNDING_TXID)],
 					holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),
-				},
+				}),
 			),
 		);
 
@@ -1159,10 +1172,10 @@ describe("an action that pins an input to one address", () => {
 					manifest: pinned({ mint_in: "params.borrower" }),
 					params: { borrower: BORROWER_SCRIPT, pubkey: PUBKEY, supply: 21 },
 				}),
-				{
+				dependencies({
 					...deps,
 					fundingUtxos: [utxo("1000000", FUNDING_TXID, { scriptPubKeyHex: OTHER_SCRIPT })],
-				},
+				}),
 			),
 		);
 
@@ -1178,10 +1191,10 @@ describe("an action that pins an input to one address", () => {
 					manifest: pinned({ mint_in: "params.borrower" }),
 					params: { borrower: BORROWER_SCRIPT, pubkey: PUBKEY, supply: 21 },
 				}),
-				{
+				dependencies({
 					...deps,
 					fundingUtxos: [utxo("1000000", FUNDING_TXID, { scriptPubKeyHex: BORROWER_SCRIPT })],
-				},
+				}),
 			),
 		);
 	});
@@ -1206,11 +1219,14 @@ describe("a document that names one surplus twice", () => {
 			...(positions.again === undefined ? {} : { required_index: positions.again }),
 		});
 
-		return reviewManifestAction(request({ manifest: document }), {
-			...deps,
-			fundingUtxos: [utxo("1000000", FUNDING_TXID)],
-			holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),
-		});
+		return reviewManifestAction(
+			request({ manifest: document }),
+			dependencies({
+				...deps,
+				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+				holdingsOf: (asset) => (asset === TOKEN ? [utxo("4000", TOKEN_TXID)] : []),
+			}),
+		);
 	}
 
 	test("pays that surplus once, into the one change output, and moves nothing else", async () => {
@@ -1263,7 +1279,11 @@ describe("a document that names one surplus twice", () => {
 
 		return reviewManifestAction(
 			request({ manifest: document, params: { ...request().params, token: POLICY_ASSET } }),
-			{ ...deps, fundingUtxos: [utxo("1000000", FUNDING_TXID)], holdingsOf: () => [] },
+			dependencies({
+				...deps,
+				fundingUtxos: [utxo("1000000", FUNDING_TXID)],
+				holdingsOf: () => [],
+			}),
 		);
 	}
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { toShownConfirmation } from "../index";
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import type { ActionRequest } from "../request/request";
 import {
 	ACCOUNT,
 	DERIVED,
@@ -16,10 +16,10 @@ import {
 
 const p2pk = Fixture.load("p2pk");
 
-const pay = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+const pay = (overrides: Partial<ActionRequest> = {}) =>
 	p2pk.request("Pay", { params: { amount_sat: 1000, pubkey: PUBKEY }, ...overrides });
 
-const receive = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+const receive = (overrides: Partial<ActionRequest> = {}) =>
 	p2pk.request("Receive", {
 		params: { pubkey: PUBKEY },
 		state: { utxos: [{ txid: TXID, utxo_type: "p2pk_output", vout: 0 }] },

@@ -4,7 +4,7 @@ import { type Action, Manifest } from "../document/manifest";
 import { Fixture, refusalOf, actionOf } from "../review/reviewForTests";
 import { Scope } from "../values/scope";
 import { resolveCreatedInstance } from "./instance";
-import { PROGRAM_HASH_SEED, programHashFrom, ITERATION_BOUND } from "./programHash";
+import { PROGRAM_HASH_SEED, createProgramHasher, ITERATION_BOUND } from "./programHash";
 
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const ASSET = `a0${"00".repeat(30)}0a`;
@@ -23,7 +23,7 @@ function recordingCompiler(debugSymbols = false) {
 
 	return {
 		calls,
-		hashProgram: programHashFrom(
+		hashProgram: createProgramHasher(
 			({ argumentsJson, extraLeavesJson, includeDebugSymbols, source }) => {
 				calls.push({ argumentsJson, extraLeavesJson, includeDebugSymbols, source });
 
@@ -236,7 +236,7 @@ describe("when the compiler cannot produce a hash", () => {
 	function computing(compile: () => string) {
 		return resolveCreatedInstance(OPEN_VAULT, {
 			contractSources: SOURCES,
-			hashProgram: programHashFrom(compile, false),
+			hashProgram: createProgramHasher(compile, false),
 			scope: new Scope({ params: PARAMS }),
 		});
 	}

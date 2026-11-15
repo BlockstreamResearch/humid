@@ -6,9 +6,9 @@ import { resolveAsset } from "../transaction/assetLedger";
 import { type SelectableUtxo, toSats } from "../transaction/coinSelection";
 import {
 	issuanceAttributes,
-	issuanceIdentity,
+	resolveIssuanceIdentity,
 	type PlannedIssuance,
-	reissuanceOf,
+	resolveReissuance,
 } from "../transaction/issuance";
 import { resolveAmount } from "../transaction/plan";
 import type { Scope } from "../values/scope";
@@ -50,7 +50,7 @@ export class Reservations {
 		const { issuance, label: id } = input;
 		const { scope } = reserved;
 		const policyAsset = this.#context.policyAsset;
-		const stated = input.utxo_source === "wallet" ? walletAmount(input, scope) : undefined;
+		const stated = input.utxo_source === "wallet" ? resolveWalletAmount(input, scope) : undefined;
 		const fits = (utxo: SelectableUtxo) =>
 			stated === undefined ||
 			(stated.exact ? toSats(utxo) === stated.sats : toSats(utxo) >= stated.sats);
@@ -109,7 +109,7 @@ export class Reservations {
 			this.#record(
 				reserved,
 				issuance,
-				issuanceIdentity({ declared: issuance, id, outpoint }, scope),
+				resolveIssuanceIdentity({ declared: issuance, id, outpoint }, scope),
 			);
 
 			return;
@@ -138,7 +138,7 @@ export class Reservations {
 		this.#record(
 			reserved,
 			issuance,
-			issuanceIdentity(
+			resolveIssuanceIdentity(
 				{ declared: issuance, id, outpoint: { txid: funding.txid, vout: funding.vout } },
 				scope,
 			),
@@ -168,7 +168,7 @@ export class Reservations {
 	}
 }
 
-export function walletAmount(input: Input, scope: Scope): WalletAmount | undefined {
+export function resolveWalletAmount(input: Input, scope: Scope): WalletAmount | undefined {
 	const declared = input.amount_sat;
 
 	if (declared === undefined) {
@@ -190,7 +190,7 @@ function reissuedToken(
 	context: { policyAsset: string; scope: Scope },
 ): string {
 	const id = input.label;
-	const token = reissuanceOf(issuance, id, context.scope).reissuanceToken;
+	const token = resolveReissuance(issuance, id, context.scope).reissuanceToken;
 	const spent = resolveAsset(input.asset, `input ${id}`, context);
 
 	if (spent !== token) {

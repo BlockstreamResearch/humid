@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { computed, fromDapp } from "../confirmation/provenance";
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import type { ActionRequest } from "../request/request";
 import {
 	chainHolding,
 	COMPILED,
@@ -21,10 +21,10 @@ import {
 const P2PK_PATH = "./p2pk.simf";
 const p2pk = Fixture.load("p2pk");
 
-const pay = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+const pay = (overrides: Partial<ActionRequest> = {}) =>
 	p2pk.request("Pay", { params: { amount_sat: 1000, pubkey: PUBKEY }, ...overrides });
 
-const receive = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+const receive = (overrides: Partial<ActionRequest> = {}) =>
 	p2pk.request("Receive", {
 		params: { pubkey: PUBKEY },
 		state: { utxos: [{ txid: TXID, utxo_type: "p2pk_output", vout: 0 }] },

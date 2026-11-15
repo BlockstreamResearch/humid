@@ -1,5 +1,5 @@
 import type { LiquidProcessConfidentialTransactionParams } from "@humid/appkit-injected-adapter";
-import { parseLiquidProcessCtParams, type ParsedLiquidProcessCtParams } from "@humid/tx-manifest";
+import { parseActionRequest, type ActionRequest } from "@humid/tx-manifest";
 import { useMemo, useState } from "react";
 
 import { ResultPanel } from "@/app/dashboard/components/ResultPanel";
@@ -17,7 +17,7 @@ type ReadRequest =
 	| {
 			kind: "ready";
 			raw: LiquidProcessConfidentialTransactionParams;
-			request: ParsedLiquidProcessCtParams;
+			request: ActionRequest;
 	  };
 
 export default function ManifestRunner() {
@@ -125,7 +125,7 @@ function RequestCard({
 }: {
 	name: string;
 	raw: LiquidProcessConfidentialTransactionParams;
-	request: ParsedLiquidProcessCtParams;
+	request: ActionRequest;
 }) {
 	const { connect, hasProvider, isConnected, wallet } = useHumidContext();
 	const { call, pending, result } = useRpcCall();
@@ -211,7 +211,7 @@ function readRequest(text: string): ReadRequest {
 		};
 	}
 
-	const parsed = parseLiquidProcessCtParams(value);
+	const parsed = parseActionRequest(value);
 
 	if (!parsed.ok) {
 		const { fieldErrors, formErrors } = parsed.malformed.details;

@@ -5,29 +5,29 @@ import type { Outpoint } from "../chain/outpoint";
 import { type Action, Manifest } from "../document/manifest";
 import { refuseUnsupported } from "../document/refuse";
 import type { ProgramReference } from "../document/schema";
-import { statedCreatedFields } from "../programs/instance";
+import { resolveStatedFields } from "../programs/instance";
 import { deriveProgramAddress, type ProgramDerivation } from "../programs/program";
 import { Refusal } from "../refusal";
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import type { ActionRequest } from "../request/request";
 import { missingParts } from "../request/requirements";
 import type { SelectableUtxo } from "../transaction/coinSelection";
-import { fillParameters } from "../transaction/parameters";
+import { resolveParameters } from "../transaction/parameters";
 import { Scope } from "../values/scope";
-import type { ReviewInput, TransactionDraft } from "./types";
+import type { ReviewDependencies, TransactionDraft } from "./types";
 
 const FEE_TARGET_BLOCKS = 1;
 
 export class ReviewContext {
 	readonly action: Action;
-	readonly dependencies: ReviewInput;
+	readonly dependencies: ReviewDependencies;
 	readonly declaredTypes: Record<string, string>;
 	readonly manifest: Manifest;
-	readonly request: ParsedLiquidProcessCtParams;
+	readonly request: ActionRequest;
 	readonly #pools = new Map<string, SelectableUtxo[]>();
 
 	private constructor(
-		request: ParsedLiquidProcessCtParams,
-		dependencies: ReviewInput,
+		request: ActionRequest,
+		dependencies: ReviewDependencies,
 		manifest: Manifest,
 		action: Action,
 	) {
@@ -39,14 +39,14 @@ export class ReviewContext {
 	}
 
 	static prepare(
-		request: ParsedLiquidProcessCtParams,
-		dependencies: ReviewInput,
+		request: ActionRequest,
+		dependencies: ReviewDependencies,
 	): { context: ReviewContext; scope: Scope } {
 		const manifest = Manifest.parse(request.manifest);
 		const unsupported = refuseUnsupported(manifest, {
-			...(dependencies.compilerVersion === undefined
+			...(dependencies.compiler.version === undefined
 				? {}
-				: { compilerVersion: dependencies.compilerVersion }),
+				: { compilerVersion: dependencies.compiler.version }),
 			contractSources: request.contractSources,
 		});
 
@@ -67,14 +67,14 @@ export class ReviewContext {
 		const supplied = Object.fromEntries(
 			Object.entries(request.params).filter(([name]) => name in action.params || !(name in fields)),
 		);
-		const params = fillParameters(
+		const params = resolveParameters(
 			action,
 			supplied,
 			new Scope({ instance: fields, params: supplied }),
 			{
-				address: dependencies.walletAddress,
-				key: dependencies.walletKey,
-				script_hash: encodeHex(sha256(walletScript(dependencies.walletScriptPubKeyHex))),
+				address: dependencies.wallet.address,
+				key: dependencies.wallet.key,
+				script_hash: encodeHex(sha256(walletScript(dependencies.wallet.scriptPubKeyHex))),
 			},
 		);
 		const missing = missingParts({ ...request, params }, manifest, action);
@@ -87,7 +87,7 @@ export class ReviewContext {
 			throw new Refusal(`This request cannot be built. ${named}`, "incomplete-request");
 		}
 
-		const stated = statedCreatedFields(action, new Scope({ instance: fields, params }));
+		const stated = resolveStatedFields(action, new Scope({ instance: fields, params }));
 
 		return {
 			context: new ReviewContext(request, dependencies, manifest, action),
@@ -96,7 +96,7 @@ export class ReviewContext {
 	}
 
 	get policyAsset(): string {
-		return this.dependencies.policyAsset;
+		return this.dependencies.chain.policyAsset;
 	}
 
 	mayReturn(asset: string): boolean {
@@ -112,10 +112,7 @@ export class ReviewContext {
 			return existing;
 		}
 
-		const pool =
-			asset === this.policyAsset
-				? this.dependencies.fundingUtxos
-				: (this.dependencies.holdingsOf?.(asset) ?? []);
+		const pool = this.dependencies.wallet.holdingsOf(asset);
 
 		this.#pools.set(asset, pool);
 
@@ -124,30 +121,30 @@ export class ReviewContext {
 
 	derive(reference: ProgramReference, scope: Scope): Promise<ProgramDerivation> {
 		return deriveProgramAddress(this.manifest, {
-			compile: this.dependencies.compile,
+			compile: this.dependencies.compiler.compile,
 			contractSources: this.request.contractSources,
 			declaredTypes: this.declaredTypes,
 			includeDebugSymbols: this.manifest.includeDebugSymbols,
-			network: this.dependencies.network,
-			programAbi: this.dependencies.programAbi,
+			network: this.dependencies.chain.network,
+			programAbi: this.dependencies.compiler.abi,
 			reference,
 			scope,
 		});
 	}
 
-	readAddress(address: string): ReturnType<ReviewInput["readAddress"]> {
+	readAddress(address: string): ReturnType<ReviewDependencies["chain"]["readAddress"]> {
 		try {
-			return this.dependencies.readAddress(address);
+			return this.dependencies.chain.readAddress(address);
 		} catch (error) {
 			throw new Refusal(
-				`${address} is not an address this wallet can pay on ${this.dependencies.network}: ${String(error)}`,
+				`${address} is not an address this wallet can pay on ${this.dependencies.chain.network}: ${String(error)}`,
 			);
 		}
 	}
 
 	async readTxOut(outpoint: Outpoint) {
 		try {
-			return await this.dependencies.readTxOut(outpoint);
+			return await this.dependencies.chain.readTxOut(outpoint);
 		} catch (error) {
 			throw new Refusal(
 				`Could not read what is at ${outpoint.txid}:${outpoint.vout}: ${String(error)}`,
@@ -157,12 +154,12 @@ export class ReviewContext {
 	}
 
 	async chainTip(): Promise<number | undefined> {
-		if (!this.dependencies.readChainTip) {
+		if (!this.dependencies.chain.readChainTip) {
 			return undefined;
 		}
 
 		try {
-			return await this.dependencies.readChainTip();
+			return await this.dependencies.chain.readChainTip();
 		} catch (error) {
 			throw new Refusal(
 				"Could not read the chain's height, which a transaction spending a program is " +
@@ -176,7 +173,7 @@ export class ReviewContext {
 		let rate: number;
 
 		try {
-			rate = await this.dependencies.readFeeRate(FEE_TARGET_BLOCKS);
+			rate = await this.dependencies.chain.readFeeRate(FEE_TARGET_BLOCKS);
 		} catch (error) {
 			throw new Refusal(
 				`The wallet could not establish a fee rate, so it will not build this: ${String(error)}`,

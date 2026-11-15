@@ -1,4 +1,4 @@
-export { type ParsedLiquidProcessCtParams, parseLiquidProcessCtParams } from "./request/request";
+export { type ActionRequest, parseActionRequest } from "./request/request";
 
 export type { EsploraEndpoint, ReadChainTip, ReadFeeRate, ReadTxOut } from "./chain/chainRead";
 export { createEsploraFeeRateReader, createEsploraTxOutReader } from "./chain/chainRead";
@@ -8,6 +8,7 @@ export {
 	type ManifestReview,
 	type PlannedInput,
 	type ReadAddress,
+	type ReviewDependencies,
 	type ReviewedProgramInput,
 	type TransactionDraft,
 	type TypedWitness,

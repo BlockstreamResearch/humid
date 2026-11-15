@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
-import { parseLiquidProcessCtParams } from "./request";
+import { parseActionRequest } from "./request";
 
 const base = {
 	action: "Pay",
@@ -10,31 +10,31 @@ const base = {
 	params: { amount_sat: 1000 },
 };
 
-describe("parseLiquidProcessCtParams", () => {
+describe("parseActionRequest", () => {
 	test("accepts the six-part request", () => {
-		const parsed = parseLiquidProcessCtParams(base);
+		const parsed = parseActionRequest(base);
 
 		expect(parsed.ok && parsed.request.action).toBe("Pay");
 	});
 
 	test("defaults broadcast to off, so nothing reaches the network unasked", () => {
-		const parsed = parseLiquidProcessCtParams(base);
+		const parsed = parseActionRequest(base);
 
 		expect(parsed.ok && parsed.request.broadcast).toBe(false);
 	});
 
 	for (const supplied of ["fee", "feeSats", "feeRate", "feeRateSatsPerKvb"]) {
 		test(`refuses a request carrying ${supplied}`, () => {
-			expect(parseLiquidProcessCtParams({ ...base, [supplied]: 500 }).ok).toBe(false);
+			expect(parseActionRequest({ ...base, [supplied]: 500 }).ok).toBe(false);
 		});
 	}
 
 	test("refuses a request with no manifest", () => {
-		expect(parseLiquidProcessCtParams({ ...base, manifest: undefined }).ok).toBe(false);
+		expect(parseActionRequest({ ...base, manifest: undefined }).ok).toBe(false);
 	});
 
 	test("and says which field, for the caller to report", () => {
-		const parsed = parseLiquidProcessCtParams({ ...base, manifest: undefined });
+		const parsed = parseActionRequest({ ...base, manifest: undefined });
 
 		expect(parsed.ok ? [] : Object.keys(parsed.malformed.details.fieldErrors)).toContain(
 			"manifest",

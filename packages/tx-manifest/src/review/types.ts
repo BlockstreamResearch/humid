@@ -86,7 +86,7 @@ export type EstimateFee = (
 ) => bigint | Promise<bigint>;
 
 export type ManifestReview = TransactionDraft & {
-	boundTo?: string;
+	template?: string;
 	confirmation: ConfirmationModel;
 	programs: ProgramFinding[];
 	programInputs: ReviewedProgramInput[];
@@ -103,23 +103,28 @@ export type ReviewRefusal = { reason: string; refused: true; reject: RejectToken
 
 export type ReviewManifestActionResult = ManifestReview | ReviewRefusal;
 
-export type ReviewInput = {
+export type ReviewDependencies = {
 	accountLabel: string;
-	compile: CompileProgram;
-	compilerVersion?: string;
+	chain: {
+		network: string;
+		policyAsset: string;
+		readAddress: ReadAddress;
+		readChainTip?: ReadChainTip;
+		readFeeRate: ReadFeeRate;
+		readTxOut: ReadTxOut;
+	};
+	compiler: {
+		abi: ProgramAbiOf;
+		compile: CompileProgram;
+		scriptPubKeyOf: CompileScriptPubKey;
+		version?: string;
+	};
 	estimateFee: EstimateFee;
-	programAbi: ProgramAbiOf;
-	fundingUtxos: SelectableUtxo[];
-	holdingsOf?: AssetHoldings;
-	network: string;
-	policyAsset: string;
-	readAddress: ReadAddress;
-	readChainTip?: ReadChainTip;
-	readFeeRate: ReadFeeRate;
-	readTxOut: ReadTxOut;
-	scriptPubKeyOf: CompileScriptPubKey;
-	unblind?: Unblind;
-	walletAddress: string;
-	walletKey: string;
-	walletScriptPubKeyHex: string;
+	wallet: {
+		address: string;
+		holdingsOf: AssetHoldings;
+		key: string;
+		scriptPubKeyHex: string;
+		unblind?: Unblind;
+	};
 };

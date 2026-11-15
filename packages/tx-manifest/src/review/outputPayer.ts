@@ -110,7 +110,7 @@ export class OutputPayer {
 				? this.#programScripts.get(target.utxoType)
 				: target.kind === "data"
 					? target.hex
-					: this.#context.dependencies.walletScriptPubKeyHex;
+					: this.#context.dependencies.wallet.scriptPubKeyHex;
 
 		if (!scriptPubKeyHex) {
 			throw new Refusal(
@@ -174,7 +174,7 @@ export class OutputPayer {
 			id,
 			...(blinding.overrode === undefined ? {} : { overrode: blinding.overrode }),
 			sats,
-			scriptPubKeyHex: this.#context.dependencies.walletScriptPubKeyHex,
+			scriptPubKeyHex: this.#context.dependencies.wallet.scriptPubKeyHex,
 		});
 	}
 }

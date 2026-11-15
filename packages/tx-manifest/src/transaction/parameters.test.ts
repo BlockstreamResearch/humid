@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { Action } from "../document/manifest";
 import { actionOf } from "../review/reviewForTests";
 import { Scope } from "../values/scope";
-import { fillParameters } from "./parameters";
+import { resolveParameters } from "./parameters";
 
 const WALLET = { address: "tex1q_mine", key: "aa".repeat(32), script_hash: "bb".repeat(32) };
 
@@ -16,7 +16,7 @@ const filling = (supplied: Record<string, unknown>) => {
 		},
 	});
 
-	return fillParameters(action, supplied, new Scope({ params: supplied }), WALLET);
+	return resolveParameters(action, supplied, new Scope({ params: supplied }), WALLET);
 };
 
 describe("a parameter the wallet fills", () => {

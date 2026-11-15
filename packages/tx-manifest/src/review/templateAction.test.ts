@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import type { ActionRequest } from "../request/request";
 import {
 	asRefusal,
 	asReview,
@@ -14,7 +14,7 @@ import {
 	POLICY_ASSET,
 	PUBKEY,
 	review,
-	type ReviewDependencies,
+	type Overrides,
 	TXID,
 	WALLET_SCRIPT,
 	abiOf,
@@ -54,8 +54,8 @@ type Compiled = {
 };
 
 function vaultletReview(
-	request: Partial<ParsedLiquidProcessCtParams>,
-	overrides: Partial<ReviewDependencies> & { hashedBy?: () => string } = {},
+	request: Partial<ActionRequest>,
+	overrides: Overrides & { hashedBy?: () => string } = {},
 ) {
 	const compiled: Compiled[] = [];
 	const hashed: { includeDebugSymbols: boolean; source: string }[] = [];
@@ -105,12 +105,12 @@ const openVault = (manifest: Document = VAULTLET) => ({
 	},
 });
 
-const reviewedAs = async (request: Partial<ParsedLiquidProcessCtParams>) =>
+const reviewedAs = async (request: Partial<ActionRequest>) =>
 	asReview(await vaultletReview(request).result);
 
 describe("a template action against a deployment that exists", () => {
 	test("reports which template the action belongs to", async () => {
-		expect((await reviewedAs(withdraw())).boundTo).toBe("vaultlet_contract");
+		expect((await reviewedAs(withdraw())).template).toBe("vaultlet_contract");
 	});
 
 	test("rebuilds its program from the deployment's own fields, at the template's declared types", async () => {

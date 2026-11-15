@@ -1,11 +1,11 @@
 import { confirmationModel, type ReviewedPlan } from "../confirmation";
 import { type Action, programOutputs } from "../document/manifest";
 import { type CreatedInstance, resolveCreatedInstance } from "../programs/instance";
-import { programHashFrom } from "../programs/programHash";
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import { createProgramHasher } from "../programs/programHash";
+import type { ActionRequest } from "../request/request";
 import { inputHookScope, runHook, withHookValues } from "../transaction/hooks";
 import { resolveInputRules } from "../transaction/inputRules";
-import { withIssuedAmounts } from "../transaction/issuance";
+import { resolveIssuedAmounts } from "../transaction/issuance";
 import { planAction } from "../transaction/plan";
 import { resolveStaticWitnesses } from "../transaction/witness";
 import type { Scope } from "../values/scope";
@@ -18,7 +18,7 @@ import type {
 	ManifestReview,
 	ProgramFinding,
 	ReviewedProgramInput,
-	ReviewInput,
+	ReviewDependencies,
 } from "./types";
 
 const MIN_FEE_SATS = 10n;
@@ -30,10 +30,7 @@ export class ActionReview {
 		this.#context = context;
 	}
 
-	static run(
-		request: ParsedLiquidProcessCtParams,
-		dependencies: ReviewInput,
-	): Promise<ManifestReview> {
+	static run(request: ActionRequest, dependencies: ReviewDependencies): Promise<ManifestReview> {
 		const { context, scope } = ReviewContext.prepare(request, dependencies);
 
 		return new ActionReview(context).#run(scope);
@@ -46,7 +43,7 @@ export class ActionReview {
 		const reserved = new Reservations(context, spent.inputs).reserve(spent.scope);
 		const hooked = runHooks(action, reserved.scope);
 		const issuances = reserved.identities.map(({ declared, planned }) =>
-			withIssuedAmounts(planned, declared, hooked),
+			resolveIssuedAmounts(planned, declared, hooked),
 		);
 		const created = this.#createInstance(hooked);
 		const instanced = created === undefined ? hooked : hooked.withInstance(created.fields);
@@ -80,7 +77,10 @@ export class ActionReview {
 			? undefined
 			: resolveCreatedInstance(action, {
 					contractSources: request.contractSources,
-					hashProgram: programHashFrom(dependencies.scriptPubKeyOf, manifest.includeDebugSymbols),
+					hashProgram: createProgramHasher(
+						dependencies.compiler.scriptPubKeyOf,
+						manifest.includeDebugSymbols,
+					),
 					scope,
 				});
 	}
@@ -120,7 +120,7 @@ export class ActionReview {
 		}));
 		const reviewed: ReviewedPlan = {
 			...draft,
-			...(action.template === undefined ? {} : { boundTo: action.template }),
+			template: action.template,
 			...(found.created === undefined ? {} : { createdInstance: found.created }),
 			estimatedFeeSats,
 			feeRateSatsPerKvb: found.feeRateSatsPerKvb,

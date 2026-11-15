@@ -30,7 +30,7 @@ const processCtParamsSchema = z
 	})
 	.strict();
 
-export type ParsedLiquidProcessCtParams = z.output<typeof processCtParamsSchema>;
+export type ActionRequest = z.output<typeof processCtParamsSchema>;
 export type InstanceFile = z.output<typeof instanceFile>;
 export type StateFile = z.output<typeof stateFile>;
 
@@ -49,9 +49,9 @@ export type MalformedRequest = {
 
 export type ParseRequestResult =
 	| { ok: false; malformed: MalformedRequest }
-	| { ok: true; request: ParsedLiquidProcessCtParams };
+	| { ok: true; request: ActionRequest };
 
-export function parseLiquidProcessCtParams(value: unknown): ParseRequestResult {
+export function parseActionRequest(value: unknown): ParseRequestResult {
 	const parsed = processCtParamsSchema.safeParse(value);
 
 	return parsed.success

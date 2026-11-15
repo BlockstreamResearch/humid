@@ -5,7 +5,7 @@ import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
 import {
 	isRefusal,
 	type ManifestReview,
-	type ParsedLiquidProcessCtParams,
+	type ActionRequest,
 	reviewManifestAction,
 	type SelectableUtxo,
 	type TransactionDraft,
@@ -119,49 +119,59 @@ class ReferenceExample {
 								}),
 							},
 						}),
-			} as ParsedLiquidProcessCtParams,
+			} as ActionRequest,
 			{
 				accountLabel: "liquid:testnet account 0",
-				compile: async (input) => {
-					const compiled = await compile(input);
+				chain: {
+					network: NETWORK,
+					policyAsset: POLICY_ASSET,
+					readAddress: addressReader(lwk, lwk.Network.testnet()),
+					readChainTip: async () => CHAIN_TIP,
+					readFeeRate: async () => 100,
+					readTxOut: async ({ txid, vout }) => {
+						const recorded = CHAIN.get(txid);
 
-					lastScript = compiled.scriptPubKeyHex;
+						if (recorded !== undefined) {
+							return chainTxOut(recorded, vout);
+						}
 
-					return compiled;
+						const amountSats = held.get(txid)?.amount ?? PLENTY;
+						const rawAssetId = held.get(txid)?.asset ?? POLICY_ASSET;
+
+						return {
+							amountSats,
+							rawAssetId,
+							scriptPubKeyHex: lastScript,
+							txOutHex: explicitTxOut(lastScript, rawAssetId, amountSats),
+						};
+					},
 				},
-				compilerVersion: SMPLX_COMPILER_VERSION,
+				compiler: {
+					abi: createSmplxProgramAbi(smplx),
+					compile: async (input) => {
+						const compiled = await compile(input);
+
+						lastScript = compiled.scriptPubKeyHex;
+
+						return compiled;
+					},
+					scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, NETWORK),
+					version: SMPLX_COMPILER_VERSION,
+				},
 				estimateFee: simplexFee,
-				programAbi: createSmplxProgramAbi(smplx),
-				fundingUtxos: request.owned?.[POLICY_ASSET] ?? [wallet(POLICY_ASSET, PLENTY)],
-				holdingsOf: (asset) =>
-					request.owned?.[asset] ?? [wallet(asset, request.holdings?.[asset] ?? PLENTY)],
-				network: NETWORK,
-				policyAsset: POLICY_ASSET,
-				readAddress: addressReader(lwk, lwk.Network.testnet()),
-				readChainTip: async () => CHAIN_TIP,
-				unblind: walletUnblinder(lwk, DESCRIPTOR, WALLET_SCRIPT),
-				walletAddress: SIGNER.address(),
-				walletKey: KEY,
-				readFeeRate: async () => 100,
-				readTxOut: async ({ txid, vout }) => {
-					const recorded = CHAIN.get(txid);
-
-					if (recorded !== undefined) {
-						return chainTxOut(recorded, vout);
-					}
-
-					const amountSats = held.get(txid)?.amount ?? PLENTY;
-					const rawAssetId = held.get(txid)?.asset ?? POLICY_ASSET;
-
-					return {
-						amountSats,
-						rawAssetId,
-						scriptPubKeyHex: lastScript,
-						txOutHex: explicitTxOut(lastScript, rawAssetId, amountSats),
-					};
+				wallet: {
+					address: SIGNER.address(),
+					holdingsOf: (asset) =>
+						request.owned?.[asset] ?? [
+							wallet(
+								asset,
+								(asset === POLICY_ASSET ? undefined : request.holdings?.[asset]) ?? PLENTY,
+							),
+						],
+					key: KEY,
+					scriptPubKeyHex: WALLET_SCRIPT,
+					unblind: walletUnblinder(lwk, DESCRIPTOR, WALLET_SCRIPT),
 				},
-				scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, NETWORK),
-				walletScriptPubKeyHex: WALLET_SCRIPT,
 			},
 		);
 	}

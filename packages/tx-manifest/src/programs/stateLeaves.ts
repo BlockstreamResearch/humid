@@ -26,7 +26,7 @@ export function encodeStateLeaves(
 
 	try {
 		return {
-			leaves: stateLeavesOf(parsed.data, { at: input.at, scope: new Scope(input.scope) }),
+			leaves: resolveStateLeaves(parsed.data, { at: input.at, scope: new Scope(input.scope) }),
 			ok: true,
 		};
 	} catch (error) {
@@ -38,7 +38,10 @@ export function encodeStateLeaves(
 	}
 }
 
-export function stateLeavesOf(declared: Leaf[], input: { at: string; scope: Scope }): string[] {
+export function resolveStateLeaves(
+	declared: Leaf[],
+	input: { at: string; scope: Scope },
+): string[] {
 	return declared.map((entry, index) =>
 		Refusal.amend(
 			() => encodeLeaf(entry, index, input),

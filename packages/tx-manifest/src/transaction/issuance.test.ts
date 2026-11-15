@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { deriveNewIssuance } from "../chain/issuance";
 import { actionOf, refusalOf } from "../review/reviewForTests";
 import { Scope } from "../values/scope";
-import { issuanceAttributes, issuanceIdentity, withIssuedAmounts } from "./issuance";
+import { issuanceAttributes, resolveIssuanceIdentity, resolveIssuedAmounts } from "./issuance";
 
 const OUTPOINT = { txid: "c".repeat(64), vout: 2 };
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -21,8 +21,8 @@ function resolve(
 		inputs: [{ issuance, utxo_source: "wallet" }],
 	}).inputs[0]!.issuance!;
 
-	return withIssuedAmounts(
-		issuanceIdentity({ declared, id: "mint_in", outpoint }, scope),
+	return resolveIssuedAmounts(
+		resolveIssuanceIdentity({ declared, id: "mint_in", outpoint }, scope),
 		declared,
 		scope,
 	);

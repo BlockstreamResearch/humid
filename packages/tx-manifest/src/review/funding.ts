@@ -4,7 +4,7 @@ import type { AssetLedger } from "../transaction/assetLedger";
 import type { InputRule } from "../transaction/inputRules";
 import type { Scope } from "../values/scope";
 import type { ReviewContext } from "./context";
-import { type ReservedFunding, walletAmount } from "./reservations";
+import { type ReservedFunding, resolveWalletAmount } from "./reservations";
 
 type Pin = { id: string; script: string };
 
@@ -124,7 +124,7 @@ export class Funding {
 		const floors = new Map<string, bigint>();
 
 		for (const input of this.#context.action.inputs) {
-			const stated = input.utxo_source === "wallet" ? walletAmount(input, scope) : undefined;
+			const stated = input.utxo_source === "wallet" ? resolveWalletAmount(input, scope) : undefined;
 			const asset = assetOf.get(input.label);
 
 			if (

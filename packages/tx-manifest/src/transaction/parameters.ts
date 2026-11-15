@@ -5,7 +5,7 @@ import type { Scope } from "../values/scope";
 
 export type WalletValues = { address: string; key: string; script_hash: string };
 
-export function fillParameters(
+export function resolveParameters(
 	action: Action,
 	supplied: Record<string, unknown>,
 	scope: Scope,

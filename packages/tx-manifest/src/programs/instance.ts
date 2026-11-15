@@ -4,11 +4,11 @@ import { Refusal } from "../refusal";
 import type { Scope } from "../values/scope";
 import { resolveCompileParams } from "./compileParams";
 import { PROGRAM_HASH_SEED, type HashProgram, ITERATION_BOUND } from "./programHash";
-import { stateLeavesOf } from "./stateLeaves";
+import { resolveStateLeaves } from "./stateLeaves";
 
 export type CreatedInstance = { fields: Record<string, string>; rounds: number };
 
-export function statedCreatedFields(action: Action, scope: Scope): Record<string, string> {
+export function resolveStatedFields(action: Action, scope: Scope): Record<string, string> {
 	const stated: Record<string, string> = {};
 
 	for (const [name, value] of Object.entries(action.create_instance?.fields ?? {})) {
@@ -105,7 +105,7 @@ export function resolveCreatedInstance(
 							),
 						),
 						extraLeavesJson: JSON.stringify(
-							stateLeavesOf(compute.extra_leaves, { at: `Field ${name}`, scope }),
+							resolveStateLeaves(compute.extra_leaves, { at: `Field ${name}`, scope }),
 						),
 						source,
 					});

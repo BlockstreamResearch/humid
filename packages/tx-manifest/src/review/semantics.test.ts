@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { ManifestReview } from "../index";
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import type { ActionRequest } from "../request/request";
 import {
 	COMPILED,
 	type Document,
@@ -18,7 +18,7 @@ import {
 
 const p2pk = Fixture.load("p2pk");
 
-const payRequest = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+const payRequest = (overrides: Partial<ActionRequest> = {}) =>
 	p2pk.request("Pay", { params: { amount_sat: 1000, pubkey: PUBKEY }, ...overrides });
 
 const payDocument = (edit: (pay: Document) => void) => p2pk.editedAction("Pay", edit).manifest;

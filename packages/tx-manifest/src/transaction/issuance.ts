@@ -22,7 +22,7 @@ export type PlannedIssuance = DerivedIssuance &
 		outpoint: Outpoint;
 	};
 
-export function reissuanceOf(declared: Issuance, id: string, scope: Scope): DerivedIssuance {
+export function resolveReissuance(declared: Issuance, id: string, scope: Scope): DerivedIssuance {
 	const entropy = Refusal.amend(
 		() => hexOf(declared.entropy, scope),
 		(reason) => `Input ${id} reissues an asset and does not say which: ${reason}`,
@@ -51,7 +51,7 @@ export function reissuanceOf(declared: Issuance, id: string, scope: Scope): Deri
 	return derived;
 }
 
-export function issuanceIdentity(
+export function resolveIssuanceIdentity(
 	input: {
 		declared: Issuance;
 		id: string;
@@ -62,7 +62,7 @@ export function issuanceIdentity(
 	const { kind } = input.declared;
 	const derived =
 		kind === "reissue"
-			? reissuanceOf(input.declared, input.id, scope)
+			? resolveReissuance(input.declared, input.id, scope)
 			: deriveNewIssuance(input.outpoint);
 
 	if (!derived) {
@@ -82,7 +82,7 @@ export function issuanceIdentity(
 	};
 }
 
-export function withIssuedAmounts(
+export function resolveIssuedAmounts(
 	planned: PlannedIssuance,
 	declared: Issuance,
 	scope: Scope,

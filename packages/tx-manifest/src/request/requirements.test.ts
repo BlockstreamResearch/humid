@@ -2,16 +2,14 @@ import { describe, expect, test } from "bun:test";
 
 import p2pkManifest from "../__fixtures__/p2pk/txmanifest.json";
 import { Manifest } from "../document/manifest";
-import type { ParsedLiquidProcessCtParams, RequestPart } from "./request";
+import type { ActionRequest, RequestPart } from "./request";
 import { missingParts } from "./requirements";
 
 const SOURCE_PATH = "./p2pk.simf";
 const PUBKEY = "0".repeat(64);
 const MANIFEST = p2pkManifest as unknown as Record<string, unknown>;
 
-function request(
-	overrides: Partial<ParsedLiquidProcessCtParams> = {},
-): ParsedLiquidProcessCtParams {
+function request(overrides: Partial<ActionRequest> = {}): ActionRequest {
 	return {
 		action: "Pay",
 		broadcast: false,
@@ -22,7 +20,7 @@ function request(
 	};
 }
 
-function requirements(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
+function requirements(overrides: Partial<ActionRequest> = {}) {
 	const asked = request(overrides);
 	const manifest = Manifest.parse({ manifest_version: "0.3.1", ...asked.manifest });
 	const action = manifest.action(asked.action);
@@ -34,7 +32,7 @@ function requirements(overrides: Partial<ParsedLiquidProcessCtParams> = {}) {
 	return missingParts(asked, manifest, action);
 }
 
-function parts(overrides: Partial<ParsedLiquidProcessCtParams> = {}): RequestPart[] {
+function parts(overrides: Partial<ActionRequest> = {}): RequestPart[] {
 	return requirements(overrides).map((missing) => missing.part);
 }
 
@@ -76,7 +74,7 @@ describe("missingParts", () => {
 	});
 
 	describe("Receive", () => {
-		const receive = (overrides: Partial<ParsedLiquidProcessCtParams> = {}) =>
+		const receive = (overrides: Partial<ActionRequest> = {}) =>
 			requirements({ action: "Receive", params: { pubkey: PUBKEY }, ...overrides });
 
 		test("refuses without the state file, saying why", () => {

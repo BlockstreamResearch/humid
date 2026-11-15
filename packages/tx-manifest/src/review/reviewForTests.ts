@@ -4,7 +4,7 @@ import type { ReadTxOut } from "../chain/chainRead";
 import { type Action, Manifest } from "../document/manifest";
 import type { ProgramAbi } from "../programs/program";
 import { Refusal } from "../refusal";
-import type { ParsedLiquidProcessCtParams } from "../request/request";
+import type { ActionRequest } from "../request/request";
 import type { SelectableUtxo } from "../transaction/coinSelection";
 import {
 	isRefusal,
@@ -15,7 +15,7 @@ import {
 	type TransactionDraft,
 } from "./index";
 
-export type ReviewDependencies = Parameters<typeof reviewManifestAction>[1];
+export type Dependencies = Parameters<typeof reviewManifestAction>[1];
 export type Document = Record<string, unknown>;
 
 export const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -81,10 +81,7 @@ export class Fixture {
 		return this.edited((manifest) => edit((manifest.actions as Record<string, Document>)[name]!));
 	}
 
-	request(
-		action: string,
-		overrides: Partial<ParsedLiquidProcessCtParams> = {},
-	): ParsedLiquidProcessCtParams {
+	request(action: string, overrides: Partial<ActionRequest> = {}): ActionRequest {
 		return {
 			action,
 			broadcast: false,
@@ -127,29 +124,55 @@ export function abiOf(source: string, parameters: Record<string, string> = {}): 
 	return { parameters, witnesses: Object.fromEntries(named.map((name) => [name, "u32"])) };
 }
 
-export function dependencies(overrides: Partial<ReviewDependencies> = {}): ReviewDependencies {
+export type Overrides = {
+	compile?: Dependencies["compiler"]["compile"];
+	compilerVersion?: string;
+	estimateFee?: Dependencies["estimateFee"];
+	fundingUtxos?: SelectableUtxo[];
+	holdingsOf?: Dependencies["wallet"]["holdingsOf"];
+	programAbi?: Dependencies["compiler"]["abi"];
+	readAddress?: Dependencies["chain"]["readAddress"];
+	readChainTip?: Dependencies["chain"]["readChainTip"];
+	readFeeRate?: Dependencies["chain"]["readFeeRate"];
+	readTxOut?: Dependencies["chain"]["readTxOut"];
+	scriptPubKeyOf?: Dependencies["compiler"]["scriptPubKeyOf"];
+	unblind?: Dependencies["wallet"]["unblind"];
+};
+
+export function dependencies(overrides: Overrides = {}): Dependencies {
+	const funding = overrides.fundingUtxos ?? [utxo("1000000")];
+
 	return {
 		accountLabel: ACCOUNT,
-		compile: () => COMPILED,
-		estimateFee: sizedFee,
-		fundingUtxos: [utxo("1000000")],
-		network: "liquid",
-		policyAsset: POLICY_ASSET,
-		programAbi: (source) => abiOf(source),
-		readAddress: (address) => ({ scriptPubKeyHex: address }),
-		readFeeRate: async () => 1000,
-		readTxOut: chainHolding(),
-		scriptPubKeyOf: () => DERIVED_SCRIPT,
-		walletAddress: WALLET_ADDRESS,
-		walletKey: PUBKEY,
-		walletScriptPubKeyHex: WALLET_SCRIPT,
-		...overrides,
+		chain: {
+			network: "liquid",
+			policyAsset: POLICY_ASSET,
+			readAddress: overrides.readAddress ?? ((address) => ({ scriptPubKeyHex: address })),
+			readChainTip: overrides.readChainTip,
+			readFeeRate: overrides.readFeeRate ?? (async () => 1000),
+			readTxOut: overrides.readTxOut ?? chainHolding(),
+		},
+		compiler: {
+			abi: overrides.programAbi ?? ((source) => abiOf(source)),
+			compile: overrides.compile ?? (() => COMPILED),
+			scriptPubKeyOf: overrides.scriptPubKeyOf ?? (() => DERIVED_SCRIPT),
+			version: overrides.compilerVersion,
+		},
+		estimateFee: overrides.estimateFee ?? sizedFee,
+		wallet: {
+			address: WALLET_ADDRESS,
+			holdingsOf: (asset) =>
+				asset === POLICY_ASSET ? funding : (overrides.holdingsOf?.(asset) ?? []),
+			key: PUBKEY,
+			scriptPubKeyHex: WALLET_SCRIPT,
+			unblind: overrides.unblind,
+		},
 	};
 }
 
 export function review(
-	request: ParsedLiquidProcessCtParams,
-	overrides: Partial<ReviewDependencies> = {},
+	request: ActionRequest,
+	overrides: Overrides = {},
 ): Promise<ReviewManifestActionResult> {
 	return reviewManifestAction(request, dependencies(overrides));
 }
@@ -171,15 +194,15 @@ export function asRefusal(result: ReviewManifestActionResult): ReviewRefusal {
 }
 
 export async function reviewed(
-	request: ParsedLiquidProcessCtParams,
-	overrides: Partial<ReviewDependencies> = {},
+	request: ActionRequest,
+	overrides: Overrides = {},
 ): Promise<ManifestReview> {
 	return asReview(await review(request, overrides));
 }
 
 export async function refused(
-	request: ParsedLiquidProcessCtParams,
-	overrides: Partial<ReviewDependencies> = {},
+	request: ActionRequest,
+	overrides: Overrides = {},
 ): Promise<ReviewRefusal> {
 	return asRefusal(await review(request, overrides));
 }
