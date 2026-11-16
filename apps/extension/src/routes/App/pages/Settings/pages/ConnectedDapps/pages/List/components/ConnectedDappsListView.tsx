@@ -99,7 +99,7 @@ function DappRows({
 				return (
 					<Link
 						key={key}
-						className="hover:bg-accent flex items-center gap-2 rounded-lg px-1.5 py-2 transition-colors"
+						className="hover:bg-accent flex items-center gap-2 rounded-lg px-2 py-2 transition-colors"
 						params={{ accountGroupId, dappKey: key }}
 						to="/app/settings/account/$accountGroupId/connected-dapps/$dappKey"
 					>

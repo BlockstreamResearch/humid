@@ -42,6 +42,10 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install
 
+      # The story tests run every Storybook story and its play steps in headless Chromium.
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
       # typecheck across apps/extension, packages/ and apps/web, then lint, format and
       # the test suite. The three projects are separate deliberately — see the comment in
       # lefthook.yml for why one `tsc --noEmit` never covered them.

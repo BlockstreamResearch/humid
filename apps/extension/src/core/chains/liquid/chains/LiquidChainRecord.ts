@@ -107,7 +107,7 @@ export function parseLiquidChainRecord(value: unknown): LiquidChainRecord {
 	const parsed = liquidChainRecordSchema.safeParse(value);
 
 	if (!parsed.success) {
-		throw new Error("Vault item does not match the HUMID Liquid chain model.");
+		throw new Error("Wallet item does not match the HUMID Liquid chain model.");
 	}
 
 	const { settings } = parsed.data;

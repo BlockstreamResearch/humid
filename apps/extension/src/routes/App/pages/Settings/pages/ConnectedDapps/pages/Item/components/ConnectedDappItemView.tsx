@@ -48,7 +48,7 @@ export function ConnectedDappItemView({
 				<span className="text-muted-foreground min-w-0 truncate text-sm">{dapp.label}</span>
 			</header>
 			<UiScrollArea className="min-h-0 flex-1">
-				<div className="flex flex-col gap-6 px-3 py-4">
+				<div className="flex flex-col gap-6 px-5 py-4">
 					<div className="flex items-center gap-2.5">
 						<DappIdentity className="flex-1" dapp={dapp} secondary={dapp.url} />
 						<UiButton

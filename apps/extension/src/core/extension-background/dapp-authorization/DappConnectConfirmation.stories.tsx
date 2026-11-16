@@ -44,7 +44,7 @@ export const GrantNothing: Story = {
 		const canvas = within(canvasElement);
 		await userEvent.click(canvas.getByRole("checkbox", { name: /view balance/i }));
 		await userEvent.click(canvas.getByRole("checkbox", { name: /view coins/i }));
-		await userEvent.click(canvas.getByRole("checkbox", { name: /view addresses/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /read public descriptor/i }));
 		await userEvent.click(canvas.getByRole("checkbox", { name: /view identity key/i }));
 
 		await userEvent.click(canvas.getByRole("button", { name: /^connect$/i }));
@@ -62,7 +62,7 @@ export const GrantSubset: Story = {
 		expect(canvas.queryByRole("checkbox", { name: /sign/i })).not.toBeInTheDocument();
 
 		await userEvent.click(canvas.getByRole("checkbox", { name: /view coins/i }));
-		await userEvent.click(canvas.getByRole("checkbox", { name: /view addresses/i }));
+		await userEvent.click(canvas.getByRole("checkbox", { name: /read public descriptor/i }));
 		await userEvent.click(canvas.getByRole("checkbox", { name: /view identity key/i }));
 		await userEvent.click(canvas.getByRole("button", { name: /^connect$/i }));
 

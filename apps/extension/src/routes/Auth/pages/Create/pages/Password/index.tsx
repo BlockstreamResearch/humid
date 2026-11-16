@@ -40,21 +40,14 @@ const DEFAULT_FORM_VALUES: CreatePasswordFormValues = {
 export function AuthCreatePasswordPage() {
 	const navigate = useNavigate();
 	const { seedMaterial } = useAuthCreateContext();
-	const {
-		control,
-		formState: { isValid },
-		handleSubmit,
-		reset,
-		trigger,
-		watch,
-	} = useForm<CreatePasswordFormValues>({
+	const { control, handleSubmit, reset, trigger, watch } = useForm<CreatePasswordFormValues>({
 		defaultValues: DEFAULT_FORM_VALUES,
 		mode: "onChange",
 		reValidateMode: "onChange",
 		resolver: zodResolver(createPasswordFormSchema),
 	});
 
-	const confirmPassphraseValue = watch("confirmPassphrase");
+	const formValues = watch();
 	const createVaultMutation = useMutation({
 		mutationFn: (values: CreatePasswordFormValues) =>
 			walletVaultClient.create({ seedMaterial, passphrase: values.passphrase }),
@@ -63,7 +56,8 @@ export function AuthCreatePasswordPage() {
 			void navigate({ to: "/app" });
 		},
 	});
-	const canSubmit = isValid && !createVaultMutation.isPending;
+	const canSubmit =
+		createPasswordFormSchema.safeParse(formValues).success && !createVaultMutation.isPending;
 
 	const clearFormError = () => {
 		createVaultMutation.reset();
@@ -89,7 +83,7 @@ export function AuthCreatePasswordPage() {
 					</p>
 					<h1 className="cn-font-heading text-2xl leading-tight font-semibold">Password</h1>
 					<p className="text-muted-foreground text-sm leading-6">
-						Protect your vault with a password. It is required to unlock this device.
+						Protect your wallet with a password. It is required to unlock this device.
 					</p>
 				</div>
 
@@ -119,7 +113,7 @@ export function AuthCreatePasswordPage() {
 											field.onChange(event);
 											clearFormError();
 
-											if (confirmPassphraseValue) {
+											if (formValues.confirmPassphrase) {
 												void trigger("confirmPassphrase");
 											}
 										}}

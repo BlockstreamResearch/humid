@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -13,7 +13,7 @@ import { UiInput } from "@/ui/UiInput/base";
 import UiPageBackgroundWrp from "@/ui/UiPageBackgroundWrp";
 
 const localAuthFormSchema = z.object({
-	passphrase: z.string().min(1, "Enter your password to unlock the vault."),
+	passphrase: z.string().min(1, "Enter your password to unlock the wallet."),
 });
 
 type LocalAuthFormValues = z.infer<typeof localAuthFormSchema>;
@@ -49,12 +49,7 @@ export function LocalAuthPage({ onReset, onUnlocked }: LocalAuthPageProps) {
 	const confirm = useConfirm();
 	const passphraseInputRef = useRef<HTMLInputElement | null>(null);
 	const [resetNotice, setResetNotice] = useState<string | null>(null);
-	const {
-		control,
-		formState: { isValid },
-		handleSubmit,
-		reset,
-	} = useForm<LocalAuthFormValues>({
+	const { control, handleSubmit, reset, watch } = useForm<LocalAuthFormValues>({
 		defaultValues: DEFAULT_FORM_VALUES,
 		mode: "onChange",
 		reValidateMode: "onChange",
@@ -63,16 +58,20 @@ export function LocalAuthPage({ onReset, onUnlocked }: LocalAuthPageProps) {
 
 	const unlockVaultMutation = useMutation({
 		mutationFn: walletVaultClient.unlock,
-		onError: () => {
-			passphraseInputRef.current?.focus();
-			passphraseInputRef.current?.select();
-		},
 		onSuccess: (status) => {
 			if (!status.isUnlocked) return;
 			reset(DEFAULT_FORM_VALUES);
 			onUnlocked?.();
 		},
 	});
+
+	useEffect(() => {
+		if (!unlockVaultMutation.isError) return;
+
+		passphraseInputRef.current?.focus();
+		passphraseInputRef.current?.select();
+	}, [unlockVaultMutation.isError]);
+
 	const resetVaultMutation = useMutation({
 		mutationFn: walletVaultClient.reset,
 		onSuccess: (status) => {
@@ -87,7 +86,7 @@ export function LocalAuthPage({ onReset, onUnlocked }: LocalAuthPageProps) {
 			: getErrorMessage(unlockVaultMutation.error);
 	const resetErrorMessage = getErrorMessage(resetVaultMutation.error);
 	const isMutating = unlockVaultMutation.isPending || resetVaultMutation.isPending;
-	const canSubmit = isValid && !isMutating;
+	const canSubmit = localAuthFormSchema.safeParse(watch()).success && !isMutating;
 
 	const clearFeedback = () => {
 		setResetNotice(null);

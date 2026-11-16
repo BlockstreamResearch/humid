@@ -105,7 +105,7 @@ export async function createSecureVault(input: SecureVaultCreateInput): Promise<
 	const existingRecord = await readSecureVaultMetaRecord();
 
 	if (existingRecord) {
-		throw new Error("Vault already exists. Reset it before creating a new one.");
+		throw new Error("A wallet already exists. Reset it before creating a new one.");
 	}
 
 	const now = Date.now();
@@ -190,7 +190,7 @@ export async function unlockSecureVault(input: SecureVaultUnlockInput): Promise<
 		}
 
 		throw new Error(
-			`Password did not unlock this vault. ${attemptsRemaining} ${
+			`Password did not unlock this wallet. ${attemptsRemaining} ${
 				attemptsRemaining === 1 ? "attempt" : "attempts"
 			} remaining.`,
 		);
@@ -226,7 +226,7 @@ export async function getSecureVaultStatus(): Promise<SecureVaultStatus> {
 
 export function getUnlockedSecureVaultStorage(): SecureVaultStorage {
 	if (!unlockedStorage) {
-		throw new Error("Vault is locked");
+		throw new Error("Wallet is locked");
 	}
 
 	return unlockedStorage;
@@ -276,7 +276,7 @@ async function requireSecureVaultMetaRecord(): Promise<SecureVaultMetaRecord> {
 	const record = await readSecureVaultMetaRecord();
 
 	if (!record) {
-		throw new Error("Vault was not created");
+		throw new Error("Wallet was not created");
 	}
 
 	return record;

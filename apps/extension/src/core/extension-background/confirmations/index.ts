@@ -138,7 +138,7 @@ export function createConfirmationResponder(
 				unlock = pendingUnlock = entry;
 				entry.decision.then(release, release);
 
-				// The vault may have unlocked while the status above was being read.
+				// The wallet may have unlocked while the status above was being read.
 				if (await wallet.isUnlocked()) entry.settle({ approved: true });
 			}
 

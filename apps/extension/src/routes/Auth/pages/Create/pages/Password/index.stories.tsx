@@ -7,7 +7,7 @@ import { AuthCreateProvider } from "../../index";
 import { AuthCreatePasswordPage } from "./index";
 
 const SAMPLE_SEED_MATERIAL = "9f8c1d4e-2b7a-4c3f-8e1d-6a5b4c3d2e1f-humid-root-key";
-const CREATE_ERROR = "Could not create the vault. Please try again.";
+const CREATE_ERROR = "Could not create the wallet. Please try again.";
 
 async function fillPasswords(canvasElement: HTMLElement, password: string, confirm: string) {
 	const canvas = within(canvasElement);

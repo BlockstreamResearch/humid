@@ -4,7 +4,7 @@ export const DAPP_AUTHORIZATION_ERROR_CODES = {
 	UNRECOGNIZED_CHAIN: 4902, // wallet_switchChain to an unknown chain — call wallet_addChain first
 	UNSUPPORTED_SCOPES: 5100, // none of the requested CAIP-25 scopes are supported
 	USER_REJECTED: 4001,
-	WALLET_LOCKED: 4900, // EIP-1193 "disconnected"; used while the vault is locked
+	WALLET_LOCKED: 4900, // EIP-1193 "disconnected"; used while the wallet is locked
 } as const;
 
 export type DappAuthorizationErrorCode =

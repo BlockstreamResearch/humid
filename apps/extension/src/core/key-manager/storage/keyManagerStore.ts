@@ -33,7 +33,7 @@ async function setUnlockedState(
 
 function getUnlockedState(): KeyManagerState {
 	if (!unlockedKeyManagerState) {
-		throw new Error("Vault is locked");
+		throw new Error("Wallet is locked");
 	}
 
 	return unlockedKeyManagerState;
@@ -86,7 +86,7 @@ export const keyManagerStore = {
 
 function parseKeyManagerState(value: unknown): KeyManagerState {
 	if (!isKeyManagerState(value)) {
-		throw new Error("Vault item does not match the HUMID key manager model.");
+		throw new Error("Wallet item does not match the HUMID key manager model.");
 	}
 
 	return value;
