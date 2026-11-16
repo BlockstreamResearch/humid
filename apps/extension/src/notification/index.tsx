@@ -13,6 +13,8 @@ import { ConfirmProvider } from "@/common/Confirmation";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
 import { processCtConfirmationRenderer } from "@/core/chains/liquid/application/methods/processConfidentialTransaction/ProcessCtConfirmation";
+import { signIdentityConfirmationRenderer } from "@/core/chains/liquid/application/methods/signIdentity/SignIdentityConfirmation";
+import { signMessageConfirmationRenderer } from "@/core/chains/liquid/application/methods/signMessage/SignMessageConfirmation";
 import { dappAddChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappAddChainConfirmation";
 import { dappConnectConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappConnectConfirmation";
 import { dappSwitchChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappSwitchChainConfirmation";
@@ -37,6 +39,8 @@ const confirmationRenderers = [
 	dappAddChainConfirmationRenderer,
 	dappSwitchChainConfirmationRenderer,
 	processCtConfirmationRenderer,
+	signIdentityConfirmationRenderer,
+	signMessageConfirmationRenderer,
 	unlockConfirmationRenderer,
 ];
 

@@ -121,6 +121,28 @@ export function FactRow({
 	);
 }
 
+export function TextBlock({
+	title,
+	byDapp = false,
+	children,
+}: {
+	title: string;
+	byDapp?: boolean;
+	children: ReactNode;
+}) {
+	return (
+		<section className="flex flex-col gap-1.5">
+			<h2 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+				{title}
+			</h2>
+			<div className="bg-muted max-h-38 overflow-y-auto rounded-lg px-3 py-2.5 text-sm leading-5 break-words whitespace-pre-wrap">
+				{children}
+			</div>
+			{byDapp && <DappProvided />}
+		</section>
+	);
+}
+
 export function ConfirmationNote({
 	tone = "info",
 	children,
