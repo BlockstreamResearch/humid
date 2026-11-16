@@ -28,7 +28,7 @@ const SPEEDS: FeeSpeed[] = [
 ];
 const FEES: Record<string, string> = { slow: "26 sats", normal: "39 sats", fast: "52 sats" };
 
-function ContractAction({ onReject, onApprove }: { onReject: () => void; onApprove: () => void }) {
+function ContractAction({ onReject, onConfirm }: { onReject: () => void; onConfirm: () => void }) {
 	const [speed, setSpeed] = useState("fast");
 
 	return (
@@ -41,9 +41,9 @@ function ContractAction({ onReject, onApprove }: { onReject: () => void; onAppro
 			footer={
 				<ConfirmationActions
 					signer="Signing with Account 0"
-					approveLabel="Approve"
+					confirmLabel="Confirm"
 					onReject={onReject}
-					onApprove={onApprove}
+					onConfirm={onConfirm}
 				/>
 			}
 		>
@@ -111,7 +111,7 @@ function ContractAction({ onReject, onApprove }: { onReject: () => void; onAppro
 const meta = {
 	title: "Confirmation/Kit",
 	component: ContractAction,
-	args: { onReject: fn(), onApprove: fn() },
+	args: { onReject: fn(), onConfirm: fn() },
 } satisfies Meta<typeof ContractAction>;
 
 export default meta;
@@ -131,8 +131,8 @@ export const PicksAFeeSpeed: Story = {
 		await userEvent.click(canvas.getByRole("button", { name: /details/i }));
 		await expect(canvas.getByText("Lending contract")).toBeInTheDocument();
 
-		await userEvent.click(canvas.getByRole("button", { name: /approve/i }));
-		await expect(args.onApprove).toHaveBeenCalled();
+		await userEvent.click(canvas.getByRole("button", { name: /confirm/i }));
+		await expect(args.onConfirm).toHaveBeenCalled();
 	},
 };
 

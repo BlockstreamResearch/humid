@@ -28,12 +28,12 @@ export function ConfirmationSection({
 }) {
 	return (
 		<section className="border-border rounded-lg border px-3 py-1">
-			<div className="mt-2 mb-1 flex items-center justify-between gap-2">
+			<header className="mt-2 mb-1 flex items-center justify-between gap-2">
 				<h2 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
 					{title}
 				</h2>
 				{aside}
-			</div>
+			</header>
 			{children}
 		</section>
 	);
@@ -97,6 +97,25 @@ export function AmountRow({
 				)}
 			>
 				{asset.amount(units, true)}
+			</span>
+		</div>
+	);
+}
+
+export function FactRow({
+	label,
+	value,
+	mono = false,
+}: {
+	label: string;
+	value: string;
+	mono?: boolean;
+}) {
+	return (
+		<div className="border-border/60 flex flex-col gap-0.5 border-t py-2.5 first-of-type:border-t-0">
+			<span className="text-muted-foreground text-xs">{label}</span>
+			<span className={cn("text-sm font-semibold break-all", mono && "font-mono font-normal")}>
+				{value}
 			</span>
 		</div>
 	);

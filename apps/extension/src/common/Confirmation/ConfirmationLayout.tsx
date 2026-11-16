@@ -71,17 +71,17 @@ export function ConfirmationLayout({
 export function ConfirmationActions({
 	signer,
 	rejectLabel = "Reject",
-	approveLabel,
+	confirmLabel,
 	onReject,
-	onApprove,
-	busy = false,
+	onConfirm,
+	canConfirm = true,
 }: {
 	signer?: string;
 	rejectLabel?: string;
-	approveLabel: string;
+	confirmLabel: string;
 	onReject: () => void;
-	onApprove: () => void;
-	busy?: boolean;
+	onConfirm: () => void;
+	canConfirm?: boolean;
 }) {
 	return (
 		<>
@@ -92,15 +92,15 @@ export function ConfirmationActions({
 				<UiButton type="button" variant="outline" className="h-11" onClick={onReject}>
 					{rejectLabel}
 				</UiButton>
-				<UiButton type="button" className="h-11" disabled={busy} onClick={onApprove}>
-					{approveLabel}
+				<UiButton type="button" className="h-11" disabled={!canConfirm} onClick={onConfirm}>
+					{confirmLabel}
 				</UiButton>
 			</div>
 		</>
 	);
 }
 
-function hostOf(origin: string): string {
+export function hostOf(origin: string): string {
 	try {
 		return new URL(origin).host || origin;
 	} catch {

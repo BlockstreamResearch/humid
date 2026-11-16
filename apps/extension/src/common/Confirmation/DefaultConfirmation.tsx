@@ -15,9 +15,9 @@ export function DefaultConfirmation({ onConfirm, onDecline, request }: Props) {
 			title={request.title}
 			footer={
 				<ConfirmationActions
-					approveLabel={request.confirmLabel ?? "Approve"}
+					confirmLabel={request.confirmLabel ?? "Confirm"}
 					onReject={onDecline}
-					onApprove={() => onConfirm()}
+					onConfirm={() => onConfirm()}
 				/>
 			}
 		>

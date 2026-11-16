@@ -150,6 +150,11 @@ export function createDappAuthorization(
 			chains: supported.chains,
 			kind: DAPP_CONNECT_CONFIRMATION_KIND,
 			methods: supported.methods,
+			networks: await Promise.all(
+				supported.chains.map(
+					async (chainId) => (await resolveKnownChain?.(chainId))?.name ?? chainId,
+				),
+			),
 			origin: requestingOrigin,
 		};
 

@@ -180,20 +180,14 @@ export async function unlockSecureVault(input: SecureVaultUnlockInput): Promise<
 	} catch {
 		failedUnlockAttempts += 1;
 
-		const attemptsRemaining = Math.max(0, MAX_UNLOCK_ATTEMPTS - failedUnlockAttempts);
-
-		if (attemptsRemaining === 0) {
+		if (failedUnlockAttempts >= MAX_UNLOCK_ATTEMPTS) {
 			unlockPausedUntil = Date.now() + UNLOCK_COOLDOWN_MS;
 			throw new Error(
 				`Too many incorrect attempts. Try again in ${formatSeconds(UNLOCK_COOLDOWN_MS)}.`,
 			);
 		}
 
-		throw new Error(
-			`Password did not unlock this wallet. ${attemptsRemaining} ${
-				attemptsRemaining === 1 ? "attempt" : "attempts"
-			} remaining.`,
-		);
+		throw new Error("Wrong password. Try again.");
 	}
 }
 

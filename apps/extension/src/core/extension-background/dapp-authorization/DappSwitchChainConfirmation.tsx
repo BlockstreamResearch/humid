@@ -1,5 +1,6 @@
 import type { ConfirmationRenderer } from "@/common/Confirmation";
-import { UiButton } from "@/ui/UiButton/base";
+import { ConfirmationActions, ConfirmationLayout } from "@/common/Confirmation/ConfirmationLayout";
+import { ConfirmationSection, FactRow } from "@/common/Confirmation/ConfirmationParts";
 
 import {
 	DAPP_SWITCH_CHAIN_CONFIRMATION_KIND,
@@ -15,36 +16,23 @@ type Props = {
 
 export function DappSwitchChainConfirmation({ data, onConfirm, onDecline }: Props) {
 	return (
-		<div className="bg-background text-foreground flex size-full flex-col">
-			<header className="p-4 pb-3 text-center">
-				<h2 className="cn-font-heading text-xl font-bold">Use this network?</h2>
-				<p className="text-muted-foreground mt-1 text-sm break-all">{data.origin}</p>
-			</header>
-
-			<div className="flex-1 space-y-5 overflow-y-auto px-4">
-				<p className="text-muted-foreground text-sm">
-					This site wants to use another network with your connected account. Approving adds it to
-					this site's session.
-				</p>
-
-				<div className="flex flex-col gap-1">
-					<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-						Network
-					</span>
-					<span className="text-sm font-medium break-all">{data.chainName}</span>
-					<span className="text-muted-foreground font-mono text-xs break-all">{data.chainId}</span>
-				</div>
-			</div>
-
-			<div className="flex items-center gap-3 p-4 pt-3">
-				<UiButton type="button" variant="outline" className="flex-1" onClick={onDecline}>
-					Decline
-				</UiButton>
-				<UiButton type="button" className="flex-1" onClick={onConfirm}>
-					Use network
-				</UiButton>
-			</div>
-		</div>
+		<ConfirmationLayout
+			origin={data.origin}
+			title={`Use ${data.chainName}`}
+			statement="The dapp asks to use this network with the connected accounts."
+			footer={
+				<ConfirmationActions
+					confirmLabel="Use network"
+					onReject={onDecline}
+					onConfirm={onConfirm}
+				/>
+			}
+		>
+			<ConfirmationSection title="Network">
+				<FactRow label="Name" value={data.chainName} />
+				<FactRow label="Chain ID" value={data.chainId} mono />
+			</ConfirmationSection>
+		</ConfirmationLayout>
 	);
 }
 
