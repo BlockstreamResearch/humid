@@ -43,11 +43,22 @@ export type RecoveryPhrase = {
 export type ReceiveAddress = {
 	address: string;
 	index: number;
-	unconfidential: string;
+	explicit: string;
+};
+
+export type TransferFee = {
+	feeRateSatsPerKvb: number;
+	feeSats: string;
+};
+
+export type TransferQuote = TransferFee & {
+	amount: string;
+	targetBlocks: number;
 };
 
 export type SendTransferInput = {
 	amount: string;
+	fee?: TransferFee;
 	rawAssetId?: string;
 	recipientAddress: string;
 	sendAll?: boolean;
@@ -66,6 +77,7 @@ export type EstimateMaxSendResult = {
 export type TransferReview = {
 	amount: string;
 	assetId: string;
+	quotes: TransferQuote[];
 	recipientAddress: string;
 	recipientConfidential: boolean;
 };

@@ -29,7 +29,7 @@ const confidentialUtxo = (value: bigint) => ({
 });
 
 const explicitOutput = (value: bigint) => ({
-	address: () => text("unconfidential-address"),
+	address: () => text("explicit-address"),
 	extInt: () => 0,
 	height: () => 12,
 	outpoint: () => ({ txid: () => text(EXPLICIT_TX), vout: () => 0 }),

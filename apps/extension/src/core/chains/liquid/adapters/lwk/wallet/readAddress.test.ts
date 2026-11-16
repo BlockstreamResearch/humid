@@ -18,7 +18,7 @@ describe("reading an address an output pays", () => {
 		});
 	});
 
-	test("gives an unconfidential address's script and no key", () => {
+	test("gives an explicit address's script and no key", () => {
 		expect(readAddress(SIGNER.address())).toEqual({ scriptPubKeyHex: SIGNER.scriptPubKeyHex() });
 	});
 

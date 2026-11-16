@@ -6,11 +6,11 @@ const SIGNING_ADDRESS_INDEX = 0;
 export function getWalletAddress(
 	account: LiquidWalletAccount,
 	index: number,
-): { address: string; unconfidential: string } {
+): { address: string; explicit: string } {
 	const result = getLwkImplementation(account).wollet.address(index);
 	const address = result.address();
 
-	return { address: address.toString(), unconfidential: address.toUnconfidential().toString() };
+	return { address: address.toString(), explicit: address.toUnconfidential().toString() };
 }
 
 export function getWalletReceiveAddress(account: LiquidWalletAccount): {
@@ -26,7 +26,7 @@ export function getWalletReceiveAddress(account: LiquidWalletAccount): {
 export function getWalletSigningAddress(account: LiquidWalletAccount): {
 	address: string;
 	index: number;
-	unconfidential: string;
+	explicit: string;
 } {
 	const implementation = getLwkImplementation(account);
 	const result = implementation.wollet.address(SIGNING_ADDRESS_INDEX);
@@ -35,6 +35,6 @@ export function getWalletSigningAddress(account: LiquidWalletAccount): {
 	return {
 		address: address.toString(),
 		index: result.index(),
-		unconfidential: address.toUnconfidential().toString(),
+		explicit: address.toUnconfidential().toString(),
 	};
 }

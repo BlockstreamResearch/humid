@@ -32,7 +32,7 @@ export function ReceivePage() {
 			address={query.data.address}
 			accountName={accountGroup.name}
 			chainName={chain.name}
-			unconfidential={query.data.unconfidential}
+			explicit={query.data.explicit}
 		/>
 	);
 }

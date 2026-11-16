@@ -13,6 +13,8 @@ import type {
 	LiquidGetWalletDescriptorParams,
 	LiquidSendTransferParams,
 	LiquidSendTransferResult,
+	LiquidTransferFee,
+	LiquidTransferQuote,
 	LiquidTransferReview,
 	LiquidUTXO,
 	LiquidWalletDescriptorEntry,
@@ -120,13 +122,13 @@ export type LiquidWalletBackend = {
 	getAddress: (
 		account: LiquidWalletAccount,
 		index: number,
-	) => { address: string; unconfidential: string };
+	) => { address: string; explicit: string };
 	getBalance: (account: LiquidWalletAccount, rawAssetId: string) => string;
 	getReceiveAddress: (account: LiquidWalletAccount) => { address: string; index: number };
 	getSigningAddress: (account: LiquidWalletAccount) => {
 		address: string;
 		index: number;
-		unconfidential: string;
+		explicit: string;
 	};
 	getDescriptorEntries: (
 		account: LiquidWalletAccount,
@@ -146,10 +148,17 @@ export type LiquidWalletBackend = {
 		params: ParsedLiquidSignMessageParams,
 	) => Promise<LiquidSignMessageReview>;
 	resolveAccount: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidWalletAccount>;
+	quoteTransfer: (
+		account: LiquidWalletAccount,
+		params: LiquidSendTransferParams,
+		rawAssetId: string,
+		feeRateSatsPerKvb: number,
+	) => Promise<LiquidTransferQuote>;
 	sendTransfer: (
 		account: LiquidWalletAccount,
 		params: LiquidSendTransferParams,
 		rawAssetId: string,
+		fee?: LiquidTransferFee,
 	) => Promise<LiquidSendTransferResult>;
 	signMessage: (
 		account: LiquidWalletAccount,

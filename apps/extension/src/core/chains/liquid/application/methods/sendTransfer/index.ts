@@ -47,7 +47,7 @@ export const sendLiquidTransfer = createWalletMethod<
 			review.transfer.memo === undefined ? "" : `Memo:\n${review.transfer.memo}`,
 			review.transfer.recipientConfidential
 				? ""
-				: "Warning: this recipient is unconfidential; the amount and asset will be publicly visible.",
+				: "Warning: this address is explicit; the amount and asset will be publicly visible.",
 		]
 			.filter(Boolean)
 			.join("\n\n"),

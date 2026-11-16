@@ -14,7 +14,12 @@ import {
 import { getWalletDescriptorEntries } from "./wallet/getWalletDescriptor";
 import { readChainTipHeight } from "./wallet/readChainTipHeight";
 import { createLwkLiquidAccount } from "./wallet/resolveAccount";
-import { estimateMaxSend, inspectTransfer, sendTransfer } from "./wallet/sendTransfer";
+import {
+	estimateMaxSend,
+	inspectTransfer,
+	quoteTransfer,
+	sendTransfer,
+} from "./wallet/sendTransfer";
 import { inspectMessageSigning, signMessage } from "./wallet/signMessage";
 import { blindAndInspectPset, signPset } from "./wallet/signPset";
 import { scanAccount } from "./wallet/syncAccount";
@@ -36,6 +41,7 @@ export function createLwkWalletBackend(): LiquidWalletBackend {
 		inspectMessageSigning,
 		inspectTransfer,
 		resolveAccount: createLwkLiquidAccount,
+		quoteTransfer,
 		sendTransfer,
 		signMessage,
 		signPset: signPset,

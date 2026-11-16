@@ -217,7 +217,7 @@ export const createProcessLiquidConfidentialTransaction = (
 						(builder) => smplx.Signer.estimateStrictFee(builder, network, feeRateSatsPerKvb),
 					),
 				wallet: {
-					address: signingAddress.unconfidential,
+					address: signingAddress.explicit,
 					holdingsOf: (asset) => fundable(context, account, asset),
 					key: dependencies.walletKeyOf(account.descriptor, signingAddress.index),
 					scriptPubKeyHex: walletScriptPubKeyHex,

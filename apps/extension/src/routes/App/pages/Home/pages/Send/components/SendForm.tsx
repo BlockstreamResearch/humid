@@ -7,6 +7,7 @@ import { formatUnits } from "@/helpers/formatters";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiInput } from "@/ui/UiInput/base";
 import { UiScrollArea } from "@/ui/UiScrollArea";
+import { UiTextarea } from "@/ui/UiTextarea/base";
 
 import type { SendableAsset } from "../model";
 import { AssetSelector } from "./AssetSelector";
@@ -80,12 +81,19 @@ export function SendForm({
 							<label className="text-sm font-medium" htmlFor="send-recipient">
 								Recipient address
 							</label>
-							<UiInput
+							<UiTextarea
 								autoComplete="off"
-								className="font-mono"
+								className="min-h-0 resize-none font-mono break-all"
 								id="send-recipient"
-								onChange={(event) => onRecipientChange(event.target.value)}
+								onChange={(event) => onRecipientChange(event.target.value.replace(/\s/g, ""))}
+								onKeyDown={(event) => {
+									if (event.key !== "Enter") return;
+
+									event.preventDefault();
+									event.currentTarget.form?.requestSubmit();
+								}}
 								placeholder="Liquid address (lq1… / VJL…)"
+								rows={1}
 								spellCheck={false}
 								value={recipient}
 							/>

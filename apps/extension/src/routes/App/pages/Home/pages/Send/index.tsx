@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 
-import type { SendTransferInput } from "@/core/accounts/application/accounts-rpc/model/types";
+import type {
+	SendTransferInput,
+	TransferQuote,
+} from "@/core/accounts/application/accounts-rpc/model/types";
 import { usePendingTransfers } from "@/core/accounts/application/pending-transfers/usePendingTransfers";
 import { formatUnits, parseUnits } from "@/helpers/formatters";
 import { chainGroupUis } from "@/routes/App/chainGroupUis";
@@ -16,7 +19,6 @@ import { useEstimateMaxSend, useInspectTransfer, useSendTransfer } from "./useSe
 type Step = "form" | "review" | "result";
 
 type PreparedTransfer = {
-	amountLabel: string;
 	asset: SendableAsset;
 	input: SendTransferInput;
 };
@@ -26,7 +28,7 @@ export function SendPage() {
 	const assets = useMemo(() => toSendableAssets(portfolio.tokens), [portfolio.tokens]);
 
 	const pending = usePendingTransfers(accountGroup.id, chain.id);
-	const nativeRawAssetId = assets.find((asset) => asset.isNative)?.rawAssetId ?? null;
+	const nativeAsset = assets.find((asset) => asset.isNative);
 
 	const { asset: initialRawAssetId } = Route.useSearch();
 
@@ -102,7 +104,7 @@ export function SendPage() {
 			...(nativeSendAll && selectedAsset.isNative ? { sendAll: true } : {}),
 		};
 
-		setPrepared({ amountLabel: amount.trim(), asset: selectedAsset, input });
+		setPrepared({ asset: selectedAsset, input });
 		inspect.mutate(input, { onSuccess: () => setStep("review") });
 	};
 
@@ -113,40 +115,45 @@ export function SendPage() {
 		setStep("form");
 	};
 
-	const handleConfirm = () => {
+	const handleConfirm = (quote: TransferQuote) => {
 		if (!prepared) return;
 
-		const { amount: amountSats, rawAssetId } = prepared.input;
+		const { rawAssetId } = prepared.input;
+		const { feeRateSatsPerKvb, feeSats } = quote;
 
-		send.mutate(prepared.input, {
-			onSuccess: (result) => {
-				const assetId = rawAssetId ?? nativeRawAssetId;
+		send.mutate(
+			{ ...prepared.input, fee: { feeRateSatsPerKvb, feeSats } },
+			{
+				onSuccess: (result) => {
+					const assetId = rawAssetId ?? nativeAsset?.rawAssetId;
 
-				if (assetId) {
-					pending.add({
-						amountSats,
-						createdAt: Date.now(),
-						rawAssetId: assetId,
-						txid: result.txid,
-					});
-				}
+					if (assetId) {
+						pending.add({
+							amountSats: quote.amount,
+							createdAt: Date.now(),
+							rawAssetId: assetId,
+							txid: result.txid,
+						});
+					}
 
-				setStep("result");
+					setStep("result");
+				},
 			},
-		});
+		);
 	};
 
-	if (step === "review" && prepared && inspect.data) {
+	if (step === "review" && prepared && inspect.data && nativeAsset) {
 		return (
 			<SendReview
-				amountLabel={prepared.amountLabel}
+				account={accountGroup.name}
+				asset={prepared.asset}
 				error={send.error?.message ?? null}
+				feeAsset={nativeAsset}
 				isSending={send.isPending}
+				network={chain.name}
 				onBack={handleBack}
 				onConfirm={handleConfirm}
-				recipientAddress={inspect.data.recipientAddress}
-				recipientConfidential={inspect.data.recipientConfidential}
-				symbol={prepared.asset.symbol}
+				review={inspect.data}
 			/>
 		);
 	}

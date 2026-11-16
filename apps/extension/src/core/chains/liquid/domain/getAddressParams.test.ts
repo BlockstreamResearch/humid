@@ -8,7 +8,7 @@ describe("getAddress parameters", () => {
 		expect(parseLiquidGetAddressParams({})).toEqual({ confidential: true, index: 0 });
 	});
 
-	test("take an index and the unconfidential form", () => {
+	test("take an index and the explicit form", () => {
 		expect(parseLiquidGetAddressParams({ confidential: false, index: 7 })).toEqual({
 			confidential: false,
 			index: 7,

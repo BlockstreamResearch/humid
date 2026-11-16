@@ -16,7 +16,7 @@ import { UiTabs, UiTabsContent, UiTabsList, UiTabsTrigger } from "@/ui/UiTabs/ba
 import { UiTooltip, UiTooltipContent, UiTooltipProvider, UiTooltipTrigger } from "@/ui/UiTooltip";
 
 const CONFIDENTIAL_TAB = "confidential";
-const UNCONFIDENTIAL_TAB = "unconfidential";
+const EXPLICIT_TAB = "explicit";
 
 function LabelWithHint({ hint, label }: { hint: string; label: string }) {
 	return (
@@ -67,12 +67,12 @@ export function ReceiveView({
 	address,
 	accountName,
 	chainName,
-	unconfidential,
+	explicit,
 }: {
 	address: string;
 	accountName: string;
 	chainName: string;
-	unconfidential: string;
+	explicit: string;
 }) {
 	return (
 		<UiTooltipProvider>
@@ -97,7 +97,7 @@ export function ReceiveView({
 						<UiTabs defaultValue={CONFIDENTIAL_TAB} className="w-full">
 							<UiTabsList className="w-full">
 								<UiTabsTrigger value={CONFIDENTIAL_TAB}>Confidential</UiTabsTrigger>
-								<UiTabsTrigger value={UNCONFIDENTIAL_TAB}>Unconfidential</UiTabsTrigger>
+								<UiTabsTrigger value={EXPLICIT_TAB}>Explicit</UiTabsTrigger>
 							</UiTabsList>
 
 							<UiTabsContent value={CONFIDENTIAL_TAB} className="mt-5">
@@ -108,11 +108,11 @@ export function ReceiveView({
 								/>
 							</UiTabsContent>
 
-							<UiTabsContent value={UNCONFIDENTIAL_TAB} className="mt-5">
+							<UiTabsContent value={EXPLICIT_TAB} className="mt-5">
 								<AddressPanel
-									address={unconfidential}
+									address={explicit}
 									hint="The same wallet address, unblinded, and fixed at the first index of the external chain. Contract actions are funded from here and return their change here; amounts paid to it are public."
-									label="Unconfidential address"
+									label="Explicit address"
 								/>
 							</UiTabsContent>
 						</UiTabs>

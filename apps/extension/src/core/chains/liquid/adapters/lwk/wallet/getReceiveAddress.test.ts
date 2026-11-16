@@ -33,10 +33,10 @@ describe("the signing address the contract flow is funded from", () => {
 	});
 
 	test("answers with the same address twice, blinded and unblinded", () => {
-		const { address, unconfidential } = getWalletSigningAddress(account());
+		const { address, explicit } = getWalletSigningAddress(account());
 
 		const blinded = new lwk.Address(address);
-		const open = new lwk.Address(unconfidential);
+		const open = new lwk.Address(explicit);
 
 		try {
 			expect(blinded.isBlinded()).toBe(true);
@@ -49,9 +49,9 @@ describe("the signing address the contract flow is funded from", () => {
 	});
 
 	test("so the unblinded form is not the blinded one", () => {
-		const { address, unconfidential } = getWalletSigningAddress(account());
+		const { address, explicit } = getWalletSigningAddress(account());
 
-		expect(unconfidential).not.toBe(address);
+		expect(explicit).not.toBe(address);
 	});
 
 	test("and it is the first index whatever the receive address is doing", () => {
@@ -70,7 +70,7 @@ describe("an address requested by index", () => {
 		const requested = getWalletAddress(shared, 0);
 
 		expect(requested.address).toBe(signing.address);
-		expect(requested.unconfidential).toBe(signing.unconfidential);
+		expect(requested.explicit).toBe(signing.explicit);
 	});
 
 	test("at another index is another blinded address", () => {
@@ -88,9 +88,9 @@ describe("an address requested by index", () => {
 	});
 
 	test("comes with its unblinded form on the same script", () => {
-		const { address, unconfidential } = getWalletAddress(account(), 3);
+		const { address, explicit } = getWalletAddress(account(), 3);
 		const blinded = new lwk.Address(address);
-		const open = new lwk.Address(unconfidential);
+		const open = new lwk.Address(explicit);
 
 		try {
 			expect(open.isBlinded()).toBe(false);

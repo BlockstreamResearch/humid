@@ -245,7 +245,7 @@ function walletBackend(log: Journal, overrides: Record<string, unknown> = {}) {
 		getSigningAddress: () => ({
 			address: "tex1q_signing",
 			index: 0,
-			unconfidential: "tex1q_signing_unconfidential",
+			explicit: "tex1q_signing_explicit",
 		}),
 		getTipHeight: () => 3_210_987,
 		getUtxos: () => [],

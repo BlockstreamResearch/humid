@@ -160,6 +160,15 @@ export type LiquidTransferReview = {
 	recipientConfidential: boolean;
 };
 
+export type LiquidTransferFee = {
+	feeRateSatsPerKvb: number;
+	feeSats: string;
+};
+
+export type LiquidTransferQuote = LiquidTransferFee & {
+	amount: string;
+};
+
 export type LiquidSendTransferResult = {
 	txid: string;
 };

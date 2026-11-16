@@ -6,6 +6,7 @@ import { DappProvided } from "./ConfirmationParts";
 
 type Props = {
 	origin?: string;
+	account?: string;
 	network?: string;
 	title: string;
 	statement?: ReactNode;
@@ -16,6 +17,7 @@ type Props = {
 
 export function ConfirmationLayout({
 	origin,
+	account,
 	network,
 	title,
 	statement,
@@ -28,7 +30,7 @@ export function ConfirmationLayout({
 	return (
 		<div className="bg-background text-foreground flex size-full flex-col">
 			<header className="flex flex-col gap-3 px-4 pt-4 pb-3">
-				{(host !== undefined || network !== undefined) && (
+				{(host !== undefined || account !== undefined || network !== undefined) && (
 					<div className="flex items-center gap-2">
 						{host !== undefined && (
 							<>
@@ -42,6 +44,11 @@ export function ConfirmationLayout({
 									{host}
 								</span>
 							</>
+						)}
+						{host === undefined && account !== undefined && (
+							<span className="text-muted-foreground min-w-0 flex-1 truncate text-[13px]">
+								{account}
+							</span>
 						)}
 						{network !== undefined && (
 							<span className="bg-muted text-muted-foreground ml-auto rounded-full px-2 py-0.5 text-xs">
@@ -75,6 +82,7 @@ export function ConfirmationActions({
 	onReject,
 	onConfirm,
 	canConfirm = true,
+	busy = false,
 }: {
 	signer?: string;
 	rejectLabel?: string;
@@ -82,6 +90,7 @@ export function ConfirmationActions({
 	onReject: () => void;
 	onConfirm: () => void;
 	canConfirm?: boolean;
+	busy?: boolean;
 }) {
 	return (
 		<>
@@ -89,10 +98,16 @@ export function ConfirmationActions({
 				<span className="text-muted-foreground text-center text-xs">{signer}</span>
 			)}
 			<div className="grid grid-cols-2 gap-2">
-				<UiButton type="button" variant="outline" className="h-11" onClick={onReject}>
+				<UiButton
+					type="button"
+					variant="outline"
+					className="h-11"
+					disabled={busy}
+					onClick={onReject}
+				>
 					{rejectLabel}
 				</UiButton>
-				<UiButton type="button" className="h-11" disabled={!canConfirm} onClick={onConfirm}>
+				<UiButton type="button" className="h-11" disabled={busy || !canConfirm} onClick={onConfirm}>
 					{confirmLabel}
 				</UiButton>
 			</div>

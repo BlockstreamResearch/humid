@@ -37,7 +37,7 @@ export function ProcessCtCard() {
 				  pubkey.trim().startsWith("tex1") ||
 				  pubkey.trim().startsWith("lq1") ||
 				  pubkey.trim().startsWith("ex1")
-				? "That is an address, not a key. Receive → Unconfidential shows both — this field wants the second one."
+				? "That is an address, not a key. Receive → Explicit shows both — this field wants the second one."
 				: `Not an x-only public key: ${pubkey.trim().length} characters, and 64 hexadecimal ones are needed.`;
 
 	const params = {

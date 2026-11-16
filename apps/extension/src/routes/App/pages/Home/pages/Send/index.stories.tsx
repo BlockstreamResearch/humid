@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { fn } from "storybook/test";
+import { expect, fn, userEvent, within } from "storybook/test";
 
 import { SendForm } from "./components/SendForm";
 import type { SendableAsset } from "./model";
@@ -53,7 +53,12 @@ export const Filled: Story = {
 	args: {
 		amount: "0.5",
 		canContinue: true,
-		recipient: "lq1qqw8xk2m7s5k3n2p9x4d6h0tzq8r7l5c3v1b9n8m6k4j2h0g8f6d4s2a0qw8xk2",
+		recipient:
+			"tlq1qqf8er278e6nyvuwtgf39e6ewvdcnjupn9a86rzpx655y5lhkt0walu3djf9cklkxd3ryld97hu8h3xepw7sh2rlu7q45dcew5h3k0vjw29m4x7c8a",
+	},
+	play: async ({ args, canvasElement }) => {
+		await userEvent.type(within(canvasElement).getByLabelText("Recipient address"), "{Enter}");
+		await expect(args.onContinue).toHaveBeenCalled();
 	},
 };
 
