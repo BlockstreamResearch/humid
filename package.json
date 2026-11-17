@@ -16,6 +16,7 @@
 		"build:watch": "vite build --watch --mode development",
 		"analyze": "vite build --mode analyze",
 		"preview": "vite preview",
+		"regtest": "bun scripts/regtest.ts",
 		"web:dev": "bun --filter='./apps/web' run dev",
 		"web:build": "bun --filter='./apps/web' run build",
 		"web:preview": "bun --filter='./apps/web' run preview",
