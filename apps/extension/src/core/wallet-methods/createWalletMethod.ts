@@ -1,3 +1,4 @@
+import type { TransactionReceiptData } from "@/common/Confirmation/TransactionReceipt";
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
@@ -24,6 +25,9 @@ export type CreateWalletMethodInput<
 	execute: (input: WalletMethodInput<TParams, TContext, TReview>) => Promise<TResult> | TResult;
 	id: string;
 	parse: (params: unknown) => TParams;
+	receipt?: (
+		input: WalletMethodInput<TParams, TContext, TReview> & { result: TResult },
+	) => Promise<TransactionReceiptData> | TransactionReceiptData;
 	review: (input: { context: TContext; params: TParams }) => Promise<TReview> | TReview;
 };
 
@@ -44,38 +48,53 @@ export function createWalletMethod<
 	execute,
 	id,
 	parse,
+	receipt,
 	review,
 }: CreateWalletMethodInput<TParams, TContext, TReview, TResult>): WalletMethod<TContext, TResult> {
 	const handler = async (params: unknown, context: TContext): Promise<TResult> => {
 		const parsedParams = parse(params);
-
 		const reviewed = await review({ context, params: parsedParams });
+		const run = (choice?: unknown) =>
+			execute({ choice, context, params: parsedParams, review: reviewed });
 
-		let choice: unknown;
+		if (context.authorization.isGranted(id)) return run();
 
-		if (!context.authorization.isGranted(id)) {
-			if (!context.confirm) {
-				throw new WalletRpcResourceUnavailableError(
-					"Wallet method requires a confirmation surface.",
-					undefined,
-					WALLET_RPC_ERROR_REASONS.CONFIRMATION_UNAVAILABLE,
-				);
-			}
+		if (!context.confirm) {
+			throw new WalletRpcResourceUnavailableError(
+				"Wallet method requires a confirmation surface.",
+				undefined,
+				WALLET_RPC_ERROR_REASONS.CONFIRMATION_UNAVAILABLE,
+			);
+		}
 
-			const decision = await context.confirm({
+		let executed: TResult | undefined;
+		const complete =
+			receipt &&
+			(async (choice: unknown) => {
+				executed = await run(choice);
+
+				return receipt({
+					choice,
+					context,
+					params: parsedParams,
+					result: executed,
+					review: reviewed,
+				});
+			});
+		const decision = await context.confirm(
+			{
 				...(await confirmation({ context, params: parsedParams, review: reviewed })),
 				method: id,
 				requester: context.requester,
-			});
+			},
+			complete,
+		);
 
-			if (!decision.approved) {
-				throw new WalletRpcUserRejectedError();
-			}
-
-			choice = decision.result;
+		if (!decision.approved) {
+			throw new WalletRpcUserRejectedError();
 		}
 
-		return execute({ choice, context, params: parsedParams, review: reviewed });
+		return complete ? (executed as TResult) : run(decision.result);
 	};
 
 	return Object.assign(handler, { id });

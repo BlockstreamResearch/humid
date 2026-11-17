@@ -115,6 +115,12 @@ export function ConfirmationActions({
 	);
 }
 
+export function signLabel(broadcast: boolean, busy: boolean): string {
+	if (busy) return broadcast ? "Sending…" : "Signing…";
+
+	return broadcast ? "Sign and send" : "Sign";
+}
+
 export function hostOf(origin: string): string {
 	try {
 		return new URL(origin).host || origin;

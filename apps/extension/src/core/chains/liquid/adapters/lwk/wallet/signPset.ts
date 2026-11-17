@@ -138,7 +138,7 @@ export async function signPset(
 		for (const input of params.signInputs) {
 			if (input.index >= inputCount) {
 				throw new WalletRpcResourceUnavailableError(
-					"Requested PSET input index is out of range.",
+					"The dapp asked to sign an input the transaction does not have.",
 					{
 						inputCount,
 						requestedIndex: input.index,
@@ -162,7 +162,7 @@ export async function signPset(
 		);
 		if (overSignedInputIndex !== -1) {
 			throw new WalletRpcResourceUnavailableError(
-				"Refusing to sign a Liquid PSET input the request did not list.",
+				"The wallet refused to sign an input the dapp did not list.",
 				{
 					overSignedInputIndex,
 					requestedInputIndexes: [...requestedIndexes],
@@ -197,8 +197,8 @@ export async function signPset(
 
 		const failure = new WalletRpcResourceUnavailableError(
 			params.broadcast
-				? "Could not sign and broadcast the Liquid PSET."
-				: "Could not sign the Liquid PSET.",
+				? "Could not sign and broadcast the transaction."
+				: "Could not sign the transaction.",
 			undefined,
 			params.broadcast
 				? WALLET_RPC_ERROR_REASONS.WALLET_PSET_BROADCAST_FAILED

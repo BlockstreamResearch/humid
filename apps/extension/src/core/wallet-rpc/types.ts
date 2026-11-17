@@ -1,3 +1,5 @@
+import type { ConfirmationCompletion } from "@/helpers/background";
+
 export type WalletRpcConfirmationRequest = {
 	data?: unknown;
 	message?: string;
@@ -15,6 +17,7 @@ export type WalletRpcConfirmationDecision = {
 
 export type WalletRpcConfirmationHandler = (
 	request: WalletRpcConfirmationRequest,
+	complete?: ConfirmationCompletion,
 ) => Promise<WalletRpcConfirmationDecision>;
 
 export type WalletRpcAuthorization = {

@@ -263,8 +263,9 @@ function context(log: Journal, overrides: Partial<LiquidProcessCtContext> = {}) 
 			id: "liquid:testnet",
 			settings: { backend: { url: "https://esplora.invalid" }, network: "testnet" },
 		},
-		confirm: async () => {
+		confirm: async (_request: unknown, complete?: (choice: unknown) => Promise<unknown>) => {
 			log.steps.push("confirm");
+			await complete?.(undefined);
 
 			return { approved: true };
 		},
@@ -438,8 +439,9 @@ describe("the order a contract action happens in", () => {
 			await method(
 				payRequest(),
 				context(log, {
-					confirm: async (request) => {
+					confirm: async (request, complete) => {
 						shown.push(request.data);
+						await complete?.(result);
 
 						return { approved: true, result };
 					},
@@ -472,8 +474,9 @@ describe("the order a contract action happens in", () => {
 		await method(
 			payRequest(true),
 			context(log, {
-				confirm: async (request) => {
+				confirm: async (request, complete) => {
 					shown.push(request.data);
+					await complete?.(undefined);
 
 					return { approved: true };
 				},
@@ -508,6 +511,34 @@ describe("what comes back", () => {
 		const { result } = await run(payRequest());
 
 		expect(result.deployment).toBeUndefined();
+	});
+});
+
+describe("the receipt the window shows", () => {
+	const receiptOf = async (broadcast: boolean) => {
+		const receipts: unknown[] = [];
+		const log = journal();
+
+		await createProcessLiquidConfidentialTransaction(dependencies(log))(
+			payRequest(broadcast),
+			context(log, {
+				confirm: async (_request, complete) => {
+					receipts.push(await complete?.(undefined));
+
+					return { approved: true };
+				},
+			}),
+		);
+
+		return receipts[0];
+	};
+
+	test("names the network's txid once the transaction is sent", async () => {
+		expect(await receiptOf(true)).toMatchObject({ fee: "344 sats", txid: SENT_TXID });
+	});
+
+	test("carries no txid when the dapp sends the transaction", async () => {
+		expect(await receiptOf(false)).toMatchObject({ fee: "344 sats", txid: undefined });
 	});
 });
 

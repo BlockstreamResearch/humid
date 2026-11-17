@@ -114,7 +114,7 @@ export async function sendTransfer(
 		return { txid };
 	} catch (error) {
 		const failure = new WalletRpcResourceUnavailableError(
-			"Could not sign and broadcast the Liquid transfer.",
+			"Could not sign and broadcast the transfer.",
 			undefined,
 			WALLET_RPC_ERROR_REASONS.WALLET_TRANSFER_FAILED,
 		);
@@ -196,7 +196,7 @@ function buildTransfer(
 					WALLET_RPC_ERROR_REASONS.INVALID_TRANSFER_REQUEST,
 				)
 			: new WalletRpcResourceUnavailableError(
-					"Could not build the Liquid transfer.",
+					"Could not build the transfer.",
 					undefined,
 					WALLET_RPC_ERROR_REASONS.WALLET_TRANSFER_FAILED,
 				);

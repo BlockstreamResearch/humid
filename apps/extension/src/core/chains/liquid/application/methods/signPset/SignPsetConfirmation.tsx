@@ -6,7 +6,11 @@ import {
 	DetailsRow,
 	shortAddress,
 } from "@/common/Confirmation/ConfirmationDetails";
-import { ConfirmationActions, ConfirmationLayout } from "@/common/Confirmation/ConfirmationLayout";
+import {
+	ConfirmationActions,
+	ConfirmationLayout,
+	signLabel,
+} from "@/common/Confirmation/ConfirmationLayout";
 import {
 	AmountRow,
 	ConfirmationNote,
@@ -34,11 +38,13 @@ export type SignPsetConfirmationData = {
 type Output = SignPsetConfirmationData["transaction"]["outputs"][number];
 
 export function SignPsetConfirmation({
+	busy = false,
 	data,
 	origin,
 	onConfirm,
 	onReject,
 }: {
+	busy?: boolean;
 	data: SignPsetConfirmationData;
 	origin?: string;
 	onConfirm: () => void;
@@ -77,7 +83,8 @@ export function SignPsetConfirmation({
 			footer={
 				<ConfirmationActions
 					signer={`Signing with ${data.account}`}
-					confirmLabel={data.broadcast ? "Sign and send" : "Sign"}
+					confirmLabel={signLabel(data.broadcast, busy)}
+					busy={busy}
 					onReject={onReject}
 					onConfirm={onConfirm}
 				/>
@@ -166,9 +173,10 @@ function outputLabel(output: Output): string {
 
 export const signPsetConfirmationRenderer: ConfirmationRenderer = {
 	kind: SIGN_PSET_CONFIRMATION_KIND,
-	render: ({ onConfirm, onDecline, request }) =>
+	render: ({ busy, onConfirm, onDecline, request }) =>
 		isSignPsetConfirmationData(request.data) ? (
 			<SignPsetConfirmation
+				busy={busy}
 				data={request.data}
 				origin={request.requester?.origin}
 				onConfirm={() => onConfirm()}

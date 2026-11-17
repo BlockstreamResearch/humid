@@ -8,6 +8,7 @@ import { initPegasusTransport } from "@webext-pegasus/transport/background";
 
 import {
 	ConfirmationDecision,
+	ConfirmationOutcome,
 	ConfirmationRequest,
 	EventProtocolListeners,
 	ExtensionMessage,
@@ -23,6 +24,7 @@ export type PegasusMsgProtocolMap = {
 	[MsgProtocolResponseMethods.RequestResponse]: ExtensionMessage<unknown>;
 	[MsgProtocolRequestMethods.RequestConfirmation]: { id: number; data: ConfirmationRequest };
 	[MsgProtocolResponseMethods.ConfirmResponse]: { id: number; data: ConfirmationDecision };
+	[MsgProtocolRequestMethods.ShowOutcome]: { id: number; data: ConfirmationOutcome };
 };
 
 export type WalletProviderEventPayload = { chainId?: string };

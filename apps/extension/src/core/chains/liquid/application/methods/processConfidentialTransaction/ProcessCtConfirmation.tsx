@@ -9,7 +9,11 @@ import {
 	DetailsRow,
 	shortAddress,
 } from "@/common/Confirmation/ConfirmationDetails";
-import { ConfirmationActions, ConfirmationLayout } from "@/common/Confirmation/ConfirmationLayout";
+import {
+	ConfirmationActions,
+	ConfirmationLayout,
+	signLabel,
+} from "@/common/Confirmation/ConfirmationLayout";
 import {
 	AmountRow,
 	ConfirmationNote,
@@ -131,11 +135,13 @@ function isFlowRow(row: unknown): boolean {
 }
 
 export function ProcessCtConfirmation({
+	busy = false,
 	data,
 	origin,
 	onConfirm,
 	onReject,
 }: {
+	busy?: boolean;
 	data: ProcessCtConfirmationData;
 	origin?: string;
 	onConfirm: (choice: { targetBlocks: number }) => void;
@@ -160,7 +166,8 @@ export function ProcessCtConfirmation({
 			footer={
 				<ConfirmationActions
 					signer={`Signing with ${shown.account.value}`}
-					confirmLabel={data.broadcast ? "Sign and send" : "Sign"}
+					confirmLabel={signLabel(data.broadcast, busy)}
+					busy={busy}
 					onReject={onReject}
 					onConfirm={() => onConfirm({ targetBlocks })}
 				/>
@@ -302,7 +309,7 @@ export function readable(name: string): string {
 
 export const processCtConfirmationRenderer: ConfirmationRenderer = {
 	kind: PROCESS_CT_CONFIRMATION_KIND,
-	render: ({ onConfirm, onDecline, request }) => {
+	render: ({ busy, onConfirm, onDecline, request }) => {
 		const data: unknown = request.data;
 
 		if (!isRecord(data) || data.kind !== PROCESS_CT_CONFIRMATION_KIND) {
@@ -311,6 +318,7 @@ export const processCtConfirmationRenderer: ConfirmationRenderer = {
 
 		return isProcessCtConfirmationData(data) ? (
 			<ProcessCtConfirmation
+				busy={busy}
 				data={data}
 				origin={request.requester?.origin}
 				onConfirm={onConfirm}

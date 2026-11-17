@@ -1,7 +1,10 @@
 import type { PegasusRPCMessage } from "@webext-pegasus/rpc";
 import browser from "webextension-polyfill";
 
+import type { TransactionReceiptData } from "@/common/Confirmation/TransactionReceipt";
+
 export type ConfirmationRequest = {
+	completes?: boolean;
 	title: string;
 	message?: string;
 	confirmLabel?: string;
@@ -15,6 +18,10 @@ export type ConfirmationDecision<TResult = unknown> = {
 	approved: boolean;
 	result?: TResult;
 };
+
+export type ConfirmationOutcome = { error: string } | { receipt: TransactionReceiptData };
+
+export type ConfirmationCompletion = (choice: unknown) => Promise<TransactionReceiptData>;
 
 export interface ExtensionMessage<T = unknown> {
 	method: string;
@@ -157,6 +164,7 @@ export async function getSelfIDService(message: PegasusRPCMessage): Promise<{
 export enum MsgProtocolRequestMethods {
 	Request = "request",
 	RequestConfirmation = "requestConfirmation",
+	ShowOutcome = "showOutcome",
 }
 
 export enum MsgProtocolResponseMethods {

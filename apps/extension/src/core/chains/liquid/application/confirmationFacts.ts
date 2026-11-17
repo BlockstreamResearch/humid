@@ -1,4 +1,7 @@
+import type { TransactionReceiptData } from "@/common/Confirmation/TransactionReceipt";
+
 import { LIQUID_NATIVE_ASSET } from "../domain/LiquidAsset";
+import { liquidExplorerTxUrl } from "../presentation/liquidExplorerTxUrl";
 import type { LiquidWalletAccount } from "./backends/LiquidWalletBackend";
 import type { LiquidRpcMethodContext } from "./LiquidRpcContext";
 
@@ -34,5 +37,25 @@ export async function readKnownAssets(
 			decimals: LIQUID_NATIVE_ASSET.decimals,
 			ticker: LIQUID_NATIVE_ASSET.symbol,
 		},
+	};
+}
+
+export async function transactionReceipt(
+	context: Pick<LiquidRpcMethodContext, "chain" | "readPortfolioSnapshot">,
+	account: LiquidWalletAccount,
+	{
+		changes,
+		feeSats,
+		txid,
+	}: { changes: TransactionReceiptData["changes"]; feeSats: string; txid?: string },
+): Promise<TransactionReceiptData> {
+	return {
+		assets: await readKnownAssets(context, account),
+		changes,
+		explorerUrl:
+			txid === undefined ? undefined : (liquidExplorerTxUrl(context.chain, txid) ?? undefined),
+		fee: `${feeSats} sats`,
+		network: context.chain.name,
+		txid,
 	};
 }

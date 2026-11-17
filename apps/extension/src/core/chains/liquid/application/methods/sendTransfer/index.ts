@@ -1,3 +1,4 @@
+import { transferChanges } from "@/common/Confirmation/TransactionReceipt";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 
 import type { ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
@@ -9,7 +10,7 @@ import {
 } from "../../../domain/LiquidRpc";
 import { parseLiquidAssetId, parseLiquidSendTransferParams } from "../../../domain/validation";
 import type { LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
-import { accountNameOf, readKnownAssets } from "../../confirmationFacts";
+import { accountNameOf, readKnownAssets, transactionReceipt } from "../../confirmationFacts";
 import { resolveDappAccount } from "../../dappAccountScope";
 import {
 	chosenTargetBlocks,
@@ -56,8 +57,7 @@ export const sendLiquidTransfer = createWalletMethod<
 		title: "Send a transfer?",
 	}),
 	execute: ({ choice, context, params, review }) => {
-		const targetBlocks = chosenTargetBlocks(choice);
-		const quote = review.quotes.find((candidate) => candidate.targetBlocks === targetBlocks)!;
+		const quote = chosenQuote(review, choice);
 
 		return context.walletBackend.sendTransfer(
 			review.account,
@@ -68,6 +68,20 @@ export const sendLiquidTransfer = createWalletMethod<
 	},
 	id: LIQUID_WALLET_RPC_METHODS.SEND_TRANSFER,
 	parse: parseLiquidSendTransferParams,
+	receipt: ({ choice, context, result, review }) => {
+		const { amount, feeSats } = chosenQuote(review, choice);
+
+		return transactionReceipt(context, review.account, {
+			changes: transferChanges({
+				amount,
+				asset: review.requestedAsset.rawAssetId,
+				feeAsset: review.account.rawPolicyAssetId,
+				feeSats,
+			}),
+			feeSats,
+			txid: result.txid,
+		});
+	},
 	review: async ({ context, params }) => {
 		const account = await resolveDappAccount(context, params.account);
 		const requestedAsset = resolveRequestedAsset(params.assetId, account);
@@ -90,6 +104,12 @@ export const sendLiquidTransfer = createWalletMethod<
 		return { account, quotes, requestedAsset, transfer };
 	},
 });
+
+function chosenQuote(review: LiquidSendTransferMethodReview, choice: unknown): SpeedQuote {
+	const targetBlocks = chosenTargetBlocks(choice);
+
+	return review.quotes.find((candidate) => candidate.targetBlocks === targetBlocks)!;
+}
 
 function resolveRequestedAsset(
 	assetId: string | undefined,

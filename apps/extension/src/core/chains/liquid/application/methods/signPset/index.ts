@@ -8,7 +8,7 @@ import type {
 } from "../../../domain/pset/types";
 import { parseLiquidSignPsetParams } from "../../../domain/pset/validation";
 import type { LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
-import { accountNameOf, readKnownAssets } from "../../confirmationFacts";
+import { accountNameOf, readKnownAssets, transactionReceipt } from "../../confirmationFacts";
 import { resolveDappAccount } from "../../dappAccountScope";
 import type { LiquidRpcMethodContext } from "../../LiquidRpcContext";
 import { SIGN_PSET_CONFIRMATION_KIND, type SignPsetConfirmationData } from "./SignPsetConfirmation";
@@ -52,6 +52,14 @@ export const signLiquidPset = createWalletMethod<
 		}),
 	id: LIQUID_WALLET_RPC_METHODS.SIGN_PSET,
 	parse: parseLiquidSignPsetParams,
+	receipt: ({ context, result, review }) =>
+		transactionReceipt(context, review.account, {
+			changes: review.transaction.netEffect,
+			feeSats:
+				review.transaction.fees.find((fee) => fee.asset === review.account.rawPolicyAssetId)
+					?.amount ?? "0",
+			txid: result.txid,
+		}),
 	review: async ({ context, params }) => {
 		const account = await resolveDappAccount(context);
 		await context.walletBackend.syncAccount(account);

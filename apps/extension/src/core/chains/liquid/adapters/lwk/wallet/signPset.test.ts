@@ -450,7 +450,7 @@ describe("mixed-input PSET signing", () => {
 				signInputs: [{ address: "wallet-address", index: 2, sighashTypes: [1] }],
 			}),
 		).rejects.toMatchObject({
-			message: "Refusing to sign a Liquid PSET input the request did not list.",
+			message: "The wallet refused to sign an input the dapp did not list.",
 		});
 	});
 
@@ -459,7 +459,7 @@ describe("mixed-input PSET signing", () => {
 		signerTransform = (pset) => withSignature(pset, 0, 2);
 
 		await expect(sign(prepared)).rejects.toThrow(
-			"Refusing to sign a Liquid PSET input the request did not list.",
+			"The wallet refused to sign an input the dapp did not list.",
 		);
 	});
 
@@ -641,7 +641,9 @@ describe("mixed-input PSET signing", () => {
 	});
 
 	test("rejects an out-of-range requested index before signing", async () => {
-		await expect(sign(fixture(), 3)).rejects.toThrow("Requested PSET input index is out of range.");
+		await expect(sign(fixture(), 3)).rejects.toThrow(
+			"The dapp asked to sign an input the transaction does not have.",
+		);
 		expect(signedSource).toBe("");
 	});
 });

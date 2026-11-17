@@ -18,7 +18,7 @@ export type SendTransferConfirmationData = {
 
 export const sendTransferConfirmationRenderer: ConfirmationRenderer = {
 	kind: SEND_TRANSFER_CONFIRMATION_KIND,
-	render: ({ onConfirm, onDecline, request }) => {
+	render: ({ busy, onConfirm, onDecline, request }) => {
 		if (!isSendTransferConfirmationData(request.data)) return null;
 
 		const data = request.data;
@@ -34,6 +34,7 @@ export const sendTransferConfirmationRenderer: ConfirmationRenderer = {
 				asset={shown(data.assetId)}
 				feeAsset={shown(data.feeAssetId)}
 				review={data.review}
+				isSending={busy}
 				onReject={onDecline}
 				onConfirm={(quote) => onConfirm({ targetBlocks: quote.targetBlocks })}
 			/>

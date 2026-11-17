@@ -1,7 +1,9 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
 import { SendReview } from "@/common/Confirmation/SendReview";
 import { ShownAsset } from "@/common/Confirmation/ShownAsset";
+import { TransactionReceipt, transferChanges } from "@/common/Confirmation/TransactionReceipt";
 import type {
 	SendTransferInput,
 	TransferQuote,
@@ -12,7 +14,6 @@ import { chainGroupUis } from "@/routes/App/chainGroupUis";
 
 import { useHome } from "../../HomeContext";
 import { SendForm } from "./components/SendForm";
-import { SendResult } from "./components/SendResult";
 import { type SendableAsset, toSendableAssets } from "./model";
 import { Route } from "./route";
 import { useEstimateMaxSend, useInspectTransfer, useSendTransfer } from "./useSendTransfer";
@@ -43,6 +44,8 @@ export function SendPage() {
 	);
 	const [nativeSendAll, setNativeSendAll] = useState(false);
 	const [prepared, setPrepared] = useState<PreparedTransfer | null>(null);
+	const [sentQuote, setSentQuote] = useState<TransferQuote | null>(null);
+	const navigate = useNavigate();
 
 	const inspect = useInspectTransfer();
 	const estimateMax = useEstimateMaxSend();
@@ -137,6 +140,7 @@ export function SendPage() {
 						});
 					}
 
+					setSentQuote(quote);
 					setStep("result");
 				},
 			},
@@ -160,13 +164,32 @@ export function SendPage() {
 		);
 	}
 
-	if (step === "result" && send.data) {
+	if (step === "result" && send.data && prepared && nativeAsset && sentQuote) {
+		const { asset } = prepared;
+
 		return (
-			<SendResult
-				explorerUrl={
-					chainGroupUis[chain.chainGroupId]?.explorerTxUrl(chain, send.data.txid) ?? null
-				}
-				txid={send.data.txid}
+			<TransactionReceipt
+				receipt={{
+					assets: {
+						[asset.rawAssetId]: { decimals: asset.decimals, ticker: asset.symbol },
+						[nativeAsset.rawAssetId]: {
+							decimals: nativeAsset.decimals,
+							ticker: nativeAsset.symbol,
+						},
+					},
+					changes: transferChanges({
+						amount: sentQuote.amount,
+						asset: asset.rawAssetId,
+						feeAsset: nativeAsset.rawAssetId,
+						feeSats: sentQuote.feeSats,
+					}),
+					explorerUrl:
+						chainGroupUis[chain.chainGroupId]?.explorerTxUrl(chain, send.data.txid) ?? undefined,
+					fee: `${sentQuote.feeSats} sats`,
+					network: chain.name,
+					txid: send.data.txid,
+				}}
+				onDone={() => navigate({ to: "/app" })}
 			/>
 		);
 	}

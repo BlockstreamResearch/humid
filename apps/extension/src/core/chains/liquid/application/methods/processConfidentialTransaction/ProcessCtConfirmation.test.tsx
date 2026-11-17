@@ -140,6 +140,7 @@ describe("the payload this surface accepts", () => {
 describe("which body the host is given", () => {
 	const rendered = (data: unknown, onConfirm: () => void = () => {}) =>
 		processCtConfirmationRenderer.render({
+			busy: false,
 			onConfirm,
 			onDecline: () => {},
 			request: { data } as never,

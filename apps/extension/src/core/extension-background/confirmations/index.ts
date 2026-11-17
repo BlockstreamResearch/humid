@@ -1,7 +1,12 @@
 import { AsyncQueuer, Debouncer } from "@tanstack/pacer";
 
 import { UNLOCK_CONFIRMATION } from "@/core/secure-vault/application/wallet-vault/unlockConfirmation";
-import type { ConfirmationDecision, ConfirmationRequest } from "@/helpers/background";
+import type {
+	ConfirmationCompletion,
+	ConfirmationDecision,
+	ConfirmationOutcome,
+	ConfirmationRequest,
+} from "@/helpers/background";
 import {
 	closeNotification,
 	MsgProtocolRequestMethods,
@@ -19,6 +24,7 @@ const UNLOCK_PRIORITY = 1;
 export type ConfirmationResponder = {
 	confirm: <TResult = unknown>(
 		request: ConfirmationRequest,
+		complete?: ConfirmationCompletion,
 	) => Promise<ConfirmationDecision<TResult>>;
 	/** Resolves once the wallet is unlocked or the queued unlock prompt is dismissed. */
 	waitForUnlock: () => Promise<void>;
@@ -33,6 +39,8 @@ export type ConfirmationWalletLock = {
 type PendingConfirmation = {
 	decision: Promise<ConfirmationDecision>;
 	fail: (error: unknown) => void;
+	finish: (outcome: ConfirmationOutcome) => void;
+	outcome: Promise<ConfirmationOutcome>;
 	priority: number;
 	request: ConfirmationRequest;
 	settle: (decision: ConfirmationDecision) => void;
@@ -54,6 +62,7 @@ export function createConfirmationResponder(
 		const id = Math.floor(Math.random() * 1_000_000);
 		let timeout: ReturnType<typeof setTimeout> | undefined;
 		let removeResponseListener: (() => void) | undefined;
+		let showsOutcome = false;
 
 		try {
 			windowId = await openNotification();
@@ -81,14 +90,27 @@ export function createConfirmationResponder(
 					"popup",
 				)
 				.catch(entry.fail);
-			await entry.decision;
+			const decision = await entry.decision;
+
+			if (decision.approved && entry.request.completes) {
+				const outcome = await entry.outcome;
+
+				showsOutcome = true;
+				// The popup answers once the outcome is dismissed; a newer request may replace it first.
+				messageBus
+					.sendMessage(MsgProtocolRequestMethods.ShowOutcome, { id, data: outcome }, "popup")
+					.then(
+						() => closeWindowWhenIdle.maybeExecute(),
+						() => undefined,
+					);
+			}
 		} catch (error) {
 			entry.fail(error);
 		} finally {
 			clearTimeout(timeout);
 			removeResponseListener?.();
 			active = null;
-			closeWindowWhenIdle.maybeExecute();
+			if (!showsOutcome) closeWindowWhenIdle.maybeExecute();
 		}
 	};
 
@@ -97,7 +119,7 @@ export function createConfirmationResponder(
 	// Consecutive confirmations reuse the open window; it closes once nothing is left to show.
 	const closeWindowWhenIdle = new Debouncer(
 		() => {
-			if (windowId === undefined || queue.peekAllItems().length > 0) return;
+			if (windowId === undefined || active !== null || queue.peekAllItems().length > 0) return;
 
 			void closeNotification(windowId);
 			windowId = undefined;
@@ -122,8 +144,24 @@ export function createConfirmationResponder(
 			active?.settle({ approved: false });
 			windowId = undefined;
 		},
-		confirm: <TResult = unknown>(request: ConfirmationRequest) =>
-			enqueue(request).decision as Promise<ConfirmationDecision<TResult>>,
+		confirm: async <TResult = unknown>(
+			request: ConfirmationRequest,
+			complete?: ConfirmationCompletion,
+		) => {
+			const entry = enqueue(complete ? { ...request, completes: true } : request);
+			const decision = (await entry.decision) as ConfirmationDecision<TResult>;
+
+			if (!decision.approved || !complete) return decision;
+
+			try {
+				entry.finish({ receipt: await complete(decision.result) });
+			} catch (error) {
+				entry.finish({ error: error instanceof Error ? error.message : "The request failed." });
+				throw error;
+			}
+
+			return decision;
+		},
 		waitForUnlock: async () => {
 			if (await wallet.isUnlocked()) return;
 
@@ -152,6 +190,7 @@ function createPendingConfirmation(
 	priority: number,
 ): PendingConfirmation {
 	const { promise, resolve, reject } = Promise.withResolvers<ConfirmationDecision>();
+	const outcome = Promise.withResolvers<ConfirmationOutcome>();
 	const entry: PendingConfirmation = {
 		decision: promise,
 		fail: (error) => {
@@ -159,6 +198,8 @@ function createPendingConfirmation(
 			entry.settled = true;
 			reject(error);
 		},
+		finish: outcome.resolve,
+		outcome: outcome.promise,
 		priority,
 		request,
 		settle: (decision) => {

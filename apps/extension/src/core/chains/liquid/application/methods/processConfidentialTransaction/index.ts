@@ -35,7 +35,7 @@ import { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type { LiquidFundingUtxo, LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
-import { accountNameOf, readKnownAssets } from "../../confirmationFacts";
+import { accountNameOf, readKnownAssets, transactionReceipt } from "../../confirmationFacts";
 import { resolveDappAccount } from "../../dappAccountScope";
 import { chosenTargetBlocks, readSpeedRates } from "../../feeSpeeds";
 import type { LiquidRpcMethodContext } from "../../LiquidRpcContext";
@@ -193,6 +193,21 @@ export const createProcessLiquidConfidentialTransaction = (
 		},
 		id: LIQUID_WALLET_RPC_METHODS.PROCESS_CONFIDENTIAL_TRANSACTION,
 		parse: parseRequest,
+		receipt: async ({ choice, context, result, review: speeds }) => {
+			const targetBlocks = chosenTargetBlocks(choice);
+			const shown = toShownConfirmation(
+				speeds.find((speed) => speed.targetBlocks === targetBlocks)!.review.confirmation,
+			);
+
+			return transactionReceipt(context, await dependencies.resolveAccount(context), {
+				changes: shown.netEffect.map((effect) => ({
+					amount: effect.sats.value,
+					asset: effect.asset.value,
+				})),
+				feeSats: shown.feeSats.value,
+				txid: result.broadcast ? result.txid : undefined,
+			});
+		},
 		review: async ({ context, params }) => {
 			const network = requireNetwork(context);
 			const account = await dependencies.resolveAccount(context);

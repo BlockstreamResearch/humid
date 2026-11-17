@@ -3,18 +3,20 @@ import type { ConfirmationRequest } from "@/helpers/background";
 import { ConfirmationActions, ConfirmationLayout } from "./ConfirmationLayout";
 
 type Props = {
+	busy?: boolean;
 	onConfirm: (result?: unknown) => void;
 	onDecline: () => void;
 	request: ConfirmationRequest;
 };
 
-export function DefaultConfirmation({ onConfirm, onDecline, request }: Props) {
+export function DefaultConfirmation({ busy, onConfirm, onDecline, request }: Props) {
 	return (
 		<ConfirmationLayout
 			origin={request.requester?.origin}
 			title={request.title}
 			footer={
 				<ConfirmationActions
+					busy={busy}
 					confirmLabel={request.confirmLabel ?? "Confirm"}
 					onReject={onDecline}
 					onConfirm={() => onConfirm()}

@@ -2,6 +2,7 @@ import type { WalletKitTypes } from "@reown/walletkit";
 
 import type { PortfolioData } from "@/core/accounts/application/accounts-rpc/model/types";
 import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
+import type { ConfirmationCompletion } from "@/helpers/background";
 
 export type WalletConnectRelayStatus = "unknown" | "connected" | "disconnected";
 
@@ -105,4 +106,5 @@ export type WalletConnectConfirmationRequest = {
 
 export type WalletConnectConfirmationHandler = (
 	request: WalletConnectConfirmationRequest,
+	complete?: ConfirmationCompletion,
 ) => Promise<{ approved: boolean; result?: unknown }>;
