@@ -53,13 +53,19 @@ export function createWalletMethod<
 }: CreateWalletMethodInput<TParams, TContext, TReview, TResult>): WalletMethod<TContext, TResult> {
 	const handler = async (params: unknown, context: TContext): Promise<TResult> => {
 		const parsedParams = parse(params);
-		const reviewed = await review({ context, params: parsedParams });
-		const run = (choice?: unknown) =>
-			execute({ choice, context, params: parsedParams, review: reviewed });
+		const reviewing = Promise.resolve(review({ context, params: parsedParams }));
+		const input = async (choice?: unknown) => ({
+			choice,
+			context,
+			params: parsedParams,
+			review: await reviewing,
+		});
 
-		if (context.authorization.isGranted(id)) return run();
+		if (context.authorization.isGranted(id)) return execute(await input());
 
 		if (!context.confirm) {
+			await reviewing;
+
 			throw new WalletRpcResourceUnavailableError(
 				"Wallet method requires a confirmation surface.",
 				undefined,
@@ -71,30 +77,24 @@ export function createWalletMethod<
 		const complete =
 			receipt &&
 			(async (choice: unknown) => {
-				executed = await run(choice);
+				const ready = await input(choice);
 
-				return receipt({
-					choice,
-					context,
-					params: parsedParams,
-					result: executed,
-					review: reviewed,
-				});
+				executed = await execute(ready);
+
+				return receipt({ ...ready, result: executed });
 			});
-		const decision = await context.confirm(
-			{
-				...(await confirmation({ context, params: parsedParams, review: reviewed })),
-				method: id,
-				requester: context.requester,
-			},
-			complete,
-		);
+		const request = reviewing.then(async (reviewed) => ({
+			...(await confirmation({ context, params: parsedParams, review: reviewed })),
+			method: id,
+			requester: context.requester,
+		}));
+		const decision = await context.confirm(request, complete);
 
 		if (!decision.approved) {
 			throw new WalletRpcUserRejectedError();
 		}
 
-		return complete ? (executed as TResult) : run(decision.result);
+		return complete ? (executed as TResult) : execute(await input(decision.result));
 	};
 
 	return Object.assign(handler, { id });

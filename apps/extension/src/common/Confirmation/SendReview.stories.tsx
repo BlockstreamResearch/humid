@@ -104,3 +104,17 @@ export const FromADapp: Story = {
 		await expect(args.onReject).toHaveBeenCalled();
 	},
 };
+
+export const QuietNetwork: Story = {
+	args: {
+		review: {
+			...meta.args.review,
+			quotes: meta.args.review.quotes.map((quote) => ({ ...quote, feeSats: "26" })),
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+
+		await expect(canvas.getAllByText("~1 min")).toHaveLength(3);
+	},
+};

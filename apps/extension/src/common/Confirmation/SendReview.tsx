@@ -94,11 +94,7 @@ export function SendReview({
 					Liquid network.
 				</ConfirmationNote>
 			)}
-			<FeeSpeedPicker
-				value={targetBlocks}
-				fee={`${quote.feeSats} sats`}
-				onChange={setTargetBlocks}
-			/>
+			<FeeSpeedPicker value={targetBlocks} fees={review.quotes} onChange={setTargetBlocks} />
 			{error !== null && <p className="text-destructive text-sm break-words">{error}</p>}
 		</ConfirmationLayout>
 	);

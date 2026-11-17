@@ -184,13 +184,14 @@ export function ProcessCtConfirmation({
 			</ConfirmationSection>
 			<FeeSpeedPicker
 				value={targetBlocks}
-				fee={`${shown.feeSats.value} sats`}
+				fees={data.speeds.map((speed) => ({
+					feeSats: speed.shown.feeSats.value,
+					targetBlocks: speed.targetBlocks,
+				}))}
 				onChange={setTargetBlocks}
 			/>
-			{shown.publishedAmounts.length > 0 && (
-				<ConfirmationNote>
-					The change stays unblinded on-chain, so the next action can spend those funds.
-				</ConfirmationNote>
+			{shown.publishedAmounts[0] !== undefined && (
+				<ConfirmationNote>{sentence(shown.publishedAmounts[0].reason.value)}</ConfirmationNote>
 			)}
 			{!data.broadcast && (
 				<ConfirmationNote>
@@ -295,6 +296,10 @@ export function ProcessCtUnreadable({
 			}
 		/>
 	);
+}
+
+function sentence(clause: string): string {
+	return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.`;
 }
 
 export function readable(name: string): string {

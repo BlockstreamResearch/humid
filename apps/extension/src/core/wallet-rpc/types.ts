@@ -16,7 +16,7 @@ export type WalletRpcConfirmationDecision = {
 };
 
 export type WalletRpcConfirmationHandler = (
-	request: WalletRpcConfirmationRequest,
+	request: WalletRpcConfirmationRequest | Promise<WalletRpcConfirmationRequest>,
 	complete?: ConfirmationCompletion,
 ) => Promise<WalletRpcConfirmationDecision>;
 

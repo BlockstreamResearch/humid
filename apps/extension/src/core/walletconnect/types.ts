@@ -105,6 +105,6 @@ export type WalletConnectConfirmationRequest = {
 };
 
 export type WalletConnectConfirmationHandler = (
-	request: WalletConnectConfirmationRequest,
+	request: WalletConnectConfirmationRequest | Promise<WalletConnectConfirmationRequest>,
 	complete?: ConfirmationCompletion,
 ) => Promise<{ approved: boolean; result?: unknown }>;

@@ -11,19 +11,34 @@ export const FEE_SPEEDS = [
 
 export const DEFAULT_TARGET_BLOCKS = 1;
 
+type SpeedFee = { feeSats: string; targetBlocks: number };
+
 export function FeeSpeedPicker({
 	value,
-	fee,
+	fees,
 	onChange,
 }: {
 	value: number;
-	fee: string;
+	fees: SpeedFee[];
 	onChange: (targetBlocks: number) => void;
 }) {
+	const feeAt = (targetBlocks: number) =>
+		fees.find((fee) => fee.targetBlocks === targetBlocks)?.feeSats;
+	const timeAt = (targetBlocks: number) => {
+		const paid = BigInt(feeAt(targetBlocks) ?? 0);
+		const fastest = FEE_SPEEDS.toSorted((a, b) => a.targetBlocks - b.targetBlocks).find(
+			(speed) => BigInt(feeAt(speed.targetBlocks) ?? paid + 1n) <= paid,
+		);
+
+		return (fastest ?? FEE_SPEEDS.find((speed) => speed.targetBlocks === targetBlocks)!).time;
+	};
+
 	return (
 		<ConfirmationSection
 			title="Network fee"
-			aside={<span className="font-mono text-sm font-semibold tabular-nums">{fee}</span>}
+			aside={
+				<span className="font-mono text-sm font-semibold tabular-nums">{feeAt(value)} sats</span>
+			}
 		>
 			<RadioGroup
 				aria-label="Fee speed"
@@ -38,7 +53,7 @@ export function FeeSpeedPicker({
 						className="data-[checked]:bg-background flex cursor-pointer flex-col items-center gap-0.5 rounded-md px-1 py-1.5 outline-none focus-visible:ring-3 data-[checked]:shadow-sm"
 					>
 						<span className="text-[13px] font-semibold">{speed.name}</span>
-						<span className="text-muted-foreground text-[11px]">{speed.time}</span>
+						<span className="text-muted-foreground text-[11px]">{timeAt(speed.targetBlocks)}</span>
 					</Radio.Root>
 				))}
 			</RadioGroup>

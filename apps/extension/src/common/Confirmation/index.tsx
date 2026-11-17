@@ -24,11 +24,7 @@ export type ConfirmationRenderer = {
 	}) => ReactNode;
 };
 
-type View = {
-	busy: boolean;
-	outcome?: ConfirmationOutcome;
-	request: ConfirmationRequest;
-};
+type View = { busy: boolean; outcome?: ConfirmationOutcome; request?: ConfirmationRequest };
 
 const ConfirmContext = createContext<{ confirm: Confirm; showOutcome: ShowOutcome } | undefined>(
 	undefined,
@@ -37,9 +33,11 @@ const ConfirmContext = createContext<{ confirm: Confirm; showOutcome: ShowOutcom
 export function ConfirmProvider({
 	children,
 	renderers = [],
+	idle,
 }: {
 	children: ReactNode;
 	renderers?: ConfirmationRenderer[];
+	idle?: ReactNode;
 }) {
 	const [view, setView] = useState<View | null>(null);
 	const [resolver, setResolver] = useState<(decision: ConfirmationDecision) => void>(
@@ -56,7 +54,7 @@ export function ConfirmProvider({
 	}, []);
 
 	const showOutcome = useCallback<ShowOutcome>((outcome) => {
-		setView((current) => current && { ...current, outcome });
+		setView((current) => ({ busy: false, ...current, outcome }));
 
 		return new Promise<void>((resolve) => {
 			setDismiss(() => resolve);
@@ -67,7 +65,7 @@ export function ConfirmProvider({
 		(decision: ConfirmationDecision) => {
 			resolver(decision);
 			setView((current) =>
-				decision.approved && current?.request.completes ? { ...current, busy: true } : null,
+				decision.approved && current?.request?.completes ? { ...current, busy: true } : null,
 			);
 		},
 		[resolver],
@@ -89,16 +87,20 @@ export function ConfirmProvider({
 	return (
 		<ConfirmContext.Provider value={context}>
 			{children}
-			{view &&
+			{(view !== null || idle !== undefined) &&
 				createPortal(
 					<div className="fixed inset-0 z-50">
-						<ConfirmationView
-							view={view}
-							Body={bodies.get(confirmationKind(view.request.data)) ?? DefaultConfirmation}
-							onConfirm={(result) => settle({ approved: true, result })}
-							onDecline={() => settle({ approved: false })}
-							onDone={done}
-						/>
+						{view === null ? (
+							idle
+						) : (
+							<ConfirmationView
+								view={view}
+								bodies={bodies}
+								onConfirm={(result) => settle({ approved: true, result })}
+								onDecline={() => settle({ approved: false })}
+								onDone={done}
+							/>
+						)}
 					</div>,
 					document.body,
 				)}
@@ -107,29 +109,34 @@ export function ConfirmProvider({
 }
 
 function ConfirmationView({
-	view: { busy, outcome, request },
-	Body,
+	view,
+	bodies,
 	onConfirm,
 	onDecline,
 	onDone,
 }: {
 	view: View;
-	Body: ConfirmationRenderer["render"];
+	bodies: Map<string, ConfirmationRenderer["render"]>;
 	onConfirm: (result?: unknown) => void;
 	onDecline: () => void;
 	onDone: () => void;
 }) {
-	const origin = request.requester?.origin;
+	const { busy, outcome, request } = view;
+	const origin = request?.requester?.origin;
 
-	if (outcome === undefined) {
-		return <Body busy={busy} request={request} onConfirm={onConfirm} onDecline={onDecline} />;
+	if (outcome !== undefined) {
+		return "receipt" in outcome ? (
+			<TransactionReceipt receipt={outcome.receipt} origin={origin} onDone={onDone} />
+		) : (
+			<ConfirmationFailure message={outcome.error} origin={origin} onClose={onDone} />
+		);
 	}
 
-	return "receipt" in outcome ? (
-		<TransactionReceipt receipt={outcome.receipt} origin={origin} onDone={onDone} />
-	) : (
-		<ConfirmationFailure message={outcome.error} origin={origin} onClose={onDone} />
-	);
+	if (request === undefined) return null;
+
+	const Body = bodies.get(confirmationKind(request.data)) ?? DefaultConfirmation;
+
+	return <Body busy={busy} request={request} onConfirm={onConfirm} onDecline={onDecline} />;
 }
 
 export function useConfirm(): Confirm {

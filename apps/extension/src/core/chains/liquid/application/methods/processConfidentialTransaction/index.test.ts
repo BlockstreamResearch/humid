@@ -263,7 +263,8 @@ function context(log: Journal, overrides: Partial<LiquidProcessCtContext> = {}) 
 			id: "liquid:testnet",
 			settings: { backend: { url: "https://esplora.invalid" }, network: "testnet" },
 		},
-		confirm: async (_request: unknown, complete?: (choice: unknown) => Promise<unknown>) => {
+		confirm: async (request: unknown, complete?: (choice: unknown) => Promise<unknown>) => {
+			await request;
 			log.steps.push("confirm");
 			await complete?.(undefined);
 
@@ -440,7 +441,7 @@ describe("the order a contract action happens in", () => {
 				payRequest(),
 				context(log, {
 					confirm: async (request, complete) => {
-						shown.push(request.data);
+						shown.push((await request).data);
 						await complete?.(result);
 
 						return { approved: true, result };
@@ -475,7 +476,7 @@ describe("the order a contract action happens in", () => {
 			payRequest(true),
 			context(log, {
 				confirm: async (request, complete) => {
-					shown.push(request.data);
+					shown.push((await request).data);
 					await complete?.(undefined);
 
 					return { approved: true };
