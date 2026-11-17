@@ -28,6 +28,8 @@ export const Default: Story = {
 		await expect(canvas.getByText("−0.00500052")).toBeVisible();
 		await expect(canvas.getByText("Unknown asset, raw units")).toBeVisible();
 		await expect(canvas.getByText("52 sats")).toBeVisible();
+		await userEvent.click(canvas.getByRole("radio", { name: /slow/i }));
+		await expect(canvas.getByText("−0.00500026")).toBeVisible();
 		await expect(canvas.getByText("Signing with Account 0")).toBeVisible();
 
 		await userEvent.click(canvas.getByRole("button", { name: /details/i }));
@@ -36,7 +38,7 @@ export const Default: Story = {
 		await expect(canvas.getByText("50 bytes")).toBeVisible();
 
 		await userEvent.click(canvas.getByRole("button", { name: /sign and send/i }));
-		await expect(args.onConfirm).toHaveBeenCalled();
+		await expect(args.onConfirm).toHaveBeenCalledWith({ targetBlocks: 60 });
 	},
 };
 

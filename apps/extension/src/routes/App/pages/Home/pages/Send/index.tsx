@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 
+import { SendReview } from "@/common/Confirmation/SendReview";
+import { ShownAsset } from "@/common/Confirmation/ShownAsset";
 import type {
 	SendTransferInput,
 	TransferQuote,
@@ -11,7 +13,6 @@ import { chainGroupUis } from "@/routes/App/chainGroupUis";
 import { useHome } from "../../HomeContext";
 import { SendForm } from "./components/SendForm";
 import { SendResult } from "./components/SendResult";
-import { SendReview } from "./components/SendReview";
 import { type SendableAsset, toSendableAssets } from "./model";
 import { Route } from "./route";
 import { useEstimateMaxSend, useInspectTransfer, useSendTransfer } from "./useSendTransfer";
@@ -146,13 +147,14 @@ export function SendPage() {
 		return (
 			<SendReview
 				account={accountGroup.name}
-				asset={prepared.asset}
+				asset={shownAsset(prepared.asset)}
 				error={send.error?.message ?? null}
-				feeAsset={nativeAsset}
+				feeAsset={shownAsset(nativeAsset)}
 				isSending={send.isPending}
 				network={chain.name}
-				onBack={handleBack}
 				onConfirm={handleConfirm}
+				onReject={handleBack}
+				rejectLabel="Back"
 				review={inspect.data}
 			/>
 		);
@@ -187,4 +189,8 @@ export function SendPage() {
 			selectedAsset={selectedAsset}
 		/>
 	);
+}
+
+function shownAsset(asset: SendableAsset): ShownAsset {
+	return new ShownAsset(asset.rawAssetId, asset.symbol, asset.decimals);
 }

@@ -7,6 +7,7 @@ import {
 } from "@/core/wallet-rpc/errors";
 
 import type { LiquidWalletAccount } from "../../../../application/backends/LiquidWalletBackend";
+import { DEFAULT_FEE_RATE_SATS_PER_KVB } from "../../../../application/feeSpeeds";
 import { LIQUID_MAINNET_CHAIN_ID } from "../../../../domain/LiquidChain";
 import type {
 	LiquidEstimateMaxSendParams,
@@ -148,8 +149,6 @@ export async function estimateMaxSend(
 
 	return { feeSats: quote.feeSats, maxAmount: (maxAmount > 0n ? maxAmount : 0n).toString() };
 }
-
-export const DEFAULT_FEE_RATE_SATS_PER_KVB = 100;
 
 function buildTransfer(
 	lwk: LwkWasmModule,

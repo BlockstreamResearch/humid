@@ -8,9 +8,14 @@ export type WalletRpcConfirmationRequest = {
 	timeoutMs?: number;
 };
 
+export type WalletRpcConfirmationDecision = {
+	approved: boolean;
+	result?: unknown;
+};
+
 export type WalletRpcConfirmationHandler = (
 	request: WalletRpcConfirmationRequest,
-) => Promise<boolean>;
+) => Promise<WalletRpcConfirmationDecision>;
 
 export type WalletRpcAuthorization = {
 	isGranted: (methodId: string) => boolean;

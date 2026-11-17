@@ -105,4 +105,4 @@ export type WalletConnectConfirmationRequest = {
 
 export type WalletConnectConfirmationHandler = (
 	request: WalletConnectConfirmationRequest,
-) => Promise<boolean>;
+) => Promise<{ approved: boolean; result?: unknown }>;

@@ -1,8 +1,5 @@
-import type { KeyManagerState, UpdateKeyManagerState } from "@/core/key-manager/types";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
-import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
-import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import type { ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
 import {
 	LIQUID_WALLET_RPC_METHODS,
@@ -11,18 +8,26 @@ import {
 	type LiquidTransferReview,
 } from "../../../domain/LiquidRpc";
 import { parseLiquidAssetId, parseLiquidSendTransferParams } from "../../../domain/validation";
-import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
+import type { LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
+import { accountNameOf, readKnownAssets } from "../../confirmationFacts";
 import { resolveDappAccount } from "../../dappAccountScope";
+import {
+	chosenTargetBlocks,
+	quoteTransferSpeeds,
+	readSpeedRates,
+	type SpeedQuote,
+} from "../../feeSpeeds";
+import type { LiquidRpcMethodContext } from "../../LiquidRpcContext";
+import {
+	SEND_TRANSFER_CONFIRMATION_KIND,
+	type SendTransferConfirmationData,
+} from "./SendTransferConfirmation";
 
-export type LiquidSendTransferContext = WalletRpcBaseContext & {
-	chain: LiquidChainRecord;
-	keyManagerState: KeyManagerState;
-	updateKeyManagerState?: UpdateKeyManagerState;
-	walletBackend: LiquidWalletBackend;
-};
+export type LiquidSendTransferContext = LiquidRpcMethodContext;
 
 type LiquidSendTransferMethodReview = {
 	account: LiquidWalletAccount;
+	quotes: SpeedQuote[];
 	requestedAsset: ParsedLiquidAssetId;
 	transfer: LiquidTransferReview;
 };
@@ -33,28 +38,34 @@ export const sendLiquidTransfer = createWalletMethod<
 	LiquidSendTransferMethodReview,
 	LiquidSendTransferResult
 >({
-	confirmation: ({ review }) => ({
-		confirmLabel: "Sign and send",
+	confirmation: async ({ context, review }) => ({
+		confirmLabel: "Send",
 		data: {
-			...review.transfer,
-			kind: "liquid.sendTransfer",
-		},
-		message: [
-			"This transfer will be signed and broadcast.",
-			`Network: ${review.transfer.chainId}\nAccount: ${review.transfer.accountIdentifier}`,
-			`Recipient: ${review.transfer.recipientAddress}`,
-			`Amount (base units): ${review.transfer.amount}\nAsset: ${review.transfer.assetId}`,
-			review.transfer.memo === undefined ? "" : `Memo:\n${review.transfer.memo}`,
-			review.transfer.recipientConfidential
-				? ""
-				: "Warning: this address is explicit; the amount and asset will be publicly visible.",
-		]
-			.filter(Boolean)
-			.join("\n\n"),
-		title: "Send Liquid transfer?",
+			account: accountNameOf(context, review.account),
+			assetId: review.requestedAsset.rawAssetId,
+			assets: await readKnownAssets(context, review.account),
+			feeAssetId: review.account.rawPolicyAssetId,
+			kind: SEND_TRANSFER_CONFIRMATION_KIND,
+			network: context.chain.name,
+			review: {
+				quotes: review.quotes,
+				recipientAddress: review.transfer.recipientAddress,
+				recipientConfidential: review.transfer.recipientConfidential,
+			},
+		} satisfies SendTransferConfirmationData,
+		title: "Send a transfer?",
 	}),
-	execute: ({ context, params, review }) =>
-		context.walletBackend.sendTransfer(review.account, params, review.requestedAsset.rawAssetId),
+	execute: ({ choice, context, params, review }) => {
+		const targetBlocks = chosenTargetBlocks(choice);
+		const quote = review.quotes.find((candidate) => candidate.targetBlocks === targetBlocks)!;
+
+		return context.walletBackend.sendTransfer(
+			review.account,
+			params,
+			review.requestedAsset.rawAssetId,
+			{ feeRateSatsPerKvb: quote.feeRateSatsPerKvb, feeSats: quote.feeSats },
+		);
+	},
 	id: LIQUID_WALLET_RPC_METHODS.SEND_TRANSFER,
 	parse: parseLiquidSendTransferParams,
 	review: async ({ context, params }) => {
@@ -68,7 +79,15 @@ export const sendLiquidTransfer = createWalletMethod<
 			params,
 			requestedAsset.rawAssetId,
 		);
-		return { account, requestedAsset, transfer };
+		const quotes = await quoteTransferSpeeds(
+			context.walletBackend,
+			account,
+			params,
+			requestedAsset.rawAssetId,
+			await readSpeedRates(context.chain),
+		);
+
+		return { account, quotes, requestedAsset, transfer };
 	},
 });
 

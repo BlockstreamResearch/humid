@@ -9,14 +9,14 @@ import {
 	processCtConfirmationRenderer,
 	readable,
 } from "./ProcessCtConfirmation";
-import { LENDING_OFFER } from "./processCtFixtures";
+import { LENDING_OFFER, LENDING_SHOWN } from "./processCtFixtures";
 
-const MODEL = LENDING_OFFER.shown;
+const MODEL = LENDING_SHOWN;
 const TOKEN = "aa".repeat(32);
 
 const payload = (shown: unknown = MODEL, extra: Record<string, unknown> = {}) => ({
 	...LENDING_OFFER,
-	shown,
+	speeds: [{ shown, targetBlocks: 1 }],
 	...extra,
 });
 
@@ -45,6 +45,11 @@ describe("the payload this surface accepts", () => {
 		expect(isProcessCtConfirmationData(payload(null))).toBe(false);
 		expect(isProcessCtConfirmationData(payload("not a model"))).toBe(false);
 		expect(isProcessCtConfirmationData(payload({}))).toBe(false);
+	});
+
+	test("refuses a payload with no speed to offer, or a speed without its block target", () => {
+		expect(isProcessCtConfirmationData(payload(MODEL, { speeds: [] }))).toBe(false);
+		expect(isProcessCtConfirmationData(payload(MODEL, { speeds: [{ shown: MODEL }] }))).toBe(false);
 	});
 
 	test("refuses a payload without the network or the assets it names", () => {

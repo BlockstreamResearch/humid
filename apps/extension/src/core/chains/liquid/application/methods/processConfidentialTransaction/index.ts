@@ -33,18 +33,20 @@ import {
 } from "../../../adapters/smplx/compileProgramWithSmplx";
 import { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
-import { LIQUID_NATIVE_ASSET } from "../../../domain/LiquidAsset";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type { LiquidFundingUtxo, LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
+import { accountNameOf, readKnownAssets } from "../../confirmationFacts";
 import { resolveDappAccount } from "../../dappAccountScope";
+import { chosenTargetBlocks, readSpeedRates } from "../../feeSpeeds";
 import type { LiquidRpcMethodContext } from "../../LiquidRpcContext";
 import {
-	type KnownAsset,
 	PROCESS_CT_CONFIRMATION_KIND,
 	type ProcessCtConfirmationData,
 } from "./ProcessCtConfirmation";
 
 export type LiquidProcessCtContext = LiquidRpcMethodContext;
+
+type SpeedReviews = { review: ManifestReview; targetBlocks: number }[];
 
 export type LiquidProcessCtResult = {
 	broadcast: boolean;
@@ -104,19 +106,24 @@ export const liquidProcessCtDependencies: LiquidProcessCtDependencies = {
 export const createProcessLiquidConfidentialTransaction = (
 	dependencies: LiquidProcessCtDependencies = liquidProcessCtDependencies,
 ) =>
-	createWalletMethod<ActionRequest, LiquidProcessCtContext, ManifestReview, LiquidProcessCtResult>({
+	createWalletMethod<ActionRequest, LiquidProcessCtContext, SpeedReviews, LiquidProcessCtResult>({
 		confirmation: async ({ context, params, review }) => ({
 			data: {
-				assets: await knownAssets(context, await dependencies.resolveAccount(context), review),
+				assets: await readKnownAssets(context, await dependencies.resolveAccount(context)),
 				broadcast: params.broadcast,
 				kind: PROCESS_CT_CONFIRMATION_KIND,
 				network: context.chain.name,
-				shown: toShownConfirmation(review.confirmation),
+				speeds: review.map(({ review: atSpeed, targetBlocks }) => ({
+					shown: toShownConfirmation(atSpeed.confirmation),
+					targetBlocks,
+				})),
 			} satisfies ProcessCtConfirmationData,
 			title: "Perform a contract action?",
 			timeoutMs: 5 * 60_000,
 		}),
-		execute: async ({ context, params, review }) => {
+		execute: async ({ choice, context, params, review: speeds }) => {
+			const targetBlocks = chosenTargetBlocks(choice);
+			const review = speeds.find((speed) => speed.targetBlocks === targetBlocks)!.review;
 			const network = requireNetwork(context);
 			const account = await dependencies.resolveAccount(context);
 			const smplx = await dependencies.loadSmplx();
@@ -196,50 +203,59 @@ export const createProcessLiquidConfidentialTransaction = (
 			const readAddress = await dependencies.readAddress(context.chain);
 			const signingAddress = context.walletBackend.getSigningAddress(account);
 			const walletScriptPubKeyHex = readAddress(signingAddress.address).scriptPubKeyHex;
-			const result = await reviewManifestAction(params, {
-				accountLabel: accountLabelOf(context, account),
-				chain: {
-					network,
-					policyAsset: account.rawPolicyAssetId,
-					readAddress,
-					readChainTip: async () => context.walletBackend.getTipHeight(account),
-					readFeeRate: dependencies.readFeeRate(context.chain),
-					readTxOut: dependencies.readTxOut(context.chain),
-				},
-				compiler: {
-					abi: createSmplxProgramAbi(smplx),
-					compile: createSmplxProgramCompiler(smplx),
-					scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, network),
-					version: SMPLX_COMPILER_VERSION,
-				},
-				estimateFee: (draft, feeRateSatsPerKvb) =>
-					assembleReviewedTransaction(
-						draft,
-						{
-							blindingPublicKeyHex: SIZING_BLINDING_KEY,
-							signingDerivationPath: signingDerivationPathOf(context, account),
-							smplx,
-						},
-						(builder) => smplx.Signer.estimateStrictFee(builder, network, feeRateSatsPerKvb),
-					),
-				wallet: {
-					address: signingAddress.explicit,
-					holdingsOf: (asset) => fundable(context, account, asset),
-					key: dependencies.walletKeyOf(account.descriptor, signingAddress.index),
-					scriptPubKeyHex: walletScriptPubKeyHex,
-					unblind: await dependencies.unblinder(account, walletScriptPubKeyHex),
-				},
-			});
+			const reviewAt = async (feeRateSatsPerKvb: number) =>
+				reviewManifestAction(params, {
+					accountLabel: accountNameOf(context, account),
+					chain: {
+						network,
+						policyAsset: account.rawPolicyAssetId,
+						readAddress,
+						readChainTip: async () => context.walletBackend.getTipHeight(account),
+						readFeeRate: async () => feeRateSatsPerKvb,
+						readTxOut: dependencies.readTxOut(context.chain),
+					},
+					compiler: {
+						abi: createSmplxProgramAbi(smplx),
+						compile: createSmplxProgramCompiler(smplx),
+						scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, network),
+						version: SMPLX_COMPILER_VERSION,
+					},
+					estimateFee: (draft, feeRateSatsPerKvb) =>
+						assembleReviewedTransaction(
+							draft,
+							{
+								blindingPublicKeyHex: SIZING_BLINDING_KEY,
+								signingDerivationPath: signingDerivationPathOf(context, account),
+								smplx,
+							},
+							(builder) => smplx.Signer.estimateStrictFee(builder, network, feeRateSatsPerKvb),
+						),
+					wallet: {
+						address: signingAddress.explicit,
+						holdingsOf: (asset) => fundable(context, account, asset),
+						key: dependencies.walletKeyOf(account.descriptor, signingAddress.index),
+						scriptPubKeyHex: walletScriptPubKeyHex,
+						unblind: await dependencies.unblinder(account, walletScriptPubKeyHex),
+					},
+				});
 
-			if (isRefusal(result)) {
+			const rates = await readSpeedRates(context.chain, dependencies.readFeeRate(context.chain));
+			const distinct = [...new Set(rates.map(({ feeRateSatsPerKvb }) => feeRateSatsPerKvb))];
+			const results = await Promise.all(distinct.map(reviewAt));
+			const refused = results.find(isRefusal);
+
+			if (refused !== undefined) {
 				throw new WalletRpcInvalidParamsError(
-					result.reason,
-					{ reject: result.reject },
+					refused.reason,
+					{ reject: refused.reject },
 					WALLET_RPC_ERROR_REASONS.INVALID_MANIFEST_REQUEST,
 				);
 			}
 
-			return result;
+			return rates.map(({ feeRateSatsPerKvb, targetBlocks }) => ({
+				review: results[distinct.indexOf(feeRateSatsPerKvb)] as ManifestReview,
+				targetBlocks,
+			}));
 		},
 	});
 
@@ -309,37 +325,6 @@ function fundable(
 	}
 
 	return selectable;
-}
-
-function accountLabelOf(context: LiquidProcessCtContext, account: LiquidWalletAccount): string {
-	const group =
-		account.accountGroupId === undefined
-			? undefined
-			: context.keyManagerState.accountModel.accountGroups[account.accountGroupId];
-
-	return group?.name ?? `Account ${account.accountGroupIndex ?? 0}`;
-}
-
-async function knownAssets(
-	context: LiquidProcessCtContext,
-	account: LiquidWalletAccount,
-	review: ManifestReview,
-): Promise<Record<string, KnownAsset>> {
-	const snapshot =
-		account.accountGroupId === undefined
-			? null
-			: await context.readPortfolioSnapshot?.(account.accountGroupId, account.chainId);
-	const held = (snapshot?.data.assets ?? []).map(
-		(asset) => [asset.rawAssetId, { decimals: asset.decimals, ticker: asset.symbol }] as const,
-	);
-
-	return {
-		...Object.fromEntries(held),
-		[review.policyAsset]: {
-			decimals: LIQUID_NATIVE_ASSET.decimals,
-			ticker: LIQUID_NATIVE_ASSET.symbol,
-		},
-	};
 }
 
 function signingDerivationPathOf(

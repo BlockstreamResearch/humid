@@ -1,4 +1,5 @@
 import type { ShownConfirmation, ShownFlowRow } from "@humid/tx-manifest";
+import { useState } from "react";
 
 import type { ConfirmationRenderer } from "@/common/Confirmation";
 import {
@@ -12,19 +13,19 @@ import {
 	ConfirmationNote,
 	ConfirmationSection,
 } from "@/common/Confirmation/ConfirmationParts";
+import { DEFAULT_TARGET_BLOCKS, FeeSpeedPicker } from "@/common/Confirmation/FeeSpeedPicker";
 import { ShownAsset } from "@/common/Confirmation/ShownAsset";
+import type { KnownAsset } from "@/core/chains/liquid/application/confirmationFacts";
 import { UiButton } from "@/ui/UiButton/base";
 
 export const PROCESS_CT_CONFIRMATION_KIND = "liquid.processConfidentialTransaction";
-
-export type KnownAsset = { decimals: number; ticker: string };
 
 export type ProcessCtConfirmationData = {
 	assets: Record<string, KnownAsset>;
 	broadcast: boolean;
 	kind: typeof PROCESS_CT_CONFIRMATION_KIND;
 	network: string;
-	shown: ShownConfirmation;
+	speeds: { shown: ShownConfirmation; targetBlocks: number }[];
 };
 
 const ROW_KINDS = new Set(["address", "change", "data", "program", "wallet"]);
@@ -70,13 +71,18 @@ export function isProcessCtConfirmationData(value: unknown): value is ProcessCtC
 		return false;
 	}
 
-	const shown = value.shown;
-
-	if (!isRecord(shown)) {
-		return false;
-	}
-
 	return (
+		Array.isArray(value.speeds) &&
+		value.speeds.length > 0 &&
+		value.speeds.every(
+			(speed) => isRecord(speed) && typeof speed.targetBlocks === "number" && isShown(speed.shown),
+		)
+	);
+}
+
+function isShown(shown: unknown): boolean {
+	return (
+		isRecord(shown) &&
 		provenancedString(shown.account) &&
 		provenancedString(shown.action) &&
 		provenancedString(shown.protocol) &&
@@ -130,10 +136,12 @@ export function ProcessCtConfirmation({
 }: {
 	data: ProcessCtConfirmationData;
 	origin?: string;
-	onConfirm: () => void;
+	onConfirm: (choice: { targetBlocks: number }) => void;
 	onReject: () => void;
 }) {
-	const { shown } = data;
+	const [targetBlocks, setTargetBlocks] = useState(DEFAULT_TARGET_BLOCKS);
+	const { shown } =
+		data.speeds.find((speed) => speed.targetBlocks === targetBlocks) ?? data.speeds.at(-1)!;
 	const assetOf = (id: string) => {
 		const known = data.assets[id];
 
@@ -152,7 +160,7 @@ export function ProcessCtConfirmation({
 					signer={`Signing with ${shown.account.value}`}
 					confirmLabel={data.broadcast ? "Sign and send" : "Sign"}
 					onReject={onReject}
-					onConfirm={onConfirm}
+					onConfirm={() => onConfirm({ targetBlocks })}
 				/>
 			}
 		>
@@ -165,13 +173,10 @@ export function ProcessCtConfirmation({
 					/>
 				))}
 			</ConfirmationSection>
-			<ConfirmationSection
-				title="Network fee"
-				aside={
-					<span className="font-mono text-sm font-semibold tabular-nums">
-						{shown.feeSats.value} sats
-					</span>
-				}
+			<FeeSpeedPicker
+				value={targetBlocks}
+				fee={`${shown.feeSats.value} sats`}
+				onChange={setTargetBlocks}
 			/>
 			{shown.publishedAmounts.length > 0 && (
 				<ConfirmationNote>
@@ -314,7 +319,7 @@ export const processCtConfirmationRenderer: ConfirmationRenderer = {
 			<ProcessCtConfirmation
 				data={data}
 				origin={request.requester?.origin}
-				onConfirm={() => onConfirm()}
+				onConfirm={onConfirm}
 				onReject={onDecline}
 			/>
 		) : (

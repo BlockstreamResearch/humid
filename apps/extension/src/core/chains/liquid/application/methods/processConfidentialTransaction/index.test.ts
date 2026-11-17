@@ -266,7 +266,7 @@ function context(log: Journal, overrides: Partial<LiquidProcessCtContext> = {}) 
 		confirm: async () => {
 			log.steps.push("confirm");
 
-			return true;
+			return { approved: true };
 		},
 		keyManagerState: { keyrings: [] },
 		walletBackend: walletBackend(log),
@@ -403,10 +403,65 @@ describe("the order a contract action happens in", () => {
 		const method = createProcessLiquidConfidentialTransaction(dependencies(log));
 
 		await expect(
-			method(payRequest(), context(log, { confirm: async () => false })),
+			method(payRequest(), context(log, { confirm: async () => ({ approved: false }) })),
 		).rejects.toThrow();
 		expect(log.steps).not.toContain("mnemonic");
 		expect(log.taken).not.toContain("signer");
+	});
+
+	describe("the fee speed", () => {
+		const rateFor = async (targetBlocks: number) => (targetBlocks === 1 ? 3000 : 1000);
+
+		const signedRate = async (result?: unknown) => {
+			const log = journal();
+			const module = smplxSubstitute(log);
+			const finalize = module.Signer.prototype.finalizeStrictFee;
+			const rates: number[] = [];
+			const shown: unknown[] = [];
+
+			module.Signer.prototype.finalizeStrictFee = function (
+				this: InstanceType<typeof module.Signer>,
+				...args: unknown[]
+			) {
+				rates.push(args[1] as number);
+
+				return finalize.call(this);
+			};
+
+			const method = createProcessLiquidConfidentialTransaction(
+				dependencies(log, {
+					loadSmplx: (async () => module) as unknown as LiquidProcessCtDependencies["loadSmplx"],
+					readFeeRate: () => rateFor,
+				}),
+			);
+
+			await method(
+				payRequest(),
+				context(log, {
+					confirm: async (request) => {
+						shown.push(request.data);
+
+						return { approved: true, result };
+					},
+				}),
+			);
+
+			return { rates, shown: shown[0] as { speeds: { targetBlocks: number }[] } };
+		};
+
+		test("offers a model for every speed", async () => {
+			const { shown } = await signedRate();
+
+			expect(shown.speeds.map((speed) => speed.targetBlocks)).toEqual([60, 10, 1]);
+		});
+
+		test("signs at the rate of the speed the person picked", async () => {
+			expect((await signedRate({ targetBlocks: 60 })).rates).toEqual([1000]);
+		});
+
+		test("and at the fastest rate where no speed comes back", async () => {
+			expect((await signedRate()).rates).toEqual([3000]);
+		});
 	});
 
 	test("tells the confirmation whether this will be sent", async () => {
@@ -420,7 +475,7 @@ describe("the order a contract action happens in", () => {
 				confirm: async (request) => {
 					shown.push(request.data);
 
-					return true;
+					return { approved: true };
 				},
 			}),
 		);

@@ -61,11 +61,7 @@ import { walletVaultBackground } from "@/core/secure-vault/application/wallet-va
 import { touchVaultActivity } from "@/core/secure-vault/background";
 import * as walletConnect from "@/core/walletconnect/background";
 import type { WalletConnectSessionSummary } from "@/core/walletconnect/types";
-import {
-	type ConfirmationRequest,
-	initNotificationManagement,
-	updateBadgeOnStorageChange,
-} from "@/helpers/background";
+import { initNotificationManagement, updateBadgeOnStorageChange } from "@/helpers/background";
 import { authStore } from "@/store/auth";
 
 export type {
@@ -125,8 +121,6 @@ const init = async () => {
 		isUnlocked: async () => (await walletVaultBackground.getStatus()).isUnlocked,
 		onUnlocked: walletVaultBackground.onUnlocked,
 	});
-	const confirmApproved = (request: ConfirmationRequest): Promise<boolean> =>
-		confirmations.confirm(request).then((decision) => decision.approved);
 	const liquidChainGroup = createLiquidChainGroup();
 	const accountRegistry = createAccountRegistry();
 
@@ -210,7 +204,7 @@ const init = async () => {
 				}),
 				authorization: { isGranted: (methodId) => grantedMethods[methodId] === true },
 				chain,
-				confirm: confirmApproved,
+				confirm: confirmations.confirm,
 				keyManagerState,
 				readPortfolioSnapshot,
 				requester: { origin },
@@ -496,7 +490,7 @@ const init = async () => {
 	walletConnect.registerWalletConnectNamespaceAdapter(liquidChainGroup.walletConnectAdapter);
 
 	await walletConnect.initializeWalletConnectBackground({
-		confirm: confirmApproved,
+		confirm: confirmations.confirm,
 		readPortfolioSnapshot,
 		waitForUnlock: confirmations.waitForUnlock,
 	});

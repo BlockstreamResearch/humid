@@ -8,6 +8,7 @@ import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 import type { ConfirmationPolicy } from "./ConfirmationPolicy";
 
 export type WalletMethodInput<TParams, TContext, TReview> = {
+	choice?: unknown;
 	context: TContext;
 	params: TParams;
 	review: TReview;
@@ -50,6 +51,8 @@ export function createWalletMethod<
 
 		const reviewed = await review({ context, params: parsedParams });
 
+		let choice: unknown;
+
 		if (!context.authorization.isGranted(id)) {
 			if (!context.confirm) {
 				throw new WalletRpcResourceUnavailableError(
@@ -59,18 +62,20 @@ export function createWalletMethod<
 				);
 			}
 
-			const confirmed = await context.confirm({
+			const decision = await context.confirm({
 				...(await confirmation({ context, params: parsedParams, review: reviewed })),
 				method: id,
 				requester: context.requester,
 			});
 
-			if (!confirmed) {
+			if (!decision.approved) {
 				throw new WalletRpcUserRejectedError();
 			}
+
+			choice = decision.result;
 		}
 
-		return execute({ context, params: parsedParams, review: reviewed });
+		return execute({ choice, context, params: parsedParams, review: reviewed });
 	};
 
 	return Object.assign(handler, { id });
