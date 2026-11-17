@@ -137,7 +137,6 @@ describe("an action that moves two assets", () => {
 				blinded: false,
 				decidedBy: "spendable-change",
 				id: "token_change",
-				overrode: "chain",
 				pays: "change",
 				sats: 3000n,
 				scriptPubKeyHex: WALLET_SCRIPT,
@@ -755,7 +754,7 @@ describe("what each output does with the value it carries", () => {
 		});
 	});
 
-	test("a contract action's change is published, carrying the word that was set aside", async () => {
+	test("a contract action's change is blinded where the protocol asks for blinded change", async () => {
 		const review = asReview(
 			await documentSaying((document) => {
 				outputsOf(document)[2]!.confidential = true;
@@ -763,26 +762,24 @@ describe("what each output does with the value it carries", () => {
 			}),
 		);
 
-		expect(changeOf(review)).toMatchObject({ blinded: false, overrode: "output" });
+		expect(changeOf(review)).toMatchObject({ blinded: true, decidedBy: "output" });
 		expect(review.outputs.find((output) => output.id === "token_change")).toMatchObject({
-			blinded: false,
-			decidedBy: "spendable-change",
-			overrode: "output",
+			blinded: true,
+			decidedBy: "output",
 		});
 	});
 
-	test("but overrides nothing where the protocol asked for open change itself", async () => {
+	test("and stays open where the protocol asked for open change", async () => {
 		const review = asReview(
 			await documentSaying((document) => {
 				outputsOf(document)[3]!.confidential = false;
 			}),
 		);
 
-		expect(changeOf(review)?.blinded).toBe(false);
-		expect(changeOf(review)?.overrode).toBeUndefined();
+		expect(changeOf(review)).toMatchObject({ blinded: false, decidedBy: "output" });
 	});
 
-	test("and says the same about change nothing says anything about", async () => {
+	test("and is published where nothing says anything about the change", async () => {
 		const minted = asReview(
 			await reviewManifestAction(
 				request({ action: "Mint", params: { pubkey: PUBKEY, supply: 21 } }),
@@ -790,7 +787,7 @@ describe("what each output does with the value it carries", () => {
 			),
 		);
 
-		expect(changeOf(minted)).toMatchObject({ blinded: false, overrode: "chain" });
+		expect(changeOf(minted)).toMatchObject({ blinded: false, decidedBy: "spendable-change" });
 	});
 });
 
@@ -834,13 +831,12 @@ describe("change when the wallet funds an action from a blinded output", () => {
 	test("and publishes it for the next action when every input is open", async () => {
 		expect(await mintFundedFrom(false)).toEqual({
 			blindedAmounts: [],
-			change: expect.objectContaining({ blinded: false, overrode: "chain" }),
+			change: expect.objectContaining({ blinded: false, decidedBy: "spendable-change" }),
 			publishedAmounts: [
 				{
 					id: "change_out",
 					reason:
-						"nothing says otherwise and this network blinds an output by default, and this " +
-						"wallet publishes it anyway so your next action can spend those funds",
+						"the protocol does not ask for the change to be blinded, so the amount stays explicit for the next action to spend",
 				},
 			],
 		});

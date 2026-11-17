@@ -84,7 +84,7 @@ export const LENDING_SHOWN: ShownConfirmation = {
 		{
 			id: computed("change"),
 			reason: computed(
-				"this wallet publishes a contract's change so the next action can spend those funds",
+				"the protocol does not ask for the change to be blinded, so the amount stays explicit for the next action to spend",
 			),
 		},
 	],

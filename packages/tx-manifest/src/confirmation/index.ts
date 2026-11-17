@@ -2,11 +2,7 @@ import type { Action, Manifest } from "../document/manifest";
 import { Refusal } from "../refusal";
 import type { ManifestReview } from "../review";
 import type { PlannedInput, ReviewedOutput } from "../review/types";
-import {
-	type BlindingDecision,
-	describeBlinding,
-	describePublishedChange,
-} from "../transaction/blinding";
+import { describeBlinding } from "../transaction/blinding";
 import type { Scope } from "../values/scope";
 import { computed, fromDapp, map, type Origin, type Provenanced, verified } from "./provenance";
 
@@ -161,22 +157,18 @@ function blindedAmounts(review: ReviewedPlan): BlindedAmount[] {
 	return review.outputs
 		.filter((output) => output.blinded)
 		.map((output) => ({
-			decidedBy: computed(word(output.decidedBy)),
+			decidedBy: computed(describeBlinding(output.decidedBy)),
 			id: fromDapp(output.id),
 		}));
 }
 
 function publishedAmounts(review: ReviewedPlan): PublishedAmount[] {
 	return review.outputs
-		.filter((output) => !output.blinded && output.overrode !== undefined)
+		.filter((output) => output.decidedBy === "spendable-change")
 		.map((output) => ({
 			id: fromDapp(output.id),
-			reason: computed(describePublishedChange(output.overrode)),
+			reason: computed(describeBlinding(output.decidedBy)),
 		}));
-}
-
-function word(decidedBy: BlindingDecision["decidedBy"] | undefined): string {
-	return describeBlinding({ blinding: "blinded", decidedBy: decidedBy ?? "chain" });
 }
 
 export function describeOrigin(origin: Origin): string {

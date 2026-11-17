@@ -188,36 +188,33 @@ describe("what a person is told about an amount this wallet published", () => {
 		}));
 	}
 
-	test("naming the network's own default, which is what the whole corpus leaves it to", async () => {
+	test("for change nothing sets the blinding of, which is what the whole corpus does", async () => {
 		expect(await published(changeSaying(undefined))).toEqual([
 			{
 				id: "fee_change",
 				reason:
-					"nothing says otherwise and this network blinds an output by default, and this " +
-					"wallet publishes it anyway so your next action can spend those funds",
+					"the protocol does not ask for the change to be blinded, so the amount stays explicit for the next action to spend",
 			},
 		]);
 	});
 
-	test("naming the protocol's own word when it asked for blinded change outright", async () => {
-		expect(await published(changeSaying(true))).toEqual([
-			{
-				id: "fee_change",
-				reason:
-					"this protocol asks for it to be blinded, and this wallet publishes it anyway so " +
-					"your next action can spend those funds",
-			},
-		]);
-	});
-
-	test("and says it for change the document declares none of and lets the wallet add", async () => {
+	test("and for change the document declares none of and lets the wallet add", async () => {
 		expect(await published(changeSaying("absent"))).toEqual([
 			{
 				id: "change",
 				reason:
-					"nothing says otherwise and this network blinds an output by default, and this " +
-					"wallet publishes it anyway so your next action can spend those funds",
+					"the protocol does not ask for the change to be blinded, so the amount stays explicit for the next action to spend",
 			},
+		]);
+	});
+
+	test("but for no change the protocol asked to be blinded, which counts among the blinded amounts", async () => {
+		const model = await shown(changeSaying(true));
+
+		expect(model.publishedAmounts).toEqual([]);
+		expect(model.blindedAmounts.map((row) => [row.id.value, row.decidedBy.value])).toContainEqual([
+			"fee_change",
+			"this protocol asks for it to be blinded",
 		]);
 	});
 

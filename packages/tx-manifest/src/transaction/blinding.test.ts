@@ -24,20 +24,18 @@ describe("an output's blinding", () => {
 });
 
 describe("a contract action's change", () => {
-	test("is published, recording what would have blinded the output", () => {
+	test("is published where nothing sets its blinding", () => {
 		expect(resolveBlinding({ change: true })).toEqual({
 			blinding: "open",
 			decidedBy: "spendable-change",
-			overrode: "chain",
-		});
-		expect(resolveBlinding({ change: true, declared: true })).toEqual({
-			blinding: "open",
-			decidedBy: "spendable-change",
-			overrode: "output",
 		});
 	});
 
-	test("overrides nothing where the protocol asked for open change", () => {
+	test("follows the protocol's word either way", () => {
+		expect(resolveBlinding({ change: true, declared: true })).toEqual({
+			blinding: "blinded",
+			decidedBy: "output",
+		});
 		expect(resolveBlinding({ change: true, declared: false })).toEqual({
 			blinding: "open",
 			decidedBy: "output",

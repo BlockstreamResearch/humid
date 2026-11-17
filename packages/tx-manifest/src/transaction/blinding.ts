@@ -10,7 +10,6 @@ export type BlindingWord =
 export type BlindingDecision = {
 	blinding: Blinding;
 	decidedBy: BlindingWord;
-	overrode?: BlindingWord;
 };
 
 export type UnblindableTarget = "program" | "data";
@@ -24,13 +23,11 @@ export function resolveBlinding(input: {
 		return { blinding: "open", decidedBy: "unblindable" };
 	}
 
-	const format = byPrecedence(input);
-
-	if (input.change && format.blinding === "blinded") {
-		return { blinding: "open", decidedBy: "spendable-change", overrode: format.decidedBy };
+	if (input.change && typeof input.declared !== "boolean") {
+		return { blinding: "open", decidedBy: "spendable-change" };
 	}
 
-	return format;
+	return byPrecedence(input);
 }
 
 export function resolveChangeBlinding(
@@ -41,7 +38,7 @@ export function resolveChangeBlinding(
 		return planned;
 	}
 
-	return { blinding: "blinded", decidedBy: "confidential-input", overrode: planned.decidedBy };
+	return { blinding: "blinded", decidedBy: "confidential-input" };
 }
 
 function byPrecedence(input: { declared?: unknown }): BlindingDecision {
@@ -52,14 +49,8 @@ function byPrecedence(input: { declared?: unknown }): BlindingDecision {
 	return { blinding: "blinded", decidedBy: "chain" };
 }
 
-export function describeBlinding(decision: BlindingDecision): string {
-	return sentenceFor(decision.decidedBy);
-}
-
-export function describePublishedChange(overrode?: BlindingWord): string {
-	return overrode === undefined
-		? sentenceFor("spendable-change")
-		: `${sentenceFor(overrode)}, and this wallet publishes it anyway so your next action can spend those funds`;
+export function describeBlinding(decidedBy: BlindingWord): string {
+	return sentenceFor(decidedBy);
 }
 
 function sentenceFor(word: BlindingWord): string {
@@ -73,7 +64,7 @@ function sentenceFor(word: BlindingWord): string {
 		}
 
 		case "spendable-change": {
-			return "this wallet publishes a contract's change so your next action can spend those funds";
+			return "the protocol does not ask for the change to be blinded, so the amount stays explicit for the next action to spend";
 		}
 
 		case "unblindable": {

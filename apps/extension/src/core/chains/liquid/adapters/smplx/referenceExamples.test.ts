@@ -415,6 +415,28 @@ describe("p2pk", () => {
 		expect(signedFee(receive)).toBe(receive.estimatedFeeSats);
 	});
 
+	test("Pay blinds the change the protocol asks to blind, to the wallet's key, at the fee shown", async () => {
+		const paying = new ReferenceExample("p2pk");
+		const actions = paying.manifest.actions as Record<
+			string,
+			{ outputs: Record<string, unknown>[] }
+		>;
+
+		Object.assign(actions.Pay!.outputs.find((output) => output.id === "change_out")!, {
+			confidential: true,
+		});
+
+		const pay = await paying.reviewed("Pay", { params: { amount_sat: 1000, pubkey: KEY } });
+		const change = pay.outputs.find((output) => output.id === "change_out")!;
+		const paid = signed(pay);
+
+		expect(change).toMatchObject({ blinded: true, decidedBy: "output" });
+		expect(paid.feeSats).toBe(pay.estimatedFeeSats);
+		expect(coinsOf(paid.hex, POLICY_ASSET).find((coin) => coin.confidential)?.amount).toBe(
+			change.sats.toString(),
+		);
+	});
+
 	test("Pay and Receive sign through a utxo type that declares its params, at the same address", async () => {
 		const closed = new ReferenceExample("p2pk");
 		const types = closed.manifest.utxo_types as Record<string, Record<string, unknown>>;

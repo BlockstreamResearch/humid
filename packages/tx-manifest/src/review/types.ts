@@ -48,7 +48,6 @@ export type ReviewedOutput = BlindingFactors & {
 	blindingPublicKeyHex?: string;
 	decidedBy: BlindingWord;
 	id: string;
-	overrode?: BlindingWord;
 	sats: bigint;
 	scriptPubKeyHex: string;
 };

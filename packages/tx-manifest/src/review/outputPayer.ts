@@ -9,11 +9,7 @@ import type { ProgramFinding, ReviewedOutput, ReviewedProgramInput } from "./typ
 
 const DUST_SATS = 22n;
 
-const UNDECLARED_CHANGE: BlindingDecision = {
-	blinding: "open",
-	decidedBy: "spendable-change",
-	overrode: "chain",
-};
+const UNDECLARED_CHANGE: BlindingDecision = { blinding: "open", decidedBy: "spendable-change" };
 
 export type PaidOutputs = {
 	at: Map<string, number>;
@@ -174,7 +170,6 @@ export class OutputPayer {
 			...chosenFactors(id, change.factors, blinded),
 			decidedBy: blinding.decidedBy,
 			id,
-			...(blinding.overrode === undefined ? {} : { overrode: blinding.overrode }),
 			pays: "change",
 			sats,
 			scriptPubKeyHex: this.#context.dependencies.wallet.scriptPubKeyHex,
