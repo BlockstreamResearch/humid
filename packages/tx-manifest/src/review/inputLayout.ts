@@ -53,7 +53,7 @@ export class InputLayout {
 			const own = reservedFor.get(wallet.id);
 
 			if (own) {
-				walletRuns.set(wallet.id, [this.#walletSlot(wallet.id, own)]);
+				walletRuns.set(wallet.id, [this.#walletSlot(wallet.id, wallet.asset, own)]);
 
 				continue;
 			}
@@ -78,7 +78,7 @@ export class InputLayout {
 			creditedWith.set(wallet.asset, wallet.id);
 			walletRuns.set(
 				wallet.id,
-				unreserved(wallet.asset).map((utxo) => this.#walletSlot(wallet.id, utxo)),
+				unreserved(wallet.asset).map((utxo) => this.#walletSlot(wallet.id, wallet.asset, utxo)),
 			);
 		}
 
@@ -97,10 +97,12 @@ export class InputLayout {
 		);
 		const undeclared = fundedOrder
 			.filter((asset) => !creditedWith.has(asset))
-			.flatMap((asset) => unreserved(asset));
+			.flatMap((asset) =>
+				unreserved(asset).map((utxo) => ({ asset, source: "wallet" as const, utxo })),
+			);
 
 		if (undeclared.length > 0) {
-			placeable.push({ slots: undeclared.map((utxo) => ({ source: "wallet" as const, utxo })) });
+			placeable.push({ slots: undeclared });
 		}
 
 		const placement = placeInputs(placeable);
@@ -125,8 +127,8 @@ export class InputLayout {
 		};
 	}
 
-	#walletSlot(id: string, utxo: SelectableUtxo): PlannedInput {
-		return { source: "wallet", utxo, ...this.#sequence(id) };
+	#walletSlot(id: string, asset: string, utxo: SelectableUtxo): PlannedInput {
+		return { asset, source: "wallet", utxo, ...this.#sequence(id) };
 	}
 
 	#sequence(id: string): { sequence?: number } {

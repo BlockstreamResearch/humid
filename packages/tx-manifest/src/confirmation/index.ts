@@ -1,6 +1,7 @@
 import type { Action, Manifest } from "../document/manifest";
 import { Refusal } from "../refusal";
 import type { ManifestReview } from "../review";
+import type { PlannedInput, ReviewedOutput } from "../review/types";
 import {
 	type BlindingDecision,
 	describeBlinding,
@@ -19,9 +20,12 @@ export type BlindedAmount = {
 	id: Provenanced<string>;
 };
 
-export type Payment = {
-	address: Provenanced<string>;
+export type FlowRow = {
+	address?: Provenanced<string>;
 	asset: Provenanced<string>;
+	dataBytes?: number;
+	kind: ReviewedOutput["pays"];
+	name?: Provenanced<string>;
 	sats: Provenanced<bigint>;
 };
 
@@ -45,8 +49,9 @@ export type ConfirmationModel = {
 	feeAsset: Provenanced<string>;
 	feeSats: Provenanced<bigint>;
 	blindedAmounts: BlindedAmount[];
+	inputs: FlowRow[];
 	netEffect: NetEffect[];
-	payments: Payment[];
+	outputs: FlowRow[];
 	protocol: Provenanced<string>;
 	publishedAmounts: PublishedAmount[];
 	summary?: Provenanced<string>;
@@ -76,25 +81,80 @@ export function confirmationModel(
 		feeAsset: computed(input.policyAsset),
 		feeSats: computed(review.estimatedFeeSats),
 		blindedAmounts: blindedAmounts(review),
+		inputs: review.inputOrder.map((planned) => inputRow(review, planned)),
 		netEffect: review.movements.map((movement) => ({
 			asset: computed(movement.asset),
 			sats: computed(movement.sats),
 		})),
-		payments: review.outputs.flatMap((output) =>
-			output.address === undefined
-				? []
-				: [
-						{
-							address: fromDapp(output.address),
-							asset: computed(output.asset),
-							sats: computed(output.sats),
-						},
-					],
-		),
+		outputs: review.outputs.map((output) => outputRow(review, output)),
 		protocol: fromDapp(manifest.protocol ?? ""),
 		publishedAmounts: publishedAmounts(review),
 		...(summary === undefined ? {} : { summary: fromDapp(summary) }),
 	};
+}
+
+function inputRow(review: ReviewedPlan, planned: PlannedInput): FlowRow {
+	if (planned.source === "wallet") {
+		return {
+			asset: computed(planned.asset),
+			kind: "wallet",
+			sats: computed(BigInt(planned.utxo.amount)),
+		};
+	}
+
+	const { asset, sats, utxoType } = planned.program;
+	const found = review.programs.find((program) => program.utxoType === utxoType);
+
+	return {
+		...(found === undefined ? {} : { address: verified(found.address) }),
+		asset: computed(asset),
+		kind: "program",
+		name: verified(utxoType),
+		sats: computed(sats),
+	};
+}
+
+function outputRow(review: ReviewedPlan, output: ReviewedOutput): FlowRow {
+	const amount = { asset: computed(output.asset), kind: output.pays, sats: computed(output.sats) };
+
+	switch (output.pays) {
+		case "address": {
+			return {
+				...amount,
+				address: fromDapp(output.address ?? ""),
+				name: fromDapp(output.id),
+			};
+		}
+
+		case "data": {
+			return {
+				...amount,
+				dataBytes: Math.max(0, output.scriptPubKeyHex.length / 2 - 2),
+				name: fromDapp(output.id),
+			};
+		}
+
+		case "program": {
+			const found = review.programs.find(
+				(program) => program.scriptPubKeyHex === output.scriptPubKeyHex,
+			);
+
+			return found === undefined
+				? { ...amount, name: fromDapp(output.id) }
+				: {
+						...amount,
+						address:
+							found.verified === "matches-chain"
+								? verified(found.address)
+								: computed(found.address),
+						name: computed(found.utxoType),
+					};
+		}
+
+		default: {
+			return amount;
+		}
+	}
 }
 
 function blindedAmounts(review: ReviewedPlan): BlindedAmount[] {
@@ -147,10 +207,16 @@ function intentOf(action: Action, scope: Scope): string | undefined {
 
 type ShownAmount = { asset: Provenanced<string>; sats: Provenanced<string> };
 
-export type ShownConfirmation = Omit<ConfirmationModel, "feeSats" | "netEffect" | "payments"> & {
+export type ShownFlowRow = Omit<FlowRow, "sats"> & { sats: Provenanced<string> };
+
+export type ShownConfirmation = Omit<
+	ConfirmationModel,
+	"feeSats" | "inputs" | "netEffect" | "outputs"
+> & {
 	feeSats: Provenanced<string>;
+	inputs: ShownFlowRow[];
 	netEffect: ShownAmount[];
-	payments: (ShownAmount & { address: Provenanced<string> })[];
+	outputs: ShownFlowRow[];
 };
 
 export function toShownConfirmation(model: ConfirmationModel): ShownConfirmation {
@@ -161,10 +227,11 @@ export function toShownConfirmation(model: ConfirmationModel): ShownConfirmation
 			asset: effect.asset,
 			sats: map(effect.sats, (sats) => sats.toString()),
 		})),
-		payments: model.payments.map((payment) => ({
-			address: payment.address,
-			asset: payment.asset,
-			sats: map(payment.sats, (sats) => sats.toString()),
-		})),
+		inputs: model.inputs.map(shownRow),
+		outputs: model.outputs.map(shownRow),
 	};
+}
+
+function shownRow(row: FlowRow): ShownFlowRow {
+	return { ...row, sats: map(row.sats, (sats) => sats.toString()) };
 }

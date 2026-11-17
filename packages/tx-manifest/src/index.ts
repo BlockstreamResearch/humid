@@ -19,7 +19,12 @@ export {
 export type { ProgramAbi } from "./programs/program";
 export { type RejectToken, Refusal } from "./refusal";
 
-export { type ShownConfirmation, describeOrigin, toShownConfirmation } from "./confirmation";
+export {
+	type ShownConfirmation,
+	type ShownFlowRow,
+	describeOrigin,
+	toShownConfirmation,
+} from "./confirmation";
 export { type Provenanced, computed, fromDapp, verified } from "./confirmation/provenance";
 
 export { type EncodeStateLeavesResult, encodeStateLeaves } from "./programs/stateLeaves";

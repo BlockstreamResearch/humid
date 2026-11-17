@@ -33,11 +33,16 @@ import {
 } from "../../../adapters/smplx/compileProgramWithSmplx";
 import { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
+import { LIQUID_NATIVE_ASSET } from "../../../domain/LiquidAsset";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type { LiquidFundingUtxo, LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../../dappAccountScope";
 import type { LiquidRpcMethodContext } from "../../LiquidRpcContext";
-import { PROCESS_CT_CONFIRMATION_KIND } from "./ProcessCtConfirmation";
+import {
+	type KnownAsset,
+	PROCESS_CT_CONFIRMATION_KIND,
+	type ProcessCtConfirmationData,
+} from "./ProcessCtConfirmation";
 
 export type LiquidProcessCtContext = LiquidRpcMethodContext;
 
@@ -100,13 +105,14 @@ export const createProcessLiquidConfidentialTransaction = (
 	dependencies: LiquidProcessCtDependencies = liquidProcessCtDependencies,
 ) =>
 	createWalletMethod<ActionRequest, LiquidProcessCtContext, ManifestReview, LiquidProcessCtResult>({
-		confirmation: ({ params, review }) => ({
+		confirmation: async ({ context, params, review }) => ({
 			data: {
+				assets: await knownAssets(context, await dependencies.resolveAccount(context), review),
 				broadcast: params.broadcast,
 				kind: PROCESS_CT_CONFIRMATION_KIND,
+				network: context.chain.name,
 				shown: toShownConfirmation(review.confirmation),
-			},
-			message: `A dapp wants to perform "${review.action}" on the ${review.protocol} protocol.`,
+			} satisfies ProcessCtConfirmationData,
 			title: "Perform a contract action?",
 			timeoutMs: 5 * 60_000,
 		}),
@@ -306,7 +312,34 @@ function fundable(
 }
 
 function accountLabelOf(context: LiquidProcessCtContext, account: LiquidWalletAccount): string {
-	return `${account.chain?.id ?? context.chain.id} account ${account.accountGroupIndex ?? 0}`;
+	const group =
+		account.accountGroupId === undefined
+			? undefined
+			: context.keyManagerState.accountModel.accountGroups[account.accountGroupId];
+
+	return group?.name ?? `Account ${account.accountGroupIndex ?? 0}`;
+}
+
+async function knownAssets(
+	context: LiquidProcessCtContext,
+	account: LiquidWalletAccount,
+	review: ManifestReview,
+): Promise<Record<string, KnownAsset>> {
+	const snapshot =
+		account.accountGroupId === undefined
+			? null
+			: await context.readPortfolioSnapshot?.(account.accountGroupId, account.chainId);
+	const held = (snapshot?.data.assets ?? []).map(
+		(asset) => [asset.rawAssetId, { decimals: asset.decimals, ticker: asset.symbol }] as const,
+	);
+
+	return {
+		...Object.fromEntries(held),
+		[review.policyAsset]: {
+			decimals: LIQUID_NATIVE_ASSET.decimals,
+			ticker: LIQUID_NATIVE_ASSET.symbol,
+		},
+	};
 }
 
 function signingDerivationPathOf(

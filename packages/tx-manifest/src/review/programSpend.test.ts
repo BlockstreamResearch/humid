@@ -81,9 +81,11 @@ describe("what the review carries out about a program it will spend", () => {
 		expect(review.programInputs).toEqual([
 			{
 				argumentsJson: JSON.stringify({ PUB_KEY: { type: "Pubkey", value: `0x${PUBKEY}` } }),
+				asset: POLICY_ASSET,
 				extraLeavesJson: "[]",
 				id: "p2pk_in",
 				includeDebugSymbols: false,
+				sats: 50_000n,
 				signatureWitness: "SIGNATURE",
 				source: p2pk.source(P2PK_PATH),
 				txOutHex: PROGRAM_TXOUT,
@@ -155,6 +157,7 @@ describe("the order the transaction's inputs are built in", () => {
 			source: "program",
 		});
 		expect(review.inputOrder[1]).toEqual({
+			asset: POLICY_ASSET,
 			source: "wallet",
 			utxo: review.selected[0]!,
 		});

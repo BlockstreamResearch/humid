@@ -189,6 +189,7 @@ describe("a template action against a deployment that exists", () => {
 			blinded: true,
 			decidedBy: "chain",
 			id: "withdrawn",
+			pays: "wallet",
 			sats: 50_000n,
 			scriptPubKeyHex: WALLET_SCRIPT,
 		});

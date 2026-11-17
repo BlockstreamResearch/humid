@@ -24,10 +24,12 @@ export function ConfirmationSection({
 }: {
 	title: string;
 	aside?: ReactNode;
-	children: ReactNode;
+	children?: ReactNode;
 }) {
 	return (
-		<section className="border-border rounded-lg border px-3 py-1">
+		<section
+			className={cn("border-border rounded-lg border px-3 py-1", children === undefined && "pb-2")}
+		>
 			<header className="mt-2 mb-1 flex items-center justify-between gap-2">
 				<h2 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
 					{title}

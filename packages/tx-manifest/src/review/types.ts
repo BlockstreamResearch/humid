@@ -18,10 +18,12 @@ export type ProgramFinding = ProgramDerivation & {
 
 export type ReviewedProgramInput = {
 	argumentsJson: string;
+	asset: string;
 	blindingSecretsJson?: string;
 	extraLeavesJson: string;
 	id: string;
 	includeDebugSymbols: boolean;
+	sats: bigint;
 	signatureWitness?: string;
 	source: string;
 	txOutHex: string;
@@ -36,11 +38,12 @@ export type TypedWitness = StaticWitness & { type: string };
 
 export type PlannedInput =
 	| { program: ReviewedProgramInput; sequence?: number; source: "program" }
-	| { sequence?: number; source: "wallet"; utxo: SelectableUtxo };
+	| { asset: string; sequence?: number; source: "wallet"; utxo: SelectableUtxo };
 
 export type ReviewedOutput = BlindingFactors & {
 	address?: string;
 	asset: string;
+	pays: "address" | "change" | "data" | "program" | "wallet";
 	blinded: boolean;
 	blindingPublicKeyHex?: string;
 	decidedBy: BlindingWord;

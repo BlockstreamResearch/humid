@@ -85,6 +85,7 @@ export class ProgramSpends {
 		spent.held.push({ asset: holding.asset, id, sats: holding.sats });
 		spent.inputs.push({
 			argumentsJson: derived.argumentsJson,
+			asset: holding.asset,
 			extraLeavesJson: derived.extraLeavesJson,
 			id,
 			includeDebugSymbols: derived.includeDebugSymbols,
@@ -92,6 +93,7 @@ export class ProgramSpends {
 			...(holding.blindingSecretsJson === undefined
 				? {}
 				: { blindingSecretsJson: holding.blindingSecretsJson }),
+			sats: holding.sats,
 			source: derived.source,
 			txOutHex: onChain.txOutHex,
 			txid: outpoint.txid,

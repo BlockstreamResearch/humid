@@ -98,6 +98,7 @@ export class OutputPayer {
 				...chosenFactors(id, factors, blinded),
 				decidedBy: blinded ? blinding.decidedBy : "unblindable",
 				id,
+				pays: "address",
 				sats,
 				scriptPubKeyHex,
 			});
@@ -131,6 +132,7 @@ export class OutputPayer {
 			...chosenFactors(id, factors, blinded),
 			decidedBy: blinding.decidedBy,
 			id,
+			pays: target.kind === "program" || target.kind === "data" ? target.kind : "wallet",
 			sats,
 			scriptPubKeyHex,
 		});
@@ -173,6 +175,7 @@ export class OutputPayer {
 			decidedBy: blinding.decidedBy,
 			id,
 			...(blinding.overrode === undefined ? {} : { overrode: blinding.overrode }),
+			pays: "change",
 			sats,
 			scriptPubKeyHex: this.#context.dependencies.wallet.scriptPubKeyHex,
 		});

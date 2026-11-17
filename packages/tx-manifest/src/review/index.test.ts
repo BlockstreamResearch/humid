@@ -170,6 +170,7 @@ describe("the transaction a review settles", () => {
 			blinded: false,
 			decidedBy: "unblindable",
 			id: "p2pk_out",
+			pays: "program",
 			sats: 1000n,
 			scriptPubKeyHex: DERIVED_SCRIPT,
 		});
@@ -259,12 +260,12 @@ describe("where an output can pay", () => {
 	test("and lists each address paid on the confirmation, as the dapp's word", async () => {
 		const review = await reviewed(paying({ destination: CONFIDENTIAL }), { readAddress });
 
-		expect(review.confirmation.payments).toEqual([
-			{
+		expect(review.confirmation.outputs.filter((row) => row.kind === "address")).toEqual([
+			expect.objectContaining({
 				address: fromDapp(CONFIDENTIAL),
 				asset: computed(POLICY_ASSET),
 				sats: computed(1000n),
-			},
+			}),
 		]);
 	});
 

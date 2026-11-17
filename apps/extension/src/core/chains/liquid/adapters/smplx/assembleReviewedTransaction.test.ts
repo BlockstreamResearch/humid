@@ -284,7 +284,7 @@ function review(overrides: Partial<ManifestReview> = {}): ManifestReview {
 				...built,
 				inputOrder: [
 					...built.programInputs.map((program) => ({ program, source: "program" as const })),
-					...built.selected.map((utxo) => ({ source: "wallet" as const, utxo })),
+					...built.selected.map((utxo) => ({ asset: ASSET, source: "wallet" as const, utxo })),
 				],
 			}
 		: built;
@@ -301,12 +301,13 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 			feeSats: computed(344n),
 			blindedAmounts: [],
 			netEffect: [{ asset: computed(ASSET), sats: computed(-50_344n) }],
-			payments: [],
+			inputs: [],
+			outputs: [],
 			protocol: fromDapp("p2pk-simplicity"),
 			publishedAmounts: [],
 		},
 		programInputs: [],
-		inputOrder: [{ source: "wallet", utxo: WALLET_UTXO }],
+		inputOrder: [{ asset: ASSET, source: "wallet", utxo: WALLET_UTXO }],
 		programs: [
 			{
 				address: "tex1p_derived",
@@ -326,6 +327,7 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 				asset: ASSET,
 				blinded: false,
 				decidedBy: "unblindable",
+				pays: "program",
 				id: "p2pk_out",
 				sats: 50_000n,
 				scriptPubKeyHex: PROGRAM_SCRIPT,
@@ -495,6 +497,8 @@ describe("assembleReviewedTransaction", () => {
 	describe("an action that spends a program", () => {
 		const programInput = {
 			argumentsJson: PROGRAM_BUILD.argumentsJson,
+			asset: ASSET,
+			sats: 50_000n,
 			extraLeavesJson: PROGRAM_BUILD.extraLeavesJson,
 			id: "p2pk_in",
 			includeDebugSymbols: PROGRAM_BUILD.includeDebugSymbols,
@@ -523,6 +527,7 @@ describe("assembleReviewedTransaction", () => {
 					asset: ASSET,
 					blinded: false,
 					decidedBy: "unblindable",
+					pays: "wallet",
 					id: "received_out",
 					sats: 50_000n,
 					scriptPubKeyHex: WALLET_SCRIPT,
@@ -594,7 +599,7 @@ describe("assembleReviewedTransaction", () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
 					inputOrder: [
-						{ source: "wallet", utxo: WALLET_UTXO },
+						{ asset: ASSET, source: "wallet", utxo: WALLET_UTXO },
 						{ program: programInput, source: "program" },
 					],
 				}),
@@ -630,7 +635,7 @@ describe("assembleReviewedTransaction", () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
 					inputOrder: [
-						{ source: "wallet", utxo: WALLET_UTXO },
+						{ asset: ASSET, source: "wallet", utxo: WALLET_UTXO },
 						{ program: { ...programInput, unusedWitnesses: ["HOT_SIG"] }, source: "program" },
 					],
 				}),
@@ -691,7 +696,7 @@ describe("assembleReviewedTransaction", () => {
 			const { assemble, recorded } = subject(
 				spendingPlan({
 					inputOrder: [
-						{ source: "wallet", utxo: WALLET_UTXO },
+						{ asset: ASSET, source: "wallet", utxo: WALLET_UTXO },
 						{ program: programInput, sequence: 25_920, source: "program" },
 					],
 					locktimeHeight: 3_210_987,
@@ -771,6 +776,7 @@ describe("assembleReviewedTransaction", () => {
 					asset: ASSET,
 					blinded: false,
 					decidedBy: "output",
+					pays: "wallet",
 					id: "received_out",
 					sats: 10n,
 					scriptPubKeyHex: WALLET_SCRIPT,
@@ -973,6 +979,7 @@ describe("assembleReviewedTransaction", () => {
 					asset: ASSET,
 					blinded: true,
 					decidedBy: "chain" as const,
+					pays: "address" as const,
 					id: "paid_out",
 					sats: 10n,
 					scriptPubKeyHex: WALLET_SCRIPT,
@@ -981,6 +988,7 @@ describe("assembleReviewedTransaction", () => {
 					asset: ASSET,
 					blinded: false,
 					decidedBy: "unblindable" as const,
+					pays: "address" as const,
 					id: "p2pk_out",
 					sats: 50_000n,
 					scriptPubKeyHex: PROGRAM_SCRIPT,

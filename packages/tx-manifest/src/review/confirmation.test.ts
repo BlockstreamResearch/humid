@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { computed, verified } from "../confirmation/provenance";
 import { toShownConfirmation } from "../index";
 import type { ActionRequest } from "../request/request";
 import {
@@ -227,6 +228,42 @@ describe("what a person is told about an amount this wallet published", () => {
 	});
 });
 
+describe("what the transaction spends and creates", () => {
+	test("lists a program it spends by its type, at the address the chain confirmed", async () => {
+		expect((await shown()).inputs[0]).toEqual({
+			address: verified(DERIVED),
+			asset: computed(POLICY_ASSET),
+			kind: "program",
+			name: verified("p2pk_output"),
+			sats: computed(50_000n),
+		});
+	});
+
+	test("and the wallet's own coins by the asset each one funds", async () => {
+		const { inputs } = (await reviewed(pay())).confirmation;
+
+		expect(inputs.length).toBeGreaterThan(0);
+		expect(inputs.every((row) => row.kind === "wallet")).toBe(true);
+		expect(inputs[0]?.asset).toEqual(computed(POLICY_ASSET));
+	});
+
+	test("names a program it pays by its type, at the address the wallet derived", async () => {
+		const { outputs } = (await reviewed(pay())).confirmation;
+
+		expect(outputs.find((row) => row.kind === "program")).toMatchObject({
+			address: computed(DERIVED),
+			name: computed("p2pk_output"),
+			sats: computed(1000n),
+		});
+	});
+
+	test("and tells change apart from what the action pays", async () => {
+		const { outputs } = (await reviewed(pay())).confirmation;
+
+		expect(outputs.map((row) => row.kind)).toContain("change");
+	});
+});
+
 describe("the model as it crosses to a surface", () => {
 	test("writes every amount as a decimal string", async () => {
 		const result = await received();
@@ -236,6 +273,7 @@ describe("the model as it crosses to a surface", () => {
 		expect(crossed.netEffect[0]?.sats.value).toBe(
 			result.confirmation.netEffect[0]?.sats.value.toString(),
 		);
+		expect(crossed.inputs[0]?.sats.value).toBe("50000");
 	});
 
 	test("and survives the encoding the bus actually uses", async () => {
