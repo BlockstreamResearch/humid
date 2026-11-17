@@ -87,7 +87,9 @@ async function exerciseSigning() {
 		const review = await blindAndInspectPset(account, params.pset);
 		expect(review.fees).toEqual([{ asset: rawAssetId, amount: "1000" }]);
 		expect(review.netEffect).toEqual([{ asset: rawAssetId, amount: "-1000" }]);
-		expect(review.inputs).toEqual([{ index: 0, sighashType: 130 }]);
+		expect(review.inputs).toEqual([
+			{ amount: String(coin.amount), asset: rawAssetId, index: 0, owned: true, sighashType: 130 },
+		]);
 		expect(params.signInputs[0]!.sighashTypes).toEqual([1]);
 		const reviewed = own(new lwk.Pset(review.pset));
 		expect(signatureCounts(review.pset)).toEqual([0]);
@@ -125,6 +127,7 @@ async function exerciseSigning() {
 			asset: rawAssetId,
 			index: 2,
 		});
+		expect(mixedReview.outputs.map((output) => output.owned)).toEqual([true, true, true, false]);
 		const mixedSigned = await signPset(account, {
 			broadcast: false,
 			reviewedPset: mixedReview.pset,

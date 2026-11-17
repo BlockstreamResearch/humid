@@ -57,12 +57,18 @@ function inspectPset(
 			explicitBalances.set(asset, (explicitBalances.get(asset) ?? 0n) + amount);
 		};
 		const review = markOwnership(lwk, wollet, pset);
-		for (const input of review.inputs.filter((entry) => entry.isOwned)) {
+		const ownedOutputs = review.outputs.map((output) => output.isOwned);
+		const spent = review.inputs.map((input) => {
+			if (!input.isOwned) {
+				const prevout = input.explicitPrevout;
+				return { amount: prevout?.value.toString(), asset: prevout?.asset, owned: false };
+			}
 			const coin = coins.find(input.outpoint);
 			if (!coin) throw invalidPset("PSET spends a wallet output the wallet does not hold.");
 			add(coin.rawAssetId, -BigInt(coin.amountSats));
 			input.disown();
-		}
+			return { amount: coin.amountSats, asset: coin.rawAssetId, owned: true };
+		});
 		for (const [index, output] of review.outputs.entries()) {
 			if (!output.isOwned || !output.isExplicit) continue;
 			const amount = outputs[index]!.amount();
@@ -87,6 +93,7 @@ function inspectPset(
 		return {
 			pset: pset.toString(),
 			inputs: inputs.map((input, index) => ({
+				...spent[index]!,
 				index,
 				sighashType: input.sighash(),
 			})),
@@ -106,6 +113,7 @@ function inspectPset(
 					amount: output.amount()?.toString(),
 					asset: asset?.toString(),
 					index,
+					owned: ownedOutputs[index]!,
 					script: own(output.scriptPubkey()).toString(),
 				};
 			}),

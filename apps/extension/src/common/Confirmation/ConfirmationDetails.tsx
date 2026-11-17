@@ -76,3 +76,11 @@ export function DetailsRow({
 		</div>
 	);
 }
+
+export function shortAddress(address: string): string {
+	return address.length <= 16 ? address : `${address.slice(0, 8)}…${address.slice(-4)}`;
+}
+
+export function count(amount: number, noun: string): string {
+	return `${amount} ${noun}${amount === 1 ? "" : "s"}`;
+}

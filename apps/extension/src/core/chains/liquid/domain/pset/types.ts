@@ -34,7 +34,13 @@ export type LiquidSignPsetResult = {
 export type LiquidSignPsetReview = {
 	/** Blinded PSET inspected for approval; signing uses this exact serialization. */
 	pset: string;
-	inputs: { index: number; sighashType: number }[];
+	inputs: {
+		amount?: string;
+		asset?: string;
+		index: number;
+		owned: boolean;
+		sighashType: number;
+	}[];
 	fees: { asset: string; amount: string }[];
 	netEffect: { asset: string; amount: string }[];
 	outputs: {
@@ -42,6 +48,7 @@ export type LiquidSignPsetReview = {
 		amount?: string;
 		asset?: string;
 		index: number;
+		owned: boolean;
 		script: string;
 	}[];
 };

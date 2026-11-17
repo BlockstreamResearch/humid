@@ -4,8 +4,10 @@ import { useState } from "react";
 import type { ConfirmationRenderer } from "@/common/Confirmation";
 import {
 	ConfirmationDetails,
+	count,
 	DetailsGroup,
 	DetailsRow,
+	shortAddress,
 } from "@/common/Confirmation/ConfirmationDetails";
 import { ConfirmationActions, ConfirmationLayout } from "@/common/Confirmation/ConfirmationLayout";
 import {
@@ -296,14 +298,6 @@ export function readable(name: string): string {
 		.toLowerCase();
 
 	return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function shortAddress(address: string): string {
-	return address.length <= 16 ? address : `${address.slice(0, 8)}…${address.slice(-4)}`;
-}
-
-function count(amount: number, noun: string): string {
-	return `${amount} ${noun}${amount === 1 ? "" : "s"}`;
 }
 
 export const processCtConfirmationRenderer: ConfirmationRenderer = {

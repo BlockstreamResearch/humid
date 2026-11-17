@@ -16,6 +16,7 @@ import { processCtConfirmationRenderer } from "@/core/chains/liquid/application/
 import { sendTransferConfirmationRenderer } from "@/core/chains/liquid/application/methods/sendTransfer/SendTransferConfirmation";
 import { signIdentityConfirmationRenderer } from "@/core/chains/liquid/application/methods/signIdentity/SignIdentityConfirmation";
 import { signMessageConfirmationRenderer } from "@/core/chains/liquid/application/methods/signMessage/SignMessageConfirmation";
+import { signPsetConfirmationRenderer } from "@/core/chains/liquid/application/methods/signPset/SignPsetConfirmation";
 import { dappAddChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappAddChainConfirmation";
 import { dappConnectConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappConnectConfirmation";
 import { dappSwitchChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappSwitchChainConfirmation";
@@ -43,6 +44,7 @@ const confirmationRenderers = [
 	sendTransferConfirmationRenderer,
 	signIdentityConfirmationRenderer,
 	signMessageConfirmationRenderer,
+	signPsetConfirmationRenderer,
 	unlockConfirmationRenderer,
 ];
 
