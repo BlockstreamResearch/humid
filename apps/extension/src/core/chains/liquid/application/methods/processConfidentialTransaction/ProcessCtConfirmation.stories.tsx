@@ -32,7 +32,6 @@ export const Default: Story = {
 		await expect(canvas.getByText("−0.00500026")).toBeVisible();
 		await expect(canvas.getByText("Signing with Account 0")).toBeVisible();
 
-		await userEvent.click(canvas.getByRole("button", { name: /details/i }));
 		await expect(canvas.getAllByText("Lending contract")[0]).toBeVisible();
 		await expect(canvas.getByText("This account, change")).toBeVisible();
 		await expect(canvas.getByText("50 bytes")).toBeVisible();

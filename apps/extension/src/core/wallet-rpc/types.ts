@@ -7,7 +7,6 @@ export type WalletRpcConfirmationRequest = {
 	method?: string;
 	requester?: { name?: string; origin: string };
 	title: string;
-	timeoutMs?: number;
 };
 
 export type WalletRpcConfirmationDecision = {

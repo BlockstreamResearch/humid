@@ -1,9 +1,13 @@
 @import "./theme/global.css";
 
 @layer utilities {
-	html,
+	/* The html size sets the popup's size; the app fits what Chrome shows of it at any zoom. */
+	html {
+		@apply m-0 h-[600px] w-[375px] overflow-hidden p-0;
+	}
+
 	body,
 	#root {
-		@apply m-0 h-[600px] w-[375px] overflow-hidden p-0;
+		@apply m-0 h-screen w-full overflow-hidden p-0;
 	}
 }

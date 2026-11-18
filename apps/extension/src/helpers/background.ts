@@ -11,7 +11,6 @@ export type ConfirmationRequest = {
 	data?: unknown;
 	method?: string;
 	requester?: { name?: string; origin: string };
-	timeoutMs?: number;
 };
 
 export type ConfirmationDecision<TResult = unknown> = {
@@ -70,8 +69,11 @@ async function createOrFocusNotification(url: string): Promise<number> {
 }
 
 async function getNotificationWindowOptions(): Promise<browser.Windows.UpdateUpdateInfoType> {
-	const width = NOTIFICATION_CONTENT_WIDTH + NOTIFICATION_WINDOW_FRAME_WIDTH_OFFSET;
-	const height = NOTIFICATION_CONTENT_HEIGHT + NOTIFICATION_WINDOW_FRAME_HEIGHT_OFFSET;
+	const zoom = await defaultZoom();
+	const width =
+		Math.round(NOTIFICATION_CONTENT_WIDTH * zoom) + NOTIFICATION_WINDOW_FRAME_WIDTH_OFFSET;
+	const height =
+		Math.round(NOTIFICATION_CONTENT_HEIGHT * zoom) + NOTIFICATION_WINDOW_FRAME_HEIGHT_OFFSET;
 	const anchorWindow = await getNotificationAnchorWindow();
 	const left = Math.round((anchorWindow.left ?? 0) + (anchorWindow.width ?? width) - width);
 
@@ -88,6 +90,14 @@ async function getNotificationWindowOptions(): Promise<browser.Windows.UpdateUpd
 	}
 
 	return windowOptions;
+}
+
+async function defaultZoom(): Promise<number> {
+	try {
+		return (await browser.tabs.getZoomSettings()).defaultZoomFactor ?? 1;
+	} catch {
+		return 1;
+	}
 }
 
 async function getNotificationAnchorWindow(): Promise<browser.Windows.Window> {

@@ -35,7 +35,7 @@ export function SignMessageConfirmation({
 			<TextBlock title="Message" byDapp>
 				{data.message}
 			</TextBlock>
-			<ConfirmationDetails summary="Signing address" defaultOpen>
+			<ConfirmationDetails summary="Signing address">
 				<div>
 					<FactRow label="Signing address" value={data.address} mono />
 					<FactRow label="Signature" value={data.protocol.toUpperCase()} />

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fn, within } from "storybook/test";
 
 import {
 	SIGN_IDENTITY_CONFIRMATION_KIND,
@@ -33,7 +33,6 @@ export const BinaryChallenge: Story = {
 		const canvas = within(canvasElement);
 
 		await expect(canvas.getByText("3a9f 21c0 7b5e d184")).toBeVisible();
-		await userEvent.click(canvas.getByRole("button", { name: /details/i }));
 		await expect(canvas.getByText(args.data.challenge)).toBeVisible();
 	},
 };

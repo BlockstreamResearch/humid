@@ -62,7 +62,6 @@ export function createInternalRpcHandlers({
 				title: data?.title ?? "Confirm action?",
 				message: data?.message,
 				data: data?.data,
-				timeoutMs: data?.timeoutMs,
 			});
 
 			return decision.approved;

@@ -8,15 +8,13 @@ import { DappProvided } from "./ConfirmationParts";
 
 export function ConfirmationDetails({
 	summary,
-	defaultOpen = false,
 	children,
 }: {
 	summary?: string;
-	defaultOpen?: boolean;
 	children: ReactNode;
 }) {
 	return (
-		<UiCollapsible defaultOpen={defaultOpen} className="border-border rounded-lg border">
+		<UiCollapsible defaultOpen className="border-border rounded-lg border">
 			<UiCollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-2 p-3 text-left">
 				<span className="flex-1 text-sm font-semibold">Details</span>
 				{summary !== undefined && <span className="text-muted-foreground text-xs">{summary}</span>}

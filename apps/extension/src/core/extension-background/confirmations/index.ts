@@ -17,7 +17,7 @@ import { sleep } from "@/helpers/promise";
 
 import type { BackgroundMessageBus } from "../transport";
 
-const CONFIRMATION_TIMEOUT_MS = 30_000;
+const CONFIRMATION_TIMEOUT_MS = 120_000;
 const NOTIFICATION_SETTLE_MS = 200;
 const UNLOCK_PRIORITY = 1;
 
@@ -94,10 +94,7 @@ export function createConfirmationResponder(
 
 			if (entry.settled) return;
 
-			timeout = setTimeout(
-				() => entry.settle({ approved: false }),
-				request.timeoutMs ?? CONFIRMATION_TIMEOUT_MS,
-			);
+			timeout = setTimeout(() => entry.settle({ approved: false }), CONFIRMATION_TIMEOUT_MS);
 			removeResponseListener = messageBus.onMessage(
 				MsgProtocolResponseMethods.ConfirmResponse,
 				({ data: response }) => {

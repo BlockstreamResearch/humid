@@ -119,7 +119,6 @@ export const createProcessLiquidConfidentialTransaction = (
 				})),
 			} satisfies ProcessCtConfirmationData,
 			title: "Perform a contract action?",
-			timeoutMs: 5 * 60_000,
 		}),
 		execute: async ({ choice, context, params, review: speeds }) => {
 			const targetBlocks = chosenTargetBlocks(choice);
