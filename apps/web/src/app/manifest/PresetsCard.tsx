@@ -79,7 +79,7 @@ export function PresetsCard({
 				{problem !== null && <p className="text-destructive text-sm">{problem}</p>}
 
 				{PRESETS.map((preset) => (
-					<div key={preset.name} className="flex flex-col gap-2">
+					<fieldset key={preset.name} aria-label={preset.name} className="flex flex-col gap-2">
 						<div>
 							<p className="font-mono text-sm font-semibold">{preset.name}</p>
 							<p className="text-muted-foreground text-xs">{preset.description}</p>
@@ -104,7 +104,7 @@ export function PresetsCard({
 								);
 							})}
 						</div>
-					</div>
+					</fieldset>
 				))}
 			</CardContent>
 		</Card>

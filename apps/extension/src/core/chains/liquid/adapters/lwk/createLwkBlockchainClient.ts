@@ -29,6 +29,8 @@ export function createLwkBlockchainClient(
 	builder.waterfalls(waterfalls);
 	builder.utxoOnly(utxoOnly);
 	builder.concurrency(concurrency);
+	// Esplora lets browsers cache address histories for 10 seconds, long enough to offer a coin just spent.
+	builder.header("Cache-Control", "no-cache");
 
 	if (backend.timeout !== undefined) {
 		builder.timeout(backend.timeout);

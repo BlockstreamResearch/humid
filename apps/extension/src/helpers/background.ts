@@ -50,20 +50,21 @@ export function openNotification(url = ""): Promise<number> {
 }
 
 async function createOrFocusNotification(url: string): Promise<number> {
-	const windowOptions = await getNotificationWindowOptions();
+	const placed = await getNotificationWindowOptions();
+	// Chrome refuses a position mostly off-screen, as next to a browser window wider than the display.
+	const unplaced = { focused: true, height: placed.height, width: placed.width };
 	const notificationWindow = await getNotification();
 
 	if (notificationWindow?.id !== undefined) {
-		await browser.windows.update(notificationWindow.id, { ...windowOptions, focused: true });
-		return notificationWindow.id;
+		const id = notificationWindow.id;
+
+		await browser.windows.update(id, placed).catch(() => browser.windows.update(id, unplaced));
+		return id;
 	}
 
-	const createdWindow = await browser.windows.create({
-		url: getNotificationUrl(url),
-		focused: true,
-		type: "popup",
-		...windowOptions,
-	});
+	const create = (options: browser.Windows.UpdateUpdateInfoType) =>
+		browser.windows.create({ url: getNotificationUrl(url), type: "popup", ...options });
+	const createdWindow = await create(placed).catch(() => create(unplaced));
 
 	notificationWindowId = createdWindow.id;
 	return createdWindow.id ?? -1;
