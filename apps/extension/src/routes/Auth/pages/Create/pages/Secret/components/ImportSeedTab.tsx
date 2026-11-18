@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { UiButton } from "@/ui/UiButton/base";
 
+import { useAuthCreateContext } from "../../../index";
 import { useMnemonicImport } from "../hooks/useMnemonicImport";
 import { MnemonicInputGrid } from "./MnemonicGrid";
 
@@ -17,7 +18,7 @@ export function ImportSeedTab({ onComplete }: { onComplete: (mnemonic: string) =
 		mnemonic,
 		pasteFromClipboard,
 		words,
-	} = useMnemonicImport();
+	} = useMnemonicImport(useAuthCreateContext().importedSeed);
 	const [pasteHint, setPasteHint] = useState<string | null>(null);
 
 	const handlePaste = async () => {
@@ -29,7 +30,9 @@ export function ImportSeedTab({ onComplete }: { onComplete: (mnemonic: string) =
 		}
 
 		if (result.error) console.warn("Clipboard read failed:", result.error);
-		setPasteHint("Couldn't read the clipboard. Paste with Ctrl+V or type the words manually.");
+		setPasteHint(
+			"Couldn't read the clipboard. Paste into the first box instead, or type the words.",
+		);
 	};
 
 	const handleClear = () => {
@@ -39,29 +42,22 @@ export function ImportSeedTab({ onComplete }: { onComplete: (mnemonic: string) =
 
 	return (
 		<div className="flex flex-col gap-4">
-			<div className="flex items-center justify-between gap-2">
-				<p className="text-muted-foreground text-sm leading-6">
-					Enter or paste your 12-word recovery phrase.
-				</p>
-				<div className="flex shrink-0 items-center gap-1">
-					<UiButton type="button" variant="ghost" size="sm" onClick={() => void handlePaste()}>
-						<HugeiconsIcon icon={ClipboardPasteIcon} />
-						Paste
-					</UiButton>
-					<UiButton
-						type="button"
-						variant="ghost"
-						size="sm"
-						disabled={isEmpty}
-						onClick={handleClear}
-					>
-						<HugeiconsIcon icon={EraserIcon} />
-						Clear
-					</UiButton>
-				</div>
-			</div>
+			<p className="text-muted-foreground text-center text-sm leading-6">
+				Enter or paste the 12-word recovery phrase.
+			</p>
 
 			<MnemonicInputGrid words={words} getInputProps={getInputProps} />
+
+			<div className="flex items-center justify-center gap-3">
+				<UiButton type="button" variant="ghost" size="sm" onClick={() => void handlePaste()}>
+					<HugeiconsIcon icon={ClipboardPasteIcon} />
+					Paste
+				</UiButton>
+				<UiButton type="button" variant="ghost" size="sm" disabled={isEmpty} onClick={handleClear}>
+					<HugeiconsIcon icon={EraserIcon} />
+					Clear
+				</UiButton>
+			</div>
 
 			{pasteHint && <p className="text-muted-foreground text-center text-xs">{pasteHint}</p>}
 

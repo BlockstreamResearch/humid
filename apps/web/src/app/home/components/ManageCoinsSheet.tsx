@@ -163,7 +163,7 @@ export function ManageCoinsSheet({ open, onOpenChange }: OverlayProps) {
 				<SheetHeader>
 					<SheetTitle>Manage coins</SheetTitle>
 					<SheetDescription>
-						Merge or split your {ticker} coins. The wallet blinds, signs and broadcasts.
+						Merge or split the {ticker} coins. The wallet blinds, signs and broadcasts.
 					</SheetDescription>
 				</SheetHeader>
 

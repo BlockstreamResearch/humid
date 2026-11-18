@@ -19,8 +19,8 @@ createAppKit({
 	defaultNetwork: liquidTestnet,
 	projectId: "41f8085dc01ff1ca42c6efcb2c12c169",
 	metadata: {
-		name: "HUMID Liquid Dapp",
-		description: "HUMID browser extension Liquid Wallet RPC test dapp",
+		name: "Humid Liquid Dapp",
+		description: "Humid browser extension Liquid Wallet RPC test dapp",
 		url: typeof window !== "undefined" ? window.location.origin : "",
 		icons: [],
 	},

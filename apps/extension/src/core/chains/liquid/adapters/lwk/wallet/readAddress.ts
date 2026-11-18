@@ -38,7 +38,9 @@ function blindingKeyOf(address: string): string {
 	const lower = address.toLowerCase();
 
 	if (!CONFIDENTIAL_PREFIXES.some((prefix) => lower.startsWith(prefix))) {
-		throw new Error(`${address} is a confidential address this wallet reads no blinding key from.`);
+		throw new Error(
+			`${address} is a confidential address in an older format. Use an lq1, tlq1 or el1 address.`,
+		);
 	}
 
 	const words = Array.from(lower.slice(lower.lastIndexOf("1") + 1, -CHECKSUM_LENGTH), (char) =>

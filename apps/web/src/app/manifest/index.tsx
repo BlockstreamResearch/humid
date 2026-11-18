@@ -73,7 +73,7 @@ export default function ManifestRunner() {
 					<CardDescription>
 						Select a JSON file or paste JSON holding a processConfidentialTransaction request —
 						action, manifest, contractSources, and optionally params, state, instance and broadcast.
-						It is sent to the HUMID extension as-is, and the wallet asks for confirmation before
+						It is sent to the Humid extension as-is, and the wallet asks for confirmation before
 						anything is signed.
 					</CardDescription>
 				</CardHeader>
@@ -213,7 +213,7 @@ function RequestCard({
 
 				{!hasProvider ? (
 					<p className="text-sm text-amber-600 dark:text-amber-500">
-						window.humid is not present on this page. Load the HUMID extension, then reload this
+						window.humid is not present on this page. Load the Humid extension, then reload this
 						tab.
 					</p>
 				) : (

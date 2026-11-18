@@ -41,9 +41,9 @@ function NoProviderCard() {
 					<PuzzleIcon className="text-muted-foreground size-6" />
 				</div>
 				<div className="flex flex-col gap-1">
-					<h1 className="text-base font-medium">HUMID extension not detected</h1>
+					<h1 className="text-base font-medium">Humid extension not detected</h1>
 					<p className="text-muted-foreground text-sm">
-						Install the HUMID browser extension and reload this tab to continue.
+						Install the Humid browser extension and reload this tab to continue.
 					</p>
 				</div>
 				<Button variant="outline" onClick={() => window.location.reload()}>
@@ -72,9 +72,9 @@ function ConnectCard() {
 					<WalletIcon className="text-primary size-7" />
 				</div>
 				<div className="flex flex-col gap-1">
-					<h1 className="text-lg font-semibold tracking-tight">Welcome to HUMID</h1>
+					<h1 className="text-lg font-semibold tracking-tight">Welcome to Humid</h1>
 					<p className="text-muted-foreground text-sm">
-						Connect your Liquid wallet to view your balance and sign in.
+						Connect the wallet to see its balance and identity.
 					</p>
 				</div>
 				<Button className="w-full" disabled={pending} onClick={onConnect}>
@@ -192,7 +192,7 @@ function ConnectedHero() {
 				{hasSession ? null : (
 					<div className="border-border bg-muted/40 flex flex-col gap-2 rounded-lg border p-3">
 						<p className="text-muted-foreground text-xs">
-							Approve a session to load your balance and identity automatically.
+							Approve a session to load the balance and identity automatically.
 						</p>
 						<Button
 							variant="secondary"

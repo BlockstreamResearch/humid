@@ -61,9 +61,9 @@ function NotDetectedCard() {
 	return (
 		<Card className="max-w-3xl">
 			<CardHeader>
-				<CardTitle>HUMID extension not detected</CardTitle>
+				<CardTitle>Humid extension not detected</CardTitle>
 				<CardDescription>
-					window.humid is not present on this page. Load the HUMID extension, then reload this tab.
+					window.humid is not present on this page. Load the Humid extension, then reload this tab.
 				</CardDescription>
 			</CardHeader>
 			<CardContent>

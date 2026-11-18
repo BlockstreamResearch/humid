@@ -60,7 +60,7 @@ type HumidContextValue = {
 };
 
 const NULL_PROVIDER: CaipRpcProvider = {
-	request: () => Promise.reject(new Error("HUMID wallet provider was not found on the page.")),
+	request: () => Promise.reject(new Error("Humid wallet provider was not found on the page.")),
 };
 
 const humidContext = createContext<HumidContextValue>({
@@ -194,7 +194,7 @@ export const HumidProvider = ({ children }: PropsWithChildren) => {
 		policy,
 		isSilent,
 		createSession: async () => {
-			if (!provider) throw new Error("HUMID wallet provider was not found on the page.");
+			if (!provider) throw new Error("Humid wallet provider was not found on the page.");
 			await createCaipSession(provider, buildAllScopes());
 			refreshSession();
 		},

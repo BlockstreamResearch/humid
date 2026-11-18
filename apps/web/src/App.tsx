@@ -32,7 +32,7 @@ export function App() {
 						<div className="mx-auto flex w-full max-w-4xl px-4 pt-4">
 							<Button variant="ghost" size="sm" onClick={() => setView("home")}>
 								<ChevronLeftIcon />
-								Back to app
+								Back to home
 							</Button>
 						</div>
 						{(() => {

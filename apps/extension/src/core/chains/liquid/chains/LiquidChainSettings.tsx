@@ -1,3 +1,6 @@
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+
 import { UiButton } from "@/ui/UiButton/base";
 import { UiCollapsible, UiCollapsibleContent, UiCollapsibleTrigger } from "@/ui/UiCollapsible";
 import { UiField, UiFieldDescription, UiFieldGroup, UiFieldLabel } from "@/ui/UiField";
@@ -65,7 +68,7 @@ export function LiquidChainSettings({ chain, onChange }: LiquidChainSettingsProp
 						onChange={(event) => patchSettings({ policyAsset: event.target.value || undefined })}
 					/>
 					<UiFieldDescription>
-						The custom network's L-BTC asset id. Leave empty to use LWK's default regtest asset.
+						The L-BTC asset ID of this network. Leave empty to use the default regtest asset.
 					</UiFieldDescription>
 				</UiField>
 			)}
@@ -143,8 +146,12 @@ export function LiquidChainSettings({ chain, onChange }: LiquidChainSettingsProp
 			</UiField>
 
 			<UiCollapsible className="flex flex-col gap-4" defaultOpen={false}>
-				<UiCollapsibleTrigger className="text-muted-foreground hover:text-foreground w-fit text-sm font-medium">
-					Advanced
+				<UiCollapsibleTrigger className="group flex w-fit cursor-pointer items-center gap-1 text-sm font-medium">
+					Advanced settings
+					<HugeiconsIcon
+						icon={ArrowDown01Icon}
+						className="text-muted-foreground size-4 transition-transform group-data-[panel-open]:rotate-180"
+					/>
 				</UiCollapsibleTrigger>
 				<UiCollapsibleContent className="flex flex-col gap-4">
 					<UiField orientation="horizontal">

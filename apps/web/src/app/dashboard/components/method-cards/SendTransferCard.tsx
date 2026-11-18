@@ -23,7 +23,7 @@ export function SendTransferCard() {
 
 	return (
 		<RpcCard
-			description="Wallet-built transfer. Prompts for confirmation on every call unless humid_methodPolicy marks it silent; decline → 4001."
+			description="Wallet-built transfer. Prompts for confirmation on every call; decline → 4001."
 			policy={state}
 			title="sendTransfer"
 		>

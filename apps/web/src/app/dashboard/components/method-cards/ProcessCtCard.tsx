@@ -60,7 +60,7 @@ export function ProcessCtCard() {
 			<SelectField
 				label={
 					spending
-						? "Action — Receive spends a p2pk output back to your wallet"
+						? "Action — Receive spends a p2pk output back to the wallet"
 						: "Action — Pay locks funds into a p2pk output"
 				}
 				onValueChange={setAction}

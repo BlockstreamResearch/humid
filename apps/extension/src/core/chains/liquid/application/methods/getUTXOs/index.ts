@@ -38,8 +38,8 @@ export const getLiquidUTXOs = createWalletMethod<
 			chainId: review.account.chainId,
 			kind: "liquid.getUTXOs",
 		},
-		message: "A dapp wants to read the Liquid UTXOs for this account.",
-		title: "Share Liquid UTXOs?",
+		message: "A dapp wants to read this account's coins (unspent outputs).",
+		title: "Share coins?",
 	}),
 	execute: async ({ context, review }) => {
 		const { account, requestedAsset } = review;

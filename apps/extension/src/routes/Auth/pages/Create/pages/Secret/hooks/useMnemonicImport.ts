@@ -7,9 +7,7 @@ import {
 	useState,
 } from "react";
 
-import { keyManagerSecretMaterial } from "@/core/key-manager/secret-material";
-
-const MNEMONIC_WORD_COUNT = 12;
+import { keyManagerSecretMaterial, MNEMONIC_WORD_COUNT } from "@/core/key-manager/secret-material";
 
 function createEmptyWords(): string[] {
 	return Array.from({ length: MNEMONIC_WORD_COUNT }, () => "");
@@ -32,8 +30,10 @@ function readClipboardViaExecCommand(): string {
 	}
 }
 
-export function useMnemonicImport() {
-	const [words, setWords] = useState<string[]>(createEmptyWords);
+export function useMnemonicImport(initial: string) {
+	const [words, setWords] = useState<string[]>(() =>
+		initial ? keyManagerSecretMaterial.splitMnemonicWords(initial) : createEmptyWords(),
+	);
 	const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 	const focusedIndexRef = useRef(0);
 

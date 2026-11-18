@@ -1,4 +1,10 @@
-import { Copy01Icon, Tick02Icon, ViewIcon, ViewOffIcon } from "@hugeicons/core-free-icons";
+import {
+	Copy01Icon,
+	RefreshIcon,
+	Tick02Icon,
+	ViewIcon,
+	ViewOffIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useMemo, useState } from "react";
@@ -8,6 +14,7 @@ import { cn } from "@/theme/utils.ts";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiInput } from "@/ui/UiInput/base";
 
+import { useAuthCreateContext } from "../../../index";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { MnemonicDisplayGrid } from "./MnemonicGrid";
 
@@ -17,7 +24,7 @@ type CreateStep = (typeof CREATE_STEPS)[number];
 const VERIFY_WORD_COUNT = 3;
 
 export function CreateSeedTab({ onComplete }: { onComplete: (mnemonic: string) => void }) {
-	const [mnemonic] = useState(() => keyManagerSecretMaterial.generateMnemonic());
+	const { generated: mnemonic, regenerate } = useAuthCreateContext();
 	const words = useMemo(() => keyManagerSecretMaterial.splitMnemonicWords(mnemonic), [mnemonic]);
 
 	const [stepIndex, setStepIndex] = useState(0);
@@ -27,7 +34,14 @@ export function CreateSeedTab({ onComplete }: { onComplete: (mnemonic: string) =
 	const goToStep = (next: CreateStep) => setStepIndex(CREATE_STEPS.indexOf(next));
 
 	const stepContent: Record<CreateStep, ReactNode> = {
-		reveal: <RevealStep words={words} mnemonic={mnemonic} onNext={() => goToStep("verify")} />,
+		reveal: (
+			<RevealStep
+				words={words}
+				mnemonic={mnemonic}
+				onNext={() => goToStep("verify")}
+				onRegenerate={regenerate}
+			/>
+		),
 		verify: (
 			<VerifyStep
 				words={words}
@@ -52,18 +66,6 @@ export function CreateSeedTab({ onComplete }: { onComplete: (mnemonic: string) =
 			transition={{ layout: { duration: 0.22, ease: "easeOut" } }}
 			className="flex flex-col gap-4"
 		>
-			<div className="flex items-center justify-center gap-1.5">
-				{CREATE_STEPS.map((stepName, index) => (
-					<span
-						key={stepName}
-						className={cn(
-							"h-1.5 rounded-full transition-all",
-							index === stepIndex ? "bg-primary w-5" : "bg-muted w-1.5",
-						)}
-					/>
-				))}
-			</div>
-
 			<AnimatePresence initial={false} mode="wait">
 				<motion.div key={step} className="flex flex-col gap-4" {...motionProps}>
 					{stepContent[step]}
@@ -77,10 +79,12 @@ function RevealStep({
 	words,
 	mnemonic,
 	onNext,
+	onRegenerate,
 }: {
 	words: string[];
 	mnemonic: string;
 	onNext: () => void;
+	onRegenerate: () => void;
 }) {
 	const [hidden, setHidden] = useState(false);
 	const { copied, copy } = useCopyToClipboard();
@@ -88,7 +92,8 @@ function RevealStep({
 	return (
 		<>
 			<p className="text-muted-foreground text-center text-sm leading-6">
-				Keep this recovery phrase safe, offline if possible. Anyone with it controls your funds.
+				Keep this recovery phrase safe, offline if possible. Anyone with the phrase controls the
+				funds.
 			</p>
 
 			<MnemonicDisplayGrid words={words} hidden={hidden} />
@@ -106,6 +111,10 @@ function RevealStep({
 				<UiButton type="button" variant="ghost" size="sm" onClick={() => void copy(mnemonic)}>
 					<HugeiconsIcon icon={copied ? Tick02Icon : Copy01Icon} />
 					{copied ? "Copied" : "Copy"}
+				</UiButton>
+				<UiButton type="button" variant="ghost" size="sm" onClick={onRegenerate}>
+					<HugeiconsIcon icon={RefreshIcon} />
+					New phrase
 				</UiButton>
 			</div>
 
@@ -135,7 +144,7 @@ function VerifyStep({
 	return (
 		<>
 			<p className="text-muted-foreground text-center text-sm leading-6">
-				Confirm you saved it: enter the requested words.
+				Enter the requested words to confirm the phrase is saved.
 			</p>
 
 			<div className="flex flex-col gap-2">

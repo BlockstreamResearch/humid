@@ -79,7 +79,7 @@ export function DappConnectConfirmation({ data, onConfirm, onDecline }: Props) {
 			origin={data.origin}
 			network={data.networks.join(", ")}
 			title={`Connect to ${hostOf(data.origin)}`}
-			statement="The dapp sees the accounts you choose. Every payment still asks for confirmation."
+			statement="The dapp sees the accounts you choose. Every payment and signature still needs approval."
 			footer={
 				<ConfirmationActions
 					confirmLabel="Connect"

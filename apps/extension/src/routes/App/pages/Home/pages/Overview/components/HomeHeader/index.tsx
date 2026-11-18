@@ -4,7 +4,7 @@ import { ConnectedDappsMenu } from "./components/ConnectedDappsMenu";
 
 export function HomeHeader() {
 	return (
-		<header className="border-border/60 flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2.5">
+		<header className="border-border/60 flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3">
 			<ChainSelector />
 			<div className="flex items-center gap-1">
 				<ConnectedDappsMenu />

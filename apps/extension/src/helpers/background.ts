@@ -2,6 +2,7 @@ import type { PegasusRPCMessage } from "@webext-pegasus/rpc";
 import browser from "webextension-polyfill";
 
 import type { TransactionReceiptData } from "@/common/Confirmation/TransactionReceipt";
+import { defaultZoom } from "@/helpers/surface";
 
 export type ConfirmationRequest = {
 	completes?: boolean;
@@ -90,14 +91,6 @@ async function getNotificationWindowOptions(): Promise<browser.Windows.UpdateUpd
 	}
 
 	return windowOptions;
-}
-
-async function defaultZoom(): Promise<number> {
-	try {
-		return (await browser.tabs.getZoomSettings()).defaultZoomFactor ?? 1;
-	} catch {
-		return 1;
-	}
 }
 
 async function getNotificationAnchorWindow(): Promise<browser.Windows.Window> {

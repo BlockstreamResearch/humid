@@ -68,7 +68,7 @@ export function ViewCoinsSheet({ open, onOpenChange }: OverlayProps) {
 		<Sheet open={open} onOpenChange={handleOpenChange}>
 			<SheetContent className="gap-0">
 				<SheetHeader>
-					<SheetTitle>Your coins</SheetTitle>
+					<SheetTitle>Coins</SheetTitle>
 					<SheetDescription>
 						The wallet&apos;s spendable and pending UTXOs for the selected asset.
 					</SheetDescription>

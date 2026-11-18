@@ -22,6 +22,6 @@ export const Default: Story = {};
 
 export const ImportError: Story = {
 	args: {
-		error: "Invalid recovery phrase.",
+		error: "Enter a valid 12-word recovery phrase.",
 	},
 };

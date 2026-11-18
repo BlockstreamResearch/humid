@@ -87,7 +87,7 @@ function createDefaultLiquidChainBackend(chainId: LiquidChainId): LiquidChainBac
 	const backend = LIQUID_DEFAULT_BACKENDS[chainId as BuiltInLiquidChainId];
 
 	if (!backend) {
-		throw new Error("Custom Liquid chains must provide backend settings.");
+		throw new Error("Custom networks need backend settings.");
 	}
 
 	return { ...backend };

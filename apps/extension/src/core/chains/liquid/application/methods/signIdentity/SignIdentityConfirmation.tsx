@@ -52,7 +52,7 @@ export function SignIdentityConfirmation({
 				{data.text ?? (
 					<span className="flex flex-col gap-1">
 						<span className="text-muted-foreground text-xs">
-							Not a readable text. The challenge fingerprint:
+							Not readable text. Challenge fingerprint:
 						</span>
 						<span className="font-mono font-semibold tracking-wide">
 							{data.fingerprint.match(/.{1,4}/g)?.join(" ")}

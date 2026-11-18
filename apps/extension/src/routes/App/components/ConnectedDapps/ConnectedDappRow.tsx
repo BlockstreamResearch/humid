@@ -24,7 +24,7 @@ export function ConnectedDappRow({
 }) {
 	const scopeSummary = [
 		pluralize(dapp.methods.length, "method"),
-		pluralize(dapp.chains.length, "chain"),
+		pluralize(dapp.chains.length, "network"),
 	].join(" · ");
 
 	return (

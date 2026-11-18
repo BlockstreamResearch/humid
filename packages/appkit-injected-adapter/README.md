@@ -1,16 +1,16 @@
 # @humid/appkit-injected-adapter
 
 A [Reown AppKit](https://reown.com/appkit) adapter for an **injected wallet provider** that speaks
-CAIP-25 (session authorization) + CAIP-27 (method invocation) — a ready-to-use **HUMID Liquid** preset
+CAIP-25 (session authorization) + CAIP-27 (method invocation) — a ready-to-use **Humid Liquid** preset
 on top of an agnostic, fully-configurable core.
 
 The wallet does not expose raw chain RPC methods on the page. A dapp authorizes a session with
 `wallet_createSession`, then invokes every method through `wallet_invokeMethod`, scoped to a chain.
 This package wraps that envelope and plugs it into AppKit as a normal injected connector.
 
-## HUMID: zero config
+## Humid: zero config
 
-Connecting to the HUMID extension is a one-liner — the preset carries every default (connector
+Connecting to the Humid extension is a one-liner — the preset carries every default (connector
 identity, `window.humid`, the ELIP-1 method set, ecdsa signMessage), and the networks ship with it:
 
 ```ts
@@ -28,7 +28,7 @@ Override any default by passing options, e.g. `new HumidAdapter({ methods: [...]
 
 ## Any injected CAIP-25 wallet
 
-The agnostic core works for any such wallet — supply the specifics instead of the HUMID preset:
+The agnostic core works for any such wallet — supply the specifics instead of the Humid preset:
 
 ```ts
 import { InjectedCaipAdapter } from "@humid/appkit-injected-adapter";
@@ -43,7 +43,7 @@ const adapter = new InjectedCaipAdapter({
 
 ## Exports
 
-- `HumidAdapter` — the HUMID-preset adapter (zero config).
+- `HumidAdapter` — the Humid-preset adapter (zero config).
 - `InjectedCaipAdapter` — the agnostic core adapter.
 - `liquid` / `liquidTestnet` / `liquidNetworks` — Liquid chains built with AppKit's `defineChain`.
 - `LIQUID_*`, `liquidWalletRpcMethods`, `HUMID_CONNECTOR` — the underlying definitions.

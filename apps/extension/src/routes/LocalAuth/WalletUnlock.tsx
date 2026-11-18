@@ -12,7 +12,6 @@ import {
 	UiInputGroupButton,
 	UiInputGroupInput,
 } from "@/ui/UiInputGroup";
-import UiPageBackgroundWrp from "@/ui/UiPageBackgroundWrp";
 
 export type WalletUnlock = ReturnType<typeof useWalletUnlock>;
 
@@ -74,23 +73,21 @@ export function UnlockScreen({
 	secondary?: ReactNode;
 }) {
 	return (
-		<UiPageBackgroundWrp>
-			<main className="flex size-full flex-col gap-4 p-5">
-				<form className="flex flex-1 flex-col justify-center gap-4" onSubmit={unlock.submit}>
-					<div className="flex flex-col gap-3">
-						<p className="text-muted-foreground text-xs font-medium uppercase">Locked</p>
-						<h1 className="cn-font-heading text-2xl leading-tight font-semibold">{title}</h1>
-						<p className="text-muted-foreground text-sm leading-6">{statement}</p>
-					</div>
-					<PasswordField unlock={unlock} disabled={disabled} onEdit={onEdit} />
-					{notices}
-					<UiButton type="submit" size="lg" disabled={!unlock.isFilled || disabled}>
-						{unlock.isPending ? "Unlocking…" : "Unlock"}
-					</UiButton>
-				</form>
-				{secondary}
-			</main>
-		</UiPageBackgroundWrp>
+		<main className="flex size-full flex-col gap-4 p-5">
+			<form className="flex flex-1 flex-col justify-center gap-4" onSubmit={unlock.submit}>
+				<div className="flex flex-col gap-3">
+					<p className="text-muted-foreground text-xs font-medium uppercase">Locked</p>
+					<h1 className="cn-font-heading text-2xl leading-tight font-semibold">{title}</h1>
+					<p className="text-muted-foreground text-sm leading-6">{statement}</p>
+				</div>
+				<PasswordField unlock={unlock} disabled={disabled} onEdit={onEdit} />
+				{notices}
+				<UiButton type="submit" size="lg" disabled={!unlock.isFilled || disabled}>
+					{unlock.isPending ? "Unlocking…" : "Unlock"}
+				</UiButton>
+			</form>
+			{secondary}
+		</main>
 	);
 }
 

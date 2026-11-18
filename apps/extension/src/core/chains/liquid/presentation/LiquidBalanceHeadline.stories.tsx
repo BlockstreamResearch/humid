@@ -11,7 +11,6 @@ const meta = {
 		</div>
 	),
 	args: {
-		isSyncing: false,
 		native: { amount: 245_000_000n, decimals: 8, symbol: "L-BTC" },
 	},
 } satisfies Meta<typeof LiquidBalanceHeadline>;
@@ -21,7 +20,3 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Amount: Story = {};
-
-export const Syncing: Story = {
-	args: { isSyncing: true },
-};

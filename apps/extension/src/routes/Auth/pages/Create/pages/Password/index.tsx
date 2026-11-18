@@ -23,7 +23,7 @@ const createPasswordFormSchema = z
 			.string()
 			.min(1, "Create a password.")
 			.min(8, "Password must be at least 8 characters."),
-		confirmPassphrase: z.string().min(1, "Repeat your password."),
+		confirmPassphrase: z.string().min(1, "Repeat the password."),
 	})
 	.refine(({ confirmPassphrase, passphrase }) => confirmPassphrase === passphrase, {
 		message: "Passwords do not match.",
@@ -83,7 +83,7 @@ export function AuthCreatePasswordPage() {
 					</p>
 					<h1 className="cn-font-heading text-2xl leading-tight font-semibold">Password</h1>
 					<p className="text-muted-foreground text-sm leading-6">
-						Protect your wallet with a password. It is required to unlock this device.
+						Set a password to unlock the wallet on this device.
 					</p>
 				</div>
 
@@ -118,9 +118,7 @@ export function AuthCreatePasswordPage() {
 											}
 										}}
 									/>
-									<UiFieldDescription id={descriptionId}>
-										Minimum 8 characters. It is required to unlock this device.
-									</UiFieldDescription>
+									<UiFieldDescription id={descriptionId}>At least 8 characters.</UiFieldDescription>
 									<UiFieldError id={errorId} errors={[fieldState.error]} />
 								</UiField>
 							);

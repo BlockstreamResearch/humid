@@ -13,7 +13,7 @@ const SEED_TABS = [
 
 export function AuthCreateSecretPage() {
 	const navigate = useNavigate();
-	const { setSeedMaterial } = useAuthCreateContext();
+	const { importedSeed, setSeedMaterial } = useAuthCreateContext();
 
 	const handleComplete = (mnemonic: string) => {
 		setSeedMaterial(mnemonic);
@@ -29,7 +29,7 @@ export function AuthCreateSecretPage() {
 				<h1 className="cn-font-heading text-2xl leading-tight font-semibold">Recovery phrase</h1>
 			</div>
 
-			<UiTabs defaultValue="create" className="flex-1">
+			<UiTabs defaultValue={importedSeed ? "import" : "create"} className="flex-1">
 				<UiTabsList className="w-full">
 					{SEED_TABS.map((tab) => (
 						<UiTabsTrigger key={tab.value} value={tab.value}>
@@ -39,7 +39,7 @@ export function AuthCreateSecretPage() {
 				</UiTabsList>
 
 				{SEED_TABS.map(({ Content, value }) => (
-					<UiTabsContent key={value} value={value} className="mt-4">
+					<UiTabsContent key={value} value={value} keepMounted className="mt-4">
 						<Content onComplete={handleComplete} />
 					</UiTabsContent>
 				))}

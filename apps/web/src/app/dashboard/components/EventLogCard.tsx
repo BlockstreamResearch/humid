@@ -94,8 +94,7 @@ export function EventLogCard() {
 				<CardTitle>Wallet events</CardTitle>
 				<CardDescription>
 					Live feed from window.humid.on. Switch the selected account or chain in the wallet, or
-					lock it, and the matching event should appear here — this is where you can see the event
-					system working.
+					lock it, and the matching event appears here.
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="flex flex-col gap-3">

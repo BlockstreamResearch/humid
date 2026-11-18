@@ -15,7 +15,7 @@ declare global {
 
 export const HUMID_CONNECTOR = {
 	id: "humid",
-	name: "HUMID Extension",
+	name: "Humid Extension",
 	rdns: "app.humid.extension",
 };
 

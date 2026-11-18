@@ -86,7 +86,7 @@ export const keyManagerStore = {
 
 function parseKeyManagerState(value: unknown): KeyManagerState {
 	if (!isKeyManagerState(value)) {
-		throw new Error("Wallet item does not match the HUMID key manager model.");
+		throw new Error("Wallet item does not match the Humid key manager model.");
 	}
 
 	return value;

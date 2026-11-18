@@ -52,7 +52,8 @@ export function LocalAuthPage({ onReset, onUnlocked }: LocalAuthPageProps) {
 
 		const { approved } = await confirm({
 			title: "Reset wallet?",
-			message: "This will remove the encrypted wallet from this browser profile.",
+			message:
+				"This erases the wallet from this browser. Only the recovery phrase can restore access.",
 		});
 
 		if (!approved) {

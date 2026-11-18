@@ -1,13 +1,13 @@
-import { ArrowLeft01Icon, ArrowRight01Icon, PlugSocketIcon } from "@hugeicons/core-free-icons";
+import { ArrowRight01Icon, PlugSocketIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { Page } from "@/common/Page";
 import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
 import type { ConnectedDappView } from "@/core/dapp-sessions/model";
 import { AccountAvatar } from "@/routes/App/components/AccountAvatar";
 import { connectedDappKey, DappIdentity } from "@/routes/App/components/ConnectedDapps";
-import { UiScrollArea } from "@/ui/UiScrollArea";
 
 export function ConnectedDappsListView({
 	accountGroupId,
@@ -23,32 +23,30 @@ export function ConnectedDappsListView({
 	isLoading: boolean;
 }) {
 	return (
-		<div className="flex size-full min-h-0 flex-col">
-			<header className="border-border/60 flex shrink-0 items-center gap-2 border-b px-3 py-3">
-				<Link
-					aria-label="Back to account"
-					className="text-muted-foreground hover:text-foreground shrink-0"
-					params={{ accountGroupId }}
-					to="/app/settings/account/$accountGroupId"
-				>
-					<HugeiconsIcon icon={ArrowLeft01Icon} size={18} />
-				</Link>
-				<AccountAvatar className="size-5 shrink-0" seed={accountGroupId} />
-				<span className="max-w-32 truncate text-sm font-semibold">{accountName}</span>
-				<span className="text-muted-foreground/50 shrink-0 text-sm">/</span>
-				<span className="text-muted-foreground shrink-0 text-sm">Connected dapps</span>
-			</header>
-			<UiScrollArea className="min-h-0 flex-1">
-				<div className="px-3 py-3">
-					<DappRows
-						accountGroupId={accountGroupId}
-						dapps={dapps}
-						isError={isError}
-						isLoading={isLoading}
-					/>
-				</div>
-			</UiScrollArea>
-		</div>
+		<Page
+			back={{
+				label: "Back to account",
+				params: { accountGroupId },
+				to: "/app/settings/account/$accountGroupId",
+			}}
+			title={
+				<>
+					<AccountAvatar className="size-5 shrink-0" seed={accountGroupId} />
+					<span className="max-w-32 truncate text-sm font-semibold">{accountName}</span>
+					<span className="text-muted-foreground/50 shrink-0 text-sm">/</span>
+					<span className="text-muted-foreground shrink-0 text-sm">Connected dapps</span>
+				</>
+			}
+		>
+			<div className="px-3 py-3">
+				<DappRows
+					accountGroupId={accountGroupId}
+					dapps={dapps}
+					isError={isError}
+					isLoading={isLoading}
+				/>
+			</div>
+		</Page>
 	);
 }
 
@@ -93,7 +91,7 @@ function DappRows({
 				const key = connectedDappKey(dapp);
 				const scope = [
 					pluralize(dapp.methods.length, "method"),
-					pluralize(dapp.chains.length, "chain"),
+					pluralize(dapp.chains.length, "network"),
 				].join(" · ");
 
 				return (

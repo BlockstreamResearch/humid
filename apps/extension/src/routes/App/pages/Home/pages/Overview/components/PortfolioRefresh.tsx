@@ -17,6 +17,7 @@ export function PortfolioRefresh() {
 		chainId: chain.id,
 	});
 	const [now, setNow] = useState(() => Date.now());
+	const busy = isRefreshing || portfolio.isSyncing;
 
 	useEffect(() => {
 		const id = setInterval(() => setNow(Date.now()), FRESHNESS_TICK_MS);
@@ -27,19 +28,19 @@ export function PortfolioRefresh() {
 	return (
 		<div className="text-muted-foreground flex items-center justify-center gap-1.5 text-xs">
 			{portfolio.syncedAt !== null ? (
-				<span>Updated {formatTimeAgo(portfolio.syncedAt, now)}</span>
+				<span>{busy ? "Syncing…" : `Updated ${formatTimeAgo(portfolio.syncedAt, now)}`}</span>
 			) : null}
 			<UiButton
 				type="button"
 				variant="ghost"
 				size="icon-xs"
 				aria-label="Refresh balances"
-				disabled={isRefreshing}
+				disabled={busy}
 				onClick={() => {
-					if (!isRefreshing) refresh();
+					if (!busy) refresh();
 				}}
 			>
-				<HugeiconsIcon icon={RefreshIcon} className={cn(isRefreshing && "animate-spin")} />
+				<HugeiconsIcon icon={RefreshIcon} className={cn(busy && "animate-spin")} />
 			</UiButton>
 		</div>
 	);

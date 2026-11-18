@@ -1,12 +1,9 @@
-import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
 import type { FormEvent } from "react";
 
+import { Page } from "@/common/Page";
 import { formatUnits } from "@/helpers/formatters";
 import { UiButton } from "@/ui/UiButton/base";
 import { UiInput } from "@/ui/UiInput/base";
-import { UiScrollArea } from "@/ui/UiScrollArea";
 import { UiTextarea } from "@/ui/UiTextarea/base";
 
 import type { SendableAsset } from "../model";
@@ -52,101 +49,88 @@ export function SendForm({
 	};
 
 	return (
-		<div className="flex size-full min-h-0 flex-col">
-			<header className="border-border/60 flex shrink-0 items-center gap-2 border-b px-2 py-2.5">
-				<Link
-					to="/app"
-					aria-label="Back"
-					className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-md p-1.5 transition-colors"
-				>
-					<HugeiconsIcon icon={ArrowLeft01Icon} size={18} />
-				</Link>
-				<p className="text-sm font-semibold">Send</p>
-			</header>
+		<Page back={{ label: "Back", to: "/app" }} title="Send">
+			{assets.length === 0 ? (
+				<p className="text-muted-foreground px-6 py-10 text-center text-sm">
+					No assets available to send yet. The balance may still be syncing — reopen this screen
+					once the balance appears on the home page.
+				</p>
+			) : (
+				<form className="flex flex-col gap-4 px-5 py-4" onSubmit={handleSubmit}>
+					<div className="flex flex-col gap-1.5">
+						<span className="text-sm font-medium">Asset</span>
+						<AssetSelector assets={assets} onSelect={onSelectAsset} selected={selectedAsset} />
+					</div>
 
-			<UiScrollArea className="min-h-0 flex-1">
-				{assets.length === 0 ? (
-					<p className="text-muted-foreground px-6 py-10 text-center text-sm">
-						No assets available to send yet. Your balance may still be syncing — reopen this screen
-						once it appears on the home page.
-					</p>
-				) : (
-					<form className="flex flex-col gap-4 px-5 py-4" onSubmit={handleSubmit}>
-						<div className="flex flex-col gap-1.5">
-							<span className="text-sm font-medium">Asset</span>
-							<AssetSelector assets={assets} onSelect={onSelectAsset} selected={selectedAsset} />
-						</div>
+					<div className="flex flex-col gap-1.5">
+						<label className="text-sm font-medium" htmlFor="send-recipient">
+							Recipient address
+						</label>
+						<UiTextarea
+							autoComplete="off"
+							className="min-h-0 resize-none font-mono break-all"
+							id="send-recipient"
+							onChange={(event) => onRecipientChange(event.target.value.replace(/\s/g, ""))}
+							onKeyDown={(event) => {
+								if (event.key !== "Enter") return;
 
-						<div className="flex flex-col gap-1.5">
-							<label className="text-sm font-medium" htmlFor="send-recipient">
-								Recipient address
+								event.preventDefault();
+								event.currentTarget.form?.requestSubmit();
+							}}
+							placeholder="Liquid address"
+							rows={1}
+							spellCheck={false}
+							value={recipient}
+						/>
+					</div>
+
+					<div className="flex flex-col gap-1.5">
+						<div className="flex items-center justify-between gap-2">
+							<label className="text-sm font-medium" htmlFor="send-amount">
+								Amount
 							</label>
-							<UiTextarea
-								autoComplete="off"
-								className="min-h-0 resize-none font-mono break-all"
-								id="send-recipient"
-								onChange={(event) => onRecipientChange(event.target.value.replace(/\s/g, ""))}
-								onKeyDown={(event) => {
-									if (event.key !== "Enter") return;
-
-									event.preventDefault();
-									event.currentTarget.form?.requestSubmit();
-								}}
-								placeholder="Liquid address (lq1… / VJL…)"
-								rows={1}
-								spellCheck={false}
-								value={recipient}
-							/>
-						</div>
-
-						<div className="flex flex-col gap-1.5">
-							<div className="flex items-center justify-between gap-2">
-								<label className="text-sm font-medium" htmlFor="send-amount">
-									Amount
-								</label>
-								{selectedAsset ? (
-									<div className="flex items-center gap-2">
-										<span className="text-muted-foreground text-xs">
-											Balance: {formatUnits(selectedAsset.amount, selectedAsset.decimals)}{" "}
-											{selectedAsset.symbol}
-										</span>
-										<button
-											className="text-primary text-xs font-semibold uppercase transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
-											disabled={maxDisabled}
-											onClick={onMax}
-											type="button"
-										>
-											{isEstimatingMax ? "Max…" : "Max"}
-										</button>
-									</div>
-								) : null}
-							</div>
-							<div className="relative">
-								<UiInput
-									autoComplete="off"
-									className="pr-16"
-									id="send-amount"
-									inputMode="decimal"
-									onChange={(event) => onAmountChange(event.target.value)}
-									placeholder="0.0"
-									value={amount}
-								/>
-								{selectedAsset ? (
-									<span className="text-muted-foreground pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm">
+							{selectedAsset ? (
+								<div className="flex items-center gap-2">
+									<span className="text-muted-foreground text-xs">
+										Balance: {formatUnits(selectedAsset.amount, selectedAsset.decimals)}{" "}
 										{selectedAsset.symbol}
 									</span>
-								) : null}
-							</div>
+									<button
+										className="text-primary text-xs font-semibold uppercase transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+										disabled={maxDisabled}
+										onClick={onMax}
+										type="button"
+									>
+										{isEstimatingMax ? "Max…" : "Max"}
+									</button>
+								</div>
+							) : null}
 						</div>
+						<div className="relative">
+							<UiInput
+								autoComplete="off"
+								className="pr-16"
+								id="send-amount"
+								inputMode="decimal"
+								onChange={(event) => onAmountChange(event.target.value)}
+								placeholder="0.0"
+								value={amount}
+							/>
+							{selectedAsset ? (
+								<span className="text-muted-foreground pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm">
+									{selectedAsset.symbol}
+								</span>
+							) : null}
+						</div>
+					</div>
 
-						{error ? <p className="text-destructive text-sm break-words">{error}</p> : null}
+					{error ? <p className="text-destructive text-sm break-words">{error}</p> : null}
 
-						<UiButton disabled={!canContinue} size="lg" type="submit">
-							{isPreparing ? "Checking…" : "Continue"}
-						</UiButton>
-					</form>
-				)}
-			</UiScrollArea>
-		</div>
+					<UiButton disabled={!canContinue} size="lg" type="submit">
+						{isPreparing ? "Checking…" : "Continue"}
+					</UiButton>
+				</form>
+			)}
+		</Page>
 	);
 }
