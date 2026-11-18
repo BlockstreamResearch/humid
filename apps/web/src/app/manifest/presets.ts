@@ -1,11 +1,23 @@
 import lastWillSource from "@humid/tx-manifest/fixtures/last_will/last_will.simf?raw";
 import lastWillManifest from "@humid/tx-manifest/fixtures/last_will/txmanifest.json";
+import multiassetSource from "@humid/tx-manifest/fixtures/multiasset/p2pk.simf?raw";
+import multiassetManifest from "@humid/tx-manifest/fixtures/multiasset/txmanifest.json";
 import p2pkSource from "@humid/tx-manifest/fixtures/p2pk/p2pk.simf?raw";
 import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk/txmanifest.json";
 
-import { Preset } from "./Preset";
+import { Preset, type SentStep } from "./Preset";
 
-const WILL = { after: ["Fund", "Refresh"], utxoType: "last_will", vout: 0 };
+const WILL_STEPS = ["Fund", "Refresh"];
+const WILL = { utxoType: "last_will", vout: 0 };
+const ISSUING_STEPS = ["MintReissuable", "Reissue"];
+
+const issuanceOf = (earlier?: SentStep) => {
+	const issuance = earlier?.issuances?.[0];
+
+	if (issuance === undefined) throw new Error(`${earlier?.action} returned no issuance.`);
+
+	return issuance;
+};
 
 export const PRESETS = [
 	new Preset(
@@ -15,8 +27,9 @@ export const PRESETS = [
 			{ action: "Pay", params: (key) => ({ amount_sat: 1000, pubkey: key }) },
 			{
 				action: "Receive",
+				after: ["Pay"],
 				params: (key) => ({ pubkey: key }),
-				spends: { after: ["Pay"], utxoType: "p2pk_output", vout: 0 },
+				spends: { utxoType: "p2pk_output", vout: 0 },
 			},
 		],
 		{ contractSources: { "./p2pk.simf": p2pkSource }, manifest: p2pkManifest },
@@ -35,11 +48,39 @@ export const PRESETS = [
 					amount_sat: 1000,
 				}),
 			},
-			{ action: "Refresh", spends: WILL },
-			{ action: "ColdBreak", spends: WILL },
-			{ action: "Inherit", spends: WILL },
+			{ action: "Refresh", after: WILL_STEPS, spends: WILL },
+			{ action: "ColdBreak", after: WILL_STEPS, spends: WILL },
+			{ action: "Inherit", after: WILL_STEPS, spends: WILL },
 		],
 		{ contractSources: { "./last_will.simf": lastWillSource }, manifest: lastWillManifest },
 		"last_will_contract",
+	),
+	new Preset(
+		"multiasset",
+		"MintReissuable creates 21 units of a new asset and its reissuance token; Reissue mints 21 more " +
+			"with the token; PayToken pays 5 units back to the wallet beside a 1,000-sat program output.",
+		[
+			{ action: "MintReissuable", params: () => ({ supply: 21 }) },
+			{
+				action: "Reissue",
+				after: ISSUING_STEPS,
+				params: (_key, earlier) => {
+					const { entropy, issuedAsset, reissuanceToken } = issuanceOf(earlier);
+
+					return { entropy, issued: issuedAsset, supply: 21, token: reissuanceToken };
+				},
+			},
+			{
+				action: "PayToken",
+				after: ISSUING_STEPS,
+				params: (key, earlier) => ({
+					amount_sat: 5,
+					fee_sat: 1000,
+					pubkey: key,
+					token: issuanceOf(earlier).issuedAsset,
+				}),
+			},
+		],
+		{ contractSources: { "./p2pk.simf": multiassetSource }, manifest: multiassetManifest },
 	),
 ];

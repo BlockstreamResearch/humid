@@ -48,6 +48,7 @@ export default function ManifestRunner() {
 		const step = {
 			action: origin.action,
 			deployment: result.deployment,
+			issuances: result.issuances,
 			spent: request.state?.utxos?.[0]?.txid,
 			txid: result.txid,
 		};

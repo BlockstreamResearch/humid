@@ -5,6 +5,7 @@ import { PresetRunner } from "./presetRunner";
 const LIFECYCLES = [
 	{ preset: "p2pk", actions: ["Pay", "Receive"] },
 	{ preset: "last_will", actions: ["Fund", "Refresh", "ColdBreak", "Fund", "Inherit"] },
+	{ preset: "multiasset", actions: ["MintReissuable", "Reissue", "Reissue", "PayToken"] },
 ];
 
 for (const { preset, actions } of LIFECYCLES) {

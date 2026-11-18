@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
+import multiassetManifest from "@humid/tx-manifest/fixtures/multiasset/txmanifest.json";
 import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk/txmanifest.json";
 
 import { DENY_ALL_AUTHORIZATION } from "@/core/wallet-rpc/types";
@@ -171,8 +172,10 @@ function smplxSubstitute(log: Journal) {
 		addInput(txid: string, vout: number, txOutHex: string) {
 			log.walletInputs.push({ txOutHex, txid, vout });
 		}
-		addIssuanceInput() {
-			throw new Error("not reached");
+		addIssuanceInput(txid: string, vout: number, txOutHex: string) {
+			log.walletInputs.push({ txOutHex, txid, vout });
+
+			return { free() {} };
 		}
 		setLocktimeHeight() {}
 		setInputSequence() {}
@@ -331,6 +334,14 @@ const payRequest = (broadcast = false) => ({
 	contractSources: { [SOURCE_PATH]: SOURCE },
 	manifest: p2pkManifest,
 	params: { amount_sat: 1000, pubkey: PUBKEY },
+});
+
+const mintRequest = () => ({
+	action: "MintReissuable",
+	broadcast: false,
+	contractSources: { [SOURCE_PATH]: SOURCE },
+	manifest: multiassetManifest,
+	params: { supply: 21 },
 });
 
 const receiveRequest = (broadcast = false) => ({
@@ -512,6 +523,16 @@ describe("what comes back", () => {
 		const { result } = await run(payRequest());
 
 		expect(result.deployment).toBeUndefined();
+		expect(result.issuances).toBeUndefined();
+	});
+
+	test("names what each issuing input created, so a later action can reissue", async () => {
+		const { result } = await run(mintRequest());
+		const hash = expect.stringMatching(/^[0-9a-f]{64}$/);
+
+		expect(result.issuances).toEqual([
+			{ entropy: hash, input: "mint_in", issuedAsset: hash, reissuanceToken: hash },
+		]);
 	});
 });
 

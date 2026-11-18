@@ -48,10 +48,18 @@ export type LiquidProcessCtContext = LiquidRpcMethodContext;
 
 type SpeedReviews = { review: ManifestReview; targetBlocks: number }[];
 
+export type LiquidProcessCtIssuance = {
+	entropy: string;
+	input: string;
+	issuedAsset: string;
+	reissuanceToken: string;
+};
+
 export type LiquidProcessCtResult = {
 	broadcast: boolean;
 	deployment?: Record<string, string>;
 	feeSats: string;
+	issuances?: LiquidProcessCtIssuance[];
 	transactionHex: string;
 	txid: string;
 };
@@ -176,11 +184,15 @@ export const createProcessLiquidConfidentialTransaction = (
 
 			const { feeSats, hex, txid } = signed;
 			const result = { feeSats: feeSats.toString(), transactionHex: hex, txid };
-			const deployment =
-				review.createdInstance === undefined ? {} : { deployment: review.createdInstance.fields };
+			const created = {
+				...(review.createdInstance === undefined
+					? {}
+					: { deployment: review.createdInstance.fields }),
+				...(review.issuances.length === 0 ? {} : { issuances: review.issuances.map(issuanceOf) }),
+			};
 
 			if (!params.broadcast) {
-				return { broadcast: false, ...deployment, ...result };
+				return { broadcast: false, ...created, ...result };
 			}
 
 			const sent = await dependencies.broadcastTransaction({
@@ -188,7 +200,7 @@ export const createProcessLiquidConfidentialTransaction = (
 				txHex: result.transactionHex,
 			});
 
-			return { broadcast: true, ...deployment, ...result, txid: sent.txid };
+			return { broadcast: true, ...created, ...result, txid: sent.txid };
 		},
 		id: LIQUID_WALLET_RPC_METHODS.PROCESS_CONFIDENTIAL_TRANSACTION,
 		parse: parseRequest,
@@ -289,6 +301,15 @@ async function refusedAsRpcError<T>(run: () => Promise<T>): Promise<T> {
 
 		throw error;
 	}
+}
+
+function issuanceOf({
+	asset,
+	entropy,
+	inputId,
+	reissuanceToken,
+}: ManifestReview["issuances"][number]): LiquidProcessCtIssuance {
+	return { entropy, input: inputId, issuedAsset: asset, reissuanceToken };
 }
 
 function parseRequest(params: unknown): ActionRequest {

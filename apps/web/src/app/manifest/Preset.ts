@@ -1,16 +1,21 @@
-import type { LiquidProcessConfidentialTransactionParams } from "@humid/appkit-injected-adapter";
+import type {
+	LiquidProcessConfidentialTransactionIssuance,
+	LiquidProcessConfidentialTransactionParams,
+} from "@humid/appkit-injected-adapter";
 
 export type SentStep = {
 	action: string;
 	deployment?: Record<string, string>;
+	issuances?: LiquidProcessConfidentialTransactionIssuance[];
 	spent?: string;
 	txid: string;
 };
 
 export type PresetStep = {
 	action: string;
-	params?: (key: string) => Record<string, unknown>;
-	spends?: { after: string[]; utxoType: string; vout: number };
+	after?: string[];
+	params?: (key: string, earlier?: SentStep) => Record<string, unknown>;
+	spends?: { utxoType: string; vout: number };
 };
 
 type PresetDocument = Pick<
@@ -44,15 +49,14 @@ export class Preset {
 		key: string,
 		sent: SentStep[],
 	): LiquidProcessConfidentialTransactionParams | undefined {
-		const spent =
-			step.spends === undefined
+		const earlier =
+			step.after === undefined
 				? undefined
-				: sent.findLast((earlier) => step.spends!.after.includes(earlier.action));
+				: sent.findLast((before) => step.after!.includes(before.action));
 
-		if (
-			step.spends !== undefined &&
-			(spent === undefined || sent.some((later) => later.spent === spent.txid))
-		) {
+		if (step.after !== undefined && earlier === undefined) return undefined;
+
+		if (step.spends !== undefined && sent.some((later) => later.spent === earlier?.txid)) {
 			return undefined;
 		}
 
@@ -62,16 +66,16 @@ export class Preset {
 			action: step.action,
 			broadcast: true,
 			...this.#document,
-			params: step.params?.(key) ?? {},
+			params: step.params?.(key, earlier) ?? {},
 			...(this.#template === undefined || deployment === undefined
 				? {}
 				: { instance: { instance: { fields: deployment, template: this.#template } } }),
-			...(spent === undefined || step.spends === undefined
+			...(earlier === undefined || step.spends === undefined
 				? {}
 				: {
 						state: {
 							utxos: [
-								{ txid: spent.txid, utxo_type: step.spends.utxoType, vout: step.spends.vout },
+								{ txid: earlier.txid, utxo_type: step.spends.utxoType, vout: step.spends.vout },
 							],
 						},
 					}),

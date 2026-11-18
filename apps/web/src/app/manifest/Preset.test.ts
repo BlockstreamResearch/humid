@@ -5,11 +5,12 @@ import { parseActionRequest } from "@humid/tx-manifest";
 import { Preset, type PresetStep } from "./Preset";
 
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
-const WILL = { after: ["Fund", "Refresh"], utxoType: "last_will", vout: 0 };
+const AFTER = ["Fund", "Refresh"];
+const WILL = { utxoType: "last_will", vout: 0 };
 const [fund, refresh, coldBreak]: PresetStep[] = [
 	{ action: "Fund", params: (key) => ({ COLD_PUB_KEY: key }) },
-	{ action: "Refresh", spends: WILL },
-	{ action: "ColdBreak", spends: WILL },
+	{ action: "Refresh", after: AFTER, spends: WILL },
+	{ action: "ColdBreak", after: AFTER, spends: WILL },
 ];
 const will = new Preset(
 	"last_will",
@@ -48,5 +49,25 @@ describe("a preset step's request", () => {
 		const broken = { action: "ColdBreak", spent: refreshed.txid, txid: "cc".repeat(32) };
 
 		expect(will.request(refresh!, KEY, [funded, refreshed, broken])).toBeUndefined();
+	});
+
+	test("reads its params from the latest step it builds on, without spending its output", () => {
+		const reissue: PresetStep = {
+			action: "Reissue",
+			after: ["Mint"],
+			params: (_key, earlier) => ({ entropy: earlier?.issuances?.[0]?.entropy }),
+		};
+		const issuance = {
+			entropy: "ee".repeat(32),
+			input: "mint_in",
+			issuedAsset: "",
+			reissuanceToken: "",
+		};
+		const minted = { action: "Mint", issuances: [issuance], txid: "dd".repeat(32) };
+		const request = will.request(reissue, KEY, [minted, { ...minted, action: "Reissue" }]);
+
+		expect(request?.params).toEqual({ entropy: issuance.entropy });
+		expect(request?.state).toBeUndefined();
+		expect(will.request(reissue, KEY, [])).toBeUndefined();
 	});
 });

@@ -227,10 +227,18 @@ export type LiquidSignIdentityResult = {
 
 export type LiquidProcessConfidentialTransactionParams = Record<string, unknown>;
 
+export type LiquidProcessConfidentialTransactionIssuance = {
+	entropy: string;
+	input: string;
+	issuedAsset: string;
+	reissuanceToken: string;
+};
+
 export type LiquidProcessConfidentialTransactionResult = {
 	broadcast: boolean;
 	deployment?: Record<string, string>;
 	feeSats: string;
+	issuances?: LiquidProcessConfidentialTransactionIssuance[];
 	transactionHex: string;
 	txid: string;
 };
