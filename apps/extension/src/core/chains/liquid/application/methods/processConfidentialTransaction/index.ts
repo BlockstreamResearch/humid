@@ -29,7 +29,7 @@ import { assembleReviewedTransaction } from "../../../adapters/smplx/assembleRev
 import {
 	createSmplxProgramAbi,
 	createSmplxProgramCompiler,
-	createSmplxScriptPubKeyCompiler,
+	createSmplxScriptHasher,
 } from "../../../adapters/smplx/compileProgramWithSmplx";
 import { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
@@ -243,7 +243,7 @@ export const createProcessLiquidConfidentialTransaction = (
 					compiler: {
 						abi: createSmplxProgramAbi(smplx),
 						compile: createSmplxProgramCompiler(smplx),
-						scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, network),
+						scriptHashOf: createSmplxScriptHasher(smplx, network),
 						version: SMPLX_COMPILER_VERSION,
 					},
 					estimateFee: (draft, feeRateSatsPerKvb) =>

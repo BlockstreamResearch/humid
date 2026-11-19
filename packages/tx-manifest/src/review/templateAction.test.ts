@@ -70,14 +70,14 @@ function vaultletReview(
 				return COMPILED;
 			},
 			programAbi: (source) => abiOf(source, { SLOT_COUNT: "u8", WITH_BURN: "bool" }),
-			scriptPubKeyOf: ({ argumentsJson, includeDebugSymbols, source }) => {
+			scriptHashOf: ({ argumentsJson, includeDebugSymbols, source }) => {
 				hashed.push({ includeDebugSymbols, source });
 
 				return (
 					hashedBy?.() ??
-					`5120${Bun.hash(JSON.stringify([source, argumentsJson, includeDebugSymbols]))
+					Bun.hash(JSON.stringify([source, argumentsJson, includeDebugSymbols]))
 						.toString(16)
-						.padStart(64, "0")}`
+						.padStart(64, "0")
 				);
 			},
 			...dependencies,
@@ -355,12 +355,12 @@ describe("when a compiler fails", () => {
 		expect(refusal.reason).toContain("RESERVE_COV_HASH");
 	});
 
-	test("a hash compiler returning something that is not a script becomes one too", async () => {
+	test("a hash compiler returning something that is not a hash becomes one too", async () => {
 		const { result } = vaultletReview(openVault(), { hashedBy: () => "not hex" });
 		const refusal = asRefusal(await result);
 
 		expect(refusal.reject).toBe("document-fault");
-		expect(refusal.reason).toContain("not bytes");
+		expect(refusal.reason).toContain("did not return a script hash");
 	});
 
 	test("a program compiler that throws becomes a refusal naming the contract", async () => {

@@ -78,7 +78,7 @@ export class ActionReview {
 			: resolveCreatedInstance(action, {
 					contractSources: request.contractSources,
 					hashProgram: createProgramHasher(
-						dependencies.compiler.scriptPubKeyOf,
+						dependencies.compiler.scriptHashOf,
 						manifest.includeDebugSymbols,
 					),
 					scope,

@@ -21,7 +21,7 @@ import { assembleReviewedTransaction } from "./assembleReviewedTransaction";
 import {
 	createSmplxProgramCompiler,
 	createSmplxProgramAbi,
-	createSmplxScriptPubKeyCompiler,
+	createSmplxScriptHasher,
 } from "./compileProgramWithSmplx";
 import { smplx } from "./smplxWasmForTests";
 
@@ -155,7 +155,7 @@ class ReferenceExample {
 
 						return compiled;
 					},
-					scriptPubKeyOf: createSmplxScriptPubKeyCompiler(smplx, NETWORK),
+					scriptHashOf: createSmplxScriptHasher(smplx, NETWORK),
 					version: SMPLX_COMPILER_VERSION,
 				},
 				estimateFee: simplexFee,

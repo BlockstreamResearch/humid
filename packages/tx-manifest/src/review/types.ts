@@ -2,7 +2,7 @@ import type { ReadChainTip, ReadFeeRate, ReadTxOut } from "../chain/chainRead";
 import type { ConfirmationModel } from "../confirmation";
 import type { CreatedInstance } from "../programs/instance";
 import type { CompileProgram, ProgramAbiOf, ProgramDerivation } from "../programs/program";
-import type { CompileScriptPubKey } from "../programs/programHash";
+import type { ScriptHashOf } from "../programs/programHash";
 import type { RejectToken } from "../refusal";
 import type { AssetHoldings } from "../transaction/assetFunding";
 import type { BlindingWord } from "../transaction/blinding";
@@ -118,7 +118,7 @@ export type ReviewDependencies = {
 	compiler: {
 		abi: ProgramAbiOf;
 		compile: CompileProgram;
-		scriptPubKeyOf: CompileScriptPubKey;
+		scriptHashOf: ScriptHashOf;
 		version?: string;
 	};
 	estimateFee: EstimateFee;

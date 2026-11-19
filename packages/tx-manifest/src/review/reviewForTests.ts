@@ -135,7 +135,7 @@ export type Overrides = {
 	readChainTip?: Dependencies["chain"]["readChainTip"];
 	readFeeRate?: Dependencies["chain"]["readFeeRate"];
 	readTxOut?: Dependencies["chain"]["readTxOut"];
-	scriptPubKeyOf?: Dependencies["compiler"]["scriptPubKeyOf"];
+	scriptHashOf?: Dependencies["compiler"]["scriptHashOf"];
 	unblind?: Dependencies["wallet"]["unblind"];
 };
 
@@ -155,7 +155,7 @@ export function dependencies(overrides: Overrides = {}): Dependencies {
 		compiler: {
 			abi: overrides.programAbi ?? ((source) => abiOf(source)),
 			compile: overrides.compile ?? (() => COMPILED),
-			scriptPubKeyOf: overrides.scriptPubKeyOf ?? (() => DERIVED_SCRIPT),
+			scriptHashOf: overrides.scriptHashOf ?? (() => "22".repeat(32)),
 			version: overrides.compilerVersion,
 		},
 		estimateFee: overrides.estimateFee ?? sizedFee,

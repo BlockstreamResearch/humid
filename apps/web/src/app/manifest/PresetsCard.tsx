@@ -86,8 +86,7 @@ export function PresetsCard({
 						</div>
 						<div className="flex flex-wrap gap-2">
 							{preset.steps.map((step) => {
-								const request =
-									key === null ? undefined : preset.request(step, key, sent[preset.name] ?? []);
+								const request = key === null ? undefined : preset.request(step, key, sent);
 
 								return (
 									<Button

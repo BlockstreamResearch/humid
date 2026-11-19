@@ -27,9 +27,9 @@ function recordingCompiler(debugSymbols = false) {
 			({ argumentsJson, extraLeavesJson, includeDebugSymbols, source }) => {
 				calls.push({ argumentsJson, extraLeavesJson, includeDebugSymbols, source });
 
-				return `5120${Bun.hash(JSON.stringify([source, argumentsJson, includeDebugSymbols]))
+				return Bun.hash(JSON.stringify([source, argumentsJson, includeDebugSymbols]))
 					.toString(16)
-					.padStart(64, "0")}`;
+					.padStart(64, "0");
 			},
 			debugSymbols,
 		),
@@ -252,11 +252,11 @@ describe("when the compiler cannot produce a hash", () => {
 		expect(result.reason).toContain("wasm module not loaded");
 	});
 
-	test("a compiler returning something that is not a script refuses rather than hashing the result", () => {
-		for (const answer of ["", "not hex", "5120abc"]) {
+	test("a compiler returning something that is not a hash refuses", () => {
+		for (const answer of ["", "not hex", `5120${"ab".repeat(32)}`]) {
 			const result = refusalOf(() => computing(() => answer));
 
-			expect(result.reason).toContain("not bytes");
+			expect(result.reason).toContain("did not return a script hash");
 		}
 	});
 });

@@ -92,18 +92,20 @@ export const PRESETS = [
 	),
 	new Preset(
 		"dex",
-		"MakeOffer locks 1,000 sats in a keyless offer that pays the wallet 1,500 sats, both L-BTC as " +
-			"the regtest wallet holds no other asset; Settle fills the offer, ClaimPayout sweeps the " +
-			"maker's proceeds, and Refund returns an unfilled offer, expired from block 1.",
+		"MakeOffer locks 5 units of the asset multiasset last minted in a keyless offer that pays " +
+			"the wallet 1,500 sats; Settle fills the offer, ClaimPayout sweeps the maker's proceeds, " +
+			"and Refund returns an unfilled offer, expired from block 1.",
 		[
 			{
 				action: "MakeOffer",
-				params: (key) => ({
+				after: ISSUING_STEPS,
+				from: "multiasset",
+				params: (key, earlier) => ({
 					AMOUNT_B: 1500,
 					ASSET_B: LBTC,
 					MAKER_PUB_KEY: key,
-					OFFER_AMOUNT: 1000,
-					OFFER_ASSET_ID: LBTC,
+					OFFER_AMOUNT: 5,
+					OFFER_ASSET_ID: issuanceOf(earlier).issuedAsset,
 					TIMEOUT: 1,
 				}),
 			},

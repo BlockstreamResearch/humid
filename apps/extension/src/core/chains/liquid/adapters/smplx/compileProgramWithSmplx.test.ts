@@ -3,13 +3,14 @@ import { describe, expect, test } from "bun:test";
 import {
 	createSmplxProgramAbi,
 	createSmplxProgramCompiler,
-	createSmplxScriptPubKeyCompiler,
+	createSmplxScriptHasher,
 } from "./compileProgramWithSmplx";
 import type { SmplxWasmModule } from "./loadSmplxWasm";
 import { smplx } from "./smplxWasmForTests";
 
 const PROBE_SOURCE = "fn main() { assert!(jet::eq_32(witness::A, witness::B)); }";
 const SCRIPT = `5120${"11".repeat(32)}`;
+const SCRIPT_HASH = "33".repeat(32);
 const CMR = "cc".repeat(32);
 const TAPLEAF_HASH = "1e".repeat(32);
 
@@ -24,6 +25,7 @@ function recording(
 	answers: {
 		address?: () => string;
 		cmr?: () => string;
+		scriptHash?: () => string;
 		scriptPubKeyHex?: () => string;
 		tapleafHash?: () => string;
 	} = {},
@@ -52,6 +54,9 @@ function recording(
 				}
 				scriptPubkey() {
 					return answers.scriptPubKeyHex?.() ?? SCRIPT;
+				}
+				scriptHash() {
+					return answers.scriptHash?.() ?? SCRIPT_HASH;
 				}
 			},
 		} as unknown as Pick<SmplxWasmModule, "Program">,
@@ -158,10 +163,10 @@ describe("createSmplxProgramCompiler", () => {
 	});
 });
 
-describe("createSmplxScriptPubKeyCompiler", () => {
+describe("createSmplxScriptHasher", () => {
 	test("binds the network and forwards everything the document decided", () => {
 		const { built, module } = recording();
-		const hex = createSmplxScriptPubKeyCompiler(
+		const hash = createSmplxScriptHasher(
 			module,
 			"liquid-testnet",
 		)({
@@ -171,13 +176,13 @@ describe("createSmplxScriptPubKeyCompiler", () => {
 			source: PROBE_SOURCE,
 		});
 
-		expect(hex).toBe(SCRIPT);
+		expect(hash).toBe(SCRIPT_HASH);
 		expect(built).toEqual([[PROBE_SOURCE, "{}", "[]", true]]);
 	});
 
 	test("answers without a promise", () => {
 		const { module } = recording();
-		const answer = createSmplxScriptPubKeyCompiler(
+		const answer = createSmplxScriptHasher(
 			module,
 			"liquid",
 		)({
@@ -192,13 +197,13 @@ describe("createSmplxScriptPubKeyCompiler", () => {
 
 	test("releases the program, including when compiling it throws", () => {
 		const { module, released } = recording({
-			scriptPubKeyHex: () => {
+			scriptHash: () => {
 				throw new Error("did not compile");
 			},
 		});
 
 		expect(() =>
-			createSmplxScriptPubKeyCompiler(
+			createSmplxScriptHasher(
 				module,
 				"liquid",
 			)({
@@ -277,16 +282,15 @@ describe("against the module this wallet ships", () => {
 		expect(debug.scriptPubKeyHex).not.toBe(plain.scriptPubKeyHex);
 	});
 
-	test("hashes the same script the full compile locks to", () => {
-		const program = new smplx.Program(PROBE_SOURCE, "{}", "[]", false);
+	test("hashes the same script the full compile locks to", async () => {
+		const { scriptPubKeyHex } = await compile(asked);
+		const digest = new Uint8Array(
+			await crypto.subtle.digest("SHA-256", Buffer.from(scriptPubKeyHex, "hex")),
+		);
 
-		try {
-			expect(createSmplxScriptPubKeyCompiler(smplx, "liquid-testnet")(asked)).toBe(
-				program.scriptPubkey("liquid-testnet"),
-			);
-		} finally {
-			program.free();
-		}
+		expect(createSmplxScriptHasher(smplx, "liquid-testnet")(asked)).toBe(
+			Buffer.from(digest).toString("hex"),
+		);
 	});
 
 	test("reads what the module says a contract's parameters and witnesses are", async () => {

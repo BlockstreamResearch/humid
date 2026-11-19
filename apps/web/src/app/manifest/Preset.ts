@@ -14,6 +14,7 @@ export type SentStep = {
 export type PresetStep = {
 	action: string;
 	after?: string[];
+	from?: string;
 	params?: (key: string, earlier?: SentStep) => Record<string, unknown>;
 	spends?: { utxoType: string; vout: number };
 };
@@ -47,20 +48,23 @@ export class Preset {
 	request(
 		step: PresetStep,
 		key: string,
-		sent: SentStep[],
+		sent: Record<string, SentStep[]>,
 	): LiquidProcessConfidentialTransactionParams | undefined {
 		const earlier =
 			step.after === undefined
 				? undefined
-				: sent.findLast((before) => step.after!.includes(before.action));
+				: sent[step.from ?? this.name]?.findLast((before) => step.after!.includes(before.action));
 
 		if (step.after !== undefined && earlier === undefined) return undefined;
 
-		if (step.spends !== undefined && sent.some((later) => later.spent === earlier?.txid)) {
+		if (
+			step.spends !== undefined &&
+			Object.values(sent).some((steps) => steps.some((later) => later.spent === earlier?.txid))
+		) {
 			return undefined;
 		}
 
-		const deployment = sent.findLast((earlier) => earlier.deployment !== undefined)?.deployment;
+		const deployment = sent[this.name]?.findLast((own) => own.deployment !== undefined)?.deployment;
 
 		return {
 			action: step.action,

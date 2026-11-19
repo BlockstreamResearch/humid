@@ -4,7 +4,7 @@ import type { SmplxWasmModule } from "./loadSmplxWasm";
 
 type CompileProgram = ReviewDependencies["compiler"]["compile"];
 type ProgramAbiOf = ReviewDependencies["compiler"]["abi"];
-type CompileScriptPubKey = ReviewDependencies["compiler"]["scriptPubKeyOf"];
+type ScriptHashOf = ReviewDependencies["compiler"]["scriptHashOf"];
 
 export function createSmplxProgramCompiler(
 	smplx: Pick<SmplxWasmModule, "Program">,
@@ -25,15 +25,15 @@ export function createSmplxProgramCompiler(
 	};
 }
 
-export function createSmplxScriptPubKeyCompiler(
+export function createSmplxScriptHasher(
 	smplx: Pick<SmplxWasmModule, "Program">,
 	network: string,
-): CompileScriptPubKey {
+): ScriptHashOf {
 	return ({ argumentsJson, extraLeavesJson, includeDebugSymbols, source }) => {
 		const program = new smplx.Program(source, argumentsJson, extraLeavesJson, includeDebugSymbols);
 
 		try {
-			return program.scriptPubkey(network);
+			return program.scriptHash(network);
 		} finally {
 			program.free();
 		}

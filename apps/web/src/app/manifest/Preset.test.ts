@@ -24,7 +24,7 @@ const refreshed = { action: "Refresh", spent: funded.txid, txid: "bb".repeat(32)
 
 describe("a preset step's request", () => {
 	test("sends the first step at once, with the wallet's key in its params", () => {
-		const request = will.request(fund!, KEY, []);
+		const request = will.request(fund!, KEY, {});
 
 		expect(request).toMatchObject({
 			action: "Fund",
@@ -35,11 +35,11 @@ describe("a preset step's request", () => {
 	});
 
 	test("waits for the step whose output it spends", () => {
-		expect(will.request(refresh!, KEY, [])).toBeUndefined();
+		expect(will.request(refresh!, KEY, {})).toBeUndefined();
 	});
 
 	test("spends the latest such output, under the contract the first step deployed", () => {
-		expect(will.request(coldBreak!, KEY, [funded, refreshed])).toMatchObject({
+		expect(will.request(coldBreak!, KEY, { last_will: [funded, refreshed] })).toMatchObject({
 			instance: { instance: { fields: funded.deployment, template: "last_will_contract" } },
 			state: { utxos: [{ txid: refreshed.txid, utxo_type: "last_will", vout: 0 }] },
 		});
@@ -48,7 +48,7 @@ describe("a preset step's request", () => {
 	test("is closed once a later step spent that output", () => {
 		const broken = { action: "ColdBreak", spent: refreshed.txid, txid: "cc".repeat(32) };
 
-		expect(will.request(refresh!, KEY, [funded, refreshed, broken])).toBeUndefined();
+		expect(will.request(refresh!, KEY, { last_will: [funded, refreshed, broken] })).toBeUndefined();
 	});
 
 	test("reads its params from the latest step it builds on, without spending its output", () => {
@@ -64,10 +64,33 @@ describe("a preset step's request", () => {
 			reissuanceToken: "",
 		};
 		const minted = { action: "Mint", issuances: [issuance], txid: "dd".repeat(32) };
-		const request = will.request(reissue, KEY, [minted, { ...minted, action: "Reissue" }]);
+		const request = will.request(reissue, KEY, {
+			last_will: [minted, { ...minted, action: "Reissue" }],
+		});
 
 		expect(request?.params).toEqual({ entropy: issuance.entropy });
 		expect(request?.state).toBeUndefined();
-		expect(will.request(reissue, KEY, [])).toBeUndefined();
+		expect(will.request(reissue, KEY, {})).toBeUndefined();
+	});
+
+	test("builds on another preset's steps when it names that preset", () => {
+		const offer: PresetStep = {
+			action: "MakeOffer",
+			after: ["Mint"],
+			from: "multiasset",
+			params: (_key, earlier) => ({ asset: earlier?.issuances?.[0]?.issuedAsset }),
+		};
+		const issuance = {
+			entropy: "",
+			input: "mint_in",
+			issuedAsset: "ff".repeat(32),
+			reissuanceToken: "",
+		};
+		const minted = { action: "Mint", issuances: [issuance], txid: "dd".repeat(32) };
+
+		expect(will.request(offer, KEY, { multiasset: [minted] })?.params).toEqual({
+			asset: issuance.issuedAsset,
+		});
+		expect(will.request(offer, KEY, { last_will: [minted] })).toBeUndefined();
 	});
 });
