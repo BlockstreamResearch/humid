@@ -29,7 +29,7 @@ const CONSTRUCTS = {
 		utxo_type: READ,
 	},
 	compute: {
-		address: UNIMPLEMENTED,
+		address: READ,
 		compile_params: UNIMPLEMENTED,
 		depends_on: UNIMPLEMENTED,
 		expr: UNIMPLEMENTED,

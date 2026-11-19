@@ -24,6 +24,7 @@ const programReference = z.object({
 });
 
 const compute = z.object({
+	address: z.string().optional(),
 	extra_leaves: z.array(leafSchema).default([]),
 	params: z
 		.record(

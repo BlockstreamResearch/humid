@@ -7,6 +7,9 @@ import multiassetSource from "@humid/tx-manifest/fixtures/multiasset/p2pk.simf?r
 import multiassetManifest from "@humid/tx-manifest/fixtures/multiasset/txmanifest.json";
 import p2pkSource from "@humid/tx-manifest/fixtures/p2pk/p2pk.simf?raw";
 import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk/txmanifest.json";
+import relaySource from "@humid/tx-manifest/fixtures/relay/relay.simf?raw";
+import relayManifest from "@humid/tx-manifest/fixtures/relay/txmanifest.json";
+import vaultSource from "@humid/tx-manifest/fixtures/relay/vault.simf?raw";
 
 import { LIQUID_REGTEST_LBTC_ASSET_ID } from "@/app/dashboard/lib/constants";
 
@@ -16,6 +19,7 @@ const WILL_STEPS = ["Fund", "Refresh"];
 const WILL = { utxoType: "last_will", vout: 0 };
 const ISSUING_STEPS = ["MintReissuable", "Reissue"];
 const OFFER = { utxoType: "tessera_offer", vout: 0 };
+const RELAY = { utxoType: "relay", vout: 0 };
 const LBTC = LIQUID_REGTEST_LBTC_ASSET_ID.split(":").at(-1)!;
 
 const issuanceOf = (earlier?: SentStep) => {
@@ -31,11 +35,11 @@ export const PRESETS = [
 		"p2pk",
 		"Pay locks 1,000 sats to the wallet's key; Receive spends them back.",
 		[
-			{ action: "Pay", params: (key) => ({ amount_sat: 1000, pubkey: key }) },
+			{ action: "Pay", params: ({ key }) => ({ amount_sat: 1000, pubkey: key }) },
 			{
 				action: "Receive",
 				after: ["Pay"],
-				params: (key) => ({ pubkey: key }),
+				params: ({ key }) => ({ pubkey: key }),
 				spends: { utxoType: "p2pk_output", vout: 0 },
 			},
 		],
@@ -47,7 +51,7 @@ export const PRESETS = [
 		[
 			{
 				action: "Fund",
-				params: (key) => ({
+				params: ({ key }) => ({
 					COLD_PUB_KEY: key,
 					HOT_PUB_KEY: key,
 					INHERITOR_PUB_KEY: key,
@@ -71,7 +75,7 @@ export const PRESETS = [
 			{
 				action: "Reissue",
 				after: ISSUING_STEPS,
-				params: (_key, earlier) => {
+				params: (_account, earlier) => {
 					const { entropy, issuedAsset, reissuanceToken } = issuanceOf(earlier);
 
 					return { entropy, issued: issuedAsset, supply: 21, token: reissuanceToken };
@@ -80,7 +84,7 @@ export const PRESETS = [
 			{
 				action: "PayToken",
 				after: ISSUING_STEPS,
-				params: (key, earlier) => ({
+				params: ({ key }, earlier) => ({
 					amount_sat: 5,
 					fee_sat: 1000,
 					pubkey: key,
@@ -100,7 +104,7 @@ export const PRESETS = [
 				action: "MakeOffer",
 				after: ISSUING_STEPS,
 				from: "multiasset",
-				params: (key, earlier) => ({
+				params: ({ key }, earlier) => ({
 					AMOUNT_B: 1500,
 					ASSET_B: LBTC,
 					MAKER_PUB_KEY: key,
@@ -125,5 +129,32 @@ export const PRESETS = [
 			manifest: dexManifest,
 		},
 		"tessera_offer_contract",
+	),
+	new Preset(
+		"relay",
+		"RelayToAddress locks 1,000 sats in a keyless relay committed to the connected address's " +
+			"script hash, and ReleaseToAddress pays them there. RelayToVault commits to a vault " +
+			"held by the wallet's key instead, ReleaseToVault moves the coins into the vault, and " +
+			"Withdraw signs them back.",
+		[
+			{ action: "RelayToAddress", params: ({ address }) => ({ amount_sat: 1000, payee: address }) },
+			{
+				action: "ReleaseToAddress",
+				after: ["RelayToAddress"],
+				params: ({ address }) => ({ payee: address }),
+				spends: RELAY,
+			},
+			{ action: "RelayToVault", params: () => ({ amount_sat: 1000 }) },
+			{ action: "ReleaseToVault", after: ["RelayToVault"], spends: RELAY },
+			{
+				action: "Withdraw",
+				after: ["ReleaseToVault"],
+				spends: { utxoType: "vault", vout: 0 },
+			},
+		],
+		{
+			contractSources: { "./relay.simf": relaySource, "./vault.simf": vaultSource },
+			manifest: relayManifest,
+		},
 	),
 ];

@@ -1,7 +1,6 @@
 import { confirmationModel, type ReviewedPlan } from "../confirmation";
 import { type Action, programOutputs } from "../document/manifest";
 import { type CreatedInstance, resolveCreatedInstance } from "../programs/instance";
-import { createProgramHasher } from "../programs/programHash";
 import type { ActionRequest } from "../request/request";
 import { inputHookScope, runHook, withHookValues } from "../transaction/hooks";
 import { resolveInputRules } from "../transaction/inputRules";
@@ -71,16 +70,13 @@ export class ActionReview {
 	}
 
 	#createInstance(scope: Scope): CreatedInstance | undefined {
-		const { action, dependencies, manifest, request } = this.#context;
+		const { action, hashProgram, request } = this.#context;
 
 		return action.create_instance === undefined
 			? undefined
 			: resolveCreatedInstance(action, {
 					contractSources: request.contractSources,
-					hashProgram: createProgramHasher(
-						dependencies.compiler.scriptHashOf,
-						manifest.includeDebugSymbols,
-					),
+					hashProgram,
 					scope,
 				});
 	}

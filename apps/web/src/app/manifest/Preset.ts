@@ -11,11 +11,13 @@ export type SentStep = {
 	txid: string;
 };
 
+export type Account = { address: string; key: string };
+
 export type PresetStep = {
 	action: string;
 	after?: string[];
 	from?: string;
-	params?: (key: string, earlier?: SentStep) => Record<string, unknown>;
+	params?: (account: Account, earlier?: SentStep) => Record<string, unknown>;
 	spends?: { utxoType: string; vout: number };
 };
 
@@ -47,7 +49,7 @@ export class Preset {
 
 	request(
 		step: PresetStep,
-		key: string,
+		account: Account,
 		sent: Record<string, SentStep[]>,
 	): LiquidProcessConfidentialTransactionParams | undefined {
 		const earlier =
@@ -70,7 +72,7 @@ export class Preset {
 			action: step.action,
 			broadcast: true,
 			...this.#document,
-			params: step.params?.(key, earlier) ?? {},
+			params: step.params?.(account, earlier) ?? {},
 			...(this.#template === undefined || deployment === undefined
 				? {}
 				: { instance: { instance: { fields: deployment, template: this.#template } } }),

@@ -582,6 +582,47 @@ describe("dex", () => {
 	});
 });
 
+describe("relay", () => {
+	const relay = new ReferenceExample("relay");
+	const payee = { payee: SIGNER.address() };
+	const hashOf = (script: string) => bytesToHex(sha256(hexToBytes(script)));
+	const committedBy = (review: ManifestReview) =>
+		review.programs.find(({ utxoType }) => utxoType === "relay")?.argumentsJson ?? "";
+
+	test("commits to the payee address's script hash and releases to that address, each at exactly the fee shown", async () => {
+		const funded = await relay.reviewed("RelayToAddress", {
+			params: { ...payee, amount_sat: 1000 },
+		});
+
+		expect(committedBy(funded)).toContain(hashOf(WALLET_SCRIPT));
+
+		const locked = settled(funded);
+
+		settled(
+			await relay.reviewed("ReleaseToAddress", {
+				params: payee,
+				spends: [heldAt(locked, 0, "relay", POLICY_ASSET)],
+			}),
+		);
+	});
+
+	test("commits to the vault's script hash, releases into the vault and withdraws, each at exactly the fee shown", async () => {
+		const funded = await relay.reviewed("RelayToVault", { params: { amount_sat: 1000 } });
+		const released = await relay.reviewed("ReleaseToVault", {
+			spends: [heldAt(settled(funded), 0, "relay", POLICY_ASSET)],
+		});
+		const vault = released.programs.find(({ utxoType }) => utxoType === "vault");
+
+		expect(committedBy(funded)).toContain(hashOf(vault?.scriptPubKeyHex ?? ""));
+
+		settled(
+			await relay.reviewed("Withdraw", {
+				spends: [heldAt(settled(released), 0, "vault", POLICY_ASSET)],
+			}),
+		);
+	});
+});
+
 describe("lending_v3", () => {
 	const issuanceFactory = new ReferenceExample("lending_v3", "issuance_factory");
 	const lending = new ReferenceExample("lending_v3", "lending_contract");

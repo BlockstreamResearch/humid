@@ -10,6 +10,12 @@ const LIFECYCLES = [
 		{ preset: "multiasset", actions: ["MintReissuable"] },
 		{ preset: "dex", actions: ["MakeOffer", "Settle", "ClaimPayout", "MakeOffer", "Refund"] },
 	],
+	[
+		{
+			preset: "relay",
+			actions: ["RelayToAddress", "ReleaseToAddress", "RelayToVault", "ReleaseToVault", "Withdraw"],
+		},
+	],
 ];
 
 for (const runs of LIFECYCLES) {

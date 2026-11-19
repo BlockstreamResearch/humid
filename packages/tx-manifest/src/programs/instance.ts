@@ -2,9 +2,8 @@ import type { Action } from "../document/manifest";
 import type { Compute } from "../document/schema";
 import { Refusal } from "../refusal";
 import type { Scope } from "../values/scope";
-import { resolveCompileParams } from "./compileParams";
+import { hashComputedProgram, tapleafWiring } from "./computedProgram";
 import { PROGRAM_HASH_SEED, type HashProgram, ITERATION_BOUND } from "./programHash";
-import { resolveStateLeaves } from "./stateLeaves";
 
 export type CreatedInstance = { fields: Record<string, string>; rounds: number };
 
@@ -58,26 +57,18 @@ export function resolveCreatedInstance(
 			);
 		}
 
-		const { simf } = value;
-
-		if (simf === undefined) {
-			throw new Refusal(`Field ${name} names no contract to compute from.`);
-		}
-
-		const source = input.contractSources[simf];
-
-		if (source === undefined) {
-			throw new Refusal(`The source of ${simf} was not supplied.`);
-		}
-
-		computed.push({ compute: value, name, source });
+		computed.push({ compute: value, name });
 	}
 
 	if (computed.length === 0) {
 		return { fields: direct, rounds: 0 };
 	}
 
-	const declaredTypes = fieldTypes(declared);
+	const hashing = {
+		contractSources: input.contractSources,
+		declaredTypes: fieldTypes(declared),
+		hashProgram: input.hashProgram,
+	};
 	const ordered = inDependencyOrder(computed);
 	let values: Record<string, string> = Object.fromEntries(
 		computed.map(({ name }) => [name, PROGRAM_HASH_SEED]),
@@ -87,31 +78,10 @@ export function resolveCreatedInstance(
 		const next: Record<string, string> = {};
 		const settled: Record<string, string> = { ...values };
 
-		for (const { compute, name, source } of ordered) {
+		for (const { compute, name } of ordered) {
 			const withNewFields = { ...direct, ...settled };
 			const scope = input.scope.withInstance(withNewFields).withParams(withNewFields);
-			const hash = Refusal.amend(
-				() => {
-					const wiring = tapleafWiring(compute);
-
-					return input.hashProgram({
-						argumentsJson: JSON.stringify(
-							resolveCompileParams(
-								wiring.wiring,
-								declaredTypes,
-								scope,
-								undefined,
-								wiring.declaredAtUse,
-							),
-						),
-						extraLeavesJson: JSON.stringify(
-							resolveStateLeaves(compute.extra_leaves, { at: `Field ${name}`, scope }),
-						),
-						source,
-					});
-				},
-				(reason) => `Computing ${name}: ${reason}`,
-			);
+			const hash = hashComputedProgram(name, compute, scope, hashing);
 
 			next[name] = hash;
 			settled[name] = hash;
@@ -133,7 +103,7 @@ export function resolveCreatedInstance(
 	);
 }
 
-type ComputedField = { compute: Compute; name: string; source: string };
+type ComputedField = { compute: Compute; name: string };
 
 const NAME_IN_TEXT = /[A-Za-z_][A-Za-z0-9_]*/g;
 
@@ -187,32 +157,6 @@ function dependenciesOf(field: ComputedField, names: Set<string>): Set<string> {
 	}
 
 	return found;
-}
-
-type TapleafWiring = {
-	declaredAtUse: Record<string, string>;
-	wiring: Record<string, string>;
-};
-
-function tapleafWiring(compute: Compute): TapleafWiring {
-	const declaredAtUse: Record<string, string> = {};
-	const wiring: Record<string, string> = {};
-
-	for (const [name, spec] of Object.entries(compute.params)) {
-		if (typeof spec === "string") {
-			wiring[name] = spec;
-
-			continue;
-		}
-
-		if (spec.type !== undefined) {
-			declaredAtUse[name] = spec.type;
-		}
-
-		wiring[name] = spec.value;
-	}
-
-	return { declaredAtUse, wiring };
 }
 
 function fieldTypes(declared: Record<string, string | Compute>): Record<string, string> {

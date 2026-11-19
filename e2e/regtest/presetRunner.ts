@@ -39,17 +39,25 @@ export class PresetRunner {
 
 		await this.#page.getByRole("button", { name: "Send to wallet" }).click();
 
-		const window = await confirmation;
-		const shownFeeSats = await window.shownFeeSats();
+		const refused = this.#outcome(/^Error$/)
+			.waitFor({ timeout: 0 })
+			.then(async () => {
+				throw new Error(`${preset} ${action}: ${await this.#shown(/^Error$/)}`);
+			});
+
+		refused.catch(() => {});
+
+		const window = await Promise.race([confirmation, refused]);
+		const shownFeeSats = await Promise.race([window.shownFeeSats(), refused]);
 
 		await window.approve("Sign and send");
 		await window.done();
 
-		const outcome = this.#page.getByText(/^(Result|Error)$/);
+		const outcome = this.#outcome(/^(Result|Error)$/);
 
 		await expect(outcome).toBeVisible();
 
-		const text = await outcome.locator("..").locator("code").textContent();
+		const text = await this.#shown(/^(Result|Error)$/);
 
 		if ((await outcome.textContent()) === "Error") throw new Error(`${preset} ${action}: ${text}`);
 
@@ -57,5 +65,13 @@ export class PresetRunner {
 			result: JSON.parse(text!) as LiquidProcessConfidentialTransactionResult,
 			shownFeeSats,
 		};
+	}
+
+	#outcome(label: RegExp) {
+		return this.#page.getByText(label);
+	}
+
+	async #shown(label: RegExp): Promise<string | null> {
+		return this.#outcome(label).locator("..").locator("code").textContent();
 	}
 }

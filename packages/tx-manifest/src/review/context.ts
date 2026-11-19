@@ -1,12 +1,11 @@
-import { sha256 } from "@noble/hashes/sha2.js";
-
-import { decodeHex, encodeHex } from "../chain/hex";
 import type { Outpoint } from "../chain/outpoint";
+import { scriptHashOf } from "../chain/scriptHash";
 import { type Action, Manifest } from "../document/manifest";
 import { refuseUnsupported } from "../document/refuse";
 import type { ProgramReference } from "../document/schema";
 import { resolveStatedFields } from "../programs/instance";
 import { deriveProgramAddress, type ProgramDerivation } from "../programs/program";
+import { createProgramHasher, type HashProgram } from "../programs/programHash";
 import { Refusal } from "../refusal";
 import type { ActionRequest } from "../request/request";
 import { missingParts } from "../request/requirements";
@@ -21,6 +20,7 @@ export class ReviewContext {
 	readonly action: Action;
 	readonly dependencies: ReviewDependencies;
 	readonly declaredTypes: Record<string, string>;
+	readonly hashProgram: HashProgram;
 	readonly manifest: Manifest;
 	readonly request: ActionRequest;
 	readonly #pools = new Map<string, SelectableUtxo[]>();
@@ -36,6 +36,10 @@ export class ReviewContext {
 		this.manifest = manifest;
 		this.action = action;
 		this.declaredTypes = manifest.paramTypes(action);
+		this.hashProgram = createProgramHasher(
+			dependencies.compiler.scriptHashOf,
+			manifest.includeDebugSymbols,
+		);
 	}
 
 	static prepare(
@@ -63,20 +67,22 @@ export class ReviewContext {
 			);
 		}
 
+		const context = new ReviewContext(request, dependencies, manifest, action);
 		const fields = request.instance?.instance?.fields ?? {};
 		const supplied = Object.fromEntries(
 			Object.entries(request.params).filter(([name]) => name in action.params || !(name in fields)),
 		);
-		const params = resolveParameters(
-			action,
-			supplied,
-			new Scope({ instance: fields, params: supplied }),
-			{
+		const params = resolveParameters(action, supplied, fields, {
+			contractSources: request.contractSources,
+			declaredTypes: context.declaredTypes,
+			hashProgram: context.hashProgram,
+			readAddress: (address) => context.readAddress(address),
+			wallet: {
 				address: dependencies.wallet.address,
 				key: dependencies.wallet.key,
-				script_hash: encodeHex(sha256(walletScript(dependencies.wallet.scriptPubKeyHex))),
+				script_hash: scriptHashOf(dependencies.wallet.scriptPubKeyHex),
 			},
-		);
+		});
 		const missing = missingParts({ ...request, params }, manifest, action);
 
 		if (missing.length > 0) {
@@ -90,7 +96,7 @@ export class ReviewContext {
 		const stated = resolveStatedFields(action, new Scope({ instance: fields, params }));
 
 		return {
-			context: new ReviewContext(request, dependencies, manifest, action),
+			context,
 			scope: new Scope({ instance: { ...fields, ...stated }, params }),
 		};
 	}
@@ -206,14 +212,4 @@ export class ReviewContext {
 			);
 		}
 	}
-}
-
-function walletScript(hex: string): Uint8Array {
-	const script = decodeHex(hex);
-
-	if (!script) {
-		throw new TypeError(`The wallet's script ${hex} is not hex.`);
-	}
-
-	return script;
 }

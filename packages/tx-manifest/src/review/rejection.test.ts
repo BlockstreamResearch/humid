@@ -101,7 +101,7 @@ describe("what the document alone is refused for", () => {
 	test("a parameter computed in a way this wallet does not implement, rather than left at its default", async () => {
 		const refusal = await payRefusal((action) => {
 			(action.params as Record<string, Document>).pubkey = {
-				compute: { address: "params.receiver", type: "script_hash" },
+				compute: { type: "hook" },
 				type: "pubkey",
 			};
 		});

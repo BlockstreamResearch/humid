@@ -6,7 +6,7 @@ import { Manifest } from "./document/manifest";
 import { refuseUnsupported, satisfies } from "./document/refuse";
 import { Refusal } from "./refusal";
 
-const EXAMPLES = ["dex", "last_will", "lending_v2", "lending_v3", "p2pk"];
+const EXAMPLES = ["dex", "last_will", "lending_v2", "lending_v3", "p2pk", "relay"];
 
 function example(name: string) {
 	const at = new URL(`./__fixtures__/${name}/`, import.meta.url);

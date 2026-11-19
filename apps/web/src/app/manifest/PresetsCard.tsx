@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useHumidContext } from "@/contexts/Web3Provider/HumidProvider";
 
-import type { SentStep } from "./Preset";
+import type { Account, SentStep } from "./Preset";
 import { PRESETS } from "./presets";
 import { walletKeyOf } from "./walletKey";
 
@@ -24,17 +24,23 @@ export function PresetsCard({
 }) {
 	const { chainId, supportedChains, switchNetwork, wallet } = useHumidContext();
 	const network = supportedChains.find((chain) => chain.caipNetworkId === chainId)?.name ?? chainId;
-	const [key, setKey] = useState<string | null>(null);
+	const [account, setAccount] = useState<Account | null>(null);
 	const [problem, setProblem] = useState<string | null>(null);
 
-	const readKey = async () => {
+	const readAccount = async () => {
 		try {
-			const { descriptors } = await wallet.getWalletDescriptor({
-				descriptorFormat: [{ format: "bip380-bip389-multipath" }],
-				descriptorType: "publicWalletDescriptor",
-			});
+			const [{ descriptors }, { utxos }] = await Promise.all([
+				wallet.getWalletDescriptor({
+					descriptorFormat: [{ format: "bip380-bip389-multipath" }],
+					descriptorType: "publicWalletDescriptor",
+				}),
+				wallet.getUTXOs(),
+			]);
 
-			setKey(walletKeyOf(descriptors[0]?.descriptor ?? ""));
+			setAccount({
+				address: utxos[0]?.address ?? "",
+				key: walletKeyOf(descriptors[0]?.descriptor ?? ""),
+			});
 			setProblem(null);
 		} catch (error) {
 			setProblem(error instanceof Error ? error.message : String(error));
@@ -53,11 +59,11 @@ export function PresetsCard({
 			</CardHeader>
 			<CardContent className="flex flex-col gap-4">
 				<div className="flex flex-wrap items-center gap-3 text-sm">
-					<Button variant="outline" size="sm" onClick={readKey}>
-						{key === null ? "Read the wallet key" : "Read the key again"}
+					<Button variant="outline" size="sm" onClick={readAccount}>
+						{account === null ? "Read the wallet key" : "Read the key again"}
 					</Button>
 					<span className="text-muted-foreground font-mono text-xs break-all">
-						{key ??
+						{account?.key ??
 							"Every preset locks funds to this key, read from the wallet's public descriptor."}
 					</span>
 				</div>
@@ -68,7 +74,7 @@ export function PresetsCard({
 							variant="outline"
 							size="sm"
 							onClick={() => {
-								setKey(null);
+								setAccount(null);
 								switchNetwork(LIQUID_REGTEST_CHAIN_ID);
 							}}
 						>
@@ -86,7 +92,7 @@ export function PresetsCard({
 						</div>
 						<div className="flex flex-wrap gap-2">
 							{preset.steps.map((step) => {
-								const request = key === null ? undefined : preset.request(step, key, sent);
+								const request = account === null ? undefined : preset.request(step, account, sent);
 
 								return (
 									<Button
