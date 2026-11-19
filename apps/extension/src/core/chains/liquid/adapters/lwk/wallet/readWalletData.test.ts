@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { readWalletActivityForAsset } from "./readWalletData";
+import { readWalletActivity } from "./readWalletData";
 
 const LBTC = "aa".repeat(32);
 const TOKEN = "cc".repeat(32);
@@ -39,29 +39,33 @@ const wollet = (txs: unknown[]) => ({ transactions: () => txs }) as never;
 
 describe("activity for coins that are not blinded", () => {
 	test("an explicit receive shows up", () => {
-		const activity = readWalletActivityForAsset(
+		const activity = readWalletActivity(
 			wollet([
 				walletTx("a", { inputs: [foreign], outputs: [owned(LBTC, 100_000n, true), foreign] }),
 			]),
 			LBTC,
 		);
 
-		expect(activity).toMatchObject([{ amountSats: "100000", direction: "received", txid: "a" }]);
+		expect(activity).toMatchObject([
+			{ changes: [{ amountSats: "100000", rawAssetId: LBTC }], txid: "a" },
+		]);
 	});
 
 	test("spending an explicit coin shows up as sent", () => {
-		const activity = readWalletActivityForAsset(
+		const activity = readWalletActivity(
 			wollet([
 				walletTx("b", { inputs: [owned(LBTC, 100_000n, true)], outputs: [foreign, foreign] }),
 			]),
 			LBTC,
 		);
 
-		expect(activity).toMatchObject([{ amountSats: "100000", direction: "sent", txid: "b" }]);
+		expect(activity).toMatchObject([
+			{ changes: [{ amountSats: "-100000", rawAssetId: LBTC }], txid: "b" },
+		]);
 	});
 
 	test("explicit and confidential amounts add up in one transaction", () => {
-		const activity = readWalletActivityForAsset(
+		const activity = readWalletActivity(
 			wollet([
 				walletTx("c", {
 					balance: [[LBTC, 5_000n]],
@@ -71,15 +75,41 @@ describe("activity for coins that are not blinded", () => {
 			LBTC,
 		);
 
-		expect(activity).toMatchObject([{ amountSats: "7000", direction: "received" }]);
+		expect(activity).toMatchObject([{ changes: [{ amountSats: "7000", rawAssetId: LBTC }] }]);
 	});
 
 	test("explicit coins of another asset are not counted", () => {
-		const activity = readWalletActivityForAsset(
+		const activity = readWalletActivity(
 			wollet([walletTx("d", { outputs: [owned(TOKEN, 500n, true)] })]),
 			LBTC,
 		);
 
 		expect(activity).toEqual([]);
+	});
+});
+
+describe("activity across the account", () => {
+	test("lists every asset a transaction changes", () => {
+		const activity = readWalletActivity(
+			wollet([
+				walletTx("e", {
+					balance: [
+						[LBTC, -1_200n],
+						[TOKEN, 21n],
+					],
+				}),
+			]),
+			null,
+		);
+
+		expect(activity).toMatchObject([
+			{
+				changes: [
+					{ amountSats: "-1200", rawAssetId: LBTC },
+					{ amountSats: "21", rawAssetId: TOKEN },
+				],
+				txid: "e",
+			},
+		]);
 	});
 });

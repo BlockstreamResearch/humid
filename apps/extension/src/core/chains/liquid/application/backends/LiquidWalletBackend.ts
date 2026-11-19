@@ -29,6 +29,7 @@ import type {
 	LiquidSignPsetReview,
 	ReviewedLiquidSignPsetParams,
 } from "../../domain/pset/types";
+import type { SignedHold, TransactionNote } from "../signedHold";
 
 export type LiquidWalletAccount = {
 	accountGroupId?: AccountGroupId;
@@ -54,8 +55,8 @@ export type ResolveLiquidWalletAccountInput = {
 };
 
 export type LiquidActivityEntry = {
-	amountSats: string;
-	direction: "received" | "sent";
+	/** Signed: what the transaction added to or took from this account, per asset. */
+	changes: { amountSats: string; rawAssetId: string }[];
 	feeSats: string;
 	timestamp: number | null;
 	txid: string;
@@ -118,7 +119,7 @@ export type LiquidWalletBackend = {
 		params: LiquidEstimateMaxSendParams,
 		rawAssetId: string,
 	) => Promise<LiquidEstimateMaxSendResult>;
-	getActivity: (account: LiquidWalletAccount, rawAssetId: string) => LiquidActivityEntry[];
+	getActivity: (account: LiquidWalletAccount, rawAssetId: string | null) => LiquidActivityEntry[];
 	getAddress: (
 		account: LiquidWalletAccount,
 		index: number,
@@ -159,6 +160,7 @@ export type LiquidWalletBackend = {
 		params: LiquidSendTransferParams,
 		rawAssetId: string,
 		fee?: LiquidTransferFee,
+		note?: TransactionNote,
 	) => Promise<LiquidSendTransferResult>;
 	signMessage: (
 		account: LiquidWalletAccount,
@@ -171,6 +173,7 @@ export type LiquidWalletBackend = {
 	signPset: (
 		account: LiquidWalletAccount,
 		params: ReviewedLiquidSignPsetParams,
+		signedFor: SignedHold,
 	) => Promise<LiquidSignPsetResult>;
 	syncAccount: (account: LiquidWalletAccount) => Promise<void>;
 };

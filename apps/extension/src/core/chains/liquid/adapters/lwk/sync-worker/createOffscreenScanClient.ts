@@ -1,12 +1,8 @@
 import browser from "webextension-polyfill";
 
-import type {
-	BroadcastInput,
-	BroadcastTxInput,
-	ReadActivityInput,
-	ScanInput,
-	SyncWorkerClient,
-} from "./createWorkerScanClient";
+import { sleep } from "@/helpers/promise";
+
+import type { ReadActivityInput, ScanInput, SyncWorkerClient } from "./createWorkerScanClient";
 import {
 	base64ToBytes,
 	OFFSCREEN_SCAN_TARGET,
@@ -27,6 +23,9 @@ export function getChromeOffscreen(): ChromeOffscreenApi | undefined {
 }
 
 const OFFSCREEN_DOCUMENT_URL = "src/offscreen.html";
+const NOT_LISTENING = "Receiving end does not exist";
+const LISTENER_WAIT_ATTEMPTS = 40;
+const LISTENER_WAIT_MS = 50;
 
 let creatingDocument: Promise<void> | null = null;
 
@@ -48,8 +47,6 @@ async function ensureOffscreenDocument(offscreen: ChromeOffscreenApi): Promise<v
 }
 
 type OffscreenRequestPayload =
-	| { input: BroadcastInput; op: "broadcast" }
-	| { input: BroadcastTxInput; op: "broadcastTransaction" }
 	| { input: ScanInput; op: "scan" | "scanAndRead" }
 	| { input: ReadActivityInput; op: "readActivity" };
 
@@ -60,33 +57,25 @@ async function requestScan(payload: OffscreenRequestPayload): Promise<OffscreenS
 
 	await ensureOffscreenDocument(offscreen);
 
-	return (await browser.runtime.sendMessage({
-		...payload,
-		target: OFFSCREEN_SCAN_TARGET,
-	})) as OffscreenScanResponse;
+	for (let attempt = 1; ; attempt += 1) {
+		try {
+			// oxlint-disable-next-line no-await-in-loop
+			return (await browser.runtime.sendMessage({
+				...payload,
+				target: OFFSCREEN_SCAN_TARGET,
+			})) as OffscreenScanResponse;
+		} catch (error) {
+			// A document just created may not be listening yet.
+			if (attempt >= LISTENER_WAIT_ATTEMPTS || !String(error).includes(NOT_LISTENING)) throw error;
+
+			// oxlint-disable-next-line no-await-in-loop
+			await sleep(LISTENER_WAIT_MS);
+		}
+	}
 }
 
 export function createOffscreenScanClient(): SyncWorkerClient {
 	return {
-		async broadcastTransaction(input) {
-			const response = await requestScan({ input, op: "broadcastTransaction" });
-
-			if (!response.ok) throw new Error(response.error);
-
-			if (response.op !== "broadcastTransaction") {
-				throw new Error("Unexpected offscreen scan response.");
-			}
-
-			return { txid: response.txid };
-		},
-		async broadcast(input) {
-			const response = await requestScan({ input, op: "broadcast" });
-
-			if (!response.ok) throw new Error(response.error);
-			if (response.op !== "broadcast") throw new Error("Unexpected offscreen scan response.");
-
-			return { txid: response.txid };
-		},
 		async readActivity(input) {
 			const response = await requestScan({ input, op: "readActivity" });
 

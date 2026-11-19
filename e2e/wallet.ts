@@ -29,6 +29,26 @@ export class Wallet {
 		await page.close();
 	}
 
+	async home(network: string): Promise<Page> {
+		const page = await this.#context.newPage();
+
+		await page.goto(`chrome-extension://${this.#extensionId}/src/popup.html?tab#/app`);
+		await page.getByRole("banner").getByRole("button").first().click();
+		await page.getByText(network, { exact: true }).click();
+		await expect(page.getByRole("banner").getByRole("button", { name: network })).toBeVisible();
+
+		return page;
+	}
+
+	async lock(): Promise<void> {
+		const page = await this.#context.newPage();
+
+		await page.goto(`chrome-extension://${this.#extensionId}/src/popup.html?tab#/app/settings`);
+		await page.getByRole("button", { name: "Lock wallet" }).click();
+		await expect(page.getByText("Locked")).toBeVisible();
+		await page.close();
+	}
+
 	async nextConfirmation(): Promise<Confirmation> {
 		for (;;) {
 			const page = await this.#context.waitForEvent("page", { timeout: 60_000 });

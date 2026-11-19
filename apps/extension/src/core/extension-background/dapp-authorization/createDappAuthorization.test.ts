@@ -4,7 +4,7 @@ import { AccountRegistry } from "@/core/accounts/application/account-registry/Ac
 
 import { createDappAuthorization } from "./createDappAuthorization";
 
-test("locked requests wait for unlock, then reject without approval or dispatch if it is dismissed", async () => {
+test("locked requests wait for unlock, then reject without approval or dispatch if it is dismissed, and locked reads reject without waiting", async () => {
 	let confirmations = 0;
 	let unlockWaits = 0;
 	const authorization = createDappAuthorization({
@@ -37,7 +37,7 @@ test("locked requests wait for unlock, then reject without approval or dispatch 
 		() =>
 			authorization.invokeMethod({
 				origin,
-				params: { scope: "liquid:testnet", request: { method: "getBalance" } },
+				params: { scope: "liquid:testnet", request: { method: "signMessage" } },
 			}),
 		() => authorization.createSession({ origin, params }),
 		() => authorization.addChain({ origin, params: { chainId: "liquid:testnet" } }),
@@ -49,4 +49,12 @@ test("locked requests wait for unlock, then reject without approval or dispatch 
 	expect(confirmations).toBe(0);
 	expect(unlockWaits).toBe(requests.length);
 	expect(authorization.getSession({ origin })).toEqual({ sessionScopes: {} });
+
+	await expect(
+		authorization.invokeMethod({
+			origin,
+			params: { scope: "liquid:testnet", request: { method: "getBalance" } },
+		}),
+	).rejects.toMatchObject({ code: 4900 });
+	expect(unlockWaits).toBe(requests.length);
 });

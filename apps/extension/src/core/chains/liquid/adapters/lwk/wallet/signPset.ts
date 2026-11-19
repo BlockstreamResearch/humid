@@ -11,10 +11,10 @@ import type {
 } from "../../../application/backends/LiquidWalletBackend";
 import type { LiquidSignPsetReview } from "../../../domain/pset/types";
 import { type LwkWasmModule, loadLwkWasm } from "../loadLwkWasm";
-import { getSyncWorkerClient } from "../sync-worker/createSyncWorkerClient";
 import { blindPset } from "./blindPset";
 import { getLwkImplementation } from "./getLwkImplementation";
 import { invalidPset, PsetMaps } from "./PsetMaps";
+import { sentTransactions } from "./sentTransactions";
 import { WalletCoins } from "./WalletCoins";
 
 export async function blindAndInspectPset(
@@ -126,6 +126,7 @@ function inspectPset(
 export async function signPset(
 	account: LiquidWalletAccount,
 	params: Parameters<LiquidWalletBackend["signPset"]>[1],
+	signedFor: Parameters<LiquidWalletBackend["signPset"]>[2],
 ) {
 	const implementation = getLwkImplementation(account);
 	let pset: Pset | undefined;
@@ -177,11 +178,9 @@ export async function signPset(
 			const finalizingPset = pset;
 			pset = undefined;
 			pset = implementation.wollet.finalize(finalizingPset);
-			const broadcast = await getSyncWorkerClient().broadcast({
-				chain: account.chain,
-				psetBase64: pset.toString(),
-			});
-			txid = broadcast.txid;
+			txid = await sentTransactions.broadcast(account, pset.extractTx().toString(), signedFor);
+		} else {
+			await sentTransactions.remember(account, pset.extractTx().toString(), signedFor);
 		}
 
 		return {

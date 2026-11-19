@@ -27,3 +27,34 @@ test("a rejected connection reaches the dapp as a failure", async ({ dapp, walle
 	await expect(dapp.page.getByText("Couldn't connect")).toBeVisible();
 	await expect(dapp.page.getByRole("button", { name: "Connect wallet" })).toBeEnabled();
 });
+
+test("a locked wallet answers a dapp's read without opening a window", async ({
+	context,
+	dapp,
+	wallet,
+}) => {
+	await dapp.connect();
+	await wallet.lock();
+
+	const opened = context.waitForEvent("page", { timeout: 3000 }).then(
+		(page) => page.url(),
+		() => null,
+	);
+	const read = dapp.page.evaluate(() =>
+		(window as unknown as { humid: { request: (request: unknown) => Promise<unknown> } }).humid
+			.request({
+				method: "wallet_invokeMethod",
+				params: {
+					request: { method: "getBalance" },
+					scope: "bip122:00902a6b70c2ca83b5d9c815d96a0e2f",
+				},
+			})
+			.then(
+				() => "answered",
+				(error: { code?: number }) => error.code,
+			),
+	);
+
+	expect(await read).toBe(4900);
+	expect(await opened).toBeNull();
+});

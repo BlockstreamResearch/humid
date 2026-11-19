@@ -29,11 +29,19 @@ export class PresetRunner {
 		return new PresetRunner(page, wallet);
 	}
 
-	async send(preset: string, action: string): Promise<SentAction> {
+	async send(preset: string, action: string, { broadcast = true } = {}): Promise<SentAction> {
 		await this.#page
 			.getByRole("group", { name: preset })
 			.getByRole("button", { exact: true, name: action })
 			.click();
+
+		if (!broadcast) {
+			const request = this.#page.getByLabel("Or paste the request JSON");
+
+			await request.fill(
+				(await request.inputValue()).replace('"broadcast": true', '"broadcast": false'),
+			);
+		}
 
 		const confirmation = this.#wallet.nextConfirmation();
 
@@ -50,7 +58,7 @@ export class PresetRunner {
 		const window = await Promise.race([confirmation, refused]);
 		const shownFeeSats = await Promise.race([window.shownFeeSats(), refused]);
 
-		await window.approve("Sign and send");
+		await window.approve(broadcast ? "Sign and send" : "Sign");
 		await window.done();
 
 		const outcome = this.#outcome(/^(Result|Error)$/);

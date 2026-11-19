@@ -7,6 +7,7 @@ import type {
 	EstimateMaxSendInput,
 	EstimateMaxSendResult,
 	GetActivityInput,
+	HeldTransaction,
 	PortfolioSnapshot,
 	ReceiveAddress,
 	SendTransferInput,
@@ -16,10 +17,12 @@ import type {
 import type { Caip25Scopes } from "@/core/caip25";
 import { addUnlockedChainRecord } from "@/core/chains/application/chain-store/addChainRecord";
 import { getUnlockedChainStoreState } from "@/core/chains/application/chain-store/secureChainStore";
+import { sentTransactions } from "@/core/chains/liquid/adapters/lwk/wallet/sentTransactions";
 import {
 	buildLiquidDappAccountScope,
 	resolveAccountGroupIdsForIdentifiers,
 } from "@/core/chains/liquid/application/dappAccountScope";
+import { transactionLabels } from "@/core/chains/liquid/application/transactionLabels";
 import { generateCustomLiquidChainId } from "@/core/chains/liquid/chains/createBuiltInLiquidChains";
 import {
 	LIQUID_CHAIN_GROUP_ID,
@@ -119,6 +122,7 @@ const init = async () => {
 
 	const confirmations = createConfirmationResponder(messageBus, {
 		isUnlocked: async () => (await walletVaultBackground.getStatus()).isUnlocked,
+		noteActivity: () => void touchVaultActivity(),
 		onUnlocked: walletVaultBackground.onUnlocked,
 	});
 	const liquidChainGroup = createLiquidChainGroup();
@@ -300,14 +304,29 @@ const init = async () => {
 
 	const refreshPortfolio = (): Promise<PortfolioSnapshot> => portfolioSync.refresh();
 
+	const listHeldTransactions = async (): Promise<HeldTransaction[]> => {
+		const { accountGroupId, input } = await resolveSelectedLiquidAccount();
+
+		return sentTransactions.signedFor(input.chain, accountGroupId);
+	};
+
+	const releaseHeldTransaction = async (txid: string): Promise<void> => {
+		sentTransactions.release(txid);
+	};
+
 	const getActivity = async (input: GetActivityInput): Promise<ActivityPage> => {
 		const { input: accountInput } = await resolveSelectedLiquidAccount();
+		const [page, labels] = await Promise.all([
+			liquidChainGroup.accountRuntime.getActivity(accountInput, input.rawAssetId, input.cursor),
+			transactionLabels.read(),
+		]);
 
-		return liquidChainGroup.accountRuntime.getActivity(
-			accountInput,
-			input.rawAssetId,
-			input.cursor,
-		);
+		return {
+			...page,
+			items: page.items.map((item) =>
+				labels[item.txid] === undefined ? item : { ...item, label: labels[item.txid] },
+			),
+		};
 	};
 
 	const resolveConnectedAccountIds = async (
@@ -506,9 +525,11 @@ const init = async () => {
 				getPortfolio,
 				getReceiveAddress,
 				inspectTransfer,
+				listHeldTransactions,
 				purgeAccountPortfolio,
 				purgeAccountWalletConnectSessions,
 				refreshPortfolio,
+				releaseHeldTransaction,
 				sendTransfer,
 			}),
 			...createDappConnectInternalHandlers({ getAccountModel, registry: accountRegistry }),

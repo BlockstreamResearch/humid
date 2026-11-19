@@ -64,6 +64,7 @@ export const sendLiquidTransfer = createWalletMethod<
 			params,
 			review.requestedAsset.rawAssetId,
 			{ feeRateSatsPerKvb: quote.feeRateSatsPerKvb, feeSats: quote.feeSats },
+			{ action: "Send", origin: context.requester?.origin ?? "" },
 		);
 	},
 	id: LIQUID_WALLET_RPC_METHODS.SEND_TRANSFER,
@@ -103,6 +104,7 @@ export const sendLiquidTransfer = createWalletMethod<
 
 		return { account, quotes, requestedAsset, transfer };
 	},
+	spends: true,
 });
 
 function chosenQuote(review: LiquidSendTransferMethodReview, choice: unknown): SpeedQuote {

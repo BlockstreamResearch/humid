@@ -3,26 +3,11 @@ import type {
 	LiquidAssetBalance,
 	LiquidUtxoSnapshot,
 } from "../../../application/backends/LiquidWalletBackend";
-import type {
-	BroadcastInput,
-	BroadcastTxInput,
-	ReadActivityInput,
-	ScanInput,
-} from "./createWorkerScanClient";
+import type { ReadActivityInput, ScanInput } from "./createWorkerScanClient";
 
 export const OFFSCREEN_SCAN_TARGET = "liquid-offscreen-scan";
 
 export type OffscreenScanMessage =
-	| {
-			input: BroadcastInput;
-			op: "broadcast";
-			target: typeof OFFSCREEN_SCAN_TARGET;
-	  }
-	| {
-			input: BroadcastTxInput;
-			op: "broadcastTransaction";
-			target: typeof OFFSCREEN_SCAN_TARGET;
-	  }
 	| {
 			input: ScanInput;
 			op: "scan" | "scanAndRead";
@@ -48,8 +33,6 @@ export type OffscreenScanResponse =
 			ok: true;
 			op: "readActivity";
 	  }
-	| { ok: true; op: "broadcast"; txid: string }
-	| { ok: true; op: "broadcastTransaction"; txid: string }
 	| { ok: true; op: "scan"; updateBase64: string | null };
 
 export function isOffscreenScanMessage(value: unknown): value is OffscreenScanMessage {

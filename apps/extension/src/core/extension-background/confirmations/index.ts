@@ -34,6 +34,7 @@ export type ConfirmationResponder = {
 
 export type ConfirmationWalletLock = {
 	isUnlocked: () => Promise<boolean>;
+	noteActivity: () => void;
 	onUnlocked: (listener: () => void) => void;
 };
 
@@ -99,6 +100,7 @@ export function createConfirmationResponder(
 				MsgProtocolResponseMethods.ConfirmResponse,
 				({ data: response }) => {
 					if (response.id !== id) return;
+					wallet.noteActivity();
 					entry.settle(response.data ?? { approved: false });
 				},
 			);

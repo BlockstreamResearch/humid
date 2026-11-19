@@ -27,6 +27,7 @@ type CacheEntry = {
 };
 
 const MIN_SYNC_INTERVAL_MS = 60_000;
+const RETRY_AFTER_FAILURE_MS = 5_000;
 
 export function createPortfolioSyncEngine(
 	resolveTarget: () => Promise<PortfolioSyncTarget>,
@@ -76,7 +77,8 @@ export function createPortfolioSyncEngine(
 		if (
 			!options?.force &&
 			entry.lastAttemptAt !== null &&
-			Date.now() - entry.lastAttemptAt < MIN_SYNC_INTERVAL_MS
+			Date.now() - entry.lastAttemptAt <
+				(entry.error === null ? MIN_SYNC_INTERVAL_MS : RETRY_AFTER_FAILURE_MS)
 		) {
 			console.warn("[liquid-sync] engine skip: throttled", {
 				agoMs: Date.now() - entry.lastAttemptAt,

@@ -39,6 +39,7 @@ import { accountNameOf, readKnownAssets, transactionReceipt } from "../../confir
 import { resolveDappAccount } from "../../dappAccountScope";
 import { chosenTargetBlocks, readSpeedRates } from "../../feeSpeeds";
 import type { LiquidRpcMethodContext } from "../../LiquidRpcContext";
+import { heldCoins, type SignedHold, type TransactionNote } from "../../signedHold";
 import {
 	PROCESS_CT_CONFIRMATION_KIND,
 	type ProcessCtConfirmationData,
@@ -75,10 +76,16 @@ const SMPLX_NETWORKS: Record<string, string> = {
 };
 
 export type LiquidProcessCtDependencies = {
-	broadcastTransaction: (input: {
-		chain: LiquidChainRecord;
-		txHex: string;
-	}) => Promise<{ txid: string }>;
+	broadcastTransaction: (
+		account: LiquidWalletAccount,
+		txHex: string,
+		note: TransactionNote,
+	) => Promise<string>;
+	rememberTransaction: (
+		account: LiquidWalletAccount,
+		txHex: string,
+		signedFor: SignedHold,
+	) => Promise<void>;
 	loadSmplx: typeof loadSmplxWasm;
 	readFeeRate: (chain: LiquidChainRecord) => ReadFeeRate;
 	readTxOut: (chain: LiquidChainRecord) => ReadTxOut;
@@ -90,15 +97,19 @@ export type LiquidProcessCtDependencies = {
 };
 
 export const liquidProcessCtDependencies: LiquidProcessCtDependencies = {
-	broadcastTransaction: async (input) => {
-		const { getSyncWorkerClient } =
-			await import("../../../adapters/lwk/sync-worker/createSyncWorkerClient");
+	broadcastTransaction: async (account, txHex, note) => {
+		const { sentTransactions } = await import("../../../adapters/lwk/wallet/sentTransactions");
 
-		return getSyncWorkerClient().broadcastTransaction(input);
+		return sentTransactions.broadcast(account, txHex, note);
 	},
 	loadSmplx: loadSmplxWasm,
 	readFeeRate: (chain) => createEsploraFeeRateReader(chain.settings.backend),
 	readTxOut: (chain) => createEsploraTxOutReader(chain.settings.backend),
+	rememberTransaction: async (account, txHex, signedFor) => {
+		const { sentTransactions } = await import("../../../adapters/lwk/wallet/sentTransactions");
+
+		await sentTransactions.remember(account, txHex, signedFor);
+	},
 	readAddress: async (chain) => {
 		const lwk = await loadLwkWasm();
 
@@ -191,16 +202,27 @@ export const createProcessLiquidConfidentialTransaction = (
 				...(review.issuances.length === 0 ? {} : { issuances: review.issuances.map(issuanceOf) }),
 			};
 
+			const note = { action: params.action, origin: context.requester?.origin ?? "" };
+
 			if (!params.broadcast) {
+				await dependencies.rememberTransaction(account, hex, {
+					...note,
+					holding: heldCoins(
+						review.inputOrder.flatMap((input) =>
+							input.source === "wallet" ? [{ amount: input.utxo.amount, asset: input.asset }] : [],
+						),
+					),
+				});
+
 				return { broadcast: false, ...created, ...result };
 			}
 
-			const sent = await dependencies.broadcastTransaction({
-				chain: account.chain,
-				txHex: result.transactionHex,
-			});
-
-			return { broadcast: true, ...created, ...result, txid: sent.txid };
+			return {
+				broadcast: true,
+				...created,
+				...result,
+				txid: await dependencies.broadcastTransaction(account, hex, note),
+			};
 		},
 		id: LIQUID_WALLET_RPC_METHODS.PROCESS_CONFIDENTIAL_TRANSACTION,
 		parse: parseRequest,
@@ -283,6 +305,7 @@ export const createProcessLiquidConfidentialTransaction = (
 				targetBlocks,
 			}));
 		},
+		spends: true,
 	});
 
 export const processLiquidConfidentialTransaction = createProcessLiquidConfidentialTransaction();

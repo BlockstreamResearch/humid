@@ -8,6 +8,7 @@ import {
 
 import type { LiquidWalletAccount } from "../../../../application/backends/LiquidWalletBackend";
 import { DEFAULT_FEE_RATE_SATS_PER_KVB } from "../../../../application/feeSpeeds";
+import type { TransactionNote } from "../../../../application/signedHold";
 import { LIQUID_MAINNET_CHAIN_ID } from "../../../../domain/LiquidChain";
 import type {
 	LiquidEstimateMaxSendParams,
@@ -20,9 +21,9 @@ import type {
 } from "../../../../domain/LiquidRpc";
 import { toLiquidAssetId } from "../../../../domain/validation";
 import { loadLwkWasm, type LwkWasmModule } from "../../loadLwkWasm";
-import { getSyncWorkerClient } from "../../sync-worker/createSyncWorkerClient";
 import { getLwkImplementation } from "../getLwkImplementation";
 import { readWalletBalanceForAsset } from "../readWalletData";
+import { sentTransactions, TransactionRefusedError } from "../sentTransactions";
 
 export async function inspectTransfer(
 	account: LiquidWalletAccount,
@@ -90,6 +91,7 @@ export async function sendTransfer(
 	params: LiquidSendTransferParams,
 	rawAssetId: string,
 	fee?: LiquidTransferFee,
+	note?: TransactionNote,
 ): Promise<LiquidSendTransferResult> {
 	const implementation = getLwkImplementation(account);
 	const lwk = await loadLwkWasm();
@@ -106,13 +108,16 @@ export async function sendTransfer(
 	try {
 		const signedPset = implementation.signer.sign(unsignedPset);
 		const finalizedPset = implementation.wollet.finalize(signedPset);
-		const { txid } = await getSyncWorkerClient().broadcast({
-			chain: account.chain,
-			psetBase64: finalizedPset.toString(),
-		});
+		const txid = await sentTransactions.broadcast(
+			account,
+			finalizedPset.extractTx().toString(),
+			note,
+		);
 
 		return { txid };
 	} catch (error) {
+		if (error instanceof TransactionRefusedError) throw error;
+
 		const failure = new WalletRpcResourceUnavailableError(
 			"Could not sign and broadcast the transfer.",
 			undefined,

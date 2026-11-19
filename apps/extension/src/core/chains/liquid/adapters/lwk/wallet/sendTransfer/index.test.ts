@@ -54,6 +54,7 @@ function makeBuilder() {
 					{ amount: () => 5000n, scriptPubkey: () => ({ bytes: () => new Uint8Array(22) }) },
 					{ amount: () => FEE_SATS, scriptPubkey: () => ({ bytes: () => new Uint8Array() }) },
 				],
+				extractTx: () => ({ toString: () => "tx" }),
 				toString: () => "pset",
 			};
 		},
@@ -87,8 +88,9 @@ mock.module("../../loadLwkWasm", () => ({
 	}),
 }));
 
-mock.module("../../sync-worker/createSyncWorkerClient", () => ({
-	getSyncWorkerClient: () => ({ broadcast: async () => ({ txid: "sent" }) }),
+mock.module("../sentTransactions", () => ({
+	sentTransactions: { broadcast: async () => "sent" },
+	TransactionRefusedError: class extends Error {},
 }));
 
 mock.module("../readWalletData", () => ({

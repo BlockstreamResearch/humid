@@ -11,6 +11,7 @@ import type { LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
 import { accountNameOf, readKnownAssets, transactionReceipt } from "../../confirmationFacts";
 import { resolveDappAccount } from "../../dappAccountScope";
 import type { LiquidRpcMethodContext } from "../../LiquidRpcContext";
+import { heldCoins } from "../../signedHold";
 import { SIGN_PSET_CONFIRMATION_KIND, type SignPsetConfirmationData } from "./SignPsetConfirmation";
 
 export type LiquidSignPsetContext = LiquidRpcMethodContext;
@@ -45,11 +46,19 @@ export const signLiquidPset = createWalletMethod<
 		};
 	},
 	execute: ({ context, params, review }) =>
-		context.walletBackend.signPset(review.account, {
-			broadcast: params.broadcast,
-			reviewedPset: review.transaction.pset,
-			signInputs: params.signInputs,
-		}),
+		context.walletBackend.signPset(
+			review.account,
+			{
+				broadcast: params.broadcast,
+				reviewedPset: review.transaction.pset,
+				signInputs: params.signInputs,
+			},
+			{
+				action: "Signed transaction",
+				holding: heldCoins(review.transaction.inputs.filter(({ owned }) => owned)),
+				origin: context.requester?.origin ?? "",
+			},
+		),
 	id: LIQUID_WALLET_RPC_METHODS.SIGN_PSET,
 	parse: parseLiquidSignPsetParams,
 	receipt: ({ context, result, review }) =>

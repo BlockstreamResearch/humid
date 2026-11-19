@@ -19,7 +19,7 @@ export type ReadActivityRequest = BaseScanRequest & {
 	cursor: string | null;
 	limit: number;
 	op: "readActivity";
-	rawAssetId: string;
+	rawAssetId: string | null;
 };
 
 export type SyncWorkerRequest = ReadActivityRequest | ScanRequest | ScanAndReadRequest;

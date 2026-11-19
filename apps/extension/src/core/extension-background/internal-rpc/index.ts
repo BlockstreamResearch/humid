@@ -3,6 +3,7 @@ import type {
 	EstimateMaxSendInput,
 	EstimateMaxSendResult,
 	GetActivityInput,
+	HeldTransaction,
 	PortfolioSnapshot,
 	ReceiveAddress,
 	SendTransferInput,
@@ -29,9 +30,11 @@ export type CreateInternalRpcHandlersInput = {
 	getPortfolio: () => Promise<PortfolioSnapshot>;
 	getReceiveAddress: () => Promise<ReceiveAddress>;
 	inspectTransfer: (input: SendTransferInput) => Promise<TransferReview>;
+	listHeldTransactions: () => Promise<HeldTransaction[]>;
 	purgeAccountPortfolio: (accountGroupId: string) => Promise<void>;
 	purgeAccountWalletConnectSessions: (accountGroupIds: readonly string[]) => Promise<void>;
 	refreshPortfolio: () => Promise<PortfolioSnapshot>;
+	releaseHeldTransaction: (txid: string) => Promise<void>;
 	sendTransfer: (input: SendTransferInput) => Promise<SendTransferResult>;
 };
 
@@ -43,9 +46,11 @@ export function createInternalRpcHandlers({
 	getPortfolio,
 	getReceiveAddress,
 	inspectTransfer,
+	listHeldTransactions,
 	purgeAccountPortfolio,
 	purgeAccountWalletConnectSessions,
 	refreshPortfolio,
+	releaseHeldTransaction,
 	sendTransfer,
 }: CreateInternalRpcHandlersInput): RequestHandlerMap {
 	return {
@@ -75,9 +80,11 @@ export function createInternalRpcHandlers({
 			getPortfolio,
 			getReceiveAddress,
 			inspectTransfer,
+			listHeldTransactions,
 			purgeAccountPortfolio,
 			purgeAccountWalletConnectSessions,
 			refreshPortfolio,
+			releaseHeldTransaction,
 			sendTransfer,
 		}),
 	};

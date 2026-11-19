@@ -40,6 +40,14 @@ export type RecoveryPhrase = {
 	phrase: string;
 };
 
+export type HeldTransaction = {
+	action: string;
+	at: number;
+	holding: { amountSats: string; rawAssetId: string }[];
+	origin: string;
+	txid: string;
+};
+
 export type ReceiveAddress = {
 	address: string;
 	index: number;
@@ -114,9 +122,10 @@ export type PortfolioData = {
 };
 
 export type ActivityEntry = {
-	amountSats: string;
-	direction: "received" | "sent";
+	/** Signed: what the transaction added to or took from this account, per asset. */
+	changes: { amountSats: string; rawAssetId: string }[];
 	feeSats: string;
+	label?: { action: string; origin: string };
 	timestamp: number | null;
 	txid: string;
 };
@@ -128,7 +137,7 @@ export type ActivityPage = {
 
 export type GetActivityInput = {
 	cursor: string | null;
-	rawAssetId: string;
+	rawAssetId: string | null;
 };
 
 export type PortfolioSnapshot = {

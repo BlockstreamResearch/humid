@@ -56,7 +56,7 @@ export type LiquidAccountRuntime = {
 	) => Promise<LiquidEstimateMaxSendResult>;
 	getActivity: (
 		input: ResolveLiquidWalletAccountInput,
-		rawAssetId: string,
+		rawAssetId: string | null,
 		cursor: string | null,
 	) => Promise<LiquidActivityPage>;
 	getReceiveAddress: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidReceiveAddress>;

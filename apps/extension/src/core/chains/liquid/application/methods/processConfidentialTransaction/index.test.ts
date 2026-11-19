@@ -284,12 +284,13 @@ function dependencies(
 	overrides: Partial<LiquidProcessCtDependencies> = {},
 ): LiquidProcessCtDependencies {
 	return {
-		broadcastTransaction: async ({ txHex }) => {
+		broadcastTransaction: async (_account, txHex) => {
 			log.steps.push("broadcast");
 			log.broadcasts.push({ txHex });
 
-			return { txid: SENT_TXID };
+			return SENT_TXID;
 		},
+		rememberTransaction: async () => {},
 		loadSmplx: (async () =>
 			smplxSubstitute(log)) as unknown as LiquidProcessCtDependencies["loadSmplx"],
 		readFeeRate: () => async () => 1000,

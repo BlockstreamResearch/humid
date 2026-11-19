@@ -7,6 +7,7 @@ import type { LiquidWalletAccount } from "../../../application/backends/LiquidWa
 import { loadLwkWasm } from "../loadLwkWasm";
 import { getSyncWorkerClient } from "../sync-worker/createSyncWorkerClient";
 import { getLwkImplementation } from "./getLwkImplementation";
+import { sentTransactions } from "./sentTransactions";
 
 export async function scanAccount(account: LiquidWalletAccount): Promise<void> {
 	const implementation = getLwkImplementation(account);
@@ -21,6 +22,8 @@ export async function scanAccount(account: LiquidWalletAccount): Promise<void> {
 			const lwk = await loadLwkWasm();
 			implementation.wollet.applyUpdate(new lwk.Update(updateBytes));
 		}
+
+		await sentTransactions.applyTo(account);
 	} catch (error) {
 		console.error("[liquid] Failed to sync the Liquid account", error);
 

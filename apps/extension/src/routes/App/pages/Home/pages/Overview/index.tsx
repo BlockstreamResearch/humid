@@ -2,13 +2,19 @@ import { UiScrollArea } from "@/ui/UiScrollArea";
 
 import { QuickActions } from "../../components/QuickActions";
 import { useHome } from "../../HomeContext";
+import { useAccountActivity } from "../Activity/useAccountActivity";
 import { BalanceSummary } from "./components/BalanceSummary";
 import { HomeHeader } from "./components/HomeHeader";
 import { PortfolioRefresh } from "./components/PortfolioRefresh";
 import { TokenList } from "./components/TokenList";
 
 export function OverviewPage() {
-	const { portfolio } = useHome();
+	const { accountGroup, chain, portfolio } = useHome();
+	const activity = useAccountActivity({
+		accountGroupId: accountGroup.id,
+		chainId: chain.id,
+		isSyncing: portfolio.isSyncing,
+	});
 
 	return (
 		<div className="flex size-full flex-col">
@@ -23,7 +29,7 @@ export function OverviewPage() {
 						/>
 						<PortfolioRefresh />
 					</div>
-					<QuickActions />
+					<QuickActions waiting={activity.held.length + activity.pending.length} />
 					<TokenList tokens={portfolio.tokens} />
 				</div>
 			</UiScrollArea>

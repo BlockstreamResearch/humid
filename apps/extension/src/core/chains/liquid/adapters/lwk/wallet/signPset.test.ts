@@ -20,6 +20,8 @@ import { getWalletUtxosForAsset } from "./getUTXOs";
 import { PsetMaps } from "./PsetMaps";
 import { WalletCoins } from "./WalletCoins";
 
+const SIGNED_FOR = { action: "Signed transaction", holding: [], origin: "https://dapp.example" };
+
 function signatureCounts(pset: string) {
 	return PsetMaps.parse(pset).inputs.map((input) => input.signatures.size);
 }
@@ -98,7 +100,7 @@ async function exerciseSigning() {
 			reviewedPset: review.pset,
 			signInputs: params.signInputs,
 		};
-		const signed = await signPset(account, signing);
+		const signed = await signPset(account, signing, SIGNED_FOR);
 		expect(signed.txid).toBeUndefined();
 		const signedPset = own(new lwk.Pset(signed.pset));
 		expect(signatureCounts(signed.pset)).toEqual([1]);
@@ -128,11 +130,15 @@ async function exerciseSigning() {
 			index: 2,
 		});
 		expect(mixedReview.outputs.map((output) => output.owned)).toEqual([true, true, true, false]);
-		const mixedSigned = await signPset(account, {
-			broadcast: false,
-			reviewedPset: mixedReview.pset,
-			signInputs: mixedParams.signInputs,
-		});
+		const mixedSigned = await signPset(
+			account,
+			{
+				broadcast: false,
+				reviewedPset: mixedReview.pset,
+				signInputs: mixedParams.signInputs,
+			},
+			SIGNED_FOR,
+		);
 		expect(mixedSigned.txid).toBeUndefined();
 		expect(own(own(new lwk.Pset(mixedSigned.pset)).extractTx()).toString()).toBe(
 			own(own(new lwk.Pset(mixedReview.pset)).extractTx()).toString(),
@@ -196,34 +202,48 @@ async function exerciseSigning() {
 		expect(legacyReview.pset).toBe(legacyPset.toString());
 		expect(legacyReview.fees).toEqual([{ asset: rawAssetId, amount: "1000" }]);
 		expect(legacyReview.netEffect).toEqual([{ asset: rawAssetId, amount: "49000" }]);
-		const legacySigned = await signPset(account, {
-			broadcast: false,
-			reviewedPset: legacyReview.pset,
-			signInputs: [{ address: coin.address, index: 2, sighashTypes: [1] }],
-		});
+		const legacySigned = await signPset(
+			account,
+			{
+				broadcast: false,
+				reviewedPset: legacyReview.pset,
+				signInputs: [{ address: coin.address, index: 2, sighashTypes: [1] }],
+			},
+			SIGNED_FOR,
+		);
 		const legacySignedPset = own(new lwk.Pset(legacySigned.pset));
 		expect(own(legacySignedPset.extractTx()).toString()).toBe(
 			own(legacyPset.extractTx()).toString(),
 		);
 		expect(legacySigned.pset).not.toBe(legacyReview.pset);
 		await expect(
-			signPset(account, {
-				broadcast: false,
-				reviewedPset: legacyReview.pset,
-				signInputs: [{ address: coin.address, index: 0, sighashTypes: [1] }],
-			}),
+			signPset(
+				account,
+				{
+					broadcast: false,
+					reviewedPset: legacyReview.pset,
+					signInputs: [{ address: coin.address, index: 0, sighashTypes: [1] }],
+				},
+				SIGNED_FOR,
+			),
 		).rejects.toMatchObject({
 			data: { reason: WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST },
 		});
 
-		await expect(signPset(account, { ...signing, signInputs: [] })).rejects.toMatchObject({
+		await expect(
+			signPset(account, { ...signing, signInputs: [] }, SIGNED_FOR),
+		).rejects.toMatchObject({
 			data: { reason: WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST },
 		});
 		await expect(
-			signPset(account, {
-				...signing,
-				signInputs: [{ ...params.signInputs[0]!, index: 1 }],
-			}),
+			signPset(
+				account,
+				{
+					...signing,
+					signInputs: [{ ...params.signInputs[0]!, index: 1 }],
+				},
+				SIGNED_FOR,
+			),
 		).rejects.toMatchObject({
 			data: { reason: WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST },
 		});
@@ -426,11 +446,15 @@ function withExplicitOutputIndices(pset: Lwk.Pset) {
 
 async function sign(pset: Lwk.Pset, index = 2) {
 	const preparedPset = blindPset(lwk, wollet, new WalletCoins(coins), pset);
-	return signPset(account, {
-		broadcast: false,
-		reviewedPset: preparedPset.toString(),
-		signInputs: [{ address: "wallet-address", index, sighashTypes: [1] }],
-	});
+	return signPset(
+		account,
+		{
+			broadcast: false,
+			reviewedPset: preparedPset.toString(),
+			signInputs: [{ address: "wallet-address", index, sighashTypes: [1] }],
+		},
+		SIGNED_FOR,
+	);
 }
 
 beforeEach(() => {
@@ -444,11 +468,15 @@ describe("mixed-input PSET signing", () => {
 		signerTransform = (pset) => withSignature(pset, 0);
 
 		await expect(
-			signPset(account, {
-				broadcast: true,
-				reviewedPset: fixture(10_000n, undefined, false).toString(),
-				signInputs: [{ address: "wallet-address", index: 2, sighashTypes: [1] }],
-			}),
+			signPset(
+				account,
+				{
+					broadcast: true,
+					reviewedPset: fixture(10_000n, undefined, false).toString(),
+					signInputs: [{ address: "wallet-address", index: 2, sighashTypes: [1] }],
+				},
+				SIGNED_FOR,
+			),
 		).rejects.toMatchObject({
 			message: "The wallet refused to sign an input the dapp did not list.",
 		});

@@ -9,7 +9,7 @@ import { createLwkBlockchainClient } from "../createLwkBlockchainClient";
 import { createLwkNetwork, type LwkNetwork } from "../createLwkNetwork";
 import { loadLwkWasm, type LwkWasmModule } from "../loadLwkWasm";
 import { readOwnedWalletUtxos, sumByAsset } from "../wallet/readOwnedWalletUtxos";
-import { readWalletActivityForAsset } from "../wallet/readWalletData";
+import { readWalletActivity } from "../wallet/readWalletData";
 import { type AssetMetadata, resolveIssuedAssetMetadata } from "../wallet/resolveAssetMetadata";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
@@ -23,19 +23,7 @@ export type LiquidScanInput = {
 export type LiquidReadActivityInput = LiquidScanInput & {
 	cursor: string | null;
 	limit: number;
-	rawAssetId: string;
-};
-
-export type LiquidBroadcastInput = {
-	chain: LiquidChainRecord;
-	id: number;
-	psetBase64: string;
-};
-
-export type LiquidBroadcastTxInput = {
-	chain: LiquidChainRecord;
-	id: number;
-	txHex: string;
+	rawAssetId: string | null;
 };
 
 const DEFAULT_ISSUED_ASSET_DECIMALS = 8;
@@ -69,54 +57,6 @@ export async function scanFresh(input: LiquidScanInput): Promise<Uint8Array | nu
 	wollet.free();
 
 	return updateBytes;
-}
-
-export async function broadcastPset(input: LiquidBroadcastInput): Promise<string> {
-	const lwk = await loadLwkWasm();
-	const network = createLwkNetwork(lwk, input.chain);
-	const client = createLwkBlockchainClient(lwk, input.chain, network);
-	const pset = new lwk.Pset(input.psetBase64);
-
-	console.warn("[liquid-sync] broadcast…", { chainId: input.chain.id, id: input.id });
-	const startedAt = Date.now();
-	const txid = await client.broadcast(pset);
-	const txidString = txid.toString();
-
-	console.warn("[liquid-sync] broadcast done", {
-		id: input.id,
-		ms: Date.now() - startedAt,
-		txid: txidString,
-	});
-
-	txid.free();
-	pset.free();
-	client.free();
-
-	return txidString;
-}
-
-export async function broadcastTransaction(input: LiquidBroadcastTxInput): Promise<string> {
-	const lwk = await loadLwkWasm();
-	const network = createLwkNetwork(lwk, input.chain);
-	const client = createLwkBlockchainClient(lwk, input.chain, network);
-	const transaction = lwk.Transaction.fromString(input.txHex);
-
-	console.warn("[liquid-sync] broadcast tx…", { chainId: input.chain.id, id: input.id });
-	const startedAt = Date.now();
-	const txid = await client.broadcastTx(transaction);
-	const txidString = txid.toString();
-
-	console.warn("[liquid-sync] broadcast tx done", {
-		id: input.id,
-		ms: Date.now() - startedAt,
-		txid: txidString,
-	});
-
-	txid.free();
-	transaction.free();
-	client.free();
-
-	return txidString;
 }
 
 export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletSnapshot> {
@@ -179,7 +119,7 @@ export function readActivity(input: LiquidReadActivityInput): LiquidActivityPage
 
 	if (!wollet) return { items: [], nextCursor: null };
 
-	const all = readWalletActivityForAsset(wollet, input.rawAssetId);
+	const all = readWalletActivity(wollet, input.rawAssetId);
 	const offset = parseActivityCursor(input.cursor);
 	const items = all.slice(offset, offset + input.limit);
 	const nextOffset = offset + items.length;

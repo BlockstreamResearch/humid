@@ -29,6 +29,7 @@ export type CreateWalletMethodInput<
 		input: WalletMethodInput<TParams, TContext, TReview> & { result: TResult },
 	) => Promise<TransactionReceiptData> | TransactionReceiptData;
 	review: (input: { context: TContext; params: TParams }) => Promise<TReview> | TReview;
+	spends?: boolean;
 };
 
 export type WalletMethod<TContext extends WalletRpcBaseContext, TResult> = ((
@@ -37,6 +38,9 @@ export type WalletMethod<TContext extends WalletRpcBaseContext, TResult> = ((
 ) => Promise<TResult>) & {
 	id: string;
 };
+
+// A spending request waits for the one before, so it is reviewed against coins that one left.
+let spending: Promise<unknown> = Promise.resolve();
 
 export function createWalletMethod<
 	TParams,
@@ -50,8 +54,9 @@ export function createWalletMethod<
 	parse,
 	receipt,
 	review,
+	spends = false,
 }: CreateWalletMethodInput<TParams, TContext, TReview, TResult>): WalletMethod<TContext, TResult> {
-	const handler = async (params: unknown, context: TContext): Promise<TResult> => {
+	const run = async (params: unknown, context: TContext): Promise<TResult> => {
 		const parsedParams = parse(params);
 		const reviewing = Promise.resolve(review({ context, params: parsedParams }));
 		const input = async (choice?: unknown) => ({
@@ -95,6 +100,15 @@ export function createWalletMethod<
 		}
 
 		return complete ? (executed as TResult) : execute(await input(decision.result));
+	};
+	const handler = (params: unknown, context: TContext): Promise<TResult> => {
+		if (!spends) return run(params, context);
+
+		const turn = spending.then(() => run(params, context));
+
+		spending = turn.catch(() => undefined);
+
+		return turn;
 	};
 
 	return Object.assign(handler, { id });
