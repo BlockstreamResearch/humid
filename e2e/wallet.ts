@@ -1,4 +1,4 @@
-import { type BrowserContext, expect, type Page } from "@playwright/test";
+import { type BrowserContext, expect, type Locator, type Page } from "@playwright/test";
 
 // Funded by bun run regtest. The phrase is public, so it never holds real funds.
 export const RECOVERY_PHRASE =
@@ -49,6 +49,10 @@ export class Confirmation {
 
 	async approve(label: string): Promise<void> {
 		await this.#page.getByRole("button", { exact: true, name: label }).click();
+	}
+
+	permission(name: RegExp): Locator {
+		return this.#page.getByRole("checkbox", { name });
 	}
 
 	async reject(): Promise<void> {

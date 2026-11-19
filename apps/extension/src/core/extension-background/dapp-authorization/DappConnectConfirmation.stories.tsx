@@ -4,6 +4,7 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { DappConnectConfirmation } from "./DappConnectConfirmation";
 
 const methods = [
+	"getAddress",
 	"getBalance",
 	"getUTXOs",
 	"getWalletDescriptor",
@@ -60,6 +61,7 @@ export const NeedsAnAccount: Story = {
 export const GrantNothing: Story = {
 	play: async ({ args, canvasElement }) => {
 		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view addresses/i }));
 		await userEvent.click(canvas.getByRole("checkbox", { name: /view balance/i }));
 		await userEvent.click(canvas.getByRole("checkbox", { name: /view coins/i }));
 		await userEvent.click(canvas.getByRole("checkbox", { name: /read public descriptor/i }));
@@ -79,6 +81,7 @@ export const GrantSubset: Story = {
 
 		expect(canvas.queryByRole("checkbox", { name: /sign/i })).not.toBeInTheDocument();
 
+		await userEvent.click(canvas.getByRole("checkbox", { name: /view addresses/i }));
 		await userEvent.click(canvas.getByRole("checkbox", { name: /view coins/i }));
 		await userEvent.click(canvas.getByRole("checkbox", { name: /read public descriptor/i }));
 		await userEvent.click(canvas.getByRole("checkbox", { name: /view identity key/i }));

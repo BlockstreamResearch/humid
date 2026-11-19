@@ -8,6 +8,7 @@ import { AutoLoadCard } from "./components/AutoLoadCard";
 import { ConnectionCard } from "./components/ConnectionCard";
 import { EventLogCard } from "./components/EventLogCard";
 import {
+	GetAddressCard,
 	GetBalanceCard,
 	GetIdentityPublicKeyCard,
 	GetIdentitySharedKeyCard,
@@ -43,6 +44,7 @@ function DebugDashboard() {
 			<AutoLoadCard />
 			<EventLogCard />
 
+			<GetAddressCard onAddress={setKnownAddress} />
 			<GetBalanceCard />
 			<GetUtxosCard onAddress={setKnownAddress} />
 			<GetWalletDescriptorCard />

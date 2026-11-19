@@ -1,4 +1,6 @@
 import type {
+	LiquidGetAddressParams,
+	LiquidGetAddressResult,
 	LiquidGetBalanceParams,
 	LiquidGetBalanceResult,
 	LiquidGetIdentityPublicKeyParams,
@@ -24,6 +26,7 @@ import { invokeMethod } from "./rpc";
 import type { CaipRpcProvider } from "./types";
 
 export type WalletClient = {
+	getAddress(params?: LiquidGetAddressParams): Promise<LiquidGetAddressResult>;
 	getBalance(params?: LiquidGetBalanceParams): Promise<LiquidGetBalanceResult>;
 	getUTXOs(params?: LiquidGetUTXOsParams): Promise<LiquidGetUTXOsResult>;
 	getWalletDescriptor(
@@ -46,6 +49,8 @@ export type WalletClient = {
 
 export function createWalletClient(provider: CaipRpcProvider, scope: string): WalletClient {
 	return {
+		getAddress: (params) =>
+			invokeMethod<LiquidGetAddressResult>(provider, scope, "getAddress", params),
 		getBalance: (params) =>
 			invokeMethod<LiquidGetBalanceResult>(provider, scope, "getBalance", params),
 		getUTXOs: (params) => invokeMethod<LiquidGetUTXOsResult>(provider, scope, "getUTXOs", params),

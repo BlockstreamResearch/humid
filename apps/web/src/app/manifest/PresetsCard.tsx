@@ -29,16 +29,16 @@ export function PresetsCard({
 
 	const readAccount = async () => {
 		try {
-			const [{ descriptors }, { utxos }] = await Promise.all([
+			const [{ descriptors }, { address }] = await Promise.all([
 				wallet.getWalletDescriptor({
 					descriptorFormat: [{ format: "bip380-bip389-multipath" }],
 					descriptorType: "publicWalletDescriptor",
 				}),
-				wallet.getUTXOs(),
+				wallet.getAddress({ index: 0 }),
 			]);
 
 			setAccount({
-				address: utxos[0]?.address ?? "",
+				address,
 				key: walletKeyOf(descriptors[0]?.descriptor ?? ""),
 			});
 			setProblem(null);
