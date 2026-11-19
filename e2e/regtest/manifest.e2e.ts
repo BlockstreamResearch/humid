@@ -6,6 +6,7 @@ const LIFECYCLES = [
 	{ preset: "p2pk", actions: ["Pay", "Receive"] },
 	{ preset: "last_will", actions: ["Fund", "Refresh", "ColdBreak", "Fund", "Inherit"] },
 	{ preset: "multiasset", actions: ["MintReissuable", "Reissue", "Reissue", "PayToken"] },
+	{ preset: "dex", actions: ["MakeOffer", "Settle", "ClaimPayout", "MakeOffer", "Refund"] },
 ];
 
 for (const { preset, actions } of LIFECYCLES) {

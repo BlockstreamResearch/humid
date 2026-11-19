@@ -1,3 +1,6 @@
+import makerPayoutSource from "@humid/tx-manifest/fixtures/dex/maker_payout.simf?raw";
+import tesseraSource from "@humid/tx-manifest/fixtures/dex/tessera.simf?raw";
+import dexManifest from "@humid/tx-manifest/fixtures/dex/txmanifest.json";
 import lastWillSource from "@humid/tx-manifest/fixtures/last_will/last_will.simf?raw";
 import lastWillManifest from "@humid/tx-manifest/fixtures/last_will/txmanifest.json";
 import multiassetSource from "@humid/tx-manifest/fixtures/multiasset/p2pk.simf?raw";
@@ -5,11 +8,15 @@ import multiassetManifest from "@humid/tx-manifest/fixtures/multiasset/txmanifes
 import p2pkSource from "@humid/tx-manifest/fixtures/p2pk/p2pk.simf?raw";
 import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk/txmanifest.json";
 
+import { LIQUID_REGTEST_LBTC_ASSET_ID } from "@/app/dashboard/lib/constants";
+
 import { Preset, type SentStep } from "./Preset";
 
 const WILL_STEPS = ["Fund", "Refresh"];
 const WILL = { utxoType: "last_will", vout: 0 };
 const ISSUING_STEPS = ["MintReissuable", "Reissue"];
+const OFFER = { utxoType: "tessera_offer", vout: 0 };
+const LBTC = LIQUID_REGTEST_LBTC_ASSET_ID.split(":").at(-1)!;
 
 const issuanceOf = (earlier?: SentStep) => {
 	const issuance = earlier?.issuances?.[0];
@@ -82,5 +89,39 @@ export const PRESETS = [
 			},
 		],
 		{ contractSources: { "./p2pk.simf": multiassetSource }, manifest: multiassetManifest },
+	),
+	new Preset(
+		"dex",
+		"MakeOffer locks 1,000 sats in a keyless offer that pays the wallet 1,500 sats, both L-BTC as " +
+			"the regtest wallet holds no other asset; Settle fills the offer, ClaimPayout sweeps the " +
+			"maker's proceeds, and Refund returns an unfilled offer, expired from block 1.",
+		[
+			{
+				action: "MakeOffer",
+				params: (key) => ({
+					AMOUNT_B: 1500,
+					ASSET_B: LBTC,
+					MAKER_PUB_KEY: key,
+					OFFER_AMOUNT: 1000,
+					OFFER_ASSET_ID: LBTC,
+					TIMEOUT: 1,
+				}),
+			},
+			{ action: "Settle", after: ["MakeOffer"], spends: OFFER },
+			{
+				action: "ClaimPayout",
+				after: ["Settle"],
+				spends: { utxoType: "maker_payout", vout: 0 },
+			},
+			{ action: "Refund", after: ["MakeOffer"], spends: OFFER },
+		],
+		{
+			contractSources: {
+				"./maker_payout.simf": makerPayoutSource,
+				"./tessera.simf": tesseraSource,
+			},
+			manifest: dexManifest,
+		},
+		"tessera_offer_contract",
 	),
 ];
