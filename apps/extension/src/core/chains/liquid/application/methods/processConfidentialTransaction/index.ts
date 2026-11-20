@@ -1,7 +1,4 @@
-import { SMPLX_COMPILER_VERSION } from "@humid/smplx-compiler";
 import {
-	createEsploraFeeRateReader,
-	createEsploraTxOutReader,
 	isRefusal,
 	type ManifestReview,
 	type ActionRequest,
@@ -10,28 +7,19 @@ import {
 	type ReadFeeRate,
 	Refusal,
 	type ReadTxOut,
+	type ReviewDependencies,
 	reviewManifestAction,
 	type Unblind,
 	type SelectableUtxo,
 	toShownConfirmation,
+	type TransactionDraft,
 } from "@humid/tx-manifest";
 
+import type { KeySourceId } from "@/core/accounts/application/account-registry/model/identifiers";
+import type { KeyManagerState } from "@/core/key-manager/types";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 
-import { createLwkNetwork } from "../../../adapters/lwk/createLwkNetwork";
-import { loadLwkWasm } from "../../../adapters/lwk/loadLwkWasm";
-import { addressReader } from "../../../adapters/lwk/wallet/readAddress";
-import { walletKeyOf } from "../../../adapters/lwk/wallet/walletKey";
-import { walletUnblinder } from "../../../adapters/lwk/wallet/walletUnblinder";
-import { withAccountMnemonic } from "../../../adapters/lwk/wallet/withAccountMnemonic";
-import { assembleReviewedTransaction } from "../../../adapters/smplx/assembleReviewedTransaction";
-import {
-	createSmplxProgramAbi,
-	createSmplxProgramCompiler,
-	createSmplxScriptHasher,
-} from "../../../adapters/smplx/compileProgramWithSmplx";
-import { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
 import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type { LiquidFundingUtxo, LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
@@ -67,12 +55,25 @@ export type LiquidProcessCtResult = {
 
 const EXTERNAL_CHAIN = 0;
 
-const SIZING_BLINDING_KEY = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
-
 const SMPLX_NETWORKS: Record<string, string> = {
 	mainnet: "liquid",
 	regtest: "elements-regtest",
 	testnet: "liquid-testnet",
+};
+
+/** The contract toolchain for one network: what a review compiles with and a signed action is built by. */
+export type LiquidContractTools = {
+	compiler: ReviewDependencies["compiler"];
+	estimateFee: (
+		draft: TransactionDraft,
+		feeRateSatsPerKvb: number,
+		signingDerivationPath: string,
+	) => bigint;
+	sign: (
+		mnemonic: string,
+		review: ManifestReview,
+		signingDerivationPath: string,
+	) => { feeSats: bigint; hex: string; txid: string };
 };
 
 export type LiquidProcessCtDependencies = {
@@ -81,49 +82,31 @@ export type LiquidProcessCtDependencies = {
 		txHex: string,
 		note: TransactionNote,
 	) => Promise<string>;
+	contractTools: (network: string) => Promise<LiquidContractTools>;
 	rememberTransaction: (
 		account: LiquidWalletAccount,
 		txHex: string,
 		signedFor: SignedHold,
 	) => Promise<void>;
-	loadSmplx: typeof loadSmplxWasm;
 	readFeeRate: (chain: LiquidChainRecord) => ReadFeeRate;
 	readTxOut: (chain: LiquidChainRecord) => ReadTxOut;
 	readAddress: (chain: LiquidChainRecord) => Promise<ReadAddress>;
 	resolveAccount: typeof resolveDappAccount;
 	unblinder: (account: LiquidWalletAccount, scriptPubKeyHex: string) => Promise<Unblind>;
-	walletKeyOf: typeof walletKeyOf;
-	withMnemonic: typeof withAccountMnemonic;
-};
-
-export const liquidProcessCtDependencies: LiquidProcessCtDependencies = {
-	broadcastTransaction: async (account, txHex, note) => {
-		const { sentTransactions } = await import("../../../adapters/lwk/wallet/sentTransactions");
-
-		return sentTransactions.broadcast(account, txHex, note);
-	},
-	loadSmplx: loadSmplxWasm,
-	readFeeRate: (chain) => createEsploraFeeRateReader(chain.settings.backend),
-	readTxOut: (chain) => createEsploraTxOutReader(chain.settings.backend),
-	rememberTransaction: async (account, txHex, signedFor) => {
-		const { sentTransactions } = await import("../../../adapters/lwk/wallet/sentTransactions");
-
-		await sentTransactions.remember(account, txHex, signedFor);
-	},
-	readAddress: async (chain) => {
-		const lwk = await loadLwkWasm();
-
-		return addressReader(lwk, createLwkNetwork(lwk, chain));
-	},
-	resolveAccount: resolveDappAccount,
-	unblinder: async (account, scriptPubKeyHex) =>
-		walletUnblinder(await loadLwkWasm(), account.descriptor, scriptPubKeyHex),
-	walletKeyOf,
-	withMnemonic: withAccountMnemonic,
+	walletKeyOf: (descriptor: string, index: number) => string;
+	withMnemonic: <T>(
+		input: {
+			accountGroupIndex?: number;
+			chain: LiquidChainRecord;
+			keyManagerState: KeyManagerState;
+			keySourceId?: KeySourceId;
+		},
+		use: (mnemonic: string) => Promise<T>,
+	) => Promise<T>;
 };
 
 export const createProcessLiquidConfidentialTransaction = (
-	dependencies: LiquidProcessCtDependencies = liquidProcessCtDependencies,
+	dependencies: LiquidProcessCtDependencies,
 ) =>
 	createWalletMethod<ActionRequest, LiquidProcessCtContext, SpeedReviews, LiquidProcessCtResult>({
 		confirmation: async ({ context, params, review }) => ({
@@ -144,7 +127,7 @@ export const createProcessLiquidConfidentialTransaction = (
 			const review = speeds.find((speed) => speed.targetBlocks === targetBlocks)!.review;
 			const network = requireNetwork(context);
 			const account = await dependencies.resolveAccount(context);
-			const smplx = await dependencies.loadSmplx();
+			const tools = await dependencies.contractTools(network);
 
 			const signed = await refusedAsRpcError(() =>
 				dependencies.withMnemonic(
@@ -156,31 +139,8 @@ export const createProcessLiquidConfidentialTransaction = (
 						keyManagerState: context.keyManagerState,
 						...(account.keySourceId === undefined ? {} : { keySourceId: account.keySourceId }),
 					},
-					async (mnemonic) => {
-						const signer = new smplx.Signer(mnemonic, network);
-
-						try {
-							return assembleReviewedTransaction(
-								review,
-								{
-									blindingPublicKeyHex: signer.blindingPublicKey(),
-									signingDerivationPath: signingDerivationPathOf(context, account),
-									smplx,
-								},
-								(builder) => {
-									const result = signer.finalizeStrictFee(builder, review.feeRateSatsPerKvb);
-
-									try {
-										return { feeSats: result.feeSats, hex: result.hex, txid: result.txid };
-									} finally {
-										result.free();
-									}
-								},
-							);
-						} finally {
-							signer.free();
-						}
-					},
+					async (mnemonic) =>
+						tools.sign(mnemonic, review, signingDerivationPathOf(context, account)),
 				),
 			);
 
@@ -244,7 +204,7 @@ export const createProcessLiquidConfidentialTransaction = (
 		review: async ({ context, params }) => {
 			const network = requireNetwork(context);
 			const account = await dependencies.resolveAccount(context);
-			const smplx = await dependencies.loadSmplx();
+			const tools = await dependencies.contractTools(network);
 
 			await context.walletBackend.syncAccount(account);
 
@@ -262,22 +222,9 @@ export const createProcessLiquidConfidentialTransaction = (
 						readFeeRate: async () => feeRateSatsPerKvb,
 						readTxOut: dependencies.readTxOut(context.chain),
 					},
-					compiler: {
-						abi: createSmplxProgramAbi(smplx),
-						compile: createSmplxProgramCompiler(smplx),
-						scriptHashOf: createSmplxScriptHasher(smplx, network),
-						version: SMPLX_COMPILER_VERSION,
-					},
+					compiler: tools.compiler,
 					estimateFee: (draft, feeRateSatsPerKvb) =>
-						assembleReviewedTransaction(
-							draft,
-							{
-								blindingPublicKeyHex: SIZING_BLINDING_KEY,
-								signingDerivationPath: signingDerivationPathOf(context, account),
-								smplx,
-							},
-							(builder) => smplx.Signer.estimateStrictFee(builder, network, feeRateSatsPerKvb),
-						),
+						tools.estimateFee(draft, feeRateSatsPerKvb, signingDerivationPathOf(context, account)),
 					wallet: {
 						address: signingAddress.explicit,
 						holdingsOf: (asset) => fundable(context, account, asset),
@@ -307,8 +254,6 @@ export const createProcessLiquidConfidentialTransaction = (
 		},
 		spends: true,
 	});
-
-export const processLiquidConfidentialTransaction = createProcessLiquidConfidentialTransaction();
 
 async function refusedAsRpcError<T>(run: () => Promise<T>): Promise<T> {
 	try {

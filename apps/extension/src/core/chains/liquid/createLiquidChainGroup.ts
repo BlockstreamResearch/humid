@@ -1,6 +1,7 @@
 import { createLwkWalletBackend } from "./adapters/lwk/createLwkWalletBackend";
 import { createLwkLiquidIdentityBackend } from "./adapters/lwk/identity/createLwkLiquidIdentityBackend";
 import { getSyncWorkerClient } from "./adapters/lwk/sync-worker/createSyncWorkerClient";
+import { processCtDependencies } from "./adapters/processCtDependencies";
 import { createLiquidWalletConnectAdapter } from "./adapters/walletconnect/createLiquidWalletConnectAdapter";
 import { createLiquidRpcRouter } from "./application/createLiquidRpcRouter";
 import { quoteTransferSpeeds, readSpeedRates } from "./application/feeSpeeds";
@@ -15,6 +16,7 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 	const walletBackend = createLwkWalletBackend();
 	const walletRpcDispatcher = createLiquidRpcRouter({
 		identityBackend,
+		processCt: processCtDependencies,
 		walletBackend,
 	});
 
@@ -91,7 +93,7 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 		chains: createBuiltInLiquidChains(),
 		id: LIQUID_CHAIN_GROUP_ID,
 		walletConnectAdapter: createLiquidWalletConnectAdapter({
-			identityBackend,
+			dispatcher: walletRpcDispatcher,
 			walletBackend,
 		}),
 		walletRpcDispatcher,

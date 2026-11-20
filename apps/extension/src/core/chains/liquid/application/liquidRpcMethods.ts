@@ -7,13 +7,18 @@ import { getLiquidIdentityPublicKey } from "./methods/getIdentityPublicKey";
 import { getLiquidIdentitySharedKey } from "./methods/getIdentitySharedKey";
 import { getLiquidUTXOs } from "./methods/getUTXOs";
 import { getLiquidWalletDescriptor } from "./methods/getWalletDescriptor";
-import { processLiquidConfidentialTransaction } from "./methods/processConfidentialTransaction";
+import {
+	createProcessLiquidConfidentialTransaction,
+	type LiquidProcessCtDependencies,
+} from "./methods/processConfidentialTransaction";
 import { sendLiquidTransfer } from "./methods/sendTransfer";
 import { signLiquidIdentity } from "./methods/signIdentity";
 import { signLiquidMessage } from "./methods/signMessage";
 import { signLiquidPset } from "./methods/signPset";
 
-export const LIQUID_RPC_METHODS: ReadonlyArray<AnyWalletMethod<LiquidRpcMethodContext>> = [
+export const liquidRpcMethods = (
+	processCt: LiquidProcessCtDependencies,
+): ReadonlyArray<AnyWalletMethod<LiquidRpcMethodContext>> => [
 	getLiquidAddress,
 	getLiquidBalance,
 	getLiquidUTXOs,
@@ -24,5 +29,5 @@ export const LIQUID_RPC_METHODS: ReadonlyArray<AnyWalletMethod<LiquidRpcMethodCo
 	getLiquidIdentityPublicKey,
 	getLiquidIdentitySharedKey,
 	signLiquidIdentity,
-	processLiquidConfidentialTransaction,
+	createProcessLiquidConfidentialTransaction(processCt),
 ];

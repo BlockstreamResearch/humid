@@ -6,6 +6,8 @@ import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk/txmanifest.json";
 
 import { DENY_ALL_AUTHORIZATION } from "@/core/wallet-rpc/types";
 
+import type { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
+import { smplxContractTools } from "../../../adapters/smplx/smplxContractTools";
 import type { LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
 import {
 	createProcessLiquidConfidentialTransaction,
@@ -290,8 +292,8 @@ function dependencies(
 			return SENT_TXID;
 		},
 		rememberTransaction: async () => {},
-		loadSmplx: (async () =>
-			smplxSubstitute(log)) as unknown as LiquidProcessCtDependencies["loadSmplx"],
+		contractTools: smplxContractTools((async () =>
+			smplxSubstitute(log)) as unknown as typeof loadSmplxWasm),
 		readFeeRate: () => async () => 1000,
 		readTxOut: () => async () => ({
 			amountSats: "50000",
@@ -463,7 +465,9 @@ describe("the order a contract action happens in", () => {
 
 			const method = createProcessLiquidConfidentialTransaction(
 				dependencies(log, {
-					loadSmplx: (async () => module) as unknown as LiquidProcessCtDependencies["loadSmplx"],
+					contractTools: smplxContractTools(
+						(async () => module) as unknown as typeof loadSmplxWasm,
+					),
 					readFeeRate: () => rateFor,
 				}),
 			);
@@ -657,7 +661,7 @@ describe("what it holds, and for how long", () => {
 
 		const method = createProcessLiquidConfidentialTransaction(
 			dependencies(log, {
-				loadSmplx: (async () => module) as unknown as LiquidProcessCtDependencies["loadSmplx"],
+				contractTools: smplxContractTools((async () => module) as unknown as typeof loadSmplxWasm),
 			}),
 		);
 
@@ -678,7 +682,7 @@ describe("what it holds, and for how long", () => {
 
 		const { data, log } = await failing(payRequest(), {
 			dependencies: {
-				loadSmplx: (async () => module) as unknown as LiquidProcessCtDependencies["loadSmplx"],
+				contractTools: smplxContractTools((async () => module) as unknown as typeof loadSmplxWasm),
 			},
 		});
 
