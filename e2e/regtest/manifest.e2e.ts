@@ -11,6 +11,44 @@ const LIFECYCLES = [
 		{ preset: "dex", actions: ["MakeOffer", "Settle", "ClaimPayout", "MakeOffer", "Refund"] },
 	],
 	[
+		{ preset: "multiasset", actions: ["MintReissuable"] },
+		{
+			preset: "lending_v2",
+			actions: [
+				"Prepare",
+				"IssueUtilityNFTs",
+				"LockCollateral",
+				"CancelOffer",
+				"Prepare",
+				"IssueUtilityNFTs",
+				"LockCollateral",
+				"SetupLending",
+				"RepayLoan",
+				"ClaimPrincipalWithInterest",
+				"Prepare",
+				"IssueUtilityNFTs",
+				"LockCollateral",
+				"SetupLending",
+				"LiquidateAfterExpiry",
+			],
+		},
+	],
+	[
+		{ preset: "multiasset", actions: ["MintReissuable"] },
+		{
+			preset: "lending_v3",
+			actions: [
+				"CreateFactory",
+				"CreateOffer",
+				"CancelOffer",
+				"CreateOffer",
+				"AcceptOffer",
+				"ClaimPrincipal",
+				"RepayLoan",
+			],
+		},
+	],
+	[
 		{
 			preset: "relay",
 			actions: ["RelayToAddress", "ReleaseToAddress", "RelayToVault", "ReleaseToVault", "Withdraw"],

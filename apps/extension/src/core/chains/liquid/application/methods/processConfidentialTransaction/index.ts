@@ -368,8 +368,8 @@ function fundable(
 
 	const selectable: SelectableUtxo[] = [];
 
-	for (const { blindingSecrets, derivationPath, ...utxo } of held) {
-		const candidate: SelectableUtxo = utxo;
+	for (const { blindingSecrets, derivationPath, scriptPubKey, ...utxo } of held) {
+		const candidate: SelectableUtxo = { ...utxo, scriptPubKeyHex: scriptPubKey };
 
 		if (blindingSecrets) {
 			candidate.blindingSecretsJson = JSON.stringify(blindingSecrets);

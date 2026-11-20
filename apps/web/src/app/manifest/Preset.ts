@@ -7,18 +7,28 @@ export type SentStep = {
 	action: string;
 	deployment?: Record<string, string>;
 	issuances?: LiquidProcessConfidentialTransactionIssuance[];
-	spent?: string;
+	/** The outputs this step spent, as txid:vout. */
+	spent?: string[];
 	txid: string;
 };
 
 export type Account = { address: string; key: string };
 
+export type PresetOutput = { utxoType: string; vout: number };
+
 export type PresetStep = {
 	action: string;
 	after?: string[];
+	/** The actions whose deployment the step runs under; the latest of any by default. */
+	deployedBy?: string[];
 	from?: string;
-	params?: (account: Account, earlier?: SentStep) => Record<string, unknown>;
-	spends?: { utxoType: string; vout: number };
+	/** Undefined while something the params need has not been sent yet. */
+	params?: (
+		account: Account,
+		earlier: SentStep | undefined,
+		sent: Record<string, SentStep[]>,
+	) => Record<string, unknown> | undefined;
+	spends?: PresetOutput[];
 };
 
 type PresetDocument = Pick<
@@ -59,20 +69,29 @@ export class Preset {
 
 		if (step.after !== undefined && earlier === undefined) return undefined;
 
-		if (
-			step.spends !== undefined &&
-			Object.values(sent).some((steps) => steps.some((later) => later.spent === earlier?.txid))
-		) {
+		const spent = new Set(
+			Object.values(sent).flatMap((steps) => steps.flatMap((later) => later.spent ?? [])),
+		);
+
+		if (step.spends?.some(({ vout }) => spent.has(`${earlier?.txid}:${vout}`))) {
 			return undefined;
 		}
 
-		const deployment = sent[this.name]?.findLast((own) => own.deployment !== undefined)?.deployment;
+		const params = step.params === undefined ? {} : step.params(account, earlier, sent);
+
+		if (params === undefined) return undefined;
+
+		const deployment = sent[this.name]?.findLast(
+			(own) =>
+				own.deployment !== undefined &&
+				(step.deployedBy === undefined || step.deployedBy.includes(own.action)),
+		)?.deployment;
 
 		return {
 			action: step.action,
 			broadcast: true,
 			...this.#document,
-			params: step.params?.(account, earlier) ?? {},
+			params,
 			...(this.#template === undefined || deployment === undefined
 				? {}
 				: { instance: { instance: { fields: deployment, template: this.#template } } }),
@@ -80,9 +99,11 @@ export class Preset {
 				? {}
 				: {
 						state: {
-							utxos: [
-								{ txid: earlier.txid, utxo_type: step.spends.utxoType, vout: step.spends.vout },
-							],
+							utxos: step.spends.map(({ utxoType, vout }) => ({
+								txid: earlier.txid,
+								utxo_type: utxoType,
+								vout,
+							})),
 						},
 					}),
 		};

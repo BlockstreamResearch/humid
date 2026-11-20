@@ -175,5 +175,7 @@ describe("how a name the protocol wrote reads", () => {
 		expect(readable("lending_contract")).toBe("Lending contract");
 		expect(readable("CreateOffer")).toBe("Create offer");
 		expect(readable("issuance-factory")).toBe("Issuance factory");
+		expect(readable("creation_op_return")).toBe("Creation op_return");
+		expect(readable("op_return_data")).toBe("op_return data");
 	});
 });

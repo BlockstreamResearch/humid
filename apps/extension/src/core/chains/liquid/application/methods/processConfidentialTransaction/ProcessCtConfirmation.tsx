@@ -302,14 +302,21 @@ function sentence(clause: string): string {
 	return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.`;
 }
 
+// Terms written as they are, separators included.
+const KEPT_TERM = /(op_return)/i;
+
 export function readable(name: string): string {
 	const words = name
 		.replaceAll(/([a-z0-9])([A-Z])/g, "$1 $2")
-		.replaceAll(/[_-]+/g, " ")
+		.split(KEPT_TERM)
+		.map((part) => (KEPT_TERM.test(part) ? part : part.replaceAll(/[_-]+/g, " ")))
+		.join("")
 		.trim()
 		.toLowerCase();
 
-	return words.charAt(0).toUpperCase() + words.slice(1);
+	return KEPT_TERM.test(words.split(" ")[0] ?? "")
+		? words
+		: words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export const processCtConfirmationRenderer: ConfirmationRenderer = {

@@ -49,7 +49,7 @@ export default function ManifestRunner() {
 			action: origin.action,
 			deployment: result.deployment,
 			issuances: result.issuances,
-			spent: request.state?.utxos?.[0]?.txid,
+			spent: request.state?.utxos?.map(({ txid, vout }) => `${txid}:${vout}`),
 			txid: result.txid,
 		};
 

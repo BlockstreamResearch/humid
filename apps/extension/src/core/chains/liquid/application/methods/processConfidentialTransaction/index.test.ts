@@ -75,7 +75,6 @@ const explicitUtxo = {
 	assetId: `liquid:testnet/elip144:${POLICY_ASSET}`,
 	confidential: false,
 	scriptPubKey: WALLET_SCRIPT,
-	scriptPubKeyHex: WALLET_SCRIPT,
 	spendable: true,
 	txid: FUNDING_TXID,
 	txOut: `01${"49".repeat(32)}0100000000000f424000160014${"33".repeat(20)}`,
@@ -391,6 +390,26 @@ async function failing(
 
 	throw new Error("The method was expected to refuse and did not.");
 }
+
+describe("a wallet coin", () => {
+	test("funds an input the manifest pins to the wallet's address", async () => {
+		const pinned = structuredClone(p2pkManifest) as {
+			actions: { Pay: { inputs: Record<string, unknown>[]; params: Record<string, unknown> } };
+		};
+
+		Object.assign(pinned.actions.Pay.inputs[0]!, { from_address: "params.payer" });
+		pinned.actions.Pay.params.payer = { type: "string" };
+
+		const request = payRequest();
+		const { result } = await run({
+			...request,
+			manifest: pinned,
+			params: { ...request.params, payer: "tex1q_signing" },
+		});
+
+		expect(result.broadcast).toBe(false);
+	});
+});
 
 describe("the order a contract action happens in", () => {
 	test("reviews before it asks, and signs only after agreement", async () => {

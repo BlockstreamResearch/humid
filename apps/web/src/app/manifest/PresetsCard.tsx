@@ -2,7 +2,7 @@ import {
 	LIQUID_REGTEST_CHAIN_ID,
 	type LiquidProcessConfidentialTransactionParams,
 } from "@humid/appkit-injected-adapter";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,12 +22,12 @@ export function PresetsCard({
 		origin: { action: string; preset: string },
 	) => void;
 }) {
-	const { chainId, supportedChains, switchNetwork, wallet } = useHumidContext();
+	const { chainId, isConnected, supportedChains, switchNetwork, wallet } = useHumidContext();
 	const network = supportedChains.find((chain) => chain.caipNetworkId === chainId)?.name ?? chainId;
 	const [account, setAccount] = useState<Account | null>(null);
 	const [problem, setProblem] = useState<string | null>(null);
 
-	const readAccount = async () => {
+	const readAccount = useCallback(async () => {
 		try {
 			const [{ descriptors }, { address }] = await Promise.all([
 				wallet.getWalletDescriptor({
@@ -45,7 +45,11 @@ export function PresetsCard({
 		} catch (error) {
 			setProblem(error instanceof Error ? error.message : String(error));
 		}
-	};
+	}, [wallet]);
+
+	useEffect(() => {
+		if (isConnected) void readAccount();
+	}, [chainId, isConnected, readAccount]);
 
 	return (
 		<Card>

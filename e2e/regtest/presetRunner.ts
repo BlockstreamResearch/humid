@@ -23,7 +23,6 @@ export class PresetRunner {
 
 		await page.getByRole("button", { name: "Process transaction" }).click();
 		await page.getByRole("button", { name: "Use Local regtest" }).click();
-		await page.getByRole("button", { name: "Read the wallet key" }).click();
 		await expect(page.getByText(/^[0-9a-f]{64}$/)).toBeVisible();
 
 		return new PresetRunner(page, wallet);

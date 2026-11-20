@@ -7,7 +7,7 @@ import { Preset, type PresetStep } from "./Preset";
 const KEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const ACCOUNT = { address: "el1qq_mine", key: KEY };
 const AFTER = ["Fund", "Refresh"];
-const WILL = { utxoType: "last_will", vout: 0 };
+const WILL = [{ utxoType: "last_will", vout: 0 }];
 const [fund, refresh, coldBreak]: PresetStep[] = [
 	{ action: "Fund", params: ({ key }) => ({ COLD_PUB_KEY: key }) },
 	{ action: "Refresh", after: AFTER, spends: WILL },
@@ -21,7 +21,7 @@ const will = new Preset(
 	"last_will_contract",
 );
 const funded = { action: "Fund", deployment: { COLD_PUB_KEY: KEY }, txid: "aa".repeat(32) };
-const refreshed = { action: "Refresh", spent: funded.txid, txid: "bb".repeat(32) };
+const refreshed = { action: "Refresh", spent: [`${funded.txid}:0`], txid: "bb".repeat(32) };
 
 describe("a preset step's request", () => {
 	test("sends the first step at once, with the wallet's key in its params", () => {
@@ -47,7 +47,7 @@ describe("a preset step's request", () => {
 	});
 
 	test("is closed once a later step spent that output", () => {
-		const broken = { action: "ColdBreak", spent: refreshed.txid, txid: "cc".repeat(32) };
+		const broken = { action: "ColdBreak", spent: [`${refreshed.txid}:0`], txid: "cc".repeat(32) };
 
 		expect(
 			will.request(refresh!, ACCOUNT, { last_will: [funded, refreshed, broken] }),
@@ -95,5 +95,40 @@ describe("a preset step's request", () => {
 			asset: issuance.issuedAsset,
 		});
 		expect(will.request(offer, ACCOUNT, { last_will: [minted] })).toBeUndefined();
+	});
+
+	test("spends every output it lists, and stays open while another output of that step is spent", () => {
+		const settle: PresetStep = {
+			action: "ColdBreak",
+			after: AFTER,
+			spends: [WILL[0]!, { utxoType: "last_will", vout: 1 }],
+		};
+		const other = { action: "Other", spent: [`${funded.txid}:2`], txid: "dd".repeat(32) };
+
+		expect(will.request(settle, ACCOUNT, { last_will: [funded, other] })?.state).toEqual({
+			utxos: [
+				{ txid: funded.txid, utxo_type: "last_will", vout: 0 },
+				{ txid: funded.txid, utxo_type: "last_will", vout: 1 },
+			],
+		});
+		expect(
+			will.request(settle, ACCOUNT, {
+				last_will: [funded, { ...other, spent: [`${funded.txid}:1`] }],
+			}),
+		).toBeUndefined();
+	});
+
+	test("runs under the deployment of the action it names", () => {
+		const factory = { action: "Fund", deployment: { FACTORY: "f" }, txid: "ee".repeat(32) };
+		const loan = { action: "Refresh", deployment: { LOAN: "l" }, txid: "ff".repeat(32) };
+		const offer: PresetStep = { action: "ColdBreak", deployedBy: ["Fund"] };
+
+		expect(will.request(offer, ACCOUNT, { last_will: [factory, loan] })?.instance).toEqual({
+			instance: { fields: factory.deployment, template: "last_will_contract" },
+		});
+	});
+
+	test("stays closed while its params cannot be filled", () => {
+		expect(will.request({ action: "Fund", params: () => undefined }, ACCOUNT, {})).toBeUndefined();
 	});
 });
