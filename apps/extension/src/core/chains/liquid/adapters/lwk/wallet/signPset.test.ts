@@ -303,7 +303,7 @@ const account = {
 	implementation: {
 		wollet,
 		signer: {
-			sign: (pset: Lwk.Pset) => {
+			signWithOptions: (pset: Lwk.Pset) => {
 				signedSource = pset.toString();
 				return signerTransform ? signerTransform(pset) : pset;
 			},
@@ -379,9 +379,17 @@ function holding(
 		scriptPubKey: script.toString(),
 		spendable,
 		txid: outpoint.txid().toString(),
-		txOut: txOut.toString(),
+		txOut: hexOf(txOut),
 		vout: outpoint.vout(),
 	};
+}
+
+function hexOf(txOut: Lwk.TxOut): string {
+	const input = lwk.PsetInputBuilder.fromPrevout(
+		lwk.OutPoint.fromParts(new lwk.Txid("0".repeat(64)), 0),
+	).witnessUtxo(txOut);
+	const pset = lwk.PsetBuilder.newV2().addInput(input.build()).build();
+	return Buffer.from(PsetMaps.parse(pset.toString()).inputs[0]!.entries.get("01")!).toString("hex");
 }
 
 function holdFixtureInputs(pset: Lwk.Pset) {

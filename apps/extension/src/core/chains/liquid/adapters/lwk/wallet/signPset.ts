@@ -17,6 +17,8 @@ import { invalidPset, PsetMaps } from "./PsetMaps";
 import { sentTransactions } from "./sentTransactions";
 import { WalletCoins } from "./WalletCoins";
 
+const SIGHASH_ALL = 1;
+
 export async function blindAndInspectPset(
 	account: LiquidWalletAccount,
 	psetBase64: string,
@@ -95,7 +97,7 @@ function inspectPset(
 			inputs: inputs.map((input, index) => ({
 				...spent[index]!,
 				index,
-				sighashType: input.sighash(),
+				sighashType: input.sighash() ?? SIGHASH_ALL,
 			})),
 			fees: Array.from(fees.entries() as Map<string, bigint>, ([asset, amount]) => ({
 				asset,
@@ -154,7 +156,13 @@ export async function signPset(
 		// sign and finalize consume their input, including when they throw.
 		const signingPset = pset;
 		pset = undefined;
-		pset = implementation.signer.sign(signingPset);
+		// The review shows each input's sighash, so dapp-chosen ones are signed as shown.
+		const options = lwk.SignOptions.dangerousAllowAnySighash();
+		try {
+			pset = implementation.signer.signWithOptions(signingPset, options);
+		} finally {
+			options.free();
+		}
 
 		const overSignedInputIndex = readInputSignatures(pset).findIndex(
 			(signatures, index) =>

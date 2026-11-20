@@ -1,10 +1,6 @@
-import {
-	WALLET_RPC_ERROR_REASONS,
-	WalletRpcResourceUnavailableError,
-} from "@/core/wallet-rpc/errors";
-
 import type { LiquidUtxoSnapshot } from "../../../application/backends/LiquidWalletBackend";
 import type { LwkWasmModule } from "../loadLwkWasm";
+import { walletTxOut } from "./walletTxOut";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
 
@@ -28,7 +24,7 @@ export function readExplicitWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[]
 		}
 
 		const txid = walletTx.txid().toString();
-		const rawOutputs = walletTx.tx().outputs;
+		const transactionHex = walletTx.tx().toString();
 
 		for (const output of walletTx.outputs()) {
 			const owned = output.get();
@@ -39,17 +35,9 @@ export function readExplicitWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[]
 
 			const outpoint = owned.outpoint();
 			const vout = outpoint.vout();
-			const rawTxOut = rawOutputs[vout];
+			const txOut = walletTxOut(transactionHex, txid, vout);
 
-			if (!rawTxOut) {
-				throw new WalletRpcResourceUnavailableError(
-					"Could not locate the raw output for a wallet transaction output.",
-					{ txid, vout },
-					WALLET_RPC_ERROR_REASONS.WALLET_UTXO_READ_FAILED,
-				);
-			}
-
-			if (rawTxOut.isPartiallyBlinded()) {
+			if (txOut.confidential) {
 				continue;
 			}
 
@@ -69,7 +57,7 @@ export function readExplicitWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[]
 				scriptPubKey: owned.scriptPubkey().toString(),
 				spendable: owned.height() !== undefined,
 				txid,
-				txOut: rawTxOut.toString(),
+				txOut: txOut.hex,
 				vout,
 			} satisfies LiquidUtxoSnapshot);
 		}

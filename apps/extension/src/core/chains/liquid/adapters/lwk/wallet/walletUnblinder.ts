@@ -22,7 +22,8 @@ export function walletUnblinder(
 
 	return (transactionHex, vout) => {
 		const transaction = lwk.Transaction.fromString(transactionHex);
-		const output = transaction.output(vout);
+		const outputs = transaction.outputs;
+		const output = outputs[vout];
 		const key = lwk.SecretKey.fromBytes(blindingKey);
 
 		try {
@@ -42,7 +43,7 @@ export function walletUnblinder(
 			return undefined;
 		} finally {
 			key.free();
-			output?.free();
+			for (const each of outputs) each.free();
 			transaction.free();
 		}
 	};

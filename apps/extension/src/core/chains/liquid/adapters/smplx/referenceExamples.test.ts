@@ -9,6 +9,7 @@ import {
 	reviewManifestAction,
 	type SelectableUtxo,
 	type TransactionDraft,
+	txOutAt,
 } from "@humid/tx-manifest";
 import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -209,17 +210,17 @@ function wallet(asset: string, amount: string, txid = asset) {
 }
 
 function chainTxOut(transactionHex: string, vout: number) {
-	const output = lwk.Transaction.fromString(transactionHex).output(vout);
-	const sats = output?.value();
-	const asset = output?.asset()?.toString();
+	const found = txOutAt(transactionHex, vout);
+
+	if (!found.ok) throw new Error(found.reason);
+
+	const { amountSats, rawAssetId, scriptPubKeyHex, txOutHex } = found.txOut;
 
 	return {
-		...(sats === undefined || asset === undefined
-			? {}
-			: { amountSats: sats.toString(), rawAssetId: asset }),
-		scriptPubKeyHex: bytesToHex(output?.scriptPubkey().bytes() ?? new Uint8Array()),
+		...(amountSats === undefined || rawAssetId === undefined ? {} : { amountSats, rawAssetId }),
+		scriptPubKeyHex,
 		transactionHex,
-		txOutHex: output?.toString() ?? "",
+		txOutHex,
 	};
 }
 
@@ -293,7 +294,7 @@ function coinsOf(hex: string, asset: string): SelectableUtxo[] {
 	const txid = transaction.txid().toString();
 	const coins: SelectableUtxo[] = [];
 
-	for (let vout = 0, output = transaction.output(0); output; output = transaction.output(++vout)) {
+	for (const [vout, output] of transaction.outputs.entries()) {
 		if (bytesToHex(output.scriptPubkey().bytes()) !== WALLET_SCRIPT) {
 			continue;
 		}
@@ -301,7 +302,7 @@ function coinsOf(hex: string, asset: string): SelectableUtxo[] {
 		const coin = {
 			scriptPubKeyHex: WALLET_SCRIPT,
 			spendable: true,
-			txOut: output.toString(),
+			txOut: chainTxOut(hex, vout).txOutHex,
 			txid,
 			vout,
 		};
