@@ -9,9 +9,10 @@ import {
 	type ParsedLiquidGetUTXOsParams,
 	type LiquidGetUTXOsResult,
 } from "../../../domain/LiquidRpc";
-import { parseLiquidAssetId, parseLiquidGetUTXOsParams } from "../../../domain/validation";
+import { parseLiquidGetUTXOsParams } from "../../../domain/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../../dappAccountScope";
+import { resolveRequestedAsset } from "../../requestedAsset";
 
 export type LiquidGetUTXOsContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
@@ -65,18 +66,3 @@ export const getLiquidUTXOs = createWalletMethod<
 		};
 	},
 });
-
-function resolveRequestedAsset(
-	assetId: string | undefined,
-	account: LiquidWalletAccount,
-): ParsedLiquidAssetId {
-	if (assetId) {
-		return parseLiquidAssetId(assetId, account.chainId);
-	}
-
-	return {
-		assetId: account.policyAssetId,
-		chainId: account.chainId,
-		rawAssetId: account.rawPolicyAssetId,
-	};
-}

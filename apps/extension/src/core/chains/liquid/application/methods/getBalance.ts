@@ -9,10 +9,11 @@ import {
 	type ParsedLiquidGetBalanceParams,
 	type LiquidGetBalanceResult,
 } from "../../domain/LiquidRpc";
-import { parseLiquidAssetId, parseLiquidGetBalanceParams } from "../../domain/validation";
+import { parseLiquidGetBalanceParams } from "../../domain/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../dappAccountScope";
 import type { ReadPortfolioSnapshot } from "../LiquidRpcContext";
+import { resolveRequestedAsset } from "../requestedAsset";
 
 export type LiquidGetBalanceContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
@@ -85,18 +86,3 @@ export const getLiquidBalance = createWalletMethod<
 		};
 	},
 });
-
-function resolveRequestedAsset(
-	assetId: string | undefined,
-	account: LiquidWalletAccount,
-): ParsedLiquidAssetId {
-	if (assetId) {
-		return parseLiquidAssetId(assetId, account.chainId);
-	}
-
-	return {
-		assetId: account.policyAssetId,
-		chainId: account.chainId,
-		rawAssetId: account.rawPolicyAssetId,
-	};
-}

@@ -1,3 +1,5 @@
+import { bytesToBase64 } from "@/helpers/base64";
+
 const PBKDF2_HASH = "SHA-256";
 
 const textEncoder = new TextEncoder();
@@ -138,27 +140,6 @@ export async function decryptVaultString(input: {
 	);
 
 	return textDecoder.decode(plaintext);
-}
-
-export function bytesToBase64(bytes: Uint8Array): string {
-	let binary = "";
-
-	for (const byte of bytes) {
-		binary += String.fromCharCode(byte);
-	}
-
-	return btoa(binary);
-}
-
-export function base64ToBytes(base64: string): Uint8Array {
-	const binary = atob(base64);
-	const bytes = new Uint8Array(binary.length);
-
-	for (let index = 0; index < binary.length; index += 1) {
-		bytes[index] = binary.charCodeAt(index);
-	}
-
-	return bytes;
 }
 
 export function randomBytes(length: number): Uint8Array {

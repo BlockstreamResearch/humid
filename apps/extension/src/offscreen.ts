@@ -3,10 +3,10 @@ import browser from "webextension-polyfill";
 import { createInlineScanClient } from "@/core/chains/liquid/adapters/lwk/sync-worker/createInlineScanClient";
 import type { SyncWorkerClient } from "@/core/chains/liquid/adapters/lwk/sync-worker/createWorkerScanClient";
 import {
-	bytesToBase64,
 	isOffscreenScanMessage,
 	type OffscreenScanResponse,
 } from "@/core/chains/liquid/adapters/lwk/sync-worker/offscreenProtocol";
+import { bytesToBase64 } from "@/helpers/base64";
 
 let client: SyncWorkerClient | null = null;
 

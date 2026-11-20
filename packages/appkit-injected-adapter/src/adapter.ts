@@ -72,35 +72,12 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		const network = this.resolveNetwork(params.chainId);
 
 		const { sessionScopes } = await createSession(this.injectedProvider, this.buildSessionScopes());
-		const accountIdentifier = sessionScopes[network.caipNetworkId]?.accounts?.[0];
 
-		if (!accountIdentifier) {
-			throw new Error(`${this.options.connector.name} returned no account for this chain.`);
-		}
-
-		const account = parseCaipAccountId(accountIdentifier);
-
-		this.onConnect(
-			[
-				{
-					address: account.id,
-					chainId: network.id,
-					chainNamespace: this.options.namespace as ChainNamespace,
-				},
-			],
-			this.options.connector.id,
+		return this.adoptSession(
+			network,
+			sessionScopes,
+			`${this.options.connector.name} returned no account for this chain.`,
 		);
-
-		await this.subscribeToWalletEvents({ accountId: account.id, chainId: network.id });
-
-		return {
-			id: this.options.connector.id,
-			type: "INJECTED" as const,
-			provider: this.injectedProvider,
-			chainId: network.id,
-			address: account.id,
-			accounts: [] as [],
-		};
 	}
 
 	async disconnect(params?: AdapterBlueprint.DisconnectParams) {
@@ -179,35 +156,8 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		const network = this.resolveNetwork(params.chainId);
 
 		const { sessionScopes } = await getSession(this.injectedProvider);
-		const accountIdentifier = sessionScopes[network.caipNetworkId]?.accounts?.[0];
 
-		if (!accountIdentifier) {
-			throw new Error("No existing session to restore.");
-		}
-
-		const account = parseCaipAccountId(accountIdentifier);
-
-		this.onConnect(
-			[
-				{
-					address: account.id,
-					chainId: network.id,
-					chainNamespace: this.options.namespace as ChainNamespace,
-				},
-			],
-			this.options.connector.id,
-		);
-
-		await this.subscribeToWalletEvents({ accountId: account.id, chainId: network.id });
-
-		return {
-			id: this.options.connector.id,
-			type: "INJECTED" as const,
-			provider: this.injectedProvider,
-			chainId: network.id,
-			address: account.id,
-			accounts: [] as [],
-		};
+		return this.adoptSession(network, sessionScopes, "No existing session to restore.");
 	}
 
 	async signMessage(params: AdapterBlueprint.SignMessageParams) {
@@ -306,6 +256,36 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 
 	async walletGetAssets() {
 		return {};
+	}
+
+	private async adoptSession(network: CaipNetwork, sessionScopes: Caip25Scopes, noAccount: string) {
+		const accountIdentifier = sessionScopes[network.caipNetworkId]?.accounts?.[0];
+
+		if (!accountIdentifier) throw new Error(noAccount);
+
+		const { id } = parseCaipAccountId(accountIdentifier);
+
+		this.onConnect(
+			[
+				{
+					address: id,
+					chainId: network.id,
+					chainNamespace: this.options.namespace as ChainNamespace,
+				},
+			],
+			this.options.connector.id,
+		);
+
+		await this.subscribeToWalletEvents({ accountId: id, chainId: network.id });
+
+		return {
+			id: this.options.connector.id,
+			type: "INJECTED" as const,
+			provider: this.injectedProvider,
+			chainId: network.id,
+			address: id,
+			accounts: [] as [],
+		};
 	}
 
 	private unsupported(method: string): Error {

@@ -7,6 +7,7 @@ import {
 	WalletRpcInvalidParamsError,
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
+import { base64ToBytes } from "@/helpers/base64";
 
 import type { LiquidWalletAccount } from "../../../application/backends/LiquidWalletBackend";
 import {
@@ -54,10 +55,7 @@ export async function signMessage(
 	const implementation = getLwkImplementation(account);
 
 	try {
-		const signature = Uint8Array.from(
-			atob(implementation.signer.signMessage(params.message, path)),
-			(char) => char.charCodeAt(0),
-		);
+		const signature = base64ToBytes(implementation.signer.signMessage(params.message, path));
 		const recoveryId = (signature[0]! - 27) & 3;
 
 		return {

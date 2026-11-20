@@ -8,7 +8,7 @@ import {
 	type LiquidSendTransferResult,
 	type LiquidTransferReview,
 } from "../../../domain/LiquidRpc";
-import { parseLiquidAssetId, parseLiquidSendTransferParams } from "../../../domain/validation";
+import { parseLiquidSendTransferParams } from "../../../domain/validation";
 import type { LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
 import { accountNameOf, readKnownAssets, transactionReceipt } from "../../confirmationFacts";
 import { resolveDappAccount } from "../../dappAccountScope";
@@ -19,6 +19,7 @@ import {
 	type SpeedQuote,
 } from "../../feeSpeeds";
 import type { LiquidRpcMethodContext } from "../../LiquidRpcContext";
+import { resolveRequestedAsset } from "../../requestedAsset";
 import {
 	SEND_TRANSFER_CONFIRMATION_KIND,
 	type SendTransferConfirmationData,
@@ -111,19 +112,4 @@ function chosenQuote(review: LiquidSendTransferMethodReview, choice: unknown): S
 	const targetBlocks = chosenTargetBlocks(choice);
 
 	return review.quotes.find((candidate) => candidate.targetBlocks === targetBlocks)!;
-}
-
-function resolveRequestedAsset(
-	assetId: string | undefined,
-	account: LiquidWalletAccount,
-): ParsedLiquidAssetId {
-	if (assetId) {
-		return parseLiquidAssetId(assetId, account.chainId);
-	}
-
-	return {
-		assetId: account.policyAssetId,
-		chainId: account.chainId,
-		rawAssetId: account.rawPolicyAssetId,
-	};
 }

@@ -1,13 +1,10 @@
 import browser from "webextension-polyfill";
 
+import { base64ToBytes } from "@/helpers/base64";
 import { sleep } from "@/helpers/promise";
 
 import type { ReadActivityInput, ScanInput, SyncWorkerClient } from "./createWorkerScanClient";
-import {
-	base64ToBytes,
-	OFFSCREEN_SCAN_TARGET,
-	type OffscreenScanResponse,
-} from "./offscreenProtocol";
+import { OFFSCREEN_SCAN_TARGET, type OffscreenScanResponse } from "./offscreenProtocol";
 
 type ChromeOffscreenApi = {
 	createDocument: (parameters: {

@@ -1,5 +1,7 @@
 import browser from "webextension-polyfill";
 
+import { base64ToBytes, bytesToBase64 } from "@/helpers/base64";
+
 import type {
 	SecureVaultCreateInput,
 	SecureVaultStatus,
@@ -7,8 +9,6 @@ import type {
 	SecureVaultUnlockInput,
 } from "../types";
 import {
-	base64ToBytes,
-	bytesToBase64,
 	deriveVaultWrappingKey,
 	exportVaultDataKey,
 	generateVaultDataKey,

@@ -1,9 +1,9 @@
 import browser from "webextension-polyfill";
 
+import { base64ToBytes, bytesToBase64 } from "@/helpers/base64";
+
 import type { SecureVaultStorage } from "../types";
 import {
-	base64ToBytes,
-	bytesToBase64,
 	decryptVaultString,
 	encryptVaultString,
 	randomBytes,

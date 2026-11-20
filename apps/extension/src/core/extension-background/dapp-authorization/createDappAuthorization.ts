@@ -4,6 +4,7 @@ import type { AccountModelState } from "@/core/accounts/application/account-regi
 import type { DappSessionScope } from "@/core/accounts/application/account-registry/model/dapp-session";
 import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
 import {
+	CAIP25_METHODS,
 	type Caip25CreateSessionParams,
 	type Caip25CreateSessionResult,
 	type Caip25GetSessionResult,
@@ -123,6 +124,21 @@ export function createDappAuthorization(
 		return requireUnlocked(getAccountModel());
 	};
 
+	const findSession = (accountModel: AccountModelState, origin: string) =>
+		registry.findDappSession(accountModel, { now: now(), origin, transport: INJECTED_TRANSPORT });
+
+	const requireSession = (accountModel: AccountModelState, origin: string) => {
+		const session = findSession(accountModel, origin);
+
+		if (!session) {
+			throw dappAuthorizationErrors.unauthorized(
+				`No active session. Call "${CAIP25_METHODS.createSession}" first.`,
+			);
+		}
+
+		return session;
+	};
+
 	const runCreateSession = async ({
 		origin,
 		params,
@@ -223,14 +239,7 @@ export function createDappAuthorization(
 
 	const getSession = ({ origin }: { origin: string | null }): Caip25GetSessionResult => {
 		const accountModel = origin ? getAccountModel() : null;
-		const session =
-			accountModel && origin
-				? registry.findDappSession(accountModel, {
-						now: now(),
-						origin,
-						transport: INJECTED_TRANSPORT,
-					})
-				: null;
+		const session = accountModel && origin ? findSession(accountModel, origin) : null;
 
 		if (!session || !accountModel) return { sessionScopes: {} };
 
@@ -275,17 +284,7 @@ export function createDappAuthorization(
 			? requireUnlocked(getAccountModel())
 			: await unlockedAccountModel();
 
-		const session = registry.findDappSession(accountModel, {
-			now: now(),
-			origin: requestingOrigin,
-			transport: INJECTED_TRANSPORT,
-		});
-
-		if (!session) {
-			throw dappAuthorizationErrors.unauthorized(
-				'No active session. Call "wallet_createSession" first.',
-			);
-		}
+		const session = requireSession(accountModel, requestingOrigin);
 
 		if (!session.scope.chains.includes(invocation.scope)) {
 			throw dappAuthorizationErrors.unauthorized(
@@ -386,17 +385,7 @@ export function createDappAuthorization(
 		const chainId = parseSwitchChainParams(params);
 		const accountModel = await unlockedAccountModel();
 
-		const session = registry.findDappSession(accountModel, {
-			now: now(),
-			origin: requestingOrigin,
-			transport: INJECTED_TRANSPORT,
-		});
-
-		if (!session) {
-			throw dappAuthorizationErrors.unauthorized(
-				'No active session. Call "wallet_createSession" first.',
-			);
-		}
+		const session = requireSession(accountModel, requestingOrigin);
 
 		if (session.scope.chains.includes(chainId)) {
 			return { chainId };
@@ -435,14 +424,7 @@ export function createDappAuthorization(
 		await updateAccountModel((model) => {
 			const current = model.dappSessions[session.id];
 
-			if (
-				!current ||
-				registry.findDappSession(model, {
-					now: now(),
-					origin: requestingOrigin,
-					transport: INJECTED_TRANSPORT,
-				})?.id !== session.id
-			) {
+			if (!current || findSession(model, requestingOrigin)?.id !== session.id) {
 				throw dappAuthorizationErrors.unauthorized(
 					"The session ended before the network change was approved.",
 				);
