@@ -94,7 +94,7 @@ function ConnectCard() {
 
 function ConnectedHero() {
 	const {
-		address,
+		accountId,
 		balance,
 		balanceStatus,
 		chainId,
@@ -113,7 +113,7 @@ function ConnectedHero() {
 	const network = supportedChains.find((chain) => chain.caipNetworkId === chainId);
 	const ticker = network?.nativeCurrency.symbol ?? "L-BTC";
 	const hasSession = Boolean(session && Object.keys(session).length);
-	const avatarSeed = identity?.publicKey ?? address;
+	const avatarSeed = identity?.publicKey ?? accountId;
 
 	const sessionAction = useAsyncAction<void>();
 
@@ -170,7 +170,7 @@ function ConnectedHero() {
 					<IdentityAvatar seed={avatarSeed} />
 					<div className="flex min-w-0 flex-col gap-1">
 						<IdentityLines
-							address={address}
+							accountId={accountId}
 							identityLabel={identity?.label}
 							status={identityStatus}
 							onReveal={refreshIdentity}
@@ -218,12 +218,12 @@ function ConnectedHero() {
 }
 
 function IdentityLines({
-	address,
+	accountId,
 	identityLabel,
 	status,
 	onReveal,
 }: {
-	address: string;
+	accountId: string;
 	identityLabel: string | undefined;
 	status: string;
 	onReveal: () => void;
@@ -240,7 +240,7 @@ function IdentityLines({
 	if (status === "needs-approval") {
 		return (
 			<>
-				<span className="truncate font-mono text-sm font-medium">{truncateMiddle(address)}</span>
+				<span className="truncate font-mono text-sm font-medium">{truncateMiddle(accountId)}</span>
 				<Button
 					variant="link"
 					size="xs"
@@ -272,10 +272,10 @@ function IdentityLines({
 	return (
 		<>
 			<span className="truncate text-sm font-medium">
-				{identityLabel ?? truncateMiddle(address)}
+				{identityLabel ?? truncateMiddle(accountId)}
 			</span>
 			<span className="text-muted-foreground truncate font-mono text-xs">
-				{truncateMiddle(address, 10, 6)}
+				{truncateMiddle(accountId, 10, 6)}
 			</span>
 		</>
 	);

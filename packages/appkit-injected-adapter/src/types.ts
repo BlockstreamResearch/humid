@@ -47,8 +47,16 @@ export type Caip25GetSessionResult = {
 
 export type SignMessageContext = {
 	scope: string;
+	/** The connected account's id, which AppKit passes as `address` when it signs on its own. */
+	accountId: string | undefined;
 	address: string;
 	message: string;
+	invoke: <T>(scope: string, method: string, params?: unknown) => Promise<T>;
+};
+
+export type ReadBalanceContext = {
+	scope: string;
+	session: Caip25GetSessionResult;
 	invoke: <T>(scope: string, method: string, params?: unknown) => Promise<T>;
 };
 
@@ -65,5 +73,7 @@ export type InjectedCaipAdapterOptions = {
 	networks?: readonly CaipNetwork[];
 	accountType?: string;
 	signMessage?: (context: SignMessageContext) => Promise<{ signature: string }>;
+	/** The native balance in base units, or undefined when reading it would prompt the user. */
+	readBalance?: (context: ReadBalanceContext) => Promise<bigint | undefined>;
 	providerTimeoutMs?: number;
 };

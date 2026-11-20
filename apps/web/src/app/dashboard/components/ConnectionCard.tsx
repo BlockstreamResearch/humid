@@ -9,14 +9,14 @@ import {
 } from "@/components/ui/select";
 import { useHumidContext } from "@/contexts/Web3Provider/HumidProvider";
 
-import { truncateAddress } from "../lib/format";
+import { truncateId } from "../lib/format";
 import { useRpcCall } from "../lib/useRpcCall";
 import { ResultPanel } from "./ResultPanel";
 import { StatusRow } from "./StatusRow";
 
 export function ConnectionCard() {
 	const {
-		address,
+		accountId,
 		chainId,
 		connect,
 		createSession,
@@ -67,7 +67,7 @@ export function ConnectionCard() {
 				{isConnected ? (
 					<p className="text-muted-foreground text-sm">
 						Connected as{" "}
-						<code className="text-foreground font-mono text-xs">{truncateAddress(address)}</code>
+						<code className="text-foreground font-mono text-xs">{truncateId(accountId)}</code>
 					</p>
 				) : null}
 

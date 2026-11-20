@@ -33,7 +33,8 @@ type HumidContextValue = {
 	hasProvider: boolean;
 
 	isConnected: boolean;
-	address: string;
+	/** The wallet's account id, which AppKit names "address"; read a Liquid address with getAddress. */
+	accountId: string;
 	connect: () => Promise<void>;
 	disconnect: () => Promise<void>;
 
@@ -66,7 +67,7 @@ const NULL_PROVIDER: CaipRpcProvider = {
 const humidContext = createContext<HumidContextValue>({
 	hasProvider: false,
 	isConnected: false,
-	address: "",
+	accountId: "",
 	connect: async () => {
 		throw new TypeError("Not implemented");
 	},
@@ -143,7 +144,7 @@ function useHumidProvider(): CaipRpcProvider | null {
 export const HumidProvider = ({ children }: PropsWithChildren) => {
 	const { connectAsync } = useWeb3Context();
 	const { disconnect } = useDisconnect();
-	const { address, isConnected } = useAppKitAccount({ namespace: LIQUID_NAMESPACE });
+	const { address: accountId, isConnected } = useAppKitAccount({ namespace: LIQUID_NAMESPACE });
 
 	const provider = useHumidProvider();
 	const [chainId, setChainId] = useState<string>(LIQUID_TESTNET_CHAIN_ID);
@@ -178,7 +179,7 @@ export const HumidProvider = ({ children }: PropsWithChildren) => {
 	const value: HumidContextValue = {
 		hasProvider: provider !== null,
 		isConnected,
-		address: address ?? "",
+		accountId: accountId ?? "",
 		connect: async () => {
 			await connectAsync(LIQUID_NAMESPACE);
 		},

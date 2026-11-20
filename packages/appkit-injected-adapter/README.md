@@ -26,6 +26,23 @@ createAppKit({
 
 Override any default by passing options, e.g. `new HumidAdapter({ methods: [...] })`.
 
+## Accounts are ids, not addresses
+
+AppKit calls each connected account's id its `address` (`useAppKitAccount().address`, `caipAddress`).
+For Humid that value is the wallet's account id, which names a descriptor wallet and is not a Liquid
+address. Read addresses with `getAddress` (by index) or from `getUTXOs`, and sign messages with one of
+those. AppKit's own signing (SIWX, ENS) signs as the account id, so the Humid preset refuses that up
+front; invoke the wallet's `signMessage` directly instead.
+
+## What AppKit's own features do
+
+- **Balance.** AppKit shows the wallet's balance only when the session lets `getBalance` run without a
+  prompt. Otherwise AppKit shows 0, since it has no way to show nothing; hide the balance with
+  `<appkit-button balance="hide" />`.
+- **EVM and Solana calls.** `sendTransaction`, `estimateGas`, `writeContract`, `writeSolanaTransaction`,
+  `grantPermissions` and `revokePermissions` throw rather than report a success that never happened.
+  Transact through the wallet's own methods (`sendTransfer`, `signPset`, `processConfidentialTransaction`).
+
 ## Any injected CAIP-25 wallet
 
 The agnostic core works for any such wallet — supply the specifics instead of the Humid preset:

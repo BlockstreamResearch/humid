@@ -41,5 +41,6 @@ export type {
 	InjectedProvider,
 	InjectedRequestArguments,
 	RawInjectedProvider,
+	ReadBalanceContext,
 	SignMessageContext,
 } from "./types";

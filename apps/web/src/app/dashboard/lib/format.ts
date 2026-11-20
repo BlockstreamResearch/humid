@@ -20,9 +20,9 @@ export function summarizeResult(value: unknown): string {
 	return text.length > 200 ? `${text.slice(0, 200)}…` : text;
 }
 
-export function truncateAddress(address: string | undefined): string {
-	if (!address) return "";
-	return address.length <= 10 ? address : `${address.slice(0, 6)}…${address.slice(-4)}`;
+export function truncateId(id: string | undefined): string {
+	if (!id) return "";
+	return id.length <= 10 ? id : `${id.slice(0, 6)}…${id.slice(-4)}`;
 }
 
 export function parseJsonInput(value: string): unknown {

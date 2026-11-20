@@ -38,8 +38,11 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 	private readonly injectedProvider: InjectedProvider;
 
 	private walletEventUnsubscribers: Array<() => void> = [];
-	private lastEmittedAddress: string | undefined;
+	private lastEmittedAccountId: string | undefined;
 	private lastEmittedChainId: string | undefined;
+
+	private readonly invoke = <T>(scope: string, method: string, params?: unknown): Promise<T> =>
+		invokeMethod<T>(this.injectedProvider, scope, method, params);
 
 	constructor(options: InjectedCaipAdapterOptions) {
 		super({ namespace: options.namespace as ChainNamespace });
@@ -84,7 +87,7 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		this.onConnect(
 			[
 				{
-					address: account.address,
+					address: account.id,
 					chainId: network.id,
 					chainNamespace: this.options.namespace as ChainNamespace,
 				},
@@ -92,14 +95,14 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 			this.options.connector.id,
 		);
 
-		await this.subscribeToWalletEvents({ address: account.address, chainId: network.id });
+		await this.subscribeToWalletEvents({ accountId: account.id, chainId: network.id });
 
 		return {
 			id: this.options.connector.id,
 			type: "INJECTED" as const,
 			provider: this.injectedProvider,
 			chainId: network.id,
-			address: account.address,
+			address: account.id,
 			accounts: [] as [],
 		};
 	}
@@ -112,7 +115,7 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 
 			this.onDisconnect(this.options.connector.id);
 			this.unsubscribeFromWalletEvents();
-			this.lastEmittedAddress = undefined;
+			this.lastEmittedAccountId = undefined;
 			this.lastEmittedChainId = undefined;
 		}
 
@@ -136,10 +139,23 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		};
 	}
 
-	async getBalance(params: AdapterBlueprint.GetBalanceParams) {
+	// AppKit renders any non-numeric balance as zero and an absent one as loading forever.
+	async getBalance({ caipNetwork }: AdapterBlueprint.GetBalanceParams) {
+		const symbol = caipNetwork?.nativeCurrency.symbol ?? "";
+		const readBalance = this.options.readBalance;
+
+		if (!caipNetwork || !readBalance) return { balance: "0", symbol };
+
+		const units = await getSession(this.injectedProvider)
+			.then((session) =>
+				readBalance({ invoke: this.invoke, scope: caipNetwork.caipNetworkId, session }),
+			)
+			.catch(() => undefined);
+		const { decimals } = caipNetwork.nativeCurrency;
+
 		return {
-			balance: "0.00",
-			symbol: params.caipNetwork?.nativeCurrency.symbol ?? "",
+			balance: units === undefined ? "0" : this.formatUnits({ decimals, value: units }),
+			symbol,
 		};
 	}
 
@@ -178,7 +194,7 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		this.onConnect(
 			[
 				{
-					address: account.address,
+					address: account.id,
 					chainId: network.id,
 					chainNamespace: this.options.namespace as ChainNamespace,
 				},
@@ -186,14 +202,14 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 			this.options.connector.id,
 		);
 
-		await this.subscribeToWalletEvents({ address: account.address, chainId: network.id });
+		await this.subscribeToWalletEvents({ accountId: account.id, chainId: network.id });
 
 		return {
 			id: this.options.connector.id,
 			type: "INJECTED" as const,
 			provider: this.injectedProvider,
 			chainId: network.id,
-			address: account.address,
+			address: account.id,
 			accounts: [] as [],
 		};
 	}
@@ -208,19 +224,18 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		if (!caipNetwork) throw new Error(`${this.options.connector.name} connection is missing`);
 
 		const scope = caipNetwork.caipNetworkId;
-		const invoke = <T>(target: string, method: string, methodParams?: unknown): Promise<T> =>
-			invokeMethod<T>(this.injectedProvider, target, method, methodParams);
 
 		if (this.options.signMessage) {
 			return this.options.signMessage({
 				scope,
+				accountId: this.lastEmittedAccountId,
 				address: params.address,
 				message: params.message,
-				invoke,
+				invoke: this.invoke,
 			});
 		}
 
-		const result = await invoke<{ signature: string } | string>(scope, "signMessage", {
+		const result = await this.invoke<{ signature: string } | string>(scope, "signMessage", {
 			address: params.address,
 			message: params.message,
 		});
@@ -228,28 +243,43 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		return { signature: typeof result === "string" ? result : result.signature };
 	}
 
-	async estimateGas() {
-		return { gas: 0n };
+	async estimateGas(): Promise<never> {
+		throw this.unsupported("estimateGas");
 	}
 
-	async sendTransaction() {
-		return { hash: "" };
+	async sendTransaction(): Promise<never> {
+		throw this.unsupported("sendTransaction");
 	}
 
-	async writeContract() {
-		return { hash: "" };
+	async writeContract(): Promise<never> {
+		throw this.unsupported("writeContract");
 	}
 
-	async writeSolanaTransaction() {
-		return { hash: "" };
+	async writeSolanaTransaction(): Promise<never> {
+		throw this.unsupported("writeSolanaTransaction");
 	}
 
-	parseUnits(params: AdapterBlueprint.ParseUnitsParams) {
-		return BigInt(params.value);
+	parseUnits({ decimals, value }: AdapterBlueprint.ParseUnitsParams) {
+		const [whole = "", fraction = "", extra] = value.trim().split(".");
+
+		if (
+			extra !== undefined ||
+			!/^\d*$/.test(whole + fraction) ||
+			whole + fraction === "" ||
+			fraction.length > decimals
+		) {
+			throw new Error(`${value} is not an amount with at most ${decimals} decimals.`);
+		}
+
+		return BigInt(whole + fraction.padEnd(decimals, "0"));
 	}
 
-	formatUnits(params: AdapterBlueprint.FormatUnitsParams) {
-		return params.value.toString();
+	formatUnits({ decimals, value }: AdapterBlueprint.FormatUnitsParams) {
+		const digits = (value < 0n ? -value : value).toString().padStart(decimals + 1, "0");
+		const whole = digits.slice(0, digits.length - decimals);
+		const fraction = digits.slice(digits.length - decimals).replace(/0+$/, "");
+
+		return `${value < 0n ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 	}
 
 	getWalletConnectProvider(params: AdapterBlueprint.GetWalletConnectProviderParams) {
@@ -270,21 +300,28 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		return switchChainRpc(this.injectedProvider, chainId);
 	}
 
-	async grantPermissions() {
-		return {};
+	async grantPermissions(): Promise<never> {
+		throw this.unsupported("grantPermissions");
 	}
 
 	async revokePermissions(): Promise<Hex> {
-		return "0x";
+		throw this.unsupported("revokePermissions");
 	}
 
 	async walletGetAssets() {
 		return {};
 	}
 
-	private async subscribeToWalletEvents(seed?: { address: string; chainId: string | number }) {
+	private unsupported(method: string): Error {
+		return new Error(
+			`${this.options.connector.name} does not support AppKit's ${method}. ` +
+				"Invoke the wallet's own methods through the provider instead.",
+		);
+	}
+
+	private async subscribeToWalletEvents(seed?: { accountId: string; chainId: string | number }) {
 		if (seed) {
-			this.lastEmittedAddress = seed.address;
+			this.lastEmittedAccountId = seed.accountId;
 			this.lastEmittedChainId = seed.chainId.toString();
 		}
 
@@ -334,8 +371,8 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		const accountIdentifier = sessionScopes[network.caipNetworkId]?.accounts?.[0];
 
 		if (!accountIdentifier) {
-			if (this.lastEmittedAddress !== undefined) {
-				this.lastEmittedAddress = undefined;
+			if (this.lastEmittedAccountId !== undefined) {
+				this.lastEmittedAccountId = undefined;
 				this.lastEmittedChainId = undefined;
 				this.onDisconnect(this.options.connector.id);
 			}
@@ -343,15 +380,15 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 			return;
 		}
 
-		const { address } = parseCaipAccountId(accountIdentifier);
+		const { id: accountId } = parseCaipAccountId(accountIdentifier);
 		const nextChainId = network.id.toString();
 		const chainChanged =
 			this.lastEmittedChainId !== undefined && nextChainId !== this.lastEmittedChainId;
-		const accountChanged = address !== this.lastEmittedAddress;
+		const accountChanged = accountId !== this.lastEmittedAccountId;
 
 		if (!chainChanged && !accountChanged) return; // Nothing AppKit doesn't already know.
 
-		this.lastEmittedAddress = address;
+		this.lastEmittedAccountId = accountId;
 		this.lastEmittedChainId = nextChainId;
 
 		if (chainChanged) {
@@ -361,7 +398,7 @@ export class InjectedCaipAdapter extends AdapterBlueprint<ChainAdapterConnector>
 		this.onConnect(
 			[
 				{
-					address,
+					address: accountId,
 					chainId: network.id,
 					chainNamespace: this.options.namespace as ChainNamespace,
 				},
@@ -437,7 +474,8 @@ function extractEventChainId(payload: unknown): string | undefined {
 	return undefined;
 }
 
-function parseCaipAccountId(accountIdentifier: string): { address: string; scope: string } {
+// AppKit calls an account's id its "address"; for Liquid the id names a descriptor wallet, not an address.
+function parseCaipAccountId(accountIdentifier: string): { id: string; scope: string } {
 	const separator = accountIdentifier.lastIndexOf(":");
 
 	if (separator <= 0) {
@@ -445,13 +483,13 @@ function parseCaipAccountId(accountIdentifier: string): { address: string; scope
 	}
 
 	return {
-		address: accountIdentifier.slice(separator + 1),
+		id: accountIdentifier.slice(separator + 1),
 		scope: accountIdentifier.slice(0, separator),
 	};
 }
 
-function toCaipAddress(network: CaipNetwork | undefined, address: string): CaipAddress {
+function toCaipAddress(network: CaipNetwork | undefined, accountId: string): CaipAddress {
 	if (!network) throw new Error("Cannot build CAIP address without network");
 
-	return `${network.caipNetworkId}:${address}` as CaipAddress;
+	return `${network.caipNetworkId}:${accountId}` as CaipAddress;
 }
