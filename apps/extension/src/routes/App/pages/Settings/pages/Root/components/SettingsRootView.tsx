@@ -15,6 +15,7 @@ import { Page } from "@/common/Page";
 import type { AccountGroupRecord } from "@/core/accounts/application/account-registry/model/account-group";
 import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
 import { AccountAvatar } from "@/routes/App/components/AccountAvatar";
+import { SettingsRowSoon } from "@/routes/App/pages/Settings/components/SettingsRow";
 import { UiBadge } from "@/ui/UiBadge";
 import { UiButton } from "@/ui/UiButton/base";
 import {
@@ -65,7 +66,7 @@ export function SettingsRootView({
 						<HugeiconsIcon className="text-muted-foreground" icon={SquareLock01Icon} size={18} />
 						<span className="flex-1 text-sm font-medium">Lock wallet</span>
 					</button>
-					<div className="flex items-center gap-3 rounded-lg px-2 py-2.5">
+					<div className="flex items-center gap-3 rounded-lg px-2 py-1">
 						<HugeiconsIcon className="text-muted-foreground" icon={Timer02Icon} size={18} />
 						<label className="flex-1 text-sm font-medium" htmlFor="settings-auto-lock">
 							Auto-lock
@@ -191,9 +192,7 @@ function DisabledRow({
 		<div className="flex items-center gap-3 rounded-lg px-2 py-2.5 opacity-50">
 			<HugeiconsIcon className="text-muted-foreground" icon={icon} size={18} />
 			<span className="flex-1 text-sm font-medium">{label}</span>
-			<span className="text-muted-foreground rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
-				Soon
-			</span>
+			<SettingsRowSoon />
 		</div>
 	);
 }

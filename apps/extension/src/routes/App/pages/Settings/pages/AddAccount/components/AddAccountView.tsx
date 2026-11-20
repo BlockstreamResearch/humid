@@ -10,7 +10,7 @@ type Mode = "create" | "import";
 
 type AddAccountViewProps = {
 	accountTypeLabel: string;
-	error: string | null;
+	errors: Record<Mode, string | null>;
 	isSubmitting: boolean;
 	onCreate: (input: { name?: string }) => void;
 	onImport: (input: { mnemonic: string; name?: string }) => void;
@@ -18,7 +18,7 @@ type AddAccountViewProps = {
 
 export function AddAccountView({
 	accountTypeLabel,
-	error,
+	errors,
 	isSubmitting,
 	onCreate,
 	onImport,
@@ -98,7 +98,7 @@ export function AddAccountView({
 					</p>
 				)}
 
-				{error ? <p className="text-destructive text-sm">{error}</p> : null}
+				{errors[mode] ? <p className="text-destructive text-sm">{errors[mode]}</p> : null}
 
 				<UiButton
 					disabled={isSubmitting || (mode === "import" && !trimmedMnemonic)}

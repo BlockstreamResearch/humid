@@ -76,7 +76,7 @@ export function AuthCreatePasswordPage() {
 
 	return (
 		<main className="flex size-full flex-col gap-4 p-5">
-			<form className="flex flex-1 flex-col justify-center gap-4" onSubmit={handleCreateVault}>
+			<form className="flex flex-1 flex-col gap-4" onSubmit={handleCreateVault}>
 				<div className="flex flex-col gap-3">
 					<p className="text-muted-foreground text-xs font-medium tracking-normal uppercase">
 						Create · Step 2 of 2
@@ -101,9 +101,7 @@ export function AuthCreatePasswordPage() {
 									<UiInput
 										{...field}
 										id="create-vault-passphrase"
-										aria-describedby={
-											fieldState.error ? `${descriptionId} ${errorId}` : descriptionId
-										}
+										aria-describedby={fieldState.error ? errorId : descriptionId}
 										aria-invalid={fieldState.invalid}
 										autoComplete="new-password"
 										disabled={createVaultMutation.isPending}
@@ -118,8 +116,13 @@ export function AuthCreatePasswordPage() {
 											}
 										}}
 									/>
-									<UiFieldDescription id={descriptionId}>At least 8 characters.</UiFieldDescription>
-									<UiFieldError id={errorId} errors={[fieldState.error]} />
+									{fieldState.error ? (
+										<UiFieldError id={errorId} errors={[fieldState.error]} />
+									) : (
+										<UiFieldDescription id={descriptionId}>
+											At least 8 characters.
+										</UiFieldDescription>
+									)}
 								</UiField>
 							);
 						}}
@@ -163,7 +166,7 @@ export function AuthCreatePasswordPage() {
 						: String(createVaultMutation.error ?? "")}
 				</UiFieldError>
 
-				<div className="flex flex-col gap-2">
+				<div className="mt-auto flex flex-col gap-2">
 					<UiButton type="submit" size="lg" disabled={!canSubmit}>
 						{createVaultMutation.isPending ? "Creating..." : "Create wallet"}
 					</UiButton>

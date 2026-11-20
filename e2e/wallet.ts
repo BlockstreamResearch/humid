@@ -45,7 +45,7 @@ export class Wallet {
 
 		await page.goto(`chrome-extension://${this.#extensionId}/src/popup.html?tab#/app/settings`);
 		await page.getByRole("button", { name: "Lock wallet" }).click();
-		await expect(page.getByText("Locked")).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Unlock Humid" })).toBeVisible();
 		await page.close();
 	}
 

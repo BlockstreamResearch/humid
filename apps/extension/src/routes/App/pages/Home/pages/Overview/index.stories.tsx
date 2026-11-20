@@ -6,6 +6,7 @@ import { expect, within } from "storybook/test";
 import { LIQUID_MAINNET_CHAIN_ID } from "@/core/chains/liquid/domain/LiquidChain";
 
 import { MockHomeProvider } from "../../HomeContext/mock";
+import { MOCK_LBTC_ID } from "../../HomeContext/mockAssets";
 import { accountActivityQueryKey, heldTransactionsQueryKey } from "../Activity/useAccountActivity";
 import { OverviewPage } from "./index";
 
@@ -37,7 +38,7 @@ function pendingClient(): QueryClient {
 		{
 			action: "Pay",
 			at: Date.now() - 3 * 60_000,
-			holding: [{ amountSats: "50000", rawAssetId: "lbtc" }],
+			holding: [{ amountSats: "50000", rawAssetId: MOCK_LBTC_ID }],
 			origin: "https://dapp.example.org",
 			txid: "ab".repeat(32),
 		},
@@ -48,7 +49,7 @@ function pendingClient(): QueryClient {
 			{
 				items: [
 					{
-						changes: [{ amountSats: "-1200", rawAssetId: "lbtc" }],
+						changes: [{ amountSats: "-1200", rawAssetId: MOCK_LBTC_ID }],
 						feeSats: "200",
 						timestamp: null,
 						txid: "d1".repeat(32),

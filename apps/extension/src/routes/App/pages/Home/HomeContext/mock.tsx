@@ -12,6 +12,7 @@ import {
 
 import type { Portfolio } from "./hooks/usePortfolio";
 import { HomeContext } from "./index";
+import { MOCK_LBTC_ID, MOCK_USDT_ID } from "./mockAssets";
 
 const CHAINS: ChainRecord[] = [
 	{ chainGroupId: "liquid", id: LIQUID_MAINNET_CHAIN_ID, name: "Liquid", settings: {} },
@@ -49,7 +50,7 @@ const PORTFOLIO: Portfolio = {
 		{
 			amount: 245_000_000n,
 			decimals: 8,
-			id: "lbtc",
+			id: MOCK_LBTC_ID,
 			metadata: { isNative: true, issuerDomain: null, verified: true },
 			name: "Liquid Bitcoin",
 			symbol: "L-BTC",
@@ -57,7 +58,7 @@ const PORTFOLIO: Portfolio = {
 		{
 			amount: 42_210_000_000n,
 			decimals: 8,
-			id: "usdt",
+			id: MOCK_USDT_ID,
 			metadata: { isNative: false, issuerDomain: "tether.to", verified: true },
 			name: "Tether USD",
 			symbol: "USDt",
