@@ -11,9 +11,15 @@ export function blindPset(
 	pset: Pset,
 ): Pset {
 	const maps = PsetMaps.parse(pset.toString());
+	const owned = maps.inputs.map((input) => coins.find(input.outpoint));
+	for (const [index, coin] of owned.entries()) if (coin) maps.inputs[index]!.spend(coin.txOut);
+
 	const targets = maps.outputs.filter((output) => output.isBlindingTarget);
 	const pending = targets.filter((output) => !output.isBlinded);
-	if (pending.length === 0) return pset;
+	if (pending.length === 0) {
+		const hydrated = maps.toString();
+		return hydrated === pset.toString() ? pset : new lwk.Pset(hydrated);
+	}
 	if (pending.length !== targets.length || pending.some((output) => !output.isExplicit)) {
 		throw invalidPset("Partially blinded PSETs must be completed by their original blinder.");
 	}
@@ -24,12 +30,9 @@ export function blindPset(
 		throw invalidPset("PSET must be blinded before signing or finalizing its inputs.");
 	}
 
-	const secrets = maps.inputs.map((input) => {
-		const coin = coins.find(input.outpoint);
-		if (coin) {
-			input.spend(coin.txOut);
-			return WalletCoins.secretsOf(lwk, coin);
-		}
+	const secrets = maps.inputs.map((input, index) => {
+		const coin = owned[index];
+		if (coin) return WalletCoins.secretsOf(lwk, coin);
 		if (!input.hasWitnessUtxo)
 			throw invalidPset("Every input needs its witness UTXO before blinding.");
 		const prevout = input.explicitPrevout;

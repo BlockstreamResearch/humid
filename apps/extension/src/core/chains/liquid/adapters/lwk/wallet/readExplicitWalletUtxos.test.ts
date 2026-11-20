@@ -98,6 +98,7 @@ describe("the wallet's own outputs that are not blinded", () => {
 				address: "confidential-address-0",
 				amount: "2000",
 				assetId: `bip122:${"11".repeat(16)}/elip144:${"cc".repeat(32)}`,
+				commitments: { asset: `01${"cc".repeat(32)}`, nonce: "00", value: "0100000000000007d0" },
 				confidential: false,
 				spendable: true,
 				txid: A,

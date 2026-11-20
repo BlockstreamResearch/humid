@@ -27,11 +27,15 @@ export type LiquidGetUTXOsParams = {
 	assetId?: string;
 };
 
+/** The output's fields as serialized in `txOut`: 33-byte commitments when blinded, 0x01-prefixed when explicit, and 0x00 for no nonce. */
+export type LiquidTxOutCommitments = { asset: string; nonce: string; value: string };
+
 export type LiquidUTXO = {
 	address: string;
 	amount: string;
 	assetId: string;
 	confidential: boolean;
+	commitments: LiquidTxOutCommitments;
 	scriptPubKey: string;
 	spendable: boolean;
 	txid: string;

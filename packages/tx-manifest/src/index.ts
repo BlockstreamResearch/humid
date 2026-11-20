@@ -2,7 +2,7 @@ export { type ActionRequest, parseActionRequest } from "./request/request";
 
 export type { EsploraEndpoint, ReadChainTip, ReadFeeRate, ReadTxOut } from "./chain/chainRead";
 export { createEsploraFeeRateReader, createEsploraTxOutReader } from "./chain/chainRead";
-export { txOutAt } from "./chain/rawTransaction";
+export { parseTxOut, txOutAt, type TxOutCommitments } from "./chain/rawTransaction";
 
 export {
 	type EstimateFee,

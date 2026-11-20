@@ -5,7 +5,7 @@ import {
 	createEsploraTxOutReader,
 	type EsploraEndpoint,
 } from "./chainRead";
-import { txOutAt } from "./rawTransaction";
+import { parseTxOut, txOutAt } from "./rawTransaction";
 
 const POLICY_ASSET = "aa".repeat(32);
 const TOKEN_ASSET = "bb".repeat(32);
@@ -84,6 +84,24 @@ describe("reading one output out of a transaction's own bytes", () => {
 		expect(found.ok && found.txOut.amountSats).toBeUndefined();
 		expect(found.ok && found.txOut.rawAssetId).toBeUndefined();
 		expect(found.ok && found.txOut.txOutHex).toBe(blinded(FIRST_SCRIPT));
+	});
+
+	test("hands back each field as serialized, commitments and explicit values alike", () => {
+		expect(parseTxOut(blinded(FIRST_SCRIPT))?.commitments).toEqual({
+			asset: `0a${"33".repeat(32)}`,
+			nonce: `02${"55".repeat(32)}`,
+			value: `08${"44".repeat(32)}`,
+		});
+		expect(parseTxOut(explicit(7n, SECOND_SCRIPT, TOKEN_ASSET))?.commitments).toEqual({
+			asset: assetField(TOKEN_ASSET),
+			nonce: "00",
+			value: "010000000000000007",
+		});
+	});
+
+	test("reads a lone output only when nothing trails the output", () => {
+		expect(parseTxOut(`${explicit(7n, SECOND_SCRIPT)}00`)).toBeUndefined();
+		expect(parseTxOut("zz")).toBeUndefined();
 	});
 
 	test("refuses an index the transaction has no output at", () => {

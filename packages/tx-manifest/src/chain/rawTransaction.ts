@@ -11,9 +11,13 @@ const WITNESS_PRESENT = 0x01;
 
 type FieldForm = "commitment" | "explicit" | "null";
 
+/** Each output field as serialized: a commitment, or a 0x01-prefixed explicit value, or 0x00 for no nonce. */
+export type TxOutCommitments = { asset: string; nonce: string; value: string };
+
 type ParsedTxOut = {
 	amountSats?: string;
 	assetForm: FieldForm;
+	commitments: TxOutCommitments;
 	nonceForm: FieldForm;
 	rawAssetId?: string;
 	scriptPubKeyHex: string;
@@ -26,6 +30,19 @@ type ParsedTransaction = { spent: Outpoint[]; txOuts: ParsedTxOut[] };
 type ParseResult = { ok: false; reason: string } | { ok: true; transaction: ParsedTransaction };
 
 type TxOutAt = { ok: false; reason: string } | { ok: true; txOut: ParsedTxOut };
+
+export function parseTxOut(txOutHex: string): ParsedTxOut | undefined {
+	const bytes = decodeHex(txOutHex);
+
+	if (!bytes) {
+		return undefined;
+	}
+
+	const reader = new ByteReader(bytes);
+	const txOut = readOutput(reader);
+
+	return reader.remaining === 0 ? txOut : undefined;
+}
 
 export function txOutAt(transactionHex: string, vout: number): TxOutAt {
 	if (!Number.isInteger(vout) || vout < 0) {
@@ -249,6 +266,7 @@ function readOutput(reader: ByteReader): ParsedTxOut | undefined {
 		...(asset.form === "explicit" ? { rawAssetId: reverseHex(asset.body) } : {}),
 		...(value.form === "explicit" ? { amountSats: BigInt(`0x${value.body}`).toString() } : {}),
 		assetForm: asset.form,
+		commitments: { asset: asset.hex, nonce: nonce.hex, value: value.hex },
 		nonceForm: nonce.form,
 		scriptPubKeyHex,
 		txOutHex: reader.hexSince(from),
@@ -256,7 +274,7 @@ function readOutput(reader: ByteReader): ParsedTxOut | undefined {
 	};
 }
 
-type Field = { body: string; form: FieldForm };
+type Field = { body: string; form: FieldForm; hex: string };
 
 type FieldSpec = {
 	allowsNull: boolean;
@@ -278,6 +296,7 @@ const ISSUANCE_AMOUNT: FieldSpec = {
 };
 
 function readField(reader: ByteReader, spec: FieldSpec): Field | undefined {
+	const from = reader.offset;
 	const prefix = reader.uint8();
 
 	if (prefix === undefined) {
@@ -285,13 +304,13 @@ function readField(reader: ByteReader, spec: FieldSpec): Field | undefined {
 	}
 
 	if (prefix === 0x00) {
-		return spec.allowsNull ? { body: "", form: "null" } : undefined;
+		return spec.allowsNull ? { body: "", form: "null", hex: reader.hexSince(from) } : undefined;
 	}
 
 	if (prefix === 0x01 && spec.explicitLength !== undefined) {
 		const body = reader.hex(spec.explicitLength);
 
-		return body === undefined ? undefined : { body, form: "explicit" };
+		return body === undefined ? undefined : { body, form: "explicit", hex: reader.hexSince(from) };
 	}
 
 	if (!spec.commitments.includes(prefix)) {
@@ -300,7 +319,7 @@ function readField(reader: ByteReader, spec: FieldSpec): Field | undefined {
 
 	const body = reader.hex(32);
 
-	return body === undefined ? undefined : { body, form: "commitment" };
+	return body === undefined ? undefined : { body, form: "commitment", hex: reader.hexSince(from) };
 }
 
 function readCount(reader: ByteReader): number | undefined {

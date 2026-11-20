@@ -533,6 +533,22 @@ describe("mixed-input PSET signing", () => {
 		expect(result.inputs[2]!.explicitPrevout).toEqual({ asset: asset.toString(), value: 10_000n });
 	});
 
+	test("hydrates wallet coins when no output needs blinding", async () => {
+		const original = fixture(10_000n, undefined, false, true);
+		holdFixtureInputs(original);
+		const result = PsetMaps.parse((await sign(original)).pset);
+
+		expect(result.inputs[2]!.explicitPrevout).toEqual({ asset: asset.toString(), value: 10_000n });
+	});
+
+	test("replaces a dapp-supplied witness UTXO when no output needs blinding", async () => {
+		const original = fixture(10_000n, lwk.TxOut.fromExplicit(script, asset, 12_000n), false);
+		holdFixtureInputs(original);
+		const result = PsetMaps.parse((await sign(original)).pset);
+
+		expect(result.inputs[2]!.explicitPrevout).toEqual({ asset: asset.toString(), value: 10_000n });
+	});
+
 	test("blinds explicit foreign inputs and preserves global metadata", async () => {
 		const original = fixture();
 		const originalBytes = Buffer.from(original.toString(), "base64");
