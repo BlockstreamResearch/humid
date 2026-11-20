@@ -2,6 +2,7 @@ import type {
 	PortfolioData,
 	PortfolioSnapshot,
 } from "@/core/accounts/application/accounts-rpc/model/types";
+import { logger } from "@/core/logger";
 
 import type { PortfolioSnapshotStore } from "./portfolioSnapshotStore";
 
@@ -80,7 +81,7 @@ export function createPortfolioSyncEngine(
 			Date.now() - entry.lastAttemptAt <
 				(entry.error === null ? MIN_SYNC_INTERVAL_MS : RETRY_AFTER_FAILURE_MS)
 		) {
-			console.warn("[liquid-sync] engine skip: throttled", {
+			logger.debug("[liquid-sync] engine skip: throttled", {
 				agoMs: Date.now() - entry.lastAttemptAt,
 				key: target.key,
 			});
@@ -91,7 +92,7 @@ export function createPortfolioSyncEngine(
 		entry.inFlight = true;
 		const startedAt = Date.now();
 
-		console.warn("[liquid-sync] engine sync start", {
+		logger.debug("[liquid-sync] engine sync start", {
 			forced: options?.force === true,
 			key: target.key,
 		});
@@ -104,14 +105,14 @@ export function createPortfolioSyncEngine(
 
 				void store?.save(target.key, { data: entry.data, syncedAt: entry.syncedAt });
 
-				console.warn("[liquid-sync] engine sync ok", {
+				logger.debug("[liquid-sync] engine sync ok", {
 					key: target.key,
 					ms: Date.now() - startedAt,
 				});
 			} catch (cause) {
 				entry.error = cause instanceof Error ? cause.message : String(cause);
 
-				console.error("[liquid-sync] engine sync failed", {
+				logger.warn("[liquid-sync] engine sync failed", {
 					error: entry.error,
 					key: target.key,
 					ms: Date.now() - startedAt,

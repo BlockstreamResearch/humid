@@ -1,3 +1,4 @@
+import { logger } from "@/core/logger";
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
@@ -25,7 +26,7 @@ export async function scanAccount(account: LiquidWalletAccount): Promise<void> {
 
 		await sentTransactions.applyTo(account);
 	} catch (error) {
-		console.error("[liquid] Failed to sync the Liquid account", error);
+		logger.error("[liquid] Failed to sync the Liquid account", error);
 
 		throw new WalletRpcResourceUnavailableError(
 			"Could not sync the Liquid wallet through the configured LWK blockchain backend.",

@@ -1,3 +1,5 @@
+import { logger } from "@/core/logger";
+
 import type {
 	LiquidActivityEntry,
 	LiquidAssetBalance,
@@ -58,11 +60,10 @@ export function createWorkerScanClient(): SyncWorkerClient {
 	});
 
 	worker.addEventListener("error", (event) => {
-		console.error(
-			"[liquid-sync] sync worker crashed",
-			event.message,
-			`${event.filename}:${event.lineno}`,
-		);
+		logger.error("[liquid-sync] sync worker crashed", event.error, {
+			at: `${event.filename}:${event.lineno}`,
+			message: event.message,
+		});
 
 		const error = new Error(event.message || "Sync worker crashed.");
 

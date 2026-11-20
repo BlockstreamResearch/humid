@@ -1,5 +1,7 @@
 import browser from "webextension-polyfill";
 
+import { logger } from "@/core/logger";
+
 export type PendingTransfer = {
 	amountSats: string;
 	createdAt: number;
@@ -51,7 +53,9 @@ export function createSessionPendingTransfersStore(): PendingTransfersStore {
 		try {
 			if (entries.length === 0) await session.remove(storageKey);
 			else await session.set({ [storageKey]: entries });
-		} catch {}
+		} catch (error) {
+			logger.warn("Could not store pending transfers", { error, storageKey });
+		}
 	};
 
 	return {

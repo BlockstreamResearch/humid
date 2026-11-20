@@ -1,3 +1,5 @@
+import { logger } from "@/core/logger";
+
 import type { LwkNetwork } from "../createLwkNetwork";
 import type { LwkWasmModule } from "../loadLwkWasm";
 
@@ -52,7 +54,7 @@ export async function resolveIssuedAssetMetadata(
 
 		registry.free();
 	} catch (error) {
-		console.warn("[liquid-sync] asset registry lookup failed", error);
+		logger.warn("[liquid-sync] asset registry lookup failed", { error });
 	}
 
 	return resolved;

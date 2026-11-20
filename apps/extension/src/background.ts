@@ -25,6 +25,7 @@ import {
 	emitWalletEvent,
 	initWalletEventBroadcaster,
 } from "@/core/extension-background/wallet-events";
+import { logger } from "@/core/logger";
 import { walletVaultBackground } from "@/core/secure-vault/application/wallet-vault/background";
 import { touchVaultActivity } from "@/core/secure-vault/background";
 import * as walletConnect from "@/core/walletconnect/background";
@@ -163,7 +164,7 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
 
 		await refreshInBackground();
 	} catch (error) {
-		console.error("[liquid-sync] background refresh failed", error);
+		logger.error("[liquid-sync] background refresh failed", error);
 	}
 });
 

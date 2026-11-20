@@ -1,3 +1,5 @@
+import { logger } from "@/core/logger";
+
 import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
 import type { LwkNetwork } from "./createLwkNetwork";
 import type { LwkWasmModule } from "./loadLwkWasm";
@@ -25,7 +27,7 @@ export function createLwkBlockchainClient(
 	const utxoOnly = backend.utxoOnly === true;
 	const concurrency = backend.concurrency ?? DEFAULT_ESPLORA_CONCURRENCY;
 
-	console.warn("[liquid-sync] esplora backend", {
+	logger.debug("[liquid-sync] esplora backend", {
 		chainId: chain.id,
 		concurrency,
 		headers: (backend.headers ?? []).length,

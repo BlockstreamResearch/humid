@@ -1,5 +1,6 @@
 import type { Pset, Wollet } from "lwk_wasm";
 
+import { logger } from "@/core/logger";
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
@@ -200,7 +201,7 @@ export async function signPset(
 			throw error;
 		}
 
-		console.error("[liquid] signPset failed", error);
+		logger.error("[liquid] signPset failed", error);
 
 		const failure = new WalletRpcResourceUnavailableError(
 			params.broadcast

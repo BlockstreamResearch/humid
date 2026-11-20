@@ -2,6 +2,7 @@ import type { PegasusRPCMessage } from "@webext-pegasus/rpc";
 import browser from "webextension-polyfill";
 
 import type { TransactionReceiptData } from "@/common/Confirmation/TransactionReceipt";
+import { logger } from "@/core/logger";
 import { defaultZoom } from "@/helpers/surface";
 
 export type ConfirmationRequest = {
@@ -118,7 +119,7 @@ export function initNotificationManagement(onUnexpectedClose?: () => void): void
 		notificationWindowId = undefined;
 
 		if (!isClosingNotificationByUserAction) {
-			console.warn("Notification closed unexpectedly. Clean up pending operations.");
+			logger.warn("Notification closed unexpectedly. Clean up pending operations.");
 			onUnexpectedClose?.();
 		}
 

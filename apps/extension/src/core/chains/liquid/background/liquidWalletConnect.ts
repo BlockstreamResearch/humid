@@ -1,6 +1,7 @@
 import type { AccountModelState } from "@/core/accounts/application/account-registry/model/account-model";
 import type { DappSessionsHandlersDependencies } from "@/core/extension-background/dapp-authorization";
 import type { CreateInternalRpcHandlersInput } from "@/core/extension-background/internal-rpc";
+import { logger } from "@/core/logger";
 import * as walletConnect from "@/core/walletconnect/background";
 import type { WalletConnectSessionSummary } from "@/core/walletconnect/types";
 
@@ -78,8 +79,9 @@ export function createLiquidWalletConnect(
 				if (authorized.length === 1) {
 					topicsToDisconnect.push(session.topic);
 				} else {
-					console.warn(
-						`[walletconnect] session ${session.topic} authorizes multiple accounts; left intact after account removal (no per-account WalletConnect pruning yet)`,
+					logger.warn(
+						"[walletconnect] a session authorizing several accounts stays after one is removed",
+						{ topic: session.topic },
 					);
 				}
 			}
@@ -87,7 +89,7 @@ export function createLiquidWalletConnect(
 			await Promise.all(
 				topicsToDisconnect.map((topic) =>
 					disconnectWalletConnect(topic).catch((error) =>
-						console.warn(`[walletconnect] failed to disconnect session ${topic}`, error),
+						logger.warn("[walletconnect] could not disconnect a session", { error, topic }),
 					),
 				),
 			);

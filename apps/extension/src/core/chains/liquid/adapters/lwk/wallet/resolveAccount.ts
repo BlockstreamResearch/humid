@@ -1,3 +1,4 @@
+import { logger } from "@/core/logger";
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
@@ -81,7 +82,7 @@ export async function createLwkLiquidAccount(
 			rawPolicyAssetId,
 		};
 	} catch (error) {
-		console.error("[liquid] Failed to derive the Liquid account", error);
+		logger.error("[liquid] Failed to derive the Liquid account", error);
 
 		const cause = error instanceof Error ? error.message : String(error);
 

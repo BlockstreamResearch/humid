@@ -2,6 +2,7 @@ import { ClipboardPasteIcon, EraserIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useState } from "react";
 
+import { logger } from "@/core/logger";
 import { UiButton } from "@/ui/UiButton/base";
 
 import { useAuthCreateContext } from "../../../index";
@@ -29,7 +30,7 @@ export function ImportSeedTab({ onComplete }: { onComplete: (mnemonic: string) =
 			return;
 		}
 
-		if (result.error) console.warn("Clipboard read failed:", result.error);
+		if (result.error) logger.warn("Clipboard read failed", { error: result.error });
 		setPasteHint(
 			"Couldn't read the clipboard. Paste into the first box instead, or type the words.",
 		);

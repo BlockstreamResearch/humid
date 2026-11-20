@@ -1,3 +1,4 @@
+import { logger } from "@/core/logger";
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
@@ -136,7 +137,7 @@ export class SentTransactions {
 		try {
 			await this.#recordLabel(txid, note);
 		} catch (error) {
-			console.warn("[liquid] Could not record which dapp made a transaction", error);
+			logger.warn("[liquid] Could not record which dapp made a transaction", { error });
 		}
 	}
 

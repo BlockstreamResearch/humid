@@ -1,3 +1,5 @@
+import { logger } from "@/core/logger";
+
 import type {
 	LiquidActivityPage,
 	LiquidAssetBalance,
@@ -41,11 +43,11 @@ export async function scanFresh(input: LiquidScanInput): Promise<Uint8Array | nu
 	const wollet = new lwk.Wollet(network, new lwk.WolletDescriptor(input.descriptor));
 	const client = createLwkBlockchainClient(lwk, input.chain, network);
 
-	console.warn("[liquid-sync] scan (fresh) fullScan…", { chainId: input.chain.id, id: input.id });
+	logger.debug("[liquid-sync] scan (fresh) fullScan…", { chainId: input.chain.id, id: input.id });
 	const scanStartedAt = Date.now();
 	const update = await client.fullScan(wollet);
 
-	console.warn("[liquid-sync] scan (fresh) done", {
+	logger.debug("[liquid-sync] scan (fresh) done", {
 		hasUpdate: Boolean(update),
 		id: input.id,
 		ms: Date.now() - scanStartedAt,
@@ -67,7 +69,7 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 
 	let wollet = wolletCache.get(cacheKey);
 
-	console.warn("[liquid-sync] scanAndRead start", {
+	logger.debug("[liquid-sync] scanAndRead start", {
 		cachedWollet: Boolean(wollet),
 		chainId: input.chain.id,
 		id: input.id,
@@ -80,11 +82,11 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 
 	const client = createLwkBlockchainClient(lwk, input.chain, network);
 
-	console.warn("[liquid-sync] fullScan…", { id: input.id });
+	logger.debug("[liquid-sync] fullScan…", { id: input.id });
 	const scanStartedAt = Date.now();
 	const update = await client.fullScan(wollet);
 
-	console.warn("[liquid-sync] fullScan done", {
+	logger.debug("[liquid-sync] fullScan done", {
 		hasUpdate: Boolean(update),
 		id: input.id,
 		ms: Date.now() - scanStartedAt,
@@ -105,7 +107,7 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 		rawPolicyAssetId,
 	);
 
-	console.warn("[liquid-sync] scanAndRead done", {
+	logger.debug("[liquid-sync] scanAndRead done", {
 		assetCount: assets.length,
 		id: input.id,
 		ms: Date.now() - scanStartedAt,

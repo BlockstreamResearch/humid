@@ -1,4 +1,5 @@
 import type { PortfolioData } from "@/core/accounts/application/accounts-rpc/model/types";
+import { logger } from "@/core/logger";
 
 import { getSessionStorage } from "./sessionStorageArea";
 
@@ -42,12 +43,19 @@ export function createSessionPortfolioSnapshotStore(): PortfolioSnapshotStore {
 				const staleKeys = (await session.keys()).filter((key) => key.startsWith(prefix));
 
 				if (staleKeys.length > 0) await session.remove(staleKeys);
-			} catch {}
+			} catch (error) {
+				logger.warn("[liquid-sync] could not purge a removed account's portfolio", {
+					accountGroupId,
+					error,
+				});
+			}
 		},
 		async save(key, snapshot) {
 			try {
 				await session.set({ [STORAGE_PREFIX + key]: snapshot });
-			} catch {}
+			} catch (error) {
+				logger.warn("[liquid-sync] could not store the portfolio snapshot", { error, key });
+			}
 		},
 	};
 }
