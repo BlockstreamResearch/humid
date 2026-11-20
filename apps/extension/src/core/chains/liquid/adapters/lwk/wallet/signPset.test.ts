@@ -28,10 +28,8 @@ function signatureCounts(pset: string) {
 
 async function exerciseSigning() {
 	mock.module("../loadLwkWasm", () => ({ loadLwkWasm: async () => lwk }));
-	mock.module("../sync-worker/createSyncWorkerClient", () => ({
-		getSyncWorkerClient: () => {
-			throw new Error("Unexpected broadcast");
-		},
+	mock.module("../../../application/transactionLabels", () => ({
+		transactionLabels: { record: async () => {} },
 	}));
 	// Module-loading boundary: install the isolated WASM loader before importing consumers.
 	const { blindAndInspectPset, signPset } = await import("./signPset");
@@ -279,8 +277,8 @@ test("coin-control review discloses effective sighash and signing preserves the 
 }, 30_000);
 
 mock.module("../loadLwkWasm", () => ({ loadLwkWasm: async () => lwk }));
-mock.module("../sync-worker/createSyncWorkerClient", () => ({
-	getSyncWorkerClient: () => ({}),
+mock.module("../../../application/transactionLabels", () => ({
+	transactionLabels: { record: async () => {} },
 }));
 const { signPset } = await import("./signPset");
 
