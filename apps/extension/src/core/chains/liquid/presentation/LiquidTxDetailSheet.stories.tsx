@@ -2,28 +2,31 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
 import type { ChainRecord } from "@/core/chains/application/ChainRecord";
-import type { PortfolioViewActivity } from "@/core/chains/application/PortfolioView";
+import type {
+	PortfolioViewActivity,
+	PortfolioViewAsset,
+} from "@/core/chains/application/PortfolioView";
 import { UiButton } from "@/ui/UiButton/base";
 
 import {
 	confirmedReceived,
 	confirmedSent,
+	issuedUnverifiedToken,
 	mockLiquidChain,
 	mockLiquidChainNoExplorer,
+	nativeToken,
 	pendingSent,
 } from "./liquidStoryFixtures";
 import { LiquidTxDetailSheet } from "./LiquidTxDetailSheet";
 
 function DetailSheetHarness({
 	chain,
-	decimals,
 	item,
-	symbol,
+	token,
 }: {
 	chain: ChainRecord;
-	decimals: number;
 	item: PortfolioViewActivity;
-	symbol: string;
+	token: PortfolioViewAsset;
 }) {
 	const [open, setOpen] = useState(true);
 
@@ -35,10 +38,9 @@ function DetailSheetHarness({
 			</UiButton>
 			<LiquidTxDetailSheet
 				chain={chain}
-				decimals={decimals}
 				item={open ? item : null}
 				onClose={() => setOpen(false)}
-				symbol={symbol}
+				token={token}
 			/>
 		</div>
 	);
@@ -47,20 +49,14 @@ function DetailSheetHarness({
 const meta = {
 	title: "Chains/Liquid/LiquidTxDetailSheet",
 	component: LiquidTxDetailSheet,
-	render: ({ chain, decimals, item, symbol }) => (
-		<DetailSheetHarness
-			chain={chain}
-			decimals={decimals}
-			item={item ?? confirmedSent}
-			symbol={symbol}
-		/>
+	render: ({ chain, item, token }) => (
+		<DetailSheetHarness chain={chain} item={item ?? confirmedSent} token={token} />
 	),
 	args: {
 		chain: mockLiquidChain,
-		decimals: 8,
 		item: confirmedSent,
 		onClose: () => {},
-		symbol: "L-BTC",
+		token: nativeToken,
 	},
 } satisfies Meta<typeof LiquidTxDetailSheet>;
 
@@ -82,4 +78,8 @@ export const PendingSent: Story = {
 
 export const NoExplorer: Story = {
 	args: { chain: mockLiquidChainNoExplorer, item: confirmedSent },
+};
+
+export const UnknownAsset: Story = {
+	args: { item: confirmedReceived, token: issuedUnverifiedToken },
 };

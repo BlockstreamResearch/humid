@@ -43,6 +43,15 @@ const activity: AccountActivity = {
 			txid: "c1".repeat(32),
 		},
 		{
+			changes: [
+				{ amountSats: "-10", rawAssetId: nativeToken.id },
+				{ amountSats: "-5", rawAssetId: "96".repeat(32) },
+			],
+			feeSats: "10",
+			timestamp: (NOW - 3 * 3600 * SECOND) / SECOND,
+			txid: "c4".repeat(32),
+		},
+		{
 			changes: [{ amountSats: "-100500", rawAssetId: nativeToken.id }],
 			feeSats: "500",
 			timestamp: (NOW - 26 * 3600 * SECOND) / SECOND,
@@ -97,11 +106,14 @@ export const Default: Story = {
 
 export const ReleasingHeldCoins: Story = {
 	play: async ({ args, canvasElement }) => {
-		const canvas = within(canvasElement);
+		await userEvent.click(within(canvasElement).getByText("Pay · dapp.example.org"));
 
-		await userEvent.click(canvas.getByText("Pay · dapp.example.org"));
-		await expect(canvas.getByText(/21 of unknown asset/)).toBeVisible();
-		await userEvent.click(canvas.getByRole("button", { name: "Release" }));
+		const sheet = within(canvasElement.ownerDocument.body);
+
+		await expect(await sheet.findByText("Signed, not sent")).toBeVisible();
+		await expect(sheet.getByText("cd".repeat(32))).toBeVisible();
+		await expect(sheet.getByText(/^Not in the asset registry/)).toBeVisible();
+		await userEvent.click(sheet.getByRole("button", { name: "Release" }));
 		await expect(args.activity.onRelease).toHaveBeenCalledWith(HELD);
 	},
 };

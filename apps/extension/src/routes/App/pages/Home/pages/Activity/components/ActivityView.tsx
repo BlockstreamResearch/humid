@@ -1,16 +1,13 @@
 import {
 	ArrowDataTransferHorizontalIcon,
-	ArrowDown01Icon,
 	ArrowDownLeft01Icon,
+	ArrowRight01Icon,
 	ArrowUpRight01Icon,
-	CheckmarkCircle02Icon,
-	Copy01Icon,
-	LinkSquare02Icon,
 	SquareLock02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import dayjs from "dayjs";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Page } from "@/common/Page";
 import type {
@@ -20,16 +17,23 @@ import type {
 import type { ChainRecord } from "@/core/chains/application/ChainRecord";
 import type { PortfolioViewAsset } from "@/core/chains/application/PortfolioView";
 import { liquidExplorerTxUrl } from "@/core/chains/liquid/presentation/liquidExplorerTxUrl";
+import { UNLISTED_ASSET_NOTE } from "@/core/chains/liquid/presentation/LiquidTxDetailSheet";
+import { LiquidTxStatusBadge } from "@/core/chains/liquid/presentation/LiquidTxStatus";
+import {
+	TransactionSheet,
+	type TransactionSheetContent,
+} from "@/core/chains/liquid/presentation/TransactionSheet";
 import { formatTimeAgo, formatUnits, handleTimestamp, truncateMiddle } from "@/helpers/formatters";
 import { cn } from "@/theme/utils";
+import { UiBadge } from "@/ui/UiBadge";
 import { UiButton } from "@/ui/UiButton/base";
-import { UiCollapsible, UiCollapsibleContent, UiCollapsibleTrigger } from "@/ui/UiCollapsible";
-import { UiCopyButton } from "@/ui/UiCopyButton";
 import { UiSpinner } from "@/ui/UiSpinner";
 
 import type { AccountActivity } from "../useAccountActivity";
 
 type Change = ActivityEntry["changes"][number];
+
+type Selected = { held: HeldTransaction } | { entry: ActivityEntry };
 
 export function ActivityView({
 	activity,
@@ -42,8 +46,17 @@ export function ActivityView({
 	now?: number;
 	tokens: PortfolioViewAsset[];
 }) {
+	const [selected, setSelected] = useState<Selected | null>(null);
 	const assets = new AssetNames(tokens);
 	const waiting = activity.held.length + activity.pending.length;
+	const entryRow = (entry: ActivityEntry) => (
+		<TransactionRow
+			assets={assets}
+			entry={entry}
+			key={entry.txid}
+			onOpen={() => setSelected({ entry })}
+		/>
+	);
 
 	return (
 		<Page back={{ label: "Back", to: "/app" }} title="Activity">
@@ -55,22 +68,17 @@ export function ActivityView({
 								assets={assets}
 								key={transaction.txid}
 								now={now}
-								onRelease={activity.onRelease}
-								releasing={activity.releasing === transaction.txid}
+								onOpen={() => setSelected({ held: transaction })}
 								transaction={transaction}
 							/>
 						))}
-						{activity.pending.map((entry) => (
-							<TransactionRow assets={assets} chain={chain} entry={entry} key={entry.txid} />
-						))}
+						{activity.pending.map(entryRow)}
 					</Section>
 				) : null}
 
 				{byDay(activity.items, now).map(([day, entries]) => (
 					<Section key={day} label={day}>
-						{entries.map((entry) => (
-							<TransactionRow assets={assets} chain={chain} entry={entry} key={entry.txid} />
-						))}
+						{entries.map(entryRow)}
 					</Section>
 				))}
 
@@ -89,6 +97,23 @@ export function ActivityView({
 					</UiButton>
 				) : null}
 			</div>
+
+			<TransactionSheet
+				content={
+					selected === null
+						? null
+						: "held" in selected
+							? heldSheet(selected.held, assets, now, {
+									onRelease: (txid) => {
+										activity.onRelease(txid);
+										setSelected(null);
+									},
+									releasing: activity.releasing === selected.held.txid,
+								})
+							: entrySheet(selected.entry, assets, chain)
+				}
+				onClose={() => setSelected(null)}
+			/>
 		</Page>
 	);
 }
@@ -123,14 +148,12 @@ function Section({ children, label }: { children: ReactNode; label: string }) {
 function HeldRow({
 	assets,
 	now,
-	onRelease,
-	releasing,
+	onOpen,
 	transaction,
 }: {
 	assets: AssetNames;
 	now: number;
-	onRelease: (txid: string) => void;
-	releasing: boolean;
+	onOpen: () => void;
 	transaction: HeldTransaction;
 }) {
 	return (
@@ -138,190 +161,198 @@ function HeldRow({
 			amount={transaction.holding[0] && assets.amount(transaction.holding[0], false)}
 			held
 			icon={SquareLock02Icon}
+			onOpen={onOpen}
 			subtitle={`Signed ${formatTimeAgo(transaction.at, now)}, not sent`}
 			title={titleOf(transaction)}
+		/>
+	);
+}
+
+function TransactionRow({
+	assets,
+	entry,
+	onOpen,
+}: {
+	assets: AssetNames;
+	entry: ActivityEntry;
+	onOpen: () => void;
+}) {
+	const primary = assets.primary(entry.changes);
+
+	return (
+		<Row
+			amount={primary && assets.amount(primary, true)}
+			icon={iconOf(entry)}
+			onOpen={onOpen}
+			subtitle={
+				entry.timestamp === null
+					? "Waiting for the confirmation"
+					: handleTimestamp(entry.timestamp).format("HH:mm")
+			}
+			title={entry.label ? titleOf(entry.label) : spends(entry) ? "Sent" : "Received"}
+		/>
+	);
+}
+
+function Row({
+	amount,
+	held = false,
+	icon,
+	onOpen,
+	subtitle,
+	title,
+}: {
+	amount: string | undefined;
+	held?: boolean;
+	icon: IconSvgElement;
+	onOpen: () => void;
+	subtitle: string;
+	title: string;
+}) {
+	return (
+		<button
+			className={cn(
+				"flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left transition-colors",
+				held
+					? "bg-info text-info-foreground ring-info-accent/40 my-1 px-2 ring-1 hover:brightness-95"
+					: "hover:bg-accent",
+			)}
+			onClick={onOpen}
+			type="button"
 		>
-			<Detail label="Locked until it reaches the chain">
-				{transaction.holding.map((coins) => (
-					<p className="font-mono" key={coins.rawAssetId}>
-						{assets.amount(coins, false)}
-					</p>
-				))}
-			</Detail>
-			<TransactionId txid={transaction.txid} />
-			<div className="flex items-center justify-between gap-3">
+			<span
+				className={cn(
+					"flex size-8 shrink-0 items-center justify-center rounded-full",
+					held ? "bg-background text-info-accent" : "bg-muted text-muted-foreground",
+				)}
+			>
+				<HugeiconsIcon icon={icon} size={15} />
+			</span>
+			<span className="min-w-0 flex-1">
+				<span className="block truncate text-sm font-medium">{title}</span>
+				<span
+					className={cn(
+						"block truncate text-xs",
+						held ? "text-info-accent" : "text-muted-foreground",
+					)}
+				>
+					{subtitle}
+				</span>
+			</span>
+			{amount ? <span className="font-mono text-sm">{amount}</span> : null}
+			<HugeiconsIcon
+				aria-hidden
+				className={cn("shrink-0", held ? "text-info-accent" : "text-muted-foreground/50")}
+				icon={ArrowRight01Icon}
+				size={16}
+			/>
+		</button>
+	);
+}
+
+function entrySheet(
+	entry: ActivityEntry,
+	assets: AssetNames,
+	chain: ChainRecord,
+): TransactionSheetContent {
+	const primary = assets.primary(entry.changes);
+
+	return {
+		copies: [
+			...assets.unlistedCopies(entry.changes),
+			{ label: "Transaction ID", value: entry.txid },
+		],
+		explorerUrl: liquidExplorerTxUrl(chain, entry.txid),
+		headline: primary ? assets.amount(primary, true) : "",
+		icon: iconOf(entry),
+		rows: [
+			...(entry.label ? dappRows(entry.label) : []),
+			{
+				label: "Date",
+				value:
+					entry.timestamp === null
+						? "Waiting for the confirmation"
+						: handleTimestamp(entry.timestamp).format("MMM D, YYYY HH:mm"),
+			},
+			...(entry.changes.length > 1
+				? entry.changes.map((change) => ({
+						label: change.amountSats.startsWith("-") ? "Sent" : "Received",
+						value: assets.amount(change, false),
+					}))
+				: []),
+			...(spends(entry) && entry.feeSats !== "0"
+				? [{ label: "Network fee", value: assets.amount(assets.fee(entry.feeSats), false) }]
+				: []),
+		],
+		status: <LiquidTxStatusBadge status={entry.timestamp === null ? "pending" : "confirmed"} />,
+	};
+}
+
+function heldSheet(
+	transaction: HeldTransaction,
+	assets: AssetNames,
+	now: number,
+	{ onRelease, releasing }: { onRelease: (txid: string) => void; releasing: boolean },
+): TransactionSheetContent {
+	const [first] = transaction.holding;
+
+	return {
+		actions: (
+			<div className="flex flex-col gap-2">
 				<p className="text-muted-foreground text-xs">
-					Release coins only when the dapp will not send the transaction.
+					Until the transaction reaches the chain, these coins stay locked. Release them only when
+					the dapp will not send the transaction.
 				</p>
 				<UiButton
 					disabled={releasing}
 					onClick={() => onRelease(transaction.txid)}
-					size="xs"
+					size="lg"
 					type="button"
 					variant="outline"
 				>
 					Release
 				</UiButton>
 			</div>
-		</Row>
-	);
+		),
+		copies: [
+			...assets.unlistedCopies(transaction.holding),
+			{ label: "Transaction ID", value: transaction.txid },
+		],
+		explorerUrl: null,
+		headline: first ? assets.amount(first, false) : "",
+		icon: SquareLock02Icon,
+		rows: [
+			...dappRows(transaction),
+			{ label: "Signed", value: formatTimeAgo(transaction.at, now) },
+			...transaction.holding.map((coins) => ({
+				label: "Locked",
+				value: assets.amount(coins, false),
+			})),
+		],
+		status: (
+			<UiBadge className="bg-info text-info-accent">
+				<HugeiconsIcon icon={SquareLock02Icon} size={12} />
+				Signed, not sent
+			</UiBadge>
+		),
+	};
 }
 
-function TransactionRow({
-	assets,
-	chain,
-	entry,
-}: {
-	assets: AssetNames;
-	chain: ChainRecord;
-	entry: ActivityEntry;
-}) {
-	const spends = entry.changes.some(({ amountSats }) => amountSats.startsWith("-"));
-	const primary = assets.primary(entry.changes);
-	const explorer = liquidExplorerTxUrl(chain, entry.txid);
-
-	return (
-		<Row
-			amount={primary && assets.amount(primary, true)}
-			icon={
-				entry.label
-					? ArrowDataTransferHorizontalIcon
-					: spends
-						? ArrowUpRight01Icon
-						: ArrowDownLeft01Icon
-			}
-			subtitle={
-				entry.timestamp === null
-					? "Waiting for the confirmation"
-					: handleTimestamp(entry.timestamp).format("HH:mm")
-			}
-			title={entry.label ? titleOf(entry.label) : spends ? "Sent" : "Received"}
-		>
-			<Detail label="Changes">
-				{entry.changes.map((change) => (
-					<p className="font-mono" key={change.rawAssetId}>
-						{assets.amount(change, true)}
-					</p>
-				))}
-			</Detail>
-			{spends && entry.feeSats !== "0" ? (
-				<Detail label="Network fee">
-					<p className="font-mono">{assets.amount(assets.fee(entry.feeSats), false)}</p>
-				</Detail>
-			) : null}
-			<TransactionId txid={entry.txid} />
-			{explorer ? (
-				<a
-					className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
-					href={explorer}
-					rel="noreferrer"
-					target="_blank"
-				>
-					<HugeiconsIcon icon={LinkSquare02Icon} size={14} /> View in explorer
-				</a>
-			) : null}
-		</Row>
-	);
+function dappRows({ action, origin }: { action: string; origin: string }) {
+	return [
+		{ label: "Dapp", value: hostOf(origin) },
+		{ label: "Action", value: action },
+	];
 }
 
-function Row({
-	amount,
-	children,
-	held = false,
-	icon,
-	subtitle,
-	title,
-}: {
-	amount: string | undefined;
-	children: ReactNode;
-	held?: boolean;
-	icon: IconSvgElement;
-	subtitle: string;
-	title: string;
-}) {
-	return (
-		<UiCollapsible
-			className={cn(
-				held && "bg-info text-info-foreground ring-info-accent/40 my-1 rounded-lg ring-1",
-			)}
-		>
-			<UiCollapsibleTrigger
-				className={cn(
-					"group flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left transition-colors",
-					held ? "px-2 hover:brightness-95" : "hover:bg-accent",
-				)}
-			>
-				<span
-					className={cn(
-						"flex size-8 shrink-0 items-center justify-center rounded-full",
-						held ? "bg-background text-info-accent" : "bg-muted text-muted-foreground",
-					)}
-				>
-					<HugeiconsIcon icon={icon} size={15} />
-				</span>
-				<span className="min-w-0 flex-1">
-					<span className="block truncate text-sm font-medium">{title}</span>
-					<span
-						className={cn(
-							"block truncate text-xs",
-							held ? "text-info-accent" : "text-muted-foreground",
-						)}
-					>
-						{subtitle}
-					</span>
-				</span>
-				{amount ? <span className="font-mono text-sm">{amount}</span> : null}
-				<HugeiconsIcon
-					aria-hidden
-					className={cn(
-						"shrink-0 transition-transform group-data-[panel-open]:rotate-180",
-						held ? "text-info-accent" : "text-muted-foreground/50",
-					)}
-					icon={ArrowDown01Icon}
-					size={16}
-				/>
-			</UiCollapsibleTrigger>
-			<UiCollapsibleContent
-				className={cn(
-					"flex flex-col gap-2 text-xs",
-					held ? "px-3 pt-1 pb-3 pl-13" : "mb-2 ml-12 rounded-lg border px-3 py-2",
-				)}
-			>
-				{children}
-			</UiCollapsibleContent>
-		</UiCollapsible>
-	);
+function spends(entry: ActivityEntry): boolean {
+	return entry.changes.some(({ amountSats }) => amountSats.startsWith("-"));
 }
 
-function Detail({ children, label }: { children: ReactNode; label: string }) {
-	return (
-		<div className="flex flex-col gap-0.5">
-			<p className="text-muted-foreground">{label}</p>
-			{children}
-		</div>
-	);
-}
+function iconOf(entry: ActivityEntry): IconSvgElement {
+	if (entry.label) return ArrowDataTransferHorizontalIcon;
 
-function TransactionId({ txid }: { txid: string }) {
-	return (
-		<Detail label="Transaction">
-			<div className="flex items-center gap-1">
-				<p className="font-mono">{truncateMiddle(txid, 10, 8)}</p>
-				<UiCopyButton
-					className="text-muted-foreground hover:text-foreground rounded p-0.5"
-					value={txid}
-				>
-					{(copied) => (
-						<HugeiconsIcon
-							aria-label={copied ? "Copied" : "Copy transaction ID"}
-							icon={copied ? CheckmarkCircle02Icon : Copy01Icon}
-							size={13}
-						/>
-					)}
-				</UiCopyButton>
-			</div>
-		</Detail>
-	);
+	return spends(entry) ? ArrowUpRight01Icon : ArrowDownLeft01Icon;
 }
 
 class AssetNames {
@@ -339,15 +370,29 @@ class AssetNames {
 		return { amountSats: feeSats, rawAssetId: this.#native()?.id ?? "" };
 	}
 
-	amount({ amountSats, rawAssetId }: Change, signed: boolean): string {
-		const negative = amountSats.startsWith("-");
-		const units = negative ? amountSats.slice(1) : amountSats;
-		const sign = signed ? (negative ? "−" : "+") : "";
-		const token = this.#tokens.find(({ id }) => id === rawAssetId);
+	amount(change: Change, signed: boolean): string {
+		const token = this.#listed(change.rawAssetId);
+		const units = change.amountSats.replace(/^-/u, "");
 
 		return token
-			? `${sign}${formatUnits(units, token.decimals)} ${token.symbol}`
-			: `${sign}${units} of unknown asset ${truncateMiddle(rawAssetId, 4, 4)}, raw units`;
+			? `${signOf(change, signed)}${formatUnits(units, token.decimals)} ${token.symbol}`
+			: `${signOf(change, signed)}${units} ${truncateMiddle(change.rawAssetId, 4, 4)}`;
+	}
+
+	unlistedCopies(changes: Change[]) {
+		return changes
+			.filter(({ rawAssetId }) => this.#listed(rawAssetId) === undefined)
+			.map(({ rawAssetId }) => ({
+				label: "Asset ID",
+				note: UNLISTED_ASSET_NOTE,
+				value: rawAssetId,
+			}));
+	}
+
+	#listed(rawAssetId: string): PortfolioViewAsset | undefined {
+		return this.#tokens.find(
+			({ id, metadata }) => id === rawAssetId && (metadata as { verified?: boolean })?.verified,
+		);
 	}
 
 	#native(): PortfolioViewAsset | undefined {
@@ -357,6 +402,12 @@ class AssetNames {
 	#isNative(rawAssetId: string): boolean {
 		return this.#native()?.id === rawAssetId;
 	}
+}
+
+function signOf({ amountSats }: Change, signed: boolean): string {
+	if (!signed) return "";
+
+	return amountSats.startsWith("-") ? "−" : "+";
 }
 
 function titleOf({ action, origin }: { action: string; origin: string }): string {

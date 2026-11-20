@@ -36,7 +36,7 @@ export function AssetHeader({ chain, token }: { chain: ChainRecord; token: Portf
 						</button>
 						<UiDrawer onOpenChange={setAboutOpen} open={aboutOpen}>
 							<UiDrawerContent className="max-h-[85vh]">
-								<UiDrawerHeader className="pb-1 text-left">
+								<UiDrawerHeader className="pt-3 pb-2 text-left">
 									<UiDrawerTitle>{token.name}</UiDrawerTitle>
 								</UiDrawerHeader>
 								<div className="overflow-y-auto px-4 pb-6">

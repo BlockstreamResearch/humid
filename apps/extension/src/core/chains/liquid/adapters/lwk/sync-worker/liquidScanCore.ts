@@ -26,7 +26,8 @@ export type LiquidReadActivityInput = LiquidScanInput & {
 	rawAssetId: string | null;
 };
 
-const DEFAULT_ISSUED_ASSET_DECIMALS = 8;
+// Without registry metadata the decimals are unknown, so amounts stay in raw units.
+const UNKNOWN_ASSET_DECIMALS = 0;
 
 const wolletCache = new Map<string, LwkWollet>();
 
@@ -187,14 +188,14 @@ function toAssetBalance(
 
 	return {
 		amountSats: sats.toString(),
-		decimals: metadata?.decimals ?? DEFAULT_ISSUED_ASSET_DECIMALS,
+		decimals: metadata?.decimals ?? UNKNOWN_ASSET_DECIMALS,
 		isNative,
 		metadata: {
 			isNative,
 			issuerDomain: metadata?.issuerDomain ?? null,
 			verified: metadata !== undefined,
 		},
-		name: metadata?.name ?? label,
+		name: metadata?.name ?? "Unknown asset",
 		rawAssetId,
 		symbol: metadata?.symbol ?? label,
 	};

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, within } from "storybook/test";
 
 import { LiquidAssetAbout } from "./LiquidAssetAbout";
 import {
@@ -36,6 +37,12 @@ export const IssuedVerified: Story = {
 
 export const IssuedUnverified: Story = {
 	args: { token: issuedUnverifiedToken },
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+
+		await expect(canvas.getByText(issuedUnverifiedToken.id)).toBeVisible();
+		await expect(canvas.getByText("Unknown, amounts in raw units")).toBeVisible();
+	},
 };
 
 export const NoExplorer: Story = {

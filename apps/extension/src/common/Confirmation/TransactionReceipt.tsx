@@ -58,19 +58,22 @@ export function TransactionReceipt({
 
 	return (
 		<div className="bg-background text-foreground flex size-full flex-col">
-			<main className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pt-10 pb-4">
+			<main className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pt-6 pb-4">
 				<div className="flex flex-col items-center gap-3 text-center">
-					<span
-						aria-hidden="true"
-						className={cn(
-							"flex size-14 items-center justify-center rounded-full",
-							sent ? "bg-info text-info-accent" : "bg-muted text-foreground",
-						)}
-					>
-						<HugeiconsIcon icon={sent ? Tick02Icon : SquareArrowUpRightIcon} className="size-7" />
-					</span>
 					<div className="flex flex-col gap-1">
-						<h1 className="text-xl leading-7 font-bold">
+						<h1 className="flex items-center justify-center gap-2 text-xl leading-7 font-bold">
+							<span
+								aria-hidden="true"
+								className={cn(
+									"flex size-8 items-center justify-center rounded-full",
+									sent ? "bg-info text-info-accent" : "bg-muted text-foreground",
+								)}
+							>
+								<HugeiconsIcon
+									icon={sent ? Tick02Icon : SquareArrowUpRightIcon}
+									className="size-4"
+								/>
+							</span>
 							{sent ? "Transaction sent" : "Signed and returned"}
 						</h1>
 						<p className="text-foreground/80 text-sm leading-5">

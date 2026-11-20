@@ -9,7 +9,6 @@ import type { ReactNode } from "react";
 
 import type { ChainRecord } from "@/core/chains/application/ChainRecord";
 import type { PortfolioViewAsset } from "@/core/chains/application/PortfolioView";
-import { truncateMiddle } from "@/helpers/formatters";
 import { cn } from "@/theme/utils.ts";
 import { UiBadge } from "@/ui/UiBadge";
 import { UiButtonVariants } from "@/ui/UiButton/base";
@@ -47,12 +46,12 @@ export function LiquidAssetAbout({
 
 				<AboutRow label="Asset ID">
 					<UiCopyButton
-						className="hover:text-foreground text-muted-foreground -my-0.5 flex max-w-full items-center gap-1.5 rounded-md py-0.5 font-mono text-xs transition-colors"
+						className="hover:text-foreground text-muted-foreground -my-0.5 flex max-w-full items-start gap-1.5 rounded-md py-0.5 text-left font-mono text-xs transition-colors"
 						value={token.id}
 					>
 						{(copied) => (
 							<>
-								<span className="truncate">{truncateMiddle(token.id, 8, 8)}</span>
+								<span className="break-all">{token.id}</span>
 								<HugeiconsIcon
 									className={cn("shrink-0", copied && "text-emerald-500")}
 									icon={Copy01Icon}
@@ -70,7 +69,9 @@ export function LiquidAssetAbout({
 				) : null}
 
 				<AboutRow label="Decimals">
-					<span className="font-medium">{token.decimals}</span>
+					<span className="font-medium">
+						{metadata.verified ? token.decimals : "Unknown, amounts in raw units"}
+					</span>
 				</AboutRow>
 			</dl>
 

@@ -1,6 +1,6 @@
 import type { TransactionReceiptData } from "@/common/Confirmation/TransactionReceipt";
 
-import { LIQUID_NATIVE_ASSET } from "../domain/LiquidAsset";
+import { LIQUID_NATIVE_ASSET, type LiquidAssetMetadata } from "../domain/LiquidAsset";
 import { liquidExplorerTxUrl } from "../presentation/liquidExplorerTxUrl";
 import type { LiquidWalletAccount } from "./backends/LiquidWalletBackend";
 import type { LiquidRpcMethodContext } from "./LiquidRpcContext";
@@ -27,9 +27,11 @@ export async function readKnownAssets(
 		account.accountGroupId === undefined
 			? null
 			: await context.readPortfolioSnapshot?.(account.accountGroupId, account.chainId);
-	const held = (snapshot?.data.assets ?? []).map(
-		(asset) => [asset.rawAssetId, { decimals: asset.decimals, ticker: asset.symbol }] as const,
-	);
+	const held = (snapshot?.data.assets ?? [])
+		.filter(({ metadata }) => (metadata as LiquidAssetMetadata).verified)
+		.map(
+			(asset) => [asset.rawAssetId, { decimals: asset.decimals, ticker: asset.symbol }] as const,
+		);
 
 	return {
 		...Object.fromEntries(held),
