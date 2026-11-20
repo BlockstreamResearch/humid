@@ -3,6 +3,7 @@ import { definePegasusEventBus, definePegasusMessageBus } from "@webext-pegasus/
 import { initPegasusTransport } from "@webext-pegasus/transport/content-script";
 import browser from "webextension-polyfill";
 
+import { logger } from "@/core/logger";
 import { ISelfIDService } from "@/helpers/background";
 
 function injectScript(url: string) {
@@ -15,7 +16,7 @@ function injectScript(url: string) {
 		container.insertBefore(scriptTag, container.children[0]);
 		container.removeChild(scriptTag);
 	} catch (error) {
-		console.error("Provider injection failed.", error);
+		logger.error("Provider injection failed.", error);
 	}
 }
 

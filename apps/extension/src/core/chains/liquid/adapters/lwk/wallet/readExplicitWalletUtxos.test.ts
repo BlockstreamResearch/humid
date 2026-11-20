@@ -13,6 +13,16 @@ type OutputSpec = {
 	index?: number;
 };
 
+const BLINDED_TX_OUT = `0a${"11".repeat(32)}08${"22".repeat(32)}0000`;
+
+const txOutOf = ({ amount, blinded }: { amount: string; blinded: boolean }) =>
+	blinded
+		? BLINDED_TX_OUT
+		: `01${"cc".repeat(32)}01${BigInt(amount).toString(16).padStart(16, "0")}0000`;
+
+const rawTransaction = (txOuts: string[]) =>
+	`020000000000${txOuts.length.toString(16).padStart(2, "0")}${txOuts.join("")}00000000`;
+
 function walletTx(
 	txid: string,
 	outputs: OutputSpec[],
@@ -45,12 +55,7 @@ function walletTx(
 				}),
 			})),
 		outputs: () => outputs.map((spec) => ({ get: () => owned(spec) })),
-		tx: () => ({
-			outputs: outputs.map((spec) => ({
-				isPartiallyBlinded: () => spec.blinded,
-				toString: () => `txout:${txid}:${spec.vout}`,
-			})),
-		}),
+		tx: () => ({ toString: () => rawTransaction(outputs.map(txOutOf)) }),
 		txid: () => ({ toString: () => txid }),
 	};
 }
@@ -69,7 +74,7 @@ const wollet = (txs: unknown[]) =>
 const A = "aa".repeat(32);
 const B = "bb".repeat(32);
 
-describe("the wallet's own outputs that hide nothing", () => {
+describe("the wallet's own outputs that are not blinded", () => {
 	test("the public UTXO response includes an explicit redemption reserve", () => {
 		const account = {
 			chainId: "bip122:" + "11".repeat(16),
@@ -93,6 +98,7 @@ describe("the wallet's own outputs that hide nothing", () => {
 				address: "confidential-address-0",
 				amount: "2000",
 				assetId: `bip122:${"11".repeat(16)}/elip144:${"cc".repeat(32)}`,
+				commitments: { asset: `01${"cc".repeat(32)}`, nonce: "00", value: "0100000000000007d0" },
 				confidential: false,
 				spendable: true,
 				txid: A,
@@ -113,7 +119,7 @@ describe("the wallet's own outputs that hide nothing", () => {
 			confidential: false,
 			spendable: true,
 			txid: A,
-			txOut: `txout:${A}:0`,
+			txOut: txOutOf({ amount: "30000", blinded: false }),
 			vout: 0,
 		});
 	});
@@ -170,17 +176,18 @@ describe("the wallet's own outputs that hide nothing", () => {
 			...tx,
 			outputs: () => [...tx.outputs(), { get: () => undefined }],
 			tx: () => ({
-				outputs: [
-					...tx.tx().outputs,
-					{ isPartiallyBlinded: () => false, toString: () => "somebody-else" },
-				],
+				toString: () =>
+					rawTransaction([
+						txOutOf({ amount: "30000", blinded: false }),
+						txOutOf({ amount: "5", blinded: false }),
+					]),
 			}),
 		};
 
 		const utxos = readExplicitWalletUtxos(wollet([withStranger]));
 
 		expect(utxos).toHaveLength(1);
-		expect(utxos[0]?.txOut).toBe(`txout:${A}:0`);
+		expect(utxos[0]?.txOut).toBe(txOutOf({ amount: "30000", blinded: false }));
 	});
 
 	test("an explicit output at a later receive index is reported under its own key", () => {

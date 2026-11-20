@@ -5,17 +5,26 @@ import {
 	PaintBoardIcon,
 	ShieldKeyIcon,
 	SquareLock01Icon,
+	Timer02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
 
+import { Page } from "@/common/Page";
 import type { AccountGroupRecord } from "@/core/accounts/application/account-registry/model/account-group";
 import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
 import { AccountAvatar } from "@/routes/App/components/AccountAvatar";
+import { SettingsRowSoon } from "@/routes/App/pages/Settings/components/SettingsRow";
 import { UiBadge } from "@/ui/UiBadge";
 import { UiButton } from "@/ui/UiButton/base";
-import { UiScrollArea } from "@/ui/UiScrollArea";
+import {
+	UiSelect,
+	UiSelectContent,
+	UiSelectItem,
+	UiSelectTrigger,
+	UiSelectValue,
+} from "@/ui/UiSelect/base";
 
 const AUTO_LOCK_OPTIONS: { label: string; minutes: number }[] = [
 	{ label: "5 minutes", minutes: 5 },
@@ -45,94 +54,85 @@ export function SettingsRootView({
 	selectedAccountGroupId,
 }: SettingsRootViewProps) {
 	return (
-		<div className="flex size-full min-h-0 flex-col">
-			<header className="border-border/60 flex shrink-0 items-center border-b px-4 py-3">
-				<h1 className="text-base font-semibold">Settings</h1>
-			</header>
-			<UiScrollArea className="min-h-0 flex-1">
-				<div className="flex flex-col gap-6 px-3 py-4">
-					<section className="flex flex-col">
-						<button
-							className="hover:bg-accent flex items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors disabled:opacity-60"
-							disabled={isLocking}
-							onClick={onLock}
-							type="button"
+		<Page title="Settings">
+			<div className="flex flex-col gap-6 px-3 py-4">
+				<section className="flex flex-col">
+					<button
+						className="hover:bg-accent flex items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors disabled:opacity-60"
+						disabled={isLocking}
+						onClick={onLock}
+						type="button"
+					>
+						<HugeiconsIcon className="text-muted-foreground" icon={SquareLock01Icon} size={18} />
+						<span className="flex-1 text-sm font-medium">Lock wallet</span>
+					</button>
+					<div className="flex items-center gap-3 rounded-lg px-2 py-1">
+						<HugeiconsIcon className="text-muted-foreground" icon={Timer02Icon} size={18} />
+						<label className="flex-1 text-sm font-medium" htmlFor="settings-auto-lock">
+							Auto-lock
+						</label>
+						<UiSelect
+							items={AUTO_LOCK_OPTIONS.map(({ label, minutes }) => ({ label, value: minutes }))}
+							value={autoLockMinutes}
+							onValueChange={(minutes) => onAutoLockChange(minutes as number)}
 						>
-							<HugeiconsIcon className="text-muted-foreground" icon={SquareLock01Icon} size={18} />
-							<span className="flex-1 text-sm font-medium">Lock wallet</span>
-						</button>
-						<div className="flex items-center gap-3 rounded-lg px-2 py-2.5">
-							<HugeiconsIcon className="text-muted-foreground" icon={SquareLock01Icon} size={18} />
-							<label className="flex-1 text-sm font-medium" htmlFor="settings-auto-lock">
-								Auto-lock when idle
-							</label>
-							<select
-								id="settings-auto-lock"
-								className="border-input bg-background text-foreground rounded-md border px-2 py-1 text-sm"
-								value={String(autoLockMinutes)}
-								onChange={(event) => onAutoLockChange(Number(event.target.value))}
-							>
+							<UiSelectTrigger id="settings-auto-lock">
+								<UiSelectValue />
+							</UiSelectTrigger>
+							<UiSelectContent align="end" alignItemWithTrigger={false} className="w-auto">
 								{AUTO_LOCK_OPTIONS.map((option) => (
-									<option key={option.minutes} value={option.minutes}>
+									<UiSelectItem key={option.minutes} value={option.minutes}>
 										{option.label}
-									</option>
+									</UiSelectItem>
 								))}
-							</select>
-						</div>
-						<Link
-							className="hover:bg-accent flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors"
-							to="/app/settings/chains"
-						>
-							<HugeiconsIcon className="text-muted-foreground" icon={GlobalIcon} size={18} />
-							<span className="flex-1 text-sm font-medium">Chains</span>
-							<HugeiconsIcon
-								className="text-muted-foreground/60"
-								icon={ArrowRight01Icon}
-								size={16}
-							/>
-						</Link>
-						<Link
-							className="hover:bg-accent flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors"
-							to="/app/settings/theme"
-						>
-							<HugeiconsIcon className="text-muted-foreground" icon={PaintBoardIcon} size={18} />
-							<span className="flex-1 text-sm font-medium">Theme</span>
-							<HugeiconsIcon
-								className="text-muted-foreground/60"
-								icon={ArrowRight01Icon}
-								size={16}
-							/>
-						</Link>
-						<DisabledRow icon={ShieldKeyIcon} label="Change password" />
-					</section>
+							</UiSelectContent>
+						</UiSelect>
+					</div>
+					<Link
+						className="hover:bg-accent flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors"
+						to="/app/settings/chains"
+					>
+						<HugeiconsIcon className="text-muted-foreground" icon={GlobalIcon} size={18} />
+						<span className="flex-1 text-sm font-medium">Networks</span>
+						<HugeiconsIcon className="text-muted-foreground/60" icon={ArrowRight01Icon} size={16} />
+					</Link>
+					<Link
+						className="hover:bg-accent flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors"
+						to="/app/settings/theme"
+					>
+						<HugeiconsIcon className="text-muted-foreground" icon={PaintBoardIcon} size={18} />
+						<span className="flex-1 text-sm font-medium">Theme</span>
+						<HugeiconsIcon className="text-muted-foreground/60" icon={ArrowRight01Icon} size={16} />
+					</Link>
+					<DisabledRow icon={ShieldKeyIcon} label="Change password" />
+				</section>
 
-					<section className="flex flex-col gap-1">
-						<div className="flex items-center justify-between px-2">
-							<p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-								Your accounts
-							</p>
-							<Link
-								className="text-primary hover:text-primary/80 inline-flex items-center gap-1 text-xs font-medium"
-								to="/app/settings/add-account"
-							>
-								<HugeiconsIcon icon={Add01Icon} size={14} />
-								Add
-							</Link>
-						</div>
-						<div className="flex flex-col">
-							{accountGroups.map((group) => (
-								<AccountRow
-									key={group.id}
-									group={group}
-									onSwitch={onSwitch}
-									selected={group.id === selectedAccountGroupId}
-								/>
-							))}
-						</div>
-					</section>
-				</div>
-			</UiScrollArea>
-		</div>
+				<section className="flex flex-col gap-1">
+					<div className="flex items-center justify-between px-2">
+						<p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+							Accounts
+						</p>
+						<Link
+							className="text-primary hover:text-primary/80 inline-flex items-center gap-1 text-xs font-medium"
+							to="/app/settings/add-account"
+						>
+							<HugeiconsIcon icon={Add01Icon} size={14} />
+							Add
+						</Link>
+					</div>
+					<div className="flex flex-col">
+						{accountGroups.map((group) => (
+							<AccountRow
+								key={group.id}
+								group={group}
+								onSwitch={onSwitch}
+								selected={group.id === selectedAccountGroupId}
+							/>
+						))}
+					</div>
+				</section>
+			</div>
+		</Page>
 	);
 }
 
@@ -192,9 +192,7 @@ function DisabledRow({
 		<div className="flex items-center gap-3 rounded-lg px-2 py-2.5 opacity-50">
 			<HugeiconsIcon className="text-muted-foreground" icon={icon} size={18} />
 			<span className="flex-1 text-sm font-medium">{label}</span>
-			<span className="text-muted-foreground rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
-				Soon
-			</span>
+			<SettingsRowSoon />
 		</div>
 	);
 }

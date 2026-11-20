@@ -1,5 +1,5 @@
 import type { LiquidProcessConfidentialTransactionParams } from "@humid/appkit-injected-adapter";
-import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk.manifest.json";
+import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk/txmanifest.json";
 import { useState } from "react";
 
 import { useHumidContext } from "@/contexts/Web3Provider/HumidProvider";
@@ -37,7 +37,7 @@ export function ProcessCtCard() {
 				  pubkey.trim().startsWith("tex1") ||
 				  pubkey.trim().startsWith("lq1") ||
 				  pubkey.trim().startsWith("ex1")
-				? "That is an address, not a key. Receive → Unconfidential shows both — this field wants the second one."
+				? "That is an address, not a key. Receive → Explicit shows both — this field wants the second one."
 				: `Not an x-only public key: ${pubkey.trim().length} characters, and 64 hexadecimal ones are needed.`;
 
 	const params = {
@@ -60,7 +60,7 @@ export function ProcessCtCard() {
 			<SelectField
 				label={
 					spending
-						? "Action — Receive spends a p2pk output back to your wallet"
+						? "Action — Receive spends a p2pk output back to the wallet"
 						: "Action — Pay locks funds into a p2pk output"
 				}
 				onValueChange={setAction}
@@ -81,7 +81,7 @@ export function ProcessCtCard() {
 
 			{spending ? (
 				<TextAreaField
-					label='State file — which covenant outputs exist: {"utxos":[{"utxo_type":"p2pk_output","txid":"…","vout":0}]}'
+					label='State file — which program outputs exist: {"utxos":[{"utxo_type":"p2pk_output","txid":"…","vout":0}]}'
 					onChange={setStateFile}
 					value={stateFile}
 				/>
@@ -91,7 +91,7 @@ export function ProcessCtCard() {
 
 			<CheckboxField
 				checked={broadcast}
-				label="Broadcast — leave off to get the signed transaction back without sending it"
+				label="Broadcast — leave off to get the signed transaction back unsent"
 				onChange={setBroadcast}
 			/>
 

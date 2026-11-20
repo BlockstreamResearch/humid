@@ -1,3 +1,5 @@
+import { logger } from "@/core/logger";
+
 import { getSessionStorage } from "./sessionStorageArea";
 
 export type ActiveScanTarget<T> = {
@@ -24,7 +26,9 @@ export function createSessionScanTargetStore<T>(): ScanTargetStore<T> {
 		async clear() {
 			try {
 				await session.remove([STORAGE_KEY]);
-			} catch {}
+			} catch (error) {
+				logger.warn("[liquid-sync] could not clear the scan target", { error });
+			}
 		},
 		async load() {
 			try {
@@ -39,7 +43,9 @@ export function createSessionScanTargetStore<T>(): ScanTargetStore<T> {
 		async save(key, target) {
 			try {
 				await session.set({ [STORAGE_KEY]: { key, target } });
-			} catch {}
+			} catch (error) {
+				logger.warn("[liquid-sync] could not store the scan target", { error, key });
+			}
 		},
 	};
 }

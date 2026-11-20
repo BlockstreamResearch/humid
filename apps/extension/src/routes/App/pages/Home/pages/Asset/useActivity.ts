@@ -43,8 +43,11 @@ export function useActivity(
 	const pending = usePendingTransfers(keys.accountGroupId, keys.chainId);
 
 	const synced = useMemo(
-		() => (query.data?.pages ?? []).flatMap((page) => page.items.map(toActivity)),
-		[query.data],
+		() =>
+			(query.data?.pages ?? []).flatMap((page) =>
+				page.items.map((item) => toActivity(item, token.id)),
+			),
+		[query.data, token.id],
 	);
 
 	const syncedTxids = useMemo(() => new Set(synced.map((item) => item.id)), [synced]);
@@ -78,12 +81,16 @@ export function useActivity(
 	};
 }
 
-function toActivity(entry: ActivityEntry): PortfolioViewActivity {
+function toActivity(entry: ActivityEntry, rawAssetId: string): PortfolioViewActivity {
+	const change = BigInt(
+		entry.changes.find((candidate) => candidate.rawAssetId === rawAssetId)?.amountSats ?? "0",
+	);
+
 	return {
-		amount: parseBaseUnits(entry.amountSats),
+		amount: change < 0n ? -change : change,
 		counterparty: truncateMiddle(entry.txid),
 		date: entry.timestamp ? handleTimestamp(entry.timestamp).format("MMM D, YYYY") : "Pending",
-		direction: entry.direction,
+		direction: change < 0n ? "sent" : "received",
 		fee: parseBaseUnits(entry.feeSats),
 		id: entry.txid,
 		status: entry.timestamp === null ? "pending" : "confirmed",

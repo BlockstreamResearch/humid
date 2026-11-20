@@ -1,19 +1,13 @@
-export type LiquidSignPsetInput = {
-	address: string;
-	index: number;
-	sighashTypes?: number[];
-};
+export type {
+	LiquidSignPsetInput,
+	LiquidSignPsetParams,
+	LiquidSignPsetResult,
+} from "@humid/wallet-rpc";
 
 export type ParsedLiquidSignPsetInput = {
 	address: string;
 	index: number;
 	sighashTypes: number[];
-};
-
-export type LiquidSignPsetParams = {
-	broadcast?: boolean;
-	pset: string;
-	signInputs: LiquidSignPsetInput[];
 };
 
 export type ParsedLiquidSignPsetParams = {
@@ -26,15 +20,16 @@ export type ReviewedLiquidSignPsetParams = Omit<ParsedLiquidSignPsetParams, "pse
 	reviewedPset: string;
 };
 
-export type LiquidSignPsetResult = {
-	pset: string;
-	txid?: string;
-};
-
 export type LiquidSignPsetReview = {
 	/** Blinded PSET inspected for approval; signing uses this exact serialization. */
 	pset: string;
-	inputs: { index: number; sighashType: number }[];
+	inputs: {
+		amount?: string;
+		asset?: string;
+		index: number;
+		owned: boolean;
+		sighashType: number;
+	}[];
 	fees: { asset: string; amount: string }[];
 	netEffect: { asset: string; amount: string }[];
 	outputs: {
@@ -42,6 +37,7 @@ export type LiquidSignPsetReview = {
 		amount?: string;
 		asset?: string;
 		index: number;
+		owned: boolean;
 		script: string;
 	}[];
 };

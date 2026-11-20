@@ -1,13 +1,12 @@
+import {
+	type Caip25CreateSessionParams,
+	type Caip25ScopedProperties,
+	type Caip25ScopeObject,
+	type Caip25Scopes,
+	HUMID_METHOD_POLICY_PROPERTY,
+} from "@humid/wallet-rpc";
+
 import type { DappSessionScope } from "@/core/accounts/application/account-registry/model/dapp-session";
-
-import type {
-	Caip25CreateSessionParams,
-	Caip25ScopedProperties,
-	Caip25ScopeObject,
-	Caip25Scopes,
-} from "./types";
-
-export const HUMID_METHOD_POLICY_PROPERTY = "humid_methodPolicy";
 
 export function mergeRequestedScopes(params: Caip25CreateSessionParams): Caip25Scopes {
 	const merged: Caip25Scopes = {};

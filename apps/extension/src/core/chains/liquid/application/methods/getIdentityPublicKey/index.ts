@@ -31,8 +31,8 @@ export const getLiquidIdentityPublicKey = createWalletMethod<
 			index: params.index,
 			kind: "liquid.getIdentityPublicKey",
 		},
-		message: "A dapp wants to read a deterministic Liquid identity public key.",
-		title: "Share Liquid identity public key?",
+		message: "A dapp wants to read this account's identity public key.",
+		title: "Share identity key?",
 	}),
 	execute: ({ context, params }) =>
 		context.identityBackend.getIdentityPublicKey({

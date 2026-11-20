@@ -1,18 +1,11 @@
-import type {
-	Caip25CreateSessionResult,
-	Caip25GetSessionResult,
-	Caip25Scopes,
-	CaipRpcProvider,
-} from "./types";
+import {
+	CAIP25_METHODS,
+	type Caip25CreateSessionResult,
+	type Caip25GetSessionResult,
+	type Caip25Scopes,
+} from "@humid/wallet-rpc";
 
-export const CAIP25_METHODS = {
-	addChain: "wallet_addChain",
-	createSession: "wallet_createSession",
-	getSession: "wallet_getSession",
-	invokeMethod: "wallet_invokeMethod",
-	revokeSession: "wallet_revokeSession",
-	switchChain: "wallet_switchChain",
-} as const;
+import type { CaipRpcProvider } from "./types";
 
 export type AddChainParams = {
 	name: string;

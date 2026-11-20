@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, userEvent, within } from "storybook/test";
 
 import { AddAccountView } from "./components/AddAccountView";
 
@@ -7,7 +8,7 @@ const meta = {
 	component: AddAccountView,
 	args: {
 		accountTypeLabel: "Liquid",
-		error: null,
+		errors: { create: null, import: null },
 		isSubmitting: false,
 		onCreate: () => {},
 		onImport: () => {},
@@ -22,6 +23,13 @@ export const Default: Story = {};
 
 export const ImportError: Story = {
 	args: {
-		error: "Invalid recovery phrase.",
+		errors: { create: null, import: "Enter a valid 12-word recovery phrase." },
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+
+		expect(canvas.queryByText(/valid 12-word/)).not.toBeInTheDocument();
+		await userEvent.click(canvas.getByRole("button", { name: "Import" }));
+		await expect(canvas.getByText("Enter a valid 12-word recovery phrase.")).toBeVisible();
 	},
 };

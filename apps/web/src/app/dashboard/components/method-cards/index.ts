@@ -1,3 +1,4 @@
+export { GetAddressCard } from "./GetAddressCard";
 export { GetBalanceCard } from "./GetBalanceCard";
 export { GetIdentityPublicKeyCard } from "./GetIdentityPublicKeyCard";
 export { GetIdentitySharedKeyCard } from "./GetIdentitySharedKeyCard";

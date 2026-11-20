@@ -14,6 +14,7 @@ export type DappConnectConfirmationData = {
 	chains: string[];
 	kind: typeof DAPP_CONNECT_CONFIRMATION_KIND;
 	methods: string[];
+	networks: string[];
 	origin: string;
 };
 

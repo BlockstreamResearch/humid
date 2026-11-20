@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import type { PortfolioViewAsset } from "@/core/chains/application/PortfolioView";
 
-import { issuedVerifiedToken, nativeToken } from "./liquidStoryFixtures";
+import { issuedUnverifiedToken, issuedVerifiedToken, nativeToken } from "./liquidStoryFixtures";
 import { LiquidTokenRow } from "./LiquidTokenRow";
 
 const longNameToken: PortfolioViewAsset = {
@@ -36,6 +36,10 @@ export const Native: Story = {
 
 export const Issued: Story = {
 	args: { token: issuedVerifiedToken },
+};
+
+export const UnknownAsset: Story = {
+	args: { token: issuedUnverifiedToken },
 };
 
 export const LongName: Story = {

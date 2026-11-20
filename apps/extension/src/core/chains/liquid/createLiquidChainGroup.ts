@@ -1,8 +1,10 @@
 import { createLwkWalletBackend } from "./adapters/lwk/createLwkWalletBackend";
 import { createLwkLiquidIdentityBackend } from "./adapters/lwk/identity/createLwkLiquidIdentityBackend";
 import { getSyncWorkerClient } from "./adapters/lwk/sync-worker/createSyncWorkerClient";
+import { processCtDependencies } from "./adapters/processCtDependencies";
 import { createLiquidWalletConnectAdapter } from "./adapters/walletconnect/createLiquidWalletConnectAdapter";
 import { createLiquidRpcRouter } from "./application/createLiquidRpcRouter";
+import { quoteTransferSpeeds, readSpeedRates } from "./application/feeSpeeds";
 import { createBuiltInLiquidChains } from "./chains/createBuiltInLiquidChains";
 import { LIQUID_CHAIN_GROUP_ID } from "./chains/LiquidChainRecord";
 import type { LiquidChainGroup } from "./contract";
@@ -14,6 +16,7 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 	const walletBackend = createLwkWalletBackend();
 	const walletRpcDispatcher = createLiquidRpcRouter({
 		identityBackend,
+		processCt: processCtDependencies,
 		walletBackend,
 	});
 
@@ -42,14 +45,24 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 
 				return {
 					...walletBackend.getReceiveAddress(account),
-					unconfidential: walletBackend.getSigningAddress(account).unconfidential,
+					explicit: walletBackend.getSigningAddress(account).explicit,
 				};
 			},
 			async inspectTransfer(input, transfer) {
 				const account = await walletBackend.resolveAccount(input);
 				const rawAssetId = transfer.rawAssetId ?? account.rawPolicyAssetId;
+				const review = await walletBackend.inspectTransfer(account, transfer, rawAssetId);
+				await walletBackend.syncAccount(account);
 
-				return walletBackend.inspectTransfer(account, transfer, rawAssetId);
+				const quotes = await quoteTransferSpeeds(
+					walletBackend,
+					account,
+					transfer,
+					rawAssetId,
+					await readSpeedRates(input.chain),
+				);
+
+				return { ...review, quotes };
 			},
 			async resolveAccountIdentifier(input) {
 				const account = await walletBackend.resolveAccount(input);
@@ -74,13 +87,13 @@ export function createLiquidChainGroup(): LiquidChainGroup {
 				const rawAssetId = transfer.rawAssetId ?? account.rawPolicyAssetId;
 				await walletBackend.syncAccount(account);
 
-				return walletBackend.sendTransfer(account, transfer, rawAssetId);
+				return walletBackend.sendTransfer(account, transfer, rawAssetId, transfer.fee);
 			},
 		},
 		chains: createBuiltInLiquidChains(),
 		id: LIQUID_CHAIN_GROUP_ID,
 		walletConnectAdapter: createLiquidWalletConnectAdapter({
-			identityBackend,
+			dispatcher: walletRpcDispatcher,
 			walletBackend,
 		}),
 		walletRpcDispatcher,

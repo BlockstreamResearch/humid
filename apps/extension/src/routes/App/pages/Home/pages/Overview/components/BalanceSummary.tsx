@@ -33,5 +33,5 @@ export function BalanceSummary({
 		);
 	}
 
-	return <BalanceHeadline isSyncing={isSyncing} native={native} />;
+	return <BalanceHeadline native={native} />;
 }

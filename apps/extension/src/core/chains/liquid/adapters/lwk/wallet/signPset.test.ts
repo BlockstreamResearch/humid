@@ -9,18 +9,27 @@ import type * as Lwk from "lwk_wasm";
 import { WALLET_RPC_ERROR_REASONS } from "@/core/wallet-rpc/errors";
 
 import { buildCoinControlPset } from "../../../../../../../../web/src/lib/pset";
-import type { LiquidWalletAccount } from "../../../application/backends/LiquidWalletBackend";
+import type {
+	LiquidUtxoSnapshot,
+	LiquidWalletAccount,
+} from "../../../application/backends/LiquidWalletBackend";
 import { parseLiquidSignPsetParams } from "../../../domain/pset/validation";
 import { lwk } from "../lwkWasmForTests";
-import { blindPset, PsetReader } from "./blindPset";
+import { blindPset } from "./blindPset";
 import { getWalletUtxosForAsset } from "./getUTXOs";
+import { PsetMaps } from "./PsetMaps";
+import { WalletCoins } from "./WalletCoins";
+
+const SIGNED_FOR = { action: "Signed transaction", holding: [], origin: "https://dapp.example" };
+
+function signatureCounts(pset: string) {
+	return PsetMaps.parse(pset).inputs.map((input) => input.signatures.size);
+}
 
 async function exerciseSigning() {
 	mock.module("../loadLwkWasm", () => ({ loadLwkWasm: async () => lwk }));
-	mock.module("../sync-worker/createSyncWorkerClient", () => ({
-		getSyncWorkerClient: () => {
-			throw new Error("Unexpected broadcast");
-		},
+	mock.module("../../../application/transactionLabels", () => ({
+		transactionLabels: { record: async () => {} },
 	}));
 	// Module-loading boundary: install the isolated WASM loader before importing consumers.
 	const { blindAndInspectPset, signPset } = await import("./signPset");
@@ -78,23 +87,21 @@ async function exerciseSigning() {
 		const review = await blindAndInspectPset(account, params.pset);
 		expect(review.fees).toEqual([{ asset: rawAssetId, amount: "1000" }]);
 		expect(review.netEffect).toEqual([{ asset: rawAssetId, amount: "-1000" }]);
-		expect(review.inputs).toEqual([{ index: 0, sighashType: 130 }]);
+		expect(review.inputs).toEqual([
+			{ amount: String(coin.amount), asset: rawAssetId, index: 0, owned: true, sighashType: 130 },
+		]);
 		expect(params.signInputs[0]!.sighashTypes).toEqual([1]);
 		const reviewed = own(new lwk.Pset(review.pset));
-		const before = own(wollet.psetDetails(reviewed)).signatures();
-		before.forEach(own);
-		expect(before.map((input) => input.hasSignature().length)).toEqual([0]);
+		expect(signatureCounts(review.pset)).toEqual([0]);
 		const signing = {
 			broadcast: false,
 			reviewedPset: review.pset,
 			signInputs: params.signInputs,
 		};
-		const signed = await signPset(account, signing);
+		const signed = await signPset(account, signing, SIGNED_FOR);
 		expect(signed.txid).toBeUndefined();
 		const signedPset = own(new lwk.Pset(signed.pset));
-		const after = own(wollet.psetDetails(signedPset)).signatures();
-		after.forEach(own);
-		expect(after.map((input) => input.hasSignature().length)).toEqual([1]);
+		expect(signatureCounts(signed.pset)).toEqual([1]);
 		expect(own(signedPset.extractTx()).toString()).toBe(own(reviewed.extractTx()).toString());
 		expect(signedPset.inputs().map((input) => own(input).sighash())).toEqual([130]);
 
@@ -120,11 +127,16 @@ async function exerciseSigning() {
 			asset: rawAssetId,
 			index: 2,
 		});
-		const mixedSigned = await signPset(account, {
-			broadcast: false,
-			reviewedPset: mixedReview.pset,
-			signInputs: mixedParams.signInputs,
-		});
+		expect(mixedReview.outputs.map((output) => output.owned)).toEqual([true, true, true, false]);
+		const mixedSigned = await signPset(
+			account,
+			{
+				broadcast: false,
+				reviewedPset: mixedReview.pset,
+				signInputs: mixedParams.signInputs,
+			},
+			SIGNED_FOR,
+		);
 		expect(mixedSigned.txid).toBeUndefined();
 		expect(own(own(new lwk.Pset(mixedSigned.pset)).extractTx()).toString()).toBe(
 			own(own(new lwk.Pset(mixedReview.pset)).extractTx()).toString(),
@@ -143,64 +155,93 @@ async function exerciseSigning() {
 		const tickAsset = "22".repeat(32);
 		const walletScript = Buffer.from(coin.scriptPubKey, "hex");
 		const foreignScript = Buffer.from("0014" + "77".repeat(20), "hex");
-		const legacySource = liquidjs.Creator.newPset({
-			inputs: [0, 1, 2].map((index) => new liquidjs.CreatorInput(String(index + 1).repeat(64), 0)),
-			outputs: [
-				new liquidjs.CreatorOutput(rawAssetId, 50_000, walletScript),
-				new liquidjs.CreatorOutput(tickAsset, 1, Buffer.from("6a", "hex")),
-				new liquidjs.CreatorOutput(rawAssetId, 9_000, walletScript),
-				new liquidjs.CreatorOutput(rawAssetId, 1_000),
-			],
+		const explicitSpend = (txid: string, vout: number, funding: number, fundingTxOut?: string) => {
+			const source = liquidjs.Creator.newPset({
+				inputs: [
+					new liquidjs.CreatorInput("1".repeat(64), 0),
+					new liquidjs.CreatorInput("2".repeat(64), 0),
+					new liquidjs.CreatorInput(txid, vout),
+				],
+				outputs: [
+					new liquidjs.CreatorOutput(rawAssetId, 50_000, walletScript),
+					new liquidjs.CreatorOutput(tickAsset, 1, Buffer.from("6a", "hex")),
+					new liquidjs.CreatorOutput(rawAssetId, funding - 1_000, walletScript),
+					new liquidjs.CreatorOutput(rawAssetId, 1_000),
+				],
+			});
+			for (const [index, inputAsset, inputValue, inputScript] of [
+				[0, rawAssetId, 50_000, foreignScript],
+				[1, tickAsset, 1, foreignScript],
+				[2, rawAssetId, funding, walletScript],
+			] as const) {
+				const input = source.inputs[index]!;
+				input.witnessUtxo = {
+					script: inputScript,
+					asset: liquidjs.AssetHash.fromHex(inputAsset).bytes,
+					value: liquidjs.ElementsValue.fromNumber(inputValue).bytes,
+					nonce: Buffer.alloc(1),
+				};
+				input.requiredHeightLocktime = undefined;
+				input.requiredTimeLocktime = undefined;
+			}
+			const maps = PsetMaps.parse(source.toBase64());
+			if (fundingTxOut) maps.inputs[2]!.spend(fundingTxOut);
+			const pset = own(new lwk.Pset(maps.toString()));
+			pset.addDetails(wollet);
+			return pset;
+		};
+		await expect(
+			blindAndInspectPset(account, explicitSpend("3".repeat(64), 0, 10_000).toString()),
+		).rejects.toMatchObject({
+			data: { reason: WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST },
 		});
-		for (const [index, inputAsset, amount, inputScript] of [
-			[0, rawAssetId, 50_000, foreignScript],
-			[1, tickAsset, 1, foreignScript],
-			[2, rawAssetId, 10_000, walletScript],
-		] as const) {
-			const input = legacySource.inputs[index]!;
-			input.witnessUtxo = {
-				script: inputScript,
-				asset: liquidjs.AssetHash.fromHex(inputAsset).bytes,
-				value: liquidjs.ElementsValue.fromNumber(amount).bytes,
-				nonce: Buffer.alloc(1),
-			};
-			input.requiredHeightLocktime = undefined;
-			input.requiredTimeLocktime = undefined;
-		}
-		const legacyPset = own(new lwk.Pset(legacySource.toBase64()));
-		legacyPset.addDetails(wollet);
+		const legacyPset = explicitSpend(coin.txid, coin.vout, Number(coin.amount), coin.txOut);
 		const legacyReview = await blindAndInspectPset(account, legacyPset.toString());
 		expect(legacyReview.pset).toBe(legacyPset.toString());
 		expect(legacyReview.fees).toEqual([{ asset: rawAssetId, amount: "1000" }]);
 		expect(legacyReview.netEffect).toEqual([{ asset: rawAssetId, amount: "49000" }]);
-		const legacySigned = await signPset(account, {
-			broadcast: false,
-			reviewedPset: legacyReview.pset,
-			signInputs: [{ address: coin.address, index: 2, sighashTypes: [1] }],
-		});
+		const legacySigned = await signPset(
+			account,
+			{
+				broadcast: false,
+				reviewedPset: legacyReview.pset,
+				signInputs: [{ address: coin.address, index: 2, sighashTypes: [1] }],
+			},
+			SIGNED_FOR,
+		);
 		const legacySignedPset = own(new lwk.Pset(legacySigned.pset));
 		expect(own(legacySignedPset.extractTx()).toString()).toBe(
 			own(legacyPset.extractTx()).toString(),
 		);
 		expect(legacySigned.pset).not.toBe(legacyReview.pset);
 		await expect(
-			signPset(account, {
-				broadcast: false,
-				reviewedPset: legacyReview.pset,
-				signInputs: [{ address: coin.address, index: 0, sighashTypes: [1] }],
-			}),
+			signPset(
+				account,
+				{
+					broadcast: false,
+					reviewedPset: legacyReview.pset,
+					signInputs: [{ address: coin.address, index: 0, sighashTypes: [1] }],
+				},
+				SIGNED_FOR,
+			),
 		).rejects.toMatchObject({
 			data: { reason: WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST },
 		});
 
-		await expect(signPset(account, { ...signing, signInputs: [] })).rejects.toMatchObject({
+		await expect(
+			signPset(account, { ...signing, signInputs: [] }, SIGNED_FOR),
+		).rejects.toMatchObject({
 			data: { reason: WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST },
 		});
 		await expect(
-			signPset(account, {
-				...signing,
-				signInputs: [{ ...params.signInputs[0]!, index: 1 }],
-			}),
+			signPset(
+				account,
+				{
+					...signing,
+					signInputs: [{ ...params.signInputs[0]!, index: 1 }],
+				},
+				SIGNED_FOR,
+			),
 		).rejects.toMatchObject({
 			data: { reason: WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST },
 		});
@@ -236,8 +277,8 @@ test("coin-control review discloses effective sighash and signing preserves the 
 }, 30_000);
 
 mock.module("../loadLwkWasm", () => ({ loadLwkWasm: async () => lwk }));
-mock.module("../sync-worker/createSyncWorkerClient", () => ({
-	getSyncWorkerClient: () => ({}),
+mock.module("../../../application/transactionLabels", () => ({
+	transactionLabels: { record: async () => {} },
 }));
 const { signPset } = await import("./signPset");
 
@@ -252,39 +293,15 @@ const wollet = new lwk.Wollet(
 		`ct(slip77(${"55".repeat(32)}),elwpkh(${blindingPublicKey.toString()}))`,
 	),
 );
-const signingAddress = wollet.address().address();
 let signedSource = "";
 let signerTransform: ((pset: Lwk.Pset) => Lwk.Pset) | undefined;
-type WalletTransaction = ReturnType<Lwk.Wollet["transactions"]>[number];
-let walletUtxos: {
-	outpoint: () => Lwk.OutPoint;
-	unblinded: () => Lwk.TxOutSecrets;
-}[] = [];
-let walletTransactions: (Pick<WalletTransaction, "txid" | "tx"> &
-	Partial<Pick<WalletTransaction, "inputs" | "outputs">>)[] = [];
-let nativeBlindingSource = "";
-let nativeBlindingResult: Lwk.Pset | undefined;
-let nativeBlindingError: Error | undefined;
-Object.assign(wollet, {
-	address: (index: number) => {
-		expect(index).toBe(0);
-		return { address: () => signingAddress };
-	},
-	utxos: () => walletUtxos,
-	transactions: () => walletTransactions,
-	blind: (pset: Lwk.Pset) => {
-		nativeBlindingSource = pset.toString();
-		if (nativeBlindingError) throw nativeBlindingError;
-		if (!nativeBlindingResult) throw new Error("Unexpected native blinding call");
-		return nativeBlindingResult;
-	},
-});
+let coins: LiquidUtxoSnapshot[] = [];
 
 const account = {
 	implementation: {
 		wollet,
 		signer: {
-			sign: (pset: Lwk.Pset) => {
+			signWithOptions: (pset: Lwk.Pset) => {
 				signedSource = pset.toString();
 				return signerTransform ? signerTransform(pset) : pset;
 			},
@@ -337,49 +354,81 @@ function fixture(
 	return builder.build();
 }
 
+function holding(
+	outpoint: Lwk.OutPoint,
+	txOut: Lwk.TxOut,
+	secrets: Lwk.TxOutSecrets,
+	spendable = true,
+): LiquidUtxoSnapshot {
+	const confidential = txOut.isPartiallyBlinded();
+	return {
+		address: "wallet-address",
+		amountSats: secrets.value().toString(),
+		blindingSecrets: confidential
+			? {
+					asset: secrets.asset().toString(),
+					assetBlindingFactor: secrets.assetBlindingFactor().toString(),
+					value: Number(secrets.value()),
+					valueBlindingFactor: secrets.valueBlindingFactor().toString(),
+				}
+			: undefined,
+		confidential,
+		rawAssetId: secrets.asset().toString(),
+		scriptPubKey: script.toString(),
+		spendable,
+		txid: outpoint.txid().toString(),
+		txOut: hexOf(txOut),
+		vout: outpoint.vout(),
+	};
+}
+
+function hexOf(txOut: Lwk.TxOut): string {
+	const input = lwk.PsetInputBuilder.fromPrevout(
+		lwk.OutPoint.fromParts(new lwk.Txid("0".repeat(64)), 0),
+	).witnessUtxo(txOut);
+	const pset = lwk.PsetBuilder.newV2().addInput(input.build()).build();
+	return Buffer.from(PsetMaps.parse(pset.toString()).inputs[0]!.entries.get("01")!).toString("hex");
+}
+
+function holdFixtureInputs(pset: Lwk.Pset) {
+	coins = pset.inputs().map((input, index) => {
+		const inputAsset = index === 1 ? otherAsset : asset;
+		const value = [50_000n, 1n, 10_000n][index]!;
+		return holding(
+			lwk.OutPoint.fromParts(input.previousTxid(), input.previousVout()),
+			lwk.TxOut.fromExplicit(script, inputAsset, value),
+			lwk.TxOutSecrets.fromExplicit(inputAsset, value),
+		);
+	});
+}
+
+function explicitFunding(spendable = true) {
+	const previous = fixture(11_000n, undefined, false).extractTx();
+	const outpoint = lwk.OutPoint.fromParts(previous.txid(), 2);
+	coins = [
+		holding(
+			outpoint,
+			previous.outputs[2]!,
+			lwk.TxOutSecrets.fromExplicit(asset, 10_000n),
+			spendable,
+		),
+	];
+	return fixture(10_000n, previous.outputs[2], true, true, outpoint);
+}
+
 function withWitness(pset: Lwk.Pset) {
-	const bytes = Buffer.from(pset.toString(), "base64");
-	const utxo = Buffer.from(lwk.TxOut.fromExplicit(script, asset, 50_000n).toBytes());
-	const offset = bytes.indexOf(Buffer.concat([Buffer.from([1, 1, utxo.length]), utxo]));
-	expect(offset).toBeGreaterThan(4);
-	return new lwk.Pset(
-		Buffer.concat([
-			bytes.subarray(0, offset),
-			Buffer.from("010803010101", "hex"),
-			bytes.subarray(offset),
-		]).toString("base64"),
-	);
+	const maps = PsetMaps.parse(pset.toString());
+	maps.inputs[0]!.entries.set("08", Buffer.from("010101", "hex"));
+	return new lwk.Pset(maps.toString());
 }
 
 function withSignature(pset: Lwk.Pset, inputIndex: number, scalar = 1) {
-	const bytes = Buffer.from(pset.toString(), "base64");
-	const reader = new PsetReader(bytes);
-	reader.map();
-	for (let index = 0; index < inputIndex; index++) reader.map();
-	const start = reader.offset;
-	const input = reader.map();
-	const key = Buffer.concat([Buffer.from([2]), Buffer.from(blindingPublicKey.toString(), "hex")]);
-	const signature = Buffer.from([48, 6, 2, 1, scalar, 2, 1, 1, 1]);
-	const entry = Buffer.concat([
-		Buffer.from([key.length]),
-		key,
-		Buffer.from([signature.length]),
-		signature,
-	]);
-	const previous = input.get(key.toString("hex"));
-	const oldEntry = previous
-		? Buffer.concat([Buffer.from([key.length]), key, Buffer.from([previous.length]), previous])
-		: undefined;
-	const offset = oldEntry ? bytes.indexOf(oldEntry, start) : reader.offset - 1;
-	expect(offset).toBeGreaterThanOrEqual(start);
-
-	return new lwk.Pset(
-		Buffer.concat([
-			bytes.subarray(0, offset),
-			entry,
-			bytes.subarray(offset + (oldEntry?.length ?? 0)),
-		]).toString("base64"),
+	const maps = PsetMaps.parse(pset.toString());
+	maps.inputs[inputIndex]!.entries.set(
+		`02${blindingPublicKey.toString()}`,
+		Buffer.from([48, 6, 2, 1, scalar, 2, 1, 1, 1]),
 	);
+	return new lwk.Pset(maps.toString());
 }
 
 function withExplicitOutputIndices(pset: Lwk.Pset) {
@@ -401,78 +450,23 @@ function withExplicitOutputIndices(pset: Lwk.Pset) {
 	return builder.build();
 }
 
-function ownFixtureInputs(pset: Lwk.Pset) {
-	walletUtxos = pset.inputs().map((input, index) => ({
-		outpoint: () => lwk.OutPoint.fromParts(input.previousTxid(), input.previousVout()),
-		unblinded: () =>
-			lwk.TxOutSecrets.fromExplicit(
-				index === 1 ? otherAsset : asset,
-				[50_000n, 1n, 10_000n][index],
-			),
-	}));
-}
-
-function explicitFundingHistory(
-	state: "unspent" | "spent" | "foreign" | "unconfirmed" = "unspent",
-) {
-	const previous = fixture(11_000n, undefined, false).extractTx();
-	const outpoint = lwk.OutPoint.fromParts(previous.txid(), 2);
-	walletTransactions = [
-		{
-			txid: () => previous.txid(),
-			tx: () => previous,
-			inputs: () => [],
-			outputs: () => [
-				{
-					get: () =>
-						state === "foreign"
-							? undefined
-							: {
-									outpoint: () => outpoint,
-									extInt: () => 0,
-									wildcardIndex: () => 0,
-									unblinded: () => lwk.TxOutSecrets.fromExplicit(asset, 10_000n),
-									height: () => (state === "unconfirmed" ? undefined : 12),
-									scriptPubkey: () => script,
-								},
-				},
-			],
-		} as unknown as WalletTransaction,
-	];
-	if (state === "spent") {
-		const spending = lwk.PsetBuilder.newV2()
-			.addInput(lwk.PsetInputBuilder.fromPrevout(outpoint).build())
-			.addOutput(lwk.PsetOutputBuilder.newExplicit(script, 9_000n, asset).build())
-			.build()
-			.extractTx();
-		walletTransactions.push({
-			txid: () => spending.txid(),
-			tx: () => spending,
-			inputs: () => [{ get: () => ({ outpoint: () => outpoint }) }],
-			outputs: () => [],
-		} as unknown as WalletTransaction);
-	}
-
-	return fixture(10_000n, previous.outputs[2], true, true, outpoint);
-}
-
 async function sign(pset: Lwk.Pset, index = 2) {
-	const preparedPset = blindPset(lwk, wollet, pset);
-	return signPset(account, {
-		broadcast: false,
-		reviewedPset: preparedPset.toString(),
-		signInputs: [{ address: "wallet-address", index, sighashTypes: [1] }],
-	});
+	const preparedPset = blindPset(lwk, wollet, new WalletCoins(coins), pset);
+	return signPset(
+		account,
+		{
+			broadcast: false,
+			reviewedPset: preparedPset.toString(),
+			signInputs: [{ address: "wallet-address", index, sighashTypes: [1] }],
+		},
+		SIGNED_FOR,
+	);
 }
 
 beforeEach(() => {
 	signedSource = "";
 	signerTransform = undefined;
-	walletUtxos = [];
-	walletTransactions = [];
-	nativeBlindingSource = "";
-	nativeBlindingResult = undefined;
-	nativeBlindingError = undefined;
+	coins = [];
 });
 
 describe("mixed-input PSET signing", () => {
@@ -480,13 +474,17 @@ describe("mixed-input PSET signing", () => {
 		signerTransform = (pset) => withSignature(pset, 0);
 
 		await expect(
-			signPset(account, {
-				broadcast: true,
-				reviewedPset: fixture(10_000n, undefined, false).toString(),
-				signInputs: [{ address: "wallet-address", index: 2, sighashTypes: [1] }],
-			}),
+			signPset(
+				account,
+				{
+					broadcast: true,
+					reviewedPset: fixture(10_000n, undefined, false).toString(),
+					signInputs: [{ address: "wallet-address", index: 2, sighashTypes: [1] }],
+				},
+				SIGNED_FOR,
+			),
 		).rejects.toMatchObject({
-			message: "Refusing to sign a Liquid PSET input the request did not list.",
+			message: "The wallet refused to sign an input the dapp did not list.",
 		});
 	});
 
@@ -495,7 +493,7 @@ describe("mixed-input PSET signing", () => {
 		signerTransform = (pset) => withSignature(pset, 0, 2);
 
 		await expect(sign(prepared)).rejects.toThrow(
-			"Refusing to sign a Liquid PSET input the request did not list.",
+			"The wallet refused to sign an input the dapp did not list.",
 		);
 	});
 
@@ -506,36 +504,47 @@ describe("mixed-input PSET signing", () => {
 		expect((await sign(prepared)).pset).toBe(withSignature(prepared, 2).toString());
 	});
 
-	test("delegates wallet-only funding to the native LWK blinder", async () => {
-		nativeBlindingResult = new lwk.Pset((await sign(fixture())).pset);
+	test("blinds a PSET funded only by wallet coins", async () => {
 		const original = fixture();
-		ownFixtureInputs(original);
-		signedSource = "";
+		holdFixtureInputs(original);
+		const outputs = new lwk.Pset((await sign(original)).pset).extractTx().outputs;
 
-		const result = await sign(original);
-
-		expect(nativeBlindingSource).toBe(original.toString());
-		expect(result.pset).toBe(nativeBlindingResult.toString());
-		expect(signedSource).toBe(nativeBlindingResult.toString());
+		expect(outputs[0]!.unblind(blindingKey).value()).toBe(50_000n);
+		expect(outputs[2]!.unblind(blindingKey).value()).toBe(9_000n);
+		expect(outputs[3]!.isPartiallyBlinded()).toBe(false);
 	});
 
-	test("lets native LWK hydrate wallet-only outpoint requests", async () => {
-		nativeBlindingResult = new lwk.Pset((await sign(fixture())).pset);
+	test("hydrates wallet coins requested by outpoint", async () => {
 		const original = fixture(10_000n, undefined, true, true);
-		ownFixtureInputs(original);
+		holdFixtureInputs(original);
+		const result = new lwk.Pset((await sign(original)).pset);
 
-		expect((await sign(original)).pset).toBe(nativeBlindingResult.toString());
-		expect(nativeBlindingSource).toBe(original.toString());
+		expect(result.inputs()[2]!.previousScriptPubkey()?.toString()).toBe(script.toString());
+		expect(result.extractTx().outputs[2]!.unblind(blindingKey).value()).toBe(9_000n);
 	});
 
-	test("does not fall back when native wallet blinding fails", async () => {
-		const original = fixture();
-		ownFixtureInputs(original);
-		nativeBlindingError = new Error("Native blinding failed");
+	test("replaces a dapp-supplied witness UTXO on a wallet coin", async () => {
+		const original = fixture(10_000n, lwk.TxOut.fromExplicit(script, asset, 12_000n));
+		holdFixtureInputs(original);
+		const result = PsetMaps.parse((await sign(original)).pset);
 
-		await expect(sign(original)).rejects.toThrow(nativeBlindingError);
-		expect(nativeBlindingSource).toBe(original.toString());
-		expect(signedSource).toBe("");
+		expect(result.inputs[2]!.explicitPrevout).toEqual({ asset: asset.toString(), value: 10_000n });
+	});
+
+	test("hydrates wallet coins when no output needs blinding", async () => {
+		const original = fixture(10_000n, undefined, false, true);
+		holdFixtureInputs(original);
+		const result = PsetMaps.parse((await sign(original)).pset);
+
+		expect(result.inputs[2]!.explicitPrevout).toEqual({ asset: asset.toString(), value: 10_000n });
+	});
+
+	test("replaces a dapp-supplied witness UTXO when no output needs blinding", async () => {
+		const original = fixture(10_000n, lwk.TxOut.fromExplicit(script, asset, 12_000n), false);
+		holdFixtureInputs(original);
+		const result = PsetMaps.parse((await sign(original)).pset);
+
+		expect(result.inputs[2]!.explicitPrevout).toEqual({ asset: asset.toString(), value: 10_000n });
 	});
 
 	test("blinds explicit foreign inputs and preserves global metadata", async () => {
@@ -570,10 +579,8 @@ describe("mixed-input PSET signing", () => {
 
 	test("preserves an already-blinded PSET byte for byte", async () => {
 		const prepared = withWitness(new lwk.Pset((await sign(fixture())).pset));
-		ownFixtureInputs(prepared);
-		const result = await sign(prepared);
-		expect(result.pset).toBe(prepared.toString());
-		expect(nativeBlindingSource).toBe("");
+		holdFixtureInputs(prepared);
+		expect((await sign(prepared)).pset).toBe(prepared.toString());
 	});
 
 	test("preserves completed blinding with zero indices on explicit outputs", async () => {
@@ -606,7 +613,7 @@ describe("mixed-input PSET signing", () => {
 		expect((await sign(prepared)).pset).toBe(prepared.toString());
 	});
 
-	test("rejects blinding after covenant witnesses are finalized", async () => {
+	test("rejects blinding after program witnesses are finalized", async () => {
 		await expect(sign(withWitness(fixture()))).rejects.toThrow(
 			"PSET must be blinded before signing or finalizing its inputs.",
 		);
@@ -628,27 +635,22 @@ describe("mixed-input PSET signing", () => {
 
 	test("uses owned confidential input secrets alongside explicit foreign inputs", async () => {
 		const previousOutput = new lwk.Pset((await sign(fixture())).pset).extractTx().outputs[2];
-		walletUtxos = [
-			{
-				outpoint: () => lwk.OutPoint.fromParts(new lwk.Txid("3".repeat(64)), 0),
-				unblinded: () => previousOutput.unblind(blindingKey),
-			},
+		coins = [
+			holding(
+				lwk.OutPoint.fromParts(new lwk.Txid("3".repeat(64)), 0),
+				previousOutput,
+				previousOutput.unblind(blindingKey),
+			),
 		];
 		const result = new lwk.Pset((await sign(fixture(9_000n, previousOutput))).pset);
 		expect(result.extractTx().outputs[2].unblind(blindingKey).value()).toBe(8_000n);
 	});
 
-	test("hydrates an owned funding input before blinding", async () => {
+	test("hydrates an owned confidential funding input before blinding", async () => {
 		const previous = new lwk.Pset((await sign(fixture())).pset).extractTx();
 		const previousOutput = previous.outputs[2];
 		const outpoint = lwk.OutPoint.fromParts(previous.txid(), 2);
-		walletUtxos = [
-			{
-				outpoint: () => outpoint,
-				unblinded: () => previousOutput.unblind(blindingKey),
-			},
-		];
-		walletTransactions = [{ txid: () => previous.txid(), tx: () => previous }];
+		coins = [holding(outpoint, previousOutput, previousOutput.unblind(blindingKey))];
 		const original = fixture(9_000n, previousOutput, true, true, outpoint);
 		const result = new lwk.Pset((await sign(original)).pset);
 		expect(result.extractTx().outputs[2].unblind(blindingKey).value()).toBe(8_000n);
@@ -658,41 +660,21 @@ describe("mixed-input PSET signing", () => {
 		).toBe(true);
 	});
 
-	test("hydrates an unspent explicit wallet input without native blinding", async () => {
-		const original = explicitFundingHistory();
-		const result = new lwk.Pset((await sign(original)).pset);
+	test("hydrates an unspent explicit wallet input", async () => {
+		const result = new lwk.Pset((await sign(explicitFunding())).pset);
 
 		expect(result.inputs()[2].previousScriptPubkey()?.toString()).toBe(script.toString());
 		expect(result.extractTx().outputs[2].unblind(blindingKey).value()).toBe(9_000n);
-		expect(nativeBlindingSource).toBe("");
-		expect(
-			Buffer.from(result.toString(), "base64").includes(Buffer.from("0103047b000000", "hex")),
-		).toBe(true);
 	});
 
-	for (const state of ["spent", "foreign", "unconfirmed"] as const) {
-		test(`does not hydrate a ${state} explicit output from wallet history`, async () => {
-			await expect(sign(explicitFundingHistory(state))).rejects.toThrow(
-				"Every input needs its witness UTXO before blinding.",
-			);
-			expect(signedSource).toBe("");
-		});
-	}
-
-	test("rejects missing witness UTXOs for unknown inputs", async () => {
-		await expect(sign(fixture(10_000n, undefined, true, true))).rejects.toThrow(
+	test("does not hydrate an unconfirmed explicit wallet output", async () => {
+		await expect(sign(explicitFunding(false))).rejects.toThrow(
 			"Every input needs its witness UTXO before blinding.",
 		);
 		expect(signedSource).toBe("");
 	});
 
-	test("rejects missing wallet transaction history before signing", async () => {
-		walletUtxos = [
-			{
-				outpoint: () => lwk.OutPoint.fromParts(new lwk.Txid("3".repeat(64)), 0),
-				unblinded: () => lwk.TxOutSecrets.fromExplicit(asset, 10_000n),
-			},
-		];
+	test("rejects missing witness UTXOs for unknown inputs", async () => {
 		await expect(sign(fixture(10_000n, undefined, true, true))).rejects.toThrow(
 			"Every input needs its witness UTXO before blinding.",
 		);
@@ -709,7 +691,9 @@ describe("mixed-input PSET signing", () => {
 	});
 
 	test("rejects an out-of-range requested index before signing", async () => {
-		await expect(sign(fixture(), 3)).rejects.toThrow("Requested PSET input index is out of range.");
+		await expect(sign(fixture(), 3)).rejects.toThrow(
+			"The dapp asked to sign an input the transaction does not have.",
+		);
 		expect(signedSource).toBe("");
 	});
 });

@@ -9,6 +9,7 @@ import type {
 	EstimateMaxSendInput,
 	EstimateMaxSendResult,
 	GetActivityInput,
+	HeldTransaction,
 	ImportAccountInput,
 	PortfolioSnapshot,
 	ReceiveAddress,
@@ -42,6 +43,8 @@ export type AccountsRuntimeDeps = {
 	getPortfolio: () => Promise<PortfolioSnapshot>;
 	getReceiveAddress: () => Promise<ReceiveAddress>;
 	inspectTransfer: (input: SendTransferInput) => Promise<TransferReview>;
+	listHeldTransactions: () => Promise<HeldTransaction[]>;
+	releaseHeldTransaction: (txid: string) => Promise<void>;
 	estimateMaxSend: (input: EstimateMaxSendInput) => Promise<EstimateMaxSendResult>;
 	refreshPortfolio: () => Promise<PortfolioSnapshot>;
 	sendTransfer: (input: SendTransferInput) => Promise<SendTransferResult>;
@@ -129,7 +132,7 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 			const { mnemonic, name } = message.data as ImportAccountInput;
 
 			if (!keyManagerSecretMaterial.isValidMnemonic(mnemonic)) {
-				throw new Error("Invalid recovery phrase.");
+				throw new Error("Enter a valid 12-word recovery phrase.");
 			}
 
 			const seedMaterial = keyManagerSecretMaterial.normalizeMnemonic(mnemonic);
@@ -222,6 +225,9 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 		[accountsRpc.methods.getReceiveAddress]: () => deps.getReceiveAddress(),
 		[accountsRpc.methods.getPortfolio]: () => deps.getPortfolio(),
 		[accountsRpc.methods.refreshPortfolio]: () => deps.refreshPortfolio(),
+		[accountsRpc.methods.listHeldTransactions]: () => deps.listHeldTransactions(),
+		[accountsRpc.methods.releaseHeldTransaction]: (message) =>
+			deps.releaseHeldTransaction((message.data as { txid: string }).txid),
 		[accountsRpc.methods.getActivity]: (message) =>
 			deps.getActivity(message.data as GetActivityInput),
 		[accountsRpc.methods.inspectTransfer]: (message) =>

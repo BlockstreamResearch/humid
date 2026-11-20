@@ -2,7 +2,7 @@ import { definePegasusMessageBus } from "@webext-pegasus/transport";
 import { useEffect } from "react";
 
 import type { PegasusMsgProtocolMap } from "@/background";
-import { useConfirm } from "@/common/Confirmation";
+import { useConfirm, useShowOutcome } from "@/common/Confirmation";
 import { MsgProtocolRequestMethods, MsgProtocolResponseMethods } from "@/helpers/background";
 
 type ActionsHandlerProps = {
@@ -11,6 +11,7 @@ type ActionsHandlerProps = {
 
 export default function ActionsHandler({ messageBus }: ActionsHandlerProps) {
 	const confirm = useConfirm();
+	const showOutcome = useShowOutcome();
 
 	useEffect(() => {
 		const removeRequestConfirmationListener = messageBus.onMessage(
@@ -25,10 +26,16 @@ export default function ActionsHandler({ messageBus }: ActionsHandlerProps) {
 			},
 		);
 
+		const removeShowOutcomeListener = messageBus.onMessage(
+			MsgProtocolRequestMethods.ShowOutcome,
+			({ data }) => showOutcome(data.data),
+		);
+
 		return () => {
 			removeRequestConfirmationListener();
+			removeShowOutcomeListener();
 		};
-	}, [confirm, messageBus]);
+	}, [confirm, messageBus, showOutcome]);
 
 	return null;
 }

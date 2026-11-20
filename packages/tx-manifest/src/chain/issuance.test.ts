@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { assetFromEntropy, deriveNewIssuance } from "./issuance";
+import { deriveFromEntropy, deriveNewIssuance } from "./issuance";
 
 const ON_CHAIN = [
 	{
@@ -95,11 +95,17 @@ describe("the asset a reissuance mints", () => {
 
 		const first = deriveNewIssuance({ txid: known.txid, vout: known.vout }, known.contractHash);
 
-		expect(assetFromEntropy(first?.entropy ?? "")).toBe(known.asset);
+		expect(deriveFromEntropy(first?.entropy ?? "")).toEqual(first);
+	});
+
+	test("reads the entropy in the byte order the format writes, which explorers print reversed", () => {
+		expect(
+			deriveFromEntropy("f8326827828ee2aab3c4d273fb573a8cf89a401bbc6643637d439ff36c60b6b9")?.asset,
+		).toBe("3a8b6b466346d9dbfcecd8c8d7b0c1873aee4e00fd5df0d95086a3f7eecd5a39");
 	});
 
 	test("is not derivable from something that is not an entropy", () => {
-		expect(assetFromEntropy("")).toBeUndefined();
-		expect(assetFromEntropy("zz".repeat(32))).toBeUndefined();
+		expect(deriveFromEntropy("")).toBeUndefined();
+		expect(deriveFromEntropy("zz".repeat(32))).toBeUndefined();
 	});
 });

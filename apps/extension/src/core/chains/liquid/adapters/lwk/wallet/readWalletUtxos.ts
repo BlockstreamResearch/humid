@@ -1,13 +1,9 @@
-import {
-	WALLET_RPC_ERROR_REASONS,
-	WalletRpcResourceUnavailableError,
-} from "@/core/wallet-rpc/errors";
-
 import type {
 	LiquidBlindingSecrets,
 	LiquidUtxoSnapshot,
 } from "../../../application/backends/LiquidWalletBackend";
 import type { LwkWasmModule } from "../loadLwkWasm";
+import { walletTxOut } from "./walletTxOut";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
 
@@ -18,13 +14,10 @@ type LwkTxOutSecrets = {
 	valueBlindingFactor: () => { toString: () => string };
 };
 
-type LwkTxOutView = {
-	isPartiallyBlinded: () => boolean;
-	toString: () => string;
-};
-
 export function readWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[] {
-	const txOutByOutpoint = createTxOutLookup(wollet);
+	const transactionHexes = new Map(
+		wollet.transactions().map((walletTx) => [walletTx.txid().toString(), walletTx.tx().toString()]),
+	);
 
 	const snapshots: LiquidUtxoSnapshot[] = [];
 
@@ -33,18 +26,9 @@ export function readWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[] {
 		const outpoint = utxo.outpoint();
 		const txid = outpoint.txid().toString();
 		const vout = outpoint.vout();
-		const rawTxOut = txOutByOutpoint.get(createOutpointKey(txid, vout));
-
-		if (!rawTxOut) {
-			throw new WalletRpcResourceUnavailableError(
-				"Could not locate the raw previous output for a wallet UTXO.",
-				{ txid, vout },
-				WALLET_RPC_ERROR_REASONS.WALLET_UTXO_READ_FAILED,
-			);
-		}
-
+		const txOut = walletTxOut(transactionHexes.get(txid) ?? "", txid, vout);
 		const spendable = utxo.height() !== undefined;
-		const confidential = rawTxOut.isPartiallyBlinded();
+		const confidential = txOut.confidential;
 
 		const snapshot: LiquidUtxoSnapshot = {
 			address: utxo.address().toString(),
@@ -55,7 +39,7 @@ export function readWalletUtxos(wollet: LwkWollet): LiquidUtxoSnapshot[] {
 			scriptPubKey: utxo.scriptPubkey().toString(),
 			spendable,
 			txid,
-			txOut: rawTxOut.toString(),
+			txOut: txOut.hex,
 			vout,
 		};
 
@@ -76,23 +60,4 @@ function secretsOf(unblinded: LwkTxOutSecrets): LiquidBlindingSecrets {
 		value: Number(unblinded.value()),
 		valueBlindingFactor: unblinded.valueBlindingFactor().toString(),
 	};
-}
-
-function createTxOutLookup(wollet: LwkWollet): Map<string, LwkTxOutView> {
-	const txOutByOutpoint = new Map<string, LwkTxOutView>();
-
-	for (const walletTx of wollet.transactions()) {
-		const txid = walletTx.txid().toString();
-		const tx = walletTx.tx();
-
-		for (const [vout, txOut] of tx.outputs.entries()) {
-			txOutByOutpoint.set(createOutpointKey(txid, vout), txOut);
-		}
-	}
-
-	return txOutByOutpoint;
-}
-
-function createOutpointKey(txid: string, vout: number): string {
-	return `${txid}:${vout}`;
 }

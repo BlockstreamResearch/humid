@@ -33,7 +33,7 @@ export function SettingsRowContent({
 
 export function SettingsRowSoon() {
 	return (
-		<span className="text-muted-foreground rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
+		<span className="text-muted-foreground rounded-full border px-2 text-[10px] leading-4 font-medium tracking-wide uppercase">
 			Soon
 		</span>
 	);

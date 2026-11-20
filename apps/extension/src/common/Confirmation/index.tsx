@@ -1,70 +1,106 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
-import type { ConfirmationDecision, ConfirmationRequest } from "@/helpers/background";
+import type {
+	ConfirmationDecision,
+	ConfirmationOutcome,
+	ConfirmationRequest,
+} from "@/helpers/background";
 
 import { DefaultConfirmation } from "./DefaultConfirmation";
+import { ConfirmationFailure, TransactionReceipt } from "./TransactionReceipt";
 
 type Confirm = (request: ConfirmationRequest) => Promise<ConfirmationDecision>;
+
+type ShowOutcome = (outcome: ConfirmationOutcome) => Promise<void>;
 
 export type ConfirmationRenderer = {
 	kind: string;
 	render: (props: {
+		busy: boolean;
 		onConfirm: (result?: unknown) => void;
 		onDecline: () => void;
 		request: ConfirmationRequest;
 	}) => ReactNode;
 };
 
-const ConfirmContext = createContext<Confirm | undefined>(undefined);
+type View = { busy: boolean; outcome?: ConfirmationOutcome; request?: ConfirmationRequest };
+
+const ConfirmContext = createContext<{ confirm: Confirm; showOutcome: ShowOutcome } | undefined>(
+	undefined,
+);
 
 export function ConfirmProvider({
 	children,
 	renderers = [],
+	idle,
 }: {
 	children: ReactNode;
 	renderers?: ConfirmationRenderer[];
+	idle?: ReactNode;
 }) {
-	const [request, setRequest] = useState<ConfirmationRequest | null>(null);
+	const [view, setView] = useState<View | null>(null);
 	const [resolver, setResolver] = useState<(decision: ConfirmationDecision) => void>(
 		() => () => {},
 	);
+	const [dismiss, setDismiss] = useState<() => void>(() => () => {});
 
-	const confirm = useCallback<Confirm>((next) => {
-		setRequest(next);
+	const confirm = useCallback<Confirm>((request) => {
+		setView({ busy: false, request });
 
 		return new Promise<ConfirmationDecision>((resolve) => {
 			setResolver(() => resolve);
 		});
 	}, []);
 
+	const showOutcome = useCallback<ShowOutcome>((outcome) => {
+		setView((current) => ({ busy: false, ...current, outcome }));
+
+		return new Promise<void>((resolve) => {
+			setDismiss(() => resolve);
+		});
+	}, []);
+
 	const settle = useCallback(
 		(decision: ConfirmationDecision) => {
 			resolver(decision);
-			setRequest(null);
+			setView((current) =>
+				decision.approved && current?.request?.completes ? { ...current, busy: true } : null,
+			);
 		},
 		[resolver],
 	);
+
+	const done = () => {
+		dismiss();
+		setView(null);
+		window.close();
+	};
 
 	const bodies = useMemo(
 		() => new Map(renderers.map((renderer) => [renderer.kind, renderer.render])),
 		[renderers],
 	);
 
-	const Body = request ? (bodies.get(confirmationKind(request.data)) ?? DefaultConfirmation) : null;
+	const context = useMemo(() => ({ confirm, showOutcome }), [confirm, showOutcome]);
 
 	return (
-		<ConfirmContext.Provider value={confirm}>
+		<ConfirmContext.Provider value={context}>
 			{children}
-			{request &&
-				Body &&
+			{(view !== null || idle !== undefined) &&
 				createPortal(
 					<div className="fixed inset-0 z-50">
-						<Body
-							request={request}
-							onConfirm={(result) => settle({ approved: true, result })}
-							onDecline={() => settle({ approved: false })}
-						/>
+						{view === null ? (
+							idle
+						) : (
+							<ConfirmationView
+								view={view}
+								bodies={bodies}
+								onConfirm={(result) => settle({ approved: true, result })}
+								onDecline={() => settle({ approved: false })}
+								onDone={done}
+							/>
+						)}
 					</div>,
 					document.body,
 				)}
@@ -72,14 +108,53 @@ export function ConfirmProvider({
 	);
 }
 
-export function useConfirm(): Confirm {
-	const confirm = useContext(ConfirmContext);
+function ConfirmationView({
+	view,
+	bodies,
+	onConfirm,
+	onDecline,
+	onDone,
+}: {
+	view: View;
+	bodies: Map<string, ConfirmationRenderer["render"]>;
+	onConfirm: (result?: unknown) => void;
+	onDecline: () => void;
+	onDone: () => void;
+}) {
+	const { busy, outcome, request } = view;
+	const origin = request?.requester?.origin;
 
-	if (!confirm) {
+	if (outcome !== undefined) {
+		return "receipt" in outcome ? (
+			<TransactionReceipt receipt={outcome.receipt} origin={origin} onDone={onDone} />
+		) : (
+			<ConfirmationFailure message={outcome.error} origin={origin} onClose={onDone} />
+		);
+	}
+
+	if (request === undefined) return null;
+
+	const Body = bodies.get(confirmationKind(request.data)) ?? DefaultConfirmation;
+
+	return <Body busy={busy} request={request} onConfirm={onConfirm} onDecline={onDecline} />;
+}
+
+export function useConfirm(): Confirm {
+	return useConfirmContext().confirm;
+}
+
+export function useShowOutcome(): ShowOutcome {
+	return useConfirmContext().showOutcome;
+}
+
+function useConfirmContext() {
+	const context = useContext(ConfirmContext);
+
+	if (!context) {
 		throw new Error("useConfirm must be used within a ConfirmProvider");
 	}
 
-	return confirm;
+	return context;
 }
 
 function confirmationKind(data: unknown): string {

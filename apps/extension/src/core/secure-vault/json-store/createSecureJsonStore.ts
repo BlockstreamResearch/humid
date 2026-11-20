@@ -31,7 +31,7 @@ export function createSecureJsonStore<TValue>(input: {
 			const value = await resolveStoreGet(storage, input);
 
 			if (value === null) {
-				throw new Error(`Secure vault item is missing: ${input.key}`);
+				throw new Error(`Wallet item is missing: ${input.key}`);
 			}
 
 			return value;
@@ -76,7 +76,7 @@ function parseJsonValue<TValue>(rawValue: string, parse: (value: unknown) => TVa
 			throw error;
 		}
 
-		throw new Error("Secure vault JSON item is invalid.", {
+		throw new Error("Wallet JSON item is invalid.", {
 			cause: error,
 		});
 	}

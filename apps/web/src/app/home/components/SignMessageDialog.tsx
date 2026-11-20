@@ -20,13 +20,13 @@ import { useAsyncAction } from "./useAsyncAction";
 type OverlayProps = { open: boolean; onOpenChange: (open: boolean) => void };
 
 export function SignMessageDialog({ open, onOpenChange }: OverlayProps) {
-	const { address, wallet } = useHumidContext();
+	const { wallet } = useHumidContext();
 	const [message, setMessage] = useState("");
 	const [signer, setSigner] = useState("");
 	const action = useAsyncAction<LiquidSignMessageResult>();
 
-	const effectiveAddress = signer.trim() || address;
-	const canSign = message.trim().length > 0 && effectiveAddress.length > 0;
+	const address = signer.trim();
+	const canSign = message.trim().length > 0 && address.length > 0;
 	const pending = action.status === "pending";
 
 	const handleOpenChange = (next: boolean) => {
@@ -41,9 +41,7 @@ export function SignMessageDialog({ open, onOpenChange }: OverlayProps) {
 	};
 
 	const sign = async () => {
-		const result = await action.run(() =>
-			wallet.signMessage({ address: effectiveAddress, message }),
-		);
+		const result = await action.run(() => wallet.signMessage({ address, message }));
 		if (result.ok) toast.success("Message signed");
 		else toast.error("Signing failed", { description: result.error });
 	};
@@ -67,8 +65,8 @@ export function SignMessageDialog({ open, onOpenChange }: OverlayProps) {
 						label="Signing address"
 						value={signer}
 						onChange={setSigner}
-						placeholder={address || "Wallet-owned address"}
-						hint="Defaults to the connected address."
+						placeholder="Wallet-owned address"
+						hint="An address getAddress or getUTXOs returned."
 					/>
 					{action.status === "success" && action.data ? (
 						<ResultField label="Signature" value={action.data.signature} />

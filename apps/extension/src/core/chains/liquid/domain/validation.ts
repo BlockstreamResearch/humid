@@ -7,11 +7,11 @@ import type { LiquidChainId } from "./LiquidChain";
 import {
 	LIQUID_DESCRIPTOR_FORMATS,
 	LIQUID_DESCRIPTOR_TYPES,
-	type LiquidGetAddressParams,
-	type LiquidGetBalanceParams,
-	type LiquidGetUTXOsParams,
+	type ParsedLiquidGetAddressParams,
+	type ParsedLiquidGetBalanceParams,
+	type ParsedLiquidGetUTXOsParams,
 	type LiquidGetWalletDescriptorParams,
-	type LiquidSendTransferParams,
+	type ParsedLiquidSendTransferParams,
 } from "./LiquidRpc";
 
 const liquidAssetIdSchema = z.string().regex(/^bip122:[0-9a-f]{32}\/elip144:[0-9a-f]{64}$/u);
@@ -121,7 +121,7 @@ export function parseLiquidAssetId(
 	};
 }
 
-export function parseLiquidGetAddressParams(value: unknown): LiquidGetAddressParams {
+export function parseLiquidGetAddressParams(value: unknown): ParsedLiquidGetAddressParams {
 	const parsed = liquidGetAddressParamsSchema.safeParse(value);
 
 	if (!parsed.success) {
@@ -131,7 +131,7 @@ export function parseLiquidGetAddressParams(value: unknown): LiquidGetAddressPar
 	return parsed.data;
 }
 
-export function parseLiquidGetBalanceParams(value: unknown): LiquidGetBalanceParams {
+export function parseLiquidGetBalanceParams(value: unknown): ParsedLiquidGetBalanceParams {
 	const parsed = liquidGetBalanceParamsSchema.safeParse(value);
 
 	if (!parsed.success) {
@@ -143,7 +143,7 @@ export function parseLiquidGetBalanceParams(value: unknown): LiquidGetBalancePar
 	};
 }
 
-export function parseLiquidGetUTXOsParams(value: unknown): LiquidGetUTXOsParams {
+export function parseLiquidGetUTXOsParams(value: unknown): ParsedLiquidGetUTXOsParams {
 	const parsed = liquidGetUTXOsParamsSchema.safeParse(value);
 
 	if (!parsed.success) {
@@ -173,7 +173,7 @@ export function parseLiquidGetWalletDescriptorParams(
 	};
 }
 
-export function parseLiquidSendTransferParams(value: unknown): LiquidSendTransferParams {
+export function parseLiquidSendTransferParams(value: unknown): ParsedLiquidSendTransferParams {
 	const parsed = liquidSendTransferParamsSchema.safeParse(value);
 
 	if (!parsed.success) {

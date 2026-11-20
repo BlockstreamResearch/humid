@@ -3,11 +3,11 @@ import type {
 	LiquidWalletAccount,
 } from "../../../application/backends/LiquidWalletBackend";
 import { getLwkImplementation } from "./getLwkImplementation";
-import { readWalletActivityForAsset } from "./readWalletData";
+import { readWalletActivity } from "./readWalletData";
 
 export function getWalletActivityForAsset(
 	account: LiquidWalletAccount,
-	rawAssetId: string,
+	rawAssetId: string | null,
 ): LiquidActivityEntry[] {
-	return readWalletActivityForAsset(getLwkImplementation(account).wollet, rawAssetId);
+	return readWalletActivity(getLwkImplementation(account).wollet, rawAssetId);
 }

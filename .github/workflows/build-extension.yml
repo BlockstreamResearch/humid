@@ -38,7 +38,7 @@ jobs:
         with:
           profile: ${{ inputs.profile }}
 
-      # The manifest runtime compiles Simplicity covenants and assembles transactions with
+      # The manifest runtime compiles Simplicity programs and assembles transactions with
       # this module, so the extension does not build without the package either.
       - name: Build smplx_wasm
         uses: ./.github/actions/build-smplx-wasm

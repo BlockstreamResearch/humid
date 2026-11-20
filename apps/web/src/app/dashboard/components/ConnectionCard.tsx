@@ -9,14 +9,14 @@ import {
 } from "@/components/ui/select";
 import { useHumidContext } from "@/contexts/Web3Provider/HumidProvider";
 
-import { truncateAddress } from "../lib/format";
+import { truncateId } from "../lib/format";
 import { useRpcCall } from "../lib/useRpcCall";
 import { ResultPanel } from "./ResultPanel";
 import { StatusRow } from "./StatusRow";
 
 export function ConnectionCard() {
 	const {
-		address,
+		accountId,
 		chainId,
 		connect,
 		createSession,
@@ -34,11 +34,11 @@ export function ConnectionCard() {
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle>HUMID Liquid Wallet RPC — debug dashboard</CardTitle>
+				<CardTitle>Humid Liquid Wallet RPC — debug dashboard</CardTitle>
 				<CardDescription>
-					Injected window.humid, CAIP-25/27. Every authorized method is callable — the wallet runs
-					it silently or prompts for confirmation per humid_methodPolicy (decline yields JSON-RPC
-					4001). Each method has its own card below that prints the raw result or error.
+					Injected window.humid, CAIP-25/27. Every authorized method is callable. Reads run without
+					a prompt when humid_methodPolicy allows; signing and sending always prompt (decline yields
+					JSON-RPC 4001). Each method has its own card below that prints the raw result or error.
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="flex flex-col gap-4">
@@ -67,7 +67,7 @@ export function ConnectionCard() {
 				{isConnected ? (
 					<p className="text-muted-foreground text-sm">
 						Connected as{" "}
-						<code className="text-foreground font-mono text-xs">{truncateAddress(address)}</code>
+						<code className="text-foreground font-mono text-xs">{truncateId(accountId)}</code>
 					</p>
 				) : null}
 

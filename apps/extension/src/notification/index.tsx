@@ -10,9 +10,14 @@ import "./notification.css";
 
 import type { PegasusMsgProtocolMap } from "@/background";
 import { ConfirmProvider } from "@/common/Confirmation";
+import { PreparingConfirmation } from "@/common/Confirmation/PreparingConfirmation";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
 import { processCtConfirmationRenderer } from "@/core/chains/liquid/application/methods/processConfidentialTransaction/ProcessCtConfirmation";
+import { sendTransferConfirmationRenderer } from "@/core/chains/liquid/application/methods/sendTransfer/SendTransferConfirmation";
+import { signIdentityConfirmationRenderer } from "@/core/chains/liquid/application/methods/signIdentity/SignIdentityConfirmation";
+import { signMessageConfirmationRenderer } from "@/core/chains/liquid/application/methods/signMessage/SignMessageConfirmation";
+import { signPsetConfirmationRenderer } from "@/core/chains/liquid/application/methods/signPset/SignPsetConfirmation";
 import { dappAddChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappAddChainConfirmation";
 import { dappConnectConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappConnectConfirmation";
 import { dappSwitchChainConfirmationRenderer } from "@/core/extension-background/dapp-authorization/DappSwitchChainConfirmation";
@@ -37,6 +42,10 @@ const confirmationRenderers = [
 	dappAddChainConfirmationRenderer,
 	dappSwitchChainConfirmationRenderer,
 	processCtConfirmationRenderer,
+	sendTransferConfirmationRenderer,
+	signIdentityConfirmationRenderer,
+	signMessageConfirmationRenderer,
+	signPsetConfirmationRenderer,
 	unlockConfirmationRenderer,
 ];
 
@@ -45,7 +54,7 @@ createRoot(rootElement).render(
 		<AppErrorBoundary>
 			<ThemeProvider>
 				<QueryClientProvider client={queryClient}>
-					<ConfirmProvider renderers={confirmationRenderers}>
+					<ConfirmProvider renderers={confirmationRenderers} idle={<PreparingConfirmation />}>
 						<ActionsHandler messageBus={messageBus} />
 					</ConfirmProvider>
 				</QueryClientProvider>

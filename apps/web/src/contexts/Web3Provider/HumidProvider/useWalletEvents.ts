@@ -1,5 +1,5 @@
 import {
-	LIQUID_DESCRIPTOR_CHANGED_EVENT,
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
 	type CaipRpcProvider,
 } from "@humid/appkit-injected-adapter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,7 +12,7 @@ import { HUMID_SESSION_QUERY_KEY } from "./useHumidSession";
 const WALLET_EVENTS = [
 	"accountsChanged",
 	"chainChanged",
-	LIQUID_DESCRIPTOR_CHANGED_EVENT,
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
 	"wallet_sessionChanged",
 ] as const;
 

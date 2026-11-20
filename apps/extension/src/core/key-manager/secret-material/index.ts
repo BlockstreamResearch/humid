@@ -32,7 +32,10 @@ function splitMnemonicWords(mnemonic: string): string[] {
 }
 
 function isValidMnemonic(mnemonic: string): boolean {
-	return validateMnemonic(normalizeMnemonic(mnemonic), wordlist);
+	return (
+		splitMnemonicWords(mnemonic).length === MNEMONIC_WORD_COUNT &&
+		validateMnemonic(normalizeMnemonic(mnemonic), wordlist)
+	);
 }
 
 export const keyManagerSecretMaterial = {

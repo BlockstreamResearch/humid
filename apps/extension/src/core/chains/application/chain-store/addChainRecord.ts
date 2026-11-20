@@ -26,7 +26,7 @@ export async function addUnlockedChainRecord(
 	}
 
 	if ((await knownChainIds(chainGroups)).has(chain.id)) {
-		throw new Error(`Chain already exists: ${chain.id}`);
+		throw new Error(`This network already exists: ${chain.id}`);
 	}
 
 	await setUnlockedChainRecord(chain);

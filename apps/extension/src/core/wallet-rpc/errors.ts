@@ -28,6 +28,7 @@ export const WALLET_RPC_ERROR_REASONS = {
 	MISSING_LOCAL_ROOT_KEYRING: "missing_local_root_keyring",
 	NOT_IMPLEMENTED: "not_implemented",
 	RESOURCE_UNAVAILABLE: "resource_unavailable",
+	TRANSACTION_REFUSED: "transaction_refused",
 	UNAUTHORIZED: "unauthorized",
 	UNSUPPORTED_CHAIN: "unsupported_chain",
 	UNSUPPORTED_DESCRIPTOR_FORMAT: "unsupported_descriptor_format",

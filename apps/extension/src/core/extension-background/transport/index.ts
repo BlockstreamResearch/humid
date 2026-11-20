@@ -1,3 +1,4 @@
+import { LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT } from "@humid/wallet-rpc";
 import { registerRPCService } from "@webext-pegasus/rpc";
 import {
 	definePegasusEventBus,
@@ -8,6 +9,7 @@ import { initPegasusTransport } from "@webext-pegasus/transport/background";
 
 import {
 	ConfirmationDecision,
+	ConfirmationOutcome,
 	ConfirmationRequest,
 	EventProtocolListeners,
 	ExtensionMessage,
@@ -23,6 +25,7 @@ export type PegasusMsgProtocolMap = {
 	[MsgProtocolResponseMethods.RequestResponse]: ExtensionMessage<unknown>;
 	[MsgProtocolRequestMethods.RequestConfirmation]: { id: number; data: ConfirmationRequest };
 	[MsgProtocolResponseMethods.ConfirmResponse]: { id: number; data: ConfirmationDecision };
+	[MsgProtocolRequestMethods.ShowOutcome]: { id: number; data: ConfirmationOutcome };
 };
 
 export type WalletProviderEventPayload = { chainId?: string };
@@ -30,7 +33,7 @@ export type WalletProviderEventPayload = { chainId?: string };
 export type PegasusEventProtocolMap = {
 	[EventProtocolListeners.ExtensionEvent]: unknown;
 	accountsChanged: WalletProviderEventPayload;
-	bip122_walletDescriptorChanged: WalletProviderEventPayload;
+	[LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT]: WalletProviderEventPayload;
 	chainChanged: WalletProviderEventPayload;
 	connect: WalletProviderEventPayload;
 	disconnect: WalletProviderEventPayload;

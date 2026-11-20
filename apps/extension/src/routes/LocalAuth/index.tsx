@@ -1,36 +1,16 @@
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
-import { z } from "zod";
+import { useState } from "react";
 
 import { useConfirm } from "@/common/Confirmation";
 import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/client";
 import { UiButton } from "@/ui/UiButton/base";
-import { UiField, UiFieldError, UiFieldGroup, UiFieldLabel } from "@/ui/UiField";
-import { UiInput } from "@/ui/UiInput/base";
-import UiPageBackgroundWrp from "@/ui/UiPageBackgroundWrp";
+import { UiFieldError } from "@/ui/UiField";
 
-const localAuthFormSchema = z.object({
-	passphrase: z.string().min(1, "Enter your password to unlock the vault."),
-});
-
-type LocalAuthFormValues = z.infer<typeof localAuthFormSchema>;
-
-const DEFAULT_FORM_VALUES: LocalAuthFormValues = {
-	passphrase: "",
-};
-
-function getErrorMessage(error: unknown): string | null {
-	if (!error) return null;
-
-	return error instanceof Error ? error.message : String(error);
-}
+import { UnlockScreen, useWalletUnlock } from "./WalletUnlock";
 
 type LocalAuthPageProps = {
 	onUnlocked?: () => void;
-	/** Omitted where resetting the wallet is not offered, such as the unlock confirmation. */
 	onReset?: () => void;
 };
 
@@ -47,32 +27,8 @@ export function LocalAuthRoutePage() {
 
 export function LocalAuthPage({ onReset, onUnlocked }: LocalAuthPageProps) {
 	const confirm = useConfirm();
-	const passphraseInputRef = useRef<HTMLInputElement | null>(null);
+	const unlock = useWalletUnlock(onUnlocked);
 	const [resetNotice, setResetNotice] = useState<string | null>(null);
-	const {
-		control,
-		formState: { isValid },
-		handleSubmit,
-		reset,
-	} = useForm<LocalAuthFormValues>({
-		defaultValues: DEFAULT_FORM_VALUES,
-		mode: "onChange",
-		reValidateMode: "onChange",
-		resolver: zodResolver(localAuthFormSchema),
-	});
-
-	const unlockVaultMutation = useMutation({
-		mutationFn: walletVaultClient.unlock,
-		onError: () => {
-			passphraseInputRef.current?.focus();
-			passphraseInputRef.current?.select();
-		},
-		onSuccess: (status) => {
-			if (!status.isUnlocked) return;
-			reset(DEFAULT_FORM_VALUES);
-			onUnlocked?.();
-		},
-	});
 	const resetVaultMutation = useMutation({
 		mutationFn: walletVaultClient.reset,
 		onSuccess: (status) => {
@@ -81,39 +37,27 @@ export function LocalAuthPage({ onReset, onUnlocked }: LocalAuthPageProps) {
 			}
 		},
 	});
-	const unlockErrorMessage =
-		unlockVaultMutation.isSuccess && !unlockVaultMutation.data.isUnlocked
-			? "Could not unlock the wallet."
-			: getErrorMessage(unlockVaultMutation.error);
-	const resetErrorMessage = getErrorMessage(resetVaultMutation.error);
-	const isMutating = unlockVaultMutation.isPending || resetVaultMutation.isPending;
-	const canSubmit = isValid && !isMutating;
+	const isMutating = unlock.isPending || resetVaultMutation.isPending;
 
-	const clearFeedback = () => {
+	const clearResetFeedback = () => {
 		setResetNotice(null);
-		unlockVaultMutation.reset();
 		resetVaultMutation.reset();
 	};
-
-	const handleUnlock = handleSubmit((values) => {
-		if (isMutating) return;
-
-		clearFeedback();
-		unlockVaultMutation.mutate(values);
-	});
 
 	const handleReset = async () => {
 		if (isMutating) return;
 
-		clearFeedback();
+		clearResetFeedback();
+		unlock.clearError();
 
 		const { approved } = await confirm({
 			title: "Reset wallet?",
-			message: "This will remove the encrypted wallet from this browser profile.",
+			message:
+				"This erases the wallet from this browser. Only the recovery phrase can restore access.",
 		});
 
 		if (!approved) {
-			setResetNotice("Reset cancelled. Your encrypted wallet is still on this device.");
+			setResetNotice("Reset cancelled. The wallet is still on this device.");
 			return;
 		}
 
@@ -121,76 +65,25 @@ export function LocalAuthPage({ onReset, onUnlocked }: LocalAuthPageProps) {
 	};
 
 	return (
-		<UiPageBackgroundWrp>
-			<main className="flex size-full flex-col gap-4 p-5">
-				<form className="flex flex-1 flex-col justify-center gap-4" onSubmit={handleUnlock}>
-					<div className="flex flex-col gap-3">
-						<p className="text-muted-foreground text-xs font-medium tracking-normal uppercase">
-							Locked
-						</p>
-						<h1 className="cn-font-heading text-2xl leading-tight font-semibold">Unlock Humid</h1>
-						<p className="text-muted-foreground text-sm leading-6">
-							A local wallet exists. Unlock it to continue to the app area.
-						</p>
-					</div>
-
-					<UiFieldGroup>
-						<Controller
-							name="passphrase"
-							control={control}
-							render={({ field, fieldState }) => {
-								const errorId = "local-auth-password-error";
-								const hasError = fieldState.invalid || Boolean(unlockErrorMessage);
-
-								return (
-									<UiField data-invalid={hasError}>
-										<UiFieldLabel htmlFor="local-auth-password">Password</UiFieldLabel>
-										<UiInput
-											{...field}
-											ref={(element) => {
-												field.ref(element);
-												passphraseInputRef.current = element;
-											}}
-											id="local-auth-password"
-											aria-describedby={hasError ? errorId : undefined}
-											aria-invalid={hasError}
-											autoComplete="current-password"
-											disabled={isMutating}
-											placeholder="Enter passphrase"
-											type="password"
-											onChange={(event) => {
-												field.onChange(event);
-												clearFeedback();
-											}}
-										/>
-										<UiFieldError
-											id={errorId}
-											errors={[
-												fieldState.error,
-												unlockErrorMessage ? { message: unlockErrorMessage } : undefined,
-											]}
-										/>
-									</UiField>
-								);
-							}}
-						/>
-					</UiFieldGroup>
-
-					<UiFieldError>{resetErrorMessage}</UiFieldError>
-
+		<UnlockScreen
+			unlock={unlock}
+			title="Unlock Humid"
+			statement="Enter the password to open the wallet."
+			disabled={isMutating}
+			onEdit={clearResetFeedback}
+			notices={
+				<>
+					<UiFieldError>{resetVaultMutation.error?.message}</UiFieldError>
 					{resetNotice && <p className="text-muted-foreground text-sm leading-5">{resetNotice}</p>}
-
-					<UiButton type="submit" size="lg" disabled={!canSubmit}>
-						{unlockVaultMutation.isPending ? "Unlocking..." : "Unlock"}
-					</UiButton>
-				</form>
-
-				{onReset && (
+				</>
+			}
+			secondary={
+				onReset && (
 					<UiButton type="button" variant="outline" disabled={isMutating} onClick={handleReset}>
-						{resetVaultMutation.isPending ? "Resetting..." : "Reset wallet"}
+						{resetVaultMutation.isPending ? "Resetting…" : "Reset wallet"}
 					</UiButton>
-				)}
-			</main>
-		</UiPageBackgroundWrp>
+				)
+			}
+		/>
 	);
 }

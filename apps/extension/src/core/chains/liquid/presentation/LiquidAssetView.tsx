@@ -1,4 +1,10 @@
-import { ArrowDownLeft01Icon, ArrowUpRight01Icon } from "@hugeicons/core-free-icons";
+import {
+	ArrowDownLeft01Icon,
+	ArrowRight01Icon,
+	ArrowUpRight01Icon,
+	CheckmarkCircle02Icon,
+	Copy01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import dayjs from "dayjs";
@@ -19,9 +25,11 @@ import type {
 	PortfolioViewAsset,
 } from "@/core/chains/application/PortfolioView";
 import { formatUnits, handleTimestamp } from "@/helpers/formatters";
+import { UiCopyButton } from "@/ui/UiCopyButton";
 import { UiSpinner } from "@/ui/UiSpinner";
 
-import { LiquidTxDetailSheet } from "./LiquidTxDetailSheet";
+import type { LiquidAssetMetadata } from "../domain/LiquidAsset";
+import { LiquidTxDetailSheet, UNLISTED_ASSET_NOTE } from "./LiquidTxDetailSheet";
 import { LiquidTxStatusBadge } from "./LiquidTxStatus";
 
 export function LiquidAssetView({
@@ -37,39 +45,53 @@ export function LiquidAssetView({
 }) {
 	return (
 		<>
-			<div className="flex flex-col items-center gap-0.5 py-2">
+			<div className="flex flex-col items-center gap-2 py-2">
 				<p className="font-mono text-2xl font-semibold tracking-tight">
 					{formatUnits(token.amount, token.decimals)} {token.symbol}
 				</p>
+				<UiCopyButton
+					className="text-muted-foreground hover:text-foreground hover:bg-accent flex items-center gap-2 rounded-lg border px-3 py-1.5 font-mono text-[0.7rem] leading-snug transition-colors"
+					value={token.id}
+				>
+					{(copied) => (
+						<>
+							<span className="flex flex-col text-left" aria-label="Asset ID">
+								<span>{token.id.slice(0, token.id.length / 2)}</span>
+								<span>{token.id.slice(token.id.length / 2)}</span>
+							</span>
+							<HugeiconsIcon
+								className="shrink-0"
+								icon={copied ? CheckmarkCircle02Icon : Copy01Icon}
+								size={14}
+							/>
+						</>
+					)}
+				</UiCopyButton>
+				{(token.metadata as LiquidAssetMetadata).verified ? null : (
+					<p className="text-muted-foreground text-xs">{UNLISTED_ASSET_NOTE}</p>
+				)}
 			</div>
 			{actions}
-			<LiquidActivityList
-				chain={chain}
-				decimals={token.decimals}
-				feed={activity}
-				symbol={token.symbol}
-			/>
+			<LiquidActivityList chain={chain} feed={activity} token={token} />
 		</>
 	);
 }
 
 function LiquidActivityList({
 	chain,
-	decimals,
 	feed,
-	symbol,
+	token,
 }: {
 	chain: ChainRecord;
-	decimals: number;
 	feed: PortfolioViewActivityFeed;
-	symbol: string;
+	token: PortfolioViewAsset;
 }) {
 	return (
 		<div className="flex flex-col gap-1">
 			<p className="text-muted-foreground px-1 text-xs font-medium tracking-wide uppercase">
 				Activity
 			</p>
-			<LiquidActivityBody chain={chain} decimals={decimals} feed={feed} symbol={symbol} />
+			<LiquidActivityBody chain={chain} feed={feed} token={token} />
 		</div>
 	);
 }
@@ -125,15 +147,14 @@ function ActivitySectionHeader({ label }: { label: string }) {
 
 function LiquidActivityBody({
 	chain,
-	decimals,
 	feed,
-	symbol,
+	token,
 }: {
 	chain: ChainRecord;
-	decimals: number;
 	feed: PortfolioViewActivityFeed;
-	symbol: string;
+	token: PortfolioViewAsset;
 }) {
+	const { decimals, symbol } = token;
 	const [selected, setSelected] = useState<PortfolioViewActivity | null>(null);
 	const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null);
 	const [scrollMargin, setScrollMargin] = useState(0);
@@ -258,10 +279,9 @@ function LiquidActivityBody({
 
 			<LiquidTxDetailSheet
 				chain={chain}
-				decimals={decimals}
 				item={selected}
 				onClose={() => setSelected(null)}
-				symbol={symbol}
+				token={token}
 			/>
 		</div>
 	);
@@ -303,6 +323,12 @@ function LiquidActivityRow({
 				{isSent ? "−" : "+"}
 				{formatUnits(item.amount, decimals)} {symbol}
 			</p>
+			<HugeiconsIcon
+				aria-hidden
+				className="text-muted-foreground/50 shrink-0"
+				icon={ArrowRight01Icon}
+				size={16}
+			/>
 		</button>
 	);
 }

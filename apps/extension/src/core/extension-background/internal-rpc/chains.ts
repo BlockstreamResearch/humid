@@ -86,7 +86,7 @@ export function createChainsInternalHandlers(
 				group.chains.some((candidate) => candidate.id === chainId),
 			);
 
-			if (isBuiltIn) throw new Error(`Built-in chains cannot be removed: ${chainId}`);
+			if (isBuiltIn) throw new Error(`Built-in networks cannot be removed: ${chainId}`);
 
 			const store = await getUnlockedChainStoreState();
 			const removed = store.chains[chainId];

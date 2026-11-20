@@ -5,7 +5,7 @@ import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
 import {
 	LIQUID_WALLET_RPC_METHODS,
-	type LiquidGetAddressParams,
+	type ParsedLiquidGetAddressParams,
 	type LiquidGetAddressResult,
 } from "../../domain/LiquidRpc";
 import { parseLiquidGetAddressParams } from "../../domain/validation";
@@ -24,7 +24,7 @@ type LiquidGetAddressReview = {
 };
 
 export const getLiquidAddress = createWalletMethod<
-	LiquidGetAddressParams,
+	ParsedLiquidGetAddressParams,
 	LiquidGetAddressContext,
 	LiquidGetAddressReview,
 	LiquidGetAddressResult
@@ -37,16 +37,16 @@ export const getLiquidAddress = createWalletMethod<
 			index: params.index,
 			kind: "liquid.getAddress",
 		},
-		message: `A dapp wants to read the ${params.confidential ? "confidential" : "unconfidential"} Liquid address #${params.index} of this account.`,
+		message: `A dapp wants to read the ${params.confidential ? "confidential" : "explicit"} Liquid address #${params.index} of this account.`,
 		title: "Share Liquid address?",
 	}),
 	execute: ({ context, params, review }) => {
 		const { account } = review;
-		const { address, unconfidential } = context.walletBackend.getAddress(account, params.index);
+		const { address, explicit } = context.walletBackend.getAddress(account, params.index);
 
 		return {
 			accountIdentifier: account.accountIdentifier,
-			address: params.confidential ? address : unconfidential,
+			address: params.confidential ? address : explicit,
 			chainId: account.chainId,
 			confidential: params.confidential,
 			index: params.index,

@@ -1,10 +1,11 @@
+import type { Caip25GetSessionResult } from "@humid/wallet-rpc";
 import type { CaipNetwork } from "@reown/appkit-common";
 import type { Provider, RequestArguments } from "@reown/appkit-controllers";
 
 /**
  * The minimal surface an injected wallet must expose on the page. `request` speaks the CAIP-25 /
  * CAIP-27 envelope; `on` is the optional EIP-1193-style event channel. Both the raw injected global
- * (e.g. `window.<wallet>`) and this package's bridged provider satisfy it.
+ * (e.g. `window.<wallet>`) and this package's bridged provider satisfy this type.
  */
 export type RawInjectedProvider = {
 	request: <T>(args: InjectedRequestArguments) => Promise<T>;
@@ -24,31 +25,18 @@ export type CaipRpcProvider = {
 	request: <T>(args: { method: string; params?: unknown }) => Promise<T>;
 };
 
-export type Caip25ScopeObject = {
-	accounts?: string[];
-	methods: string[];
-	notifications: string[];
-};
-
-export type Caip25Scopes = Record<string, Caip25ScopeObject>;
-
-export type Caip25ScopedProperties = Record<string, Record<string, unknown>>;
-
-export type Caip25CreateSessionResult = {
-	scopedProperties?: Caip25ScopedProperties;
-	sessionProperties?: Record<string, unknown>;
-	sessionScopes: Caip25Scopes;
-};
-
-export type Caip25GetSessionResult = {
-	scopedProperties?: Caip25ScopedProperties;
-	sessionScopes: Caip25Scopes;
-};
-
 export type SignMessageContext = {
 	scope: string;
+	/** The connected account's id, which AppKit passes as `address` when it signs on its own. */
+	accountId: string | undefined;
 	address: string;
 	message: string;
+	invoke: <T>(scope: string, method: string, params?: unknown) => Promise<T>;
+};
+
+export type ReadBalanceContext = {
+	scope: string;
+	session: Caip25GetSessionResult;
 	invoke: <T>(scope: string, method: string, params?: unknown) => Promise<T>;
 };
 
@@ -65,5 +53,7 @@ export type InjectedCaipAdapterOptions = {
 	networks?: readonly CaipNetwork[];
 	accountType?: string;
 	signMessage?: (context: SignMessageContext) => Promise<{ signature: string }>;
+	/** The native balance in base units, or undefined when reading it would prompt the user. */
+	readBalance?: (context: ReadBalanceContext) => Promise<bigint | undefined>;
 	providerTimeoutMs?: number;
 };

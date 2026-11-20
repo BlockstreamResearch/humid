@@ -1,0 +1,28 @@
+/*
+ * The maker's payout leg — a plain pay-to-public-key covenant.
+ * ============================================================
+ * Identical to examples/p2pk/p2pk.simf. It exists here because of how Tessera
+ * identifies the maker.
+ *
+ * tessera.simf checks `sha256(scriptPubKey of the payout output) == MAKER_SPK`
+ * (that is what the `output_script_hash` jet returns). So building a settle
+ * transaction means producing an output whose scriptPubKey hashes to MAKER_SPK
+ * — which means MAKER_SPK has to be *computable* from something the manifest
+ * knows, not just pasted in as an opaque 32 bytes.
+ *
+ * The engine's one way to compute a script hash is `"compute": "tapleaf"`:
+ * compile a .simf, derive its taproot address, hash the scriptPubKey. So the
+ * maker's payout address is itself a (trivial) covenant, and MAKER_SPK is the
+ * tapleaf compute of this file over the maker's key. The settle output then
+ * targets `{"utxo_type": "maker_payout"}` with the same key, which necessarily
+ * lands on the same address — the covenant check passes by construction rather
+ * than by the taker copying a hash correctly.
+ *
+ * This keeps Tessera's keyless property intact. The swap covenant still has no
+ * signature on any path; the key here only governs the maker sweeping their
+ * proceeds afterwards (the ClaimPayout method), long after the swap settled.
+ */
+fn main() {
+    let sig: Signature = witness::SIGNATURE;
+    jet::bip_0340_verify((param::PUB_KEY, jet::sig_all_hash()), sig);
+}

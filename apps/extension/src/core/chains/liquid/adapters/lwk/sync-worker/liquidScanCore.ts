@@ -1,3 +1,5 @@
+import { logger } from "@/core/logger";
+
 import type {
 	LiquidActivityPage,
 	LiquidAssetBalance,
@@ -9,7 +11,7 @@ import { createLwkBlockchainClient } from "../createLwkBlockchainClient";
 import { createLwkNetwork, type LwkNetwork } from "../createLwkNetwork";
 import { loadLwkWasm, type LwkWasmModule } from "../loadLwkWasm";
 import { readOwnedWalletUtxos, sumByAsset } from "../wallet/readOwnedWalletUtxos";
-import { readWalletActivityForAsset } from "../wallet/readWalletData";
+import { readWalletActivity } from "../wallet/readWalletData";
 import { type AssetMetadata, resolveIssuedAssetMetadata } from "../wallet/resolveAssetMetadata";
 
 type LwkWollet = InstanceType<LwkWasmModule["Wollet"]>;
@@ -23,22 +25,11 @@ export type LiquidScanInput = {
 export type LiquidReadActivityInput = LiquidScanInput & {
 	cursor: string | null;
 	limit: number;
-	rawAssetId: string;
+	rawAssetId: string | null;
 };
 
-export type LiquidBroadcastInput = {
-	chain: LiquidChainRecord;
-	id: number;
-	psetBase64: string;
-};
-
-export type LiquidBroadcastTxInput = {
-	chain: LiquidChainRecord;
-	id: number;
-	txHex: string;
-};
-
-const DEFAULT_ISSUED_ASSET_DECIMALS = 8;
+// Without registry metadata the decimals are unknown, so amounts stay in raw units.
+const UNKNOWN_ASSET_DECIMALS = 0;
 
 const wolletCache = new Map<string, LwkWollet>();
 
@@ -52,11 +43,11 @@ export async function scanFresh(input: LiquidScanInput): Promise<Uint8Array | nu
 	const wollet = new lwk.Wollet(network, new lwk.WolletDescriptor(input.descriptor));
 	const client = createLwkBlockchainClient(lwk, input.chain, network);
 
-	console.warn("[liquid-sync] scan (fresh) fullScan…", { chainId: input.chain.id, id: input.id });
+	logger.debug("[liquid-sync] scan (fresh) fullScan…", { chainId: input.chain.id, id: input.id });
 	const scanStartedAt = Date.now();
 	const update = await client.fullScan(wollet);
 
-	console.warn("[liquid-sync] scan (fresh) done", {
+	logger.debug("[liquid-sync] scan (fresh) done", {
 		hasUpdate: Boolean(update),
 		id: input.id,
 		ms: Date.now() - scanStartedAt,
@@ -71,54 +62,6 @@ export async function scanFresh(input: LiquidScanInput): Promise<Uint8Array | nu
 	return updateBytes;
 }
 
-export async function broadcastPset(input: LiquidBroadcastInput): Promise<string> {
-	const lwk = await loadLwkWasm();
-	const network = createLwkNetwork(lwk, input.chain);
-	const client = createLwkBlockchainClient(lwk, input.chain, network);
-	const pset = new lwk.Pset(input.psetBase64);
-
-	console.warn("[liquid-sync] broadcast…", { chainId: input.chain.id, id: input.id });
-	const startedAt = Date.now();
-	const txid = await client.broadcast(pset);
-	const txidString = txid.toString();
-
-	console.warn("[liquid-sync] broadcast done", {
-		id: input.id,
-		ms: Date.now() - startedAt,
-		txid: txidString,
-	});
-
-	txid.free();
-	pset.free();
-	client.free();
-
-	return txidString;
-}
-
-export async function broadcastTransaction(input: LiquidBroadcastTxInput): Promise<string> {
-	const lwk = await loadLwkWasm();
-	const network = createLwkNetwork(lwk, input.chain);
-	const client = createLwkBlockchainClient(lwk, input.chain, network);
-	const transaction = lwk.Transaction.fromString(input.txHex);
-
-	console.warn("[liquid-sync] broadcast tx…", { chainId: input.chain.id, id: input.id });
-	const startedAt = Date.now();
-	const txid = await client.broadcastTx(transaction);
-	const txidString = txid.toString();
-
-	console.warn("[liquid-sync] broadcast tx done", {
-		id: input.id,
-		ms: Date.now() - startedAt,
-		txid: txidString,
-	});
-
-	txid.free();
-	transaction.free();
-	client.free();
-
-	return txidString;
-}
-
 export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletSnapshot> {
 	const lwk = await loadLwkWasm();
 	const network = createLwkNetwork(lwk, input.chain);
@@ -126,7 +69,7 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 
 	let wollet = wolletCache.get(cacheKey);
 
-	console.warn("[liquid-sync] scanAndRead start", {
+	logger.debug("[liquid-sync] scanAndRead start", {
 		cachedWollet: Boolean(wollet),
 		chainId: input.chain.id,
 		id: input.id,
@@ -139,11 +82,11 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 
 	const client = createLwkBlockchainClient(lwk, input.chain, network);
 
-	console.warn("[liquid-sync] fullScan…", { id: input.id });
+	logger.debug("[liquid-sync] fullScan…", { id: input.id });
 	const scanStartedAt = Date.now();
 	const update = await client.fullScan(wollet);
 
-	console.warn("[liquid-sync] fullScan done", {
+	logger.debug("[liquid-sync] fullScan done", {
 		hasUpdate: Boolean(update),
 		id: input.id,
 		ms: Date.now() - scanStartedAt,
@@ -164,7 +107,7 @@ export async function scanAndRead(input: LiquidScanInput): Promise<LiquidWalletS
 		rawPolicyAssetId,
 	);
 
-	console.warn("[liquid-sync] scanAndRead done", {
+	logger.debug("[liquid-sync] scanAndRead done", {
 		assetCount: assets.length,
 		id: input.id,
 		ms: Date.now() - scanStartedAt,
@@ -179,7 +122,7 @@ export function readActivity(input: LiquidReadActivityInput): LiquidActivityPage
 
 	if (!wollet) return { items: [], nextCursor: null };
 
-	const all = readWalletActivityForAsset(wollet, input.rawAssetId);
+	const all = readWalletActivity(wollet, input.rawAssetId);
 	const offset = parseActivityCursor(input.cursor);
 	const items = all.slice(offset, offset + input.limit);
 	const nextOffset = offset + items.length;
@@ -247,14 +190,14 @@ function toAssetBalance(
 
 	return {
 		amountSats: sats.toString(),
-		decimals: metadata?.decimals ?? DEFAULT_ISSUED_ASSET_DECIMALS,
+		decimals: metadata?.decimals ?? UNKNOWN_ASSET_DECIMALS,
 		isNative,
 		metadata: {
 			isNative,
 			issuerDomain: metadata?.issuerDomain ?? null,
 			verified: metadata !== undefined,
 		},
-		name: metadata?.name ?? label,
+		name: metadata?.name ?? "Unknown asset",
 		rawAssetId,
 		symbol: metadata?.symbol ?? label,
 	};

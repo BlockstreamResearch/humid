@@ -25,7 +25,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
-export const Approve: Story = {
+export const Confirms: Story = {
 	play: async ({ args, canvasElement }) => {
 		const canvas = within(canvasElement);
 

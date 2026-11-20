@@ -24,6 +24,8 @@ dist-ssr
 *.sw?
 tmp/
 storybook-static/
+test-results/
+playwright-report/
 
 # Config files
 .webextrc

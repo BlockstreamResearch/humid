@@ -18,7 +18,7 @@ export default function Home({
 	return (
 		<div className="mx-auto flex min-h-svh w-full max-w-md flex-col gap-6 px-4 py-10 sm:py-16">
 			<header className="flex items-center gap-2 px-1">
-				<span className="text-sm font-semibold tracking-tight">HUMID</span>
+				<span className="text-sm font-semibold tracking-tight">Humid</span>
 				<span className="text-muted-foreground text-sm">Liquid Wallet</span>
 			</header>
 

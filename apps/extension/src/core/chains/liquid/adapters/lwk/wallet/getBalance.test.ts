@@ -11,6 +11,8 @@ const EXPLICIT_TX = "bb".repeat(32);
 
 const text = (value: string) => ({ toString: () => value });
 
+const rawTransaction = (txOut: string) => text(`02000000000001${txOut}00000000`);
+
 const secrets = (value: bigint) => ({
 	asset: () => text(ASSET),
 	assetBlindingFactor: () => text("ab".repeat(32)),
@@ -29,7 +31,7 @@ const confidentialUtxo = (value: bigint) => ({
 });
 
 const explicitOutput = (value: bigint) => ({
-	address: () => text("unconfidential-address"),
+	address: () => text("explicit-address"),
 	extInt: () => 0,
 	height: () => 12,
 	outpoint: () => ({ txid: () => text(EXPLICIT_TX), vout: () => 0 }),
@@ -46,7 +48,7 @@ function account({ confidential, explicit }: { confidential?: bigint; explicit?:
 					{
 						inputs: () => [],
 						outputs: () => [],
-						tx: () => ({ outputs: [{ isPartiallyBlinded: () => true, toString: () => "raw" }] }),
+						tx: () => rawTransaction(`0a${"11".repeat(32)}08${"22".repeat(32)}0000`),
 						txid: () => text(CONFIDENTIAL_TX),
 					},
 				]),
@@ -56,7 +58,7 @@ function account({ confidential, explicit }: { confidential?: bigint; explicit?:
 					{
 						inputs: () => [],
 						outputs: () => [{ get: () => explicitOutput(explicit) }],
-						tx: () => ({ outputs: [{ isPartiallyBlinded: () => false, toString: () => "raw" }] }),
+						tx: () => rawTransaction(`01${ASSET}01${"00".repeat(8)}0000`),
 						txid: () => text(EXPLICIT_TX),
 					},
 				]),

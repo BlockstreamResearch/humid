@@ -1,8 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { userEvent, within } from "storybook/test";
 
-import UiPageBackgroundWrp from "@/ui/UiPageBackgroundWrp";
-
 import { AuthCreateProvider } from "../../index";
 import { AuthCreateSecretPage } from "./index";
 
@@ -12,9 +10,7 @@ const meta = {
 	decorators: [
 		(Story) => (
 			<AuthCreateProvider>
-				<UiPageBackgroundWrp>
-					<Story />
-				</UiPageBackgroundWrp>
+				<Story />
 			</AuthCreateProvider>
 		),
 	],

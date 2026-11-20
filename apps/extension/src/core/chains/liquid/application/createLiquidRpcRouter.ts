@@ -3,21 +3,26 @@ import { createWalletMethodRegistry } from "@/core/wallet-methods/createWalletMe
 import type { LiquidIdentityBackend } from "./backends/LiquidIdentityBackend";
 import type { LiquidWalletBackend } from "./backends/LiquidWalletBackend";
 import type { LiquidRpcMethodContext, LiquidWalletRpcContext } from "./LiquidRpcContext";
-import { LIQUID_RPC_METHODS } from "./liquidRpcMethods";
+import { liquidRpcMethods } from "./liquidRpcMethods";
+import type { LiquidProcessCtDependencies } from "./methods/processConfidentialTransaction";
 
 export type { LiquidWalletRpcContext };
 
 export type CreateLiquidRpcRouterDependencies = {
 	identityBackend: LiquidIdentityBackend;
+	processCt: LiquidProcessCtDependencies;
 	walletBackend: LiquidWalletBackend;
 };
 
+export type LiquidRpcRouter = ReturnType<typeof createLiquidRpcRouter>;
+
 export function createLiquidRpcRouter({
 	identityBackend,
+	processCt,
 	walletBackend,
 }: CreateLiquidRpcRouterDependencies) {
 	return createWalletMethodRegistry<LiquidWalletRpcContext, LiquidRpcMethodContext>(
-		LIQUID_RPC_METHODS,
+		liquidRpcMethods(processCt),
 		(context) => ({ ...context, identityBackend, walletBackend }),
 	);
 }

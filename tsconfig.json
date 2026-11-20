@@ -29,5 +29,5 @@
 		"noUnusedParameters": true,
 		"noFallthroughCasesInSwitch": true
 	},
-	"include": ["apps/extension/src", "apps/extension/package.json"]
+	"include": ["apps/extension/src", "apps/extension/package.json", ".storybook"]
 }

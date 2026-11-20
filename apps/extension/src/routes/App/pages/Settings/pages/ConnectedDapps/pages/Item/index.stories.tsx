@@ -46,6 +46,7 @@ export const Injected: Story = {
 			events: ["accountsChanged", "bip122_walletDescriptorChanged"],
 			label: "app.example.org",
 			methodPolicy: {
+				getAddress: true,
 				getBalance: true,
 				getIdentityPublicKey: false,
 				getIdentitySharedKey: false,
@@ -58,6 +59,7 @@ export const Injected: Story = {
 				signPset: false,
 			},
 			methods: [
+				"getAddress",
 				"getBalance",
 				"getUTXOs",
 				"getWalletDescriptor",

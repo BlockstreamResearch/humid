@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk.manifest.json";
+import multiassetManifest from "@humid/tx-manifest/fixtures/multiasset/txmanifest.json";
+import p2pkManifest from "@humid/tx-manifest/fixtures/p2pk/txmanifest.json";
 
 import { DENY_ALL_AUTHORIZATION } from "@/core/wallet-rpc/types";
 
+import type { loadSmplxWasm } from "../../../adapters/smplx/loadSmplxWasm";
+import { smplxContractTools } from "../../../adapters/smplx/smplxContractTools";
 import type { LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
 import {
 	createProcessLiquidConfidentialTransaction,
@@ -17,19 +20,19 @@ import { PROCESS_CT_CONFIRMATION_KIND } from "./ProcessCtConfirmation";
 const SOURCE_PATH = "./p2pk.simf";
 const SOURCE = readFileSync(
 	new URL(
-		"../../../../../../../../../packages/tx-manifest/src/__fixtures__/p2pk.simf",
+		"../../../../../../../../../packages/tx-manifest/src/__fixtures__/p2pk/p2pk.simf",
 		import.meta.url,
 	),
 	"utf8",
 );
 const PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const POLICY_ASSET = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
-const COVENANT_SCRIPT = `5120${"11".repeat(32)}`;
+const PROGRAM_SCRIPT = `5120${"11".repeat(32)}`;
 const WALLET_SCRIPT = `0014${"33".repeat(20)}`;
 const SIGNER_SCRIPT = `0014${"77".repeat(20)}`;
 const BLINDING_KEY = `02${"88".repeat(32)}`;
 const FUNDING_TXID = "c".repeat(64);
-const COVENANT_TXID = "e".repeat(64);
+const PROGRAM_TXID = "e".repeat(64);
 const SIGNED_TXID = "f".repeat(64);
 const SENT_TXID = "a".repeat(64);
 const FEE_SATS = 344n;
@@ -65,7 +68,7 @@ function transaction(inputs: string[], outputs: string[]): string {
 
 const SIGNED_HEX = transaction(
 	[txIn(FUNDING_TXID, 0)],
-	[txOut(COVENANT_SCRIPT, 1000n), txOut(SIGNER_SCRIPT, 998_656n), txOut("", FEE_SATS)],
+	[txOut(PROGRAM_SCRIPT, 1000n), txOut(SIGNER_SCRIPT, 998_656n), txOut("", FEE_SATS)],
 );
 
 const explicitUtxo = {
@@ -74,19 +77,18 @@ const explicitUtxo = {
 	assetId: `liquid:testnet/elip144:${POLICY_ASSET}`,
 	confidential: false,
 	scriptPubKey: WALLET_SCRIPT,
-	scriptPubKeyHex: WALLET_SCRIPT,
 	spendable: true,
 	txid: FUNDING_TXID,
 	txOut: `01${"49".repeat(32)}0100000000000f424000160014${"33".repeat(20)}`,
 	vout: 0,
 };
 
-const COVENANT_HELD_SATS = 50_000n;
-const COVENANT_TXOUT = txOut(COVENANT_SCRIPT, COVENANT_HELD_SATS);
+const PROGRAM_HELD_SATS = 50_000n;
+const PROGRAM_TXOUT = txOut(PROGRAM_SCRIPT, PROGRAM_HELD_SATS);
 
 type Journal = {
 	broadcasts: { txHex: string }[];
-	covenantInputs: {
+	programInputs: {
 		signatureWitness: string | undefined;
 		source: string;
 		txOutHex: string;
@@ -105,7 +107,7 @@ type Journal = {
 function journal(): Journal {
 	return {
 		broadcasts: [],
-		covenantInputs: [],
+		programInputs: [],
 		finalizedHex: SIGNED_HEX,
 		freed: [],
 		mnemonicHeldAfter: false,
@@ -117,29 +119,35 @@ function journal(): Journal {
 }
 
 function smplxSubstitute(log: Journal) {
-	class Covenant {
+	class Program {
+		static abi() {
+			return JSON.stringify({
+				parameters: { PUB_KEY: "u256" },
+				witnesses: { SIGNATURE: "[u8; 64]" },
+			});
+		}
 		constructor(
 			readonly source: string,
 			readonly argumentsJson?: string,
 			readonly extraLeavesJson?: string,
 			readonly includeDebugSymbols?: boolean,
 		) {
-			log.taken.push("covenant");
+			log.taken.push("program");
 		}
-		address() {
+		trAddress() {
 			return "tex1p_derived";
 		}
-		commitmentMerkleRoot() {
+		cmr() {
 			return "cc".repeat(32);
 		}
-		scriptPubKeyHex() {
-			return COVENANT_SCRIPT;
+		scriptPubkey() {
+			return PROGRAM_SCRIPT;
 		}
 		tapleafHash() {
 			return "1e".repeat(32);
 		}
 		free() {
-			log.freed.push("covenant");
+			log.freed.push("program");
 		}
 	}
 
@@ -147,8 +155,7 @@ function smplxSubstitute(log: Journal) {
 		constructor() {
 			log.taken.push("builder");
 		}
-		addChange() {}
-		addCovenantInput(
+		addProgramInput(
 			txid: string,
 			vout: number,
 			txOutHex: string,
@@ -157,26 +164,29 @@ function smplxSubstitute(log: Journal) {
 			_witnessJson?: string,
 			signatureWitness?: string,
 		) {
-			log.covenantInputs.push({ signatureWitness, source, txOutHex, txid, vout });
+			log.programInputs.push({ signatureWitness, source, txOutHex, txid, vout });
 		}
-		addCovenantIssuanceInput() {
+		addProgramIssuanceInput() {
 			throw new Error("not reached");
 		}
 		addOutput() {}
-		addWalletInput(txid: string, vout: number, txOutHex: string) {
+		addInput(txid: string, vout: number, txOutHex: string) {
 			log.walletInputs.push({ txOutHex, txid, vout });
 		}
-		addWalletIssuanceInput() {
-			throw new Error("not reached");
+		addIssuanceInput(txid: string, vout: number, txOutHex: string) {
+			log.walletInputs.push({ txOutHex, txid, vout });
+
+			return { free() {} };
 		}
 		setLocktimeHeight() {}
-		setSequence() {}
+		setInputSequence() {}
+		setUnusedWitnesses() {}
 		free() {
 			log.freed.push("builder");
 		}
 	}
 
-	class WalletSigner {
+	class Signer {
 		constructor(
 			readonly mnemonic: string,
 			readonly network: string,
@@ -190,7 +200,10 @@ function smplxSubstitute(log: Journal) {
 		scriptPubKeyHex() {
 			return SIGNER_SCRIPT;
 		}
-		finalizeTransaction() {
+		static estimateStrictFee() {
+			return FEE_SATS;
+		}
+		finalizeStrictFee() {
 			log.taken.push("signed");
 
 			return {
@@ -208,10 +221,9 @@ function smplxSubstitute(log: Journal) {
 	}
 
 	return {
-		Covenant,
-		covenantParameterTypes: () => JSON.stringify({ PUB_KEY: "Pubkey" }),
+		Program,
 		TransactionBuilder,
-		WalletSigner,
+		Signer,
 	};
 }
 
@@ -237,7 +249,7 @@ function walletBackend(log: Journal, overrides: Record<string, unknown> = {}) {
 		getSigningAddress: () => ({
 			address: "tex1q_signing",
 			index: 0,
-			unconfidential: "tex1q_signing_unconfidential",
+			explicit: "tex1q_signing_explicit",
 		}),
 		getTipHeight: () => 3_210_987,
 		getUtxos: () => [],
@@ -255,10 +267,12 @@ function context(log: Journal, overrides: Partial<LiquidProcessCtContext> = {}) 
 			id: "liquid:testnet",
 			settings: { backend: { url: "https://esplora.invalid" }, network: "testnet" },
 		},
-		confirm: async () => {
+		confirm: async (request: unknown, complete?: (choice: unknown) => Promise<unknown>) => {
+			await request;
 			log.steps.push("confirm");
+			await complete?.(undefined);
 
-			return true;
+			return { approved: true };
 		},
 		keyManagerState: { keyrings: [] },
 		walletBackend: walletBackend(log),
@@ -271,24 +285,27 @@ function dependencies(
 	overrides: Partial<LiquidProcessCtDependencies> = {},
 ): LiquidProcessCtDependencies {
 	return {
-		broadcastTransaction: async ({ txHex }) => {
+		broadcastTransaction: async (_account, txHex) => {
 			log.steps.push("broadcast");
 			log.broadcasts.push({ txHex });
 
-			return { txid: SENT_TXID };
+			return SENT_TXID;
 		},
-		loadSmplx: (async () =>
-			smplxSubstitute(log)) as unknown as LiquidProcessCtDependencies["loadSmplx"],
+		rememberTransaction: async () => {},
+		contractTools: smplxContractTools((async () =>
+			smplxSubstitute(log)) as unknown as typeof loadSmplxWasm),
 		readFeeRate: () => async () => 1000,
 		readTxOut: () => async () => ({
 			amountSats: "50000",
 			rawAssetId: POLICY_ASSET,
-			scriptPubKeyHex: COVENANT_SCRIPT,
-			txOutHex: COVENANT_TXOUT,
+			scriptPubKeyHex: PROGRAM_SCRIPT,
+			txOutHex: PROGRAM_TXOUT,
 		}),
 		resolveAccount: (async () =>
 			account()) as unknown as LiquidProcessCtDependencies["resolveAccount"],
-		scriptPubKeyHexOf: async () => WALLET_SCRIPT,
+		readAddress: async () => () => ({ scriptPubKeyHex: WALLET_SCRIPT }),
+		unblinder: async () => () => undefined,
+		walletKeyOf: () => PUBKEY,
 		withMnemonic: (async (
 			request: { accountGroupIndex?: number; keySourceId?: string },
 			use: (mnemonic: string) => unknown,
@@ -321,13 +338,21 @@ const payRequest = (broadcast = false) => ({
 	params: { amount_sat: 1000, pubkey: PUBKEY },
 });
 
+const mintRequest = () => ({
+	action: "MintReissuable",
+	broadcast: false,
+	contractSources: { [SOURCE_PATH]: SOURCE },
+	manifest: multiassetManifest,
+	params: { supply: 21 },
+});
+
 const receiveRequest = (broadcast = false) => ({
 	action: "Receive",
 	broadcast,
 	contractSources: { [SOURCE_PATH]: SOURCE },
 	manifest: p2pkManifest,
 	params: { pubkey: PUBKEY },
-	state: { utxos: [{ txid: COVENANT_TXID, utxo_type: "p2pk_output", vout: 0 }] },
+	state: { utxos: [{ txid: PROGRAM_TXID, utxo_type: "p2pk_output", vout: 0 }] },
 });
 
 async function run(
@@ -368,6 +393,26 @@ async function failing(
 	throw new Error("The method was expected to refuse and did not.");
 }
 
+describe("a wallet coin", () => {
+	test("funds an input the manifest pins to the wallet's address", async () => {
+		const pinned = structuredClone(p2pkManifest) as {
+			actions: { Pay: { inputs: Record<string, unknown>[]; params: Record<string, unknown> } };
+		};
+
+		Object.assign(pinned.actions.Pay.inputs[0]!, { from_address: "params.payer" });
+		pinned.actions.Pay.params.payer = { type: "string" };
+
+		const request = payRequest();
+		const { result } = await run({
+			...request,
+			manifest: pinned,
+			params: { ...request.params, payer: "tex1q_signing" },
+		});
+
+		expect(result.broadcast).toBe(false);
+	});
+});
+
 describe("the order a contract action happens in", () => {
 	test("reviews before it asks, and signs only after agreement", async () => {
 		const { log } = await run(payRequest());
@@ -393,10 +438,68 @@ describe("the order a contract action happens in", () => {
 		const method = createProcessLiquidConfidentialTransaction(dependencies(log));
 
 		await expect(
-			method(payRequest(), context(log, { confirm: async () => false })),
+			method(payRequest(), context(log, { confirm: async () => ({ approved: false }) })),
 		).rejects.toThrow();
 		expect(log.steps).not.toContain("mnemonic");
 		expect(log.taken).not.toContain("signer");
+	});
+
+	describe("the fee speed", () => {
+		const rateFor = async (targetBlocks: number) => (targetBlocks === 1 ? 3000 : 1000);
+
+		const signedRate = async (result?: unknown) => {
+			const log = journal();
+			const module = smplxSubstitute(log);
+			const finalize = module.Signer.prototype.finalizeStrictFee;
+			const rates: number[] = [];
+			const shown: unknown[] = [];
+
+			module.Signer.prototype.finalizeStrictFee = function (
+				this: InstanceType<typeof module.Signer>,
+				...args: unknown[]
+			) {
+				rates.push(args[1] as number);
+
+				return finalize.call(this);
+			};
+
+			const method = createProcessLiquidConfidentialTransaction(
+				dependencies(log, {
+					contractTools: smplxContractTools(
+						(async () => module) as unknown as typeof loadSmplxWasm,
+					),
+					readFeeRate: () => rateFor,
+				}),
+			);
+
+			await method(
+				payRequest(),
+				context(log, {
+					confirm: async (request, complete) => {
+						shown.push((await request).data);
+						await complete?.(result);
+
+						return { approved: true, result };
+					},
+				}),
+			);
+
+			return { rates, shown: shown[0] as { speeds: { targetBlocks: number }[] } };
+		};
+
+		test("offers a model for every speed", async () => {
+			const { shown } = await signedRate();
+
+			expect(shown.speeds.map((speed) => speed.targetBlocks)).toEqual([60, 10, 1]);
+		});
+
+		test("signs at the rate of the speed the person picked", async () => {
+			expect((await signedRate({ targetBlocks: 60 })).rates).toEqual([1000]);
+		});
+
+		test("and at the fastest rate where no speed comes back", async () => {
+			expect((await signedRate()).rates).toEqual([3000]);
+		});
 	});
 
 	test("tells the confirmation whether this will be sent", async () => {
@@ -407,10 +510,11 @@ describe("the order a contract action happens in", () => {
 		await method(
 			payRequest(true),
 			context(log, {
-				confirm: async (request) => {
-					shown.push(request.data);
+				confirm: async (request, complete) => {
+					shown.push((await request).data);
+					await complete?.(undefined);
 
-					return true;
+					return { approved: true };
 				},
 			}),
 		);
@@ -443,6 +547,44 @@ describe("what comes back", () => {
 		const { result } = await run(payRequest());
 
 		expect(result.deployment).toBeUndefined();
+		expect(result.issuances).toBeUndefined();
+	});
+
+	test("names what each issuing input created, so a later action can reissue", async () => {
+		const { result } = await run(mintRequest());
+		const hash = expect.stringMatching(/^[0-9a-f]{64}$/);
+
+		expect(result.issuances).toEqual([
+			{ entropy: hash, input: "mint_in", issuedAsset: hash, reissuanceToken: hash },
+		]);
+	});
+});
+
+describe("the receipt the window shows", () => {
+	const receiptOf = async (broadcast: boolean) => {
+		const receipts: unknown[] = [];
+		const log = journal();
+
+		await createProcessLiquidConfidentialTransaction(dependencies(log))(
+			payRequest(broadcast),
+			context(log, {
+				confirm: async (_request, complete) => {
+					receipts.push(await complete?.(undefined));
+
+					return { approved: true };
+				},
+			}),
+		);
+
+		return receipts[0];
+	};
+
+	test("names the network's txid once the transaction is sent", async () => {
+		expect(await receiptOf(true)).toMatchObject({ fee: "344 sats", txid: SENT_TXID });
+	});
+
+	test("carries no txid when the dapp sends the transaction", async () => {
+		expect(await receiptOf(false)).toMatchObject({ fee: "344 sats", txid: undefined });
 	});
 });
 
@@ -464,19 +606,19 @@ describe("what it refuses, and how", () => {
 		expect(data).toMatchObject({ reason: "invalid_manifest_request", reject: "no-utxo-to-spend" });
 	});
 
-	test("refuses when the chain says something else is at the covenant's outpoint", async () => {
+	test("refuses when the chain says something else is at the program's outpoint", async () => {
 		const { data } = await failing(receiveRequest(), {
 			dependencies: {
 				readTxOut: () => async () => ({
 					amountSats: "50000",
 					rawAssetId: POLICY_ASSET,
 					scriptPubKeyHex: `0014${"99".repeat(20)}`,
-					txOutHex: COVENANT_TXOUT,
+					txOutHex: PROGRAM_TXOUT,
 				}),
 			},
 		});
 
-		expect(data).toMatchObject({ reject: "covenant-mismatch" });
+		expect(data).toMatchObject({ reject: "program-mismatch" });
 	});
 
 	test("refuses a network the contract module does not support", async () => {
@@ -513,19 +655,39 @@ describe("what it holds, and for how long", () => {
 		const log = journal();
 		const module = smplxSubstitute(log);
 
-		module.WalletSigner.prototype.finalizeTransaction = () => {
+		module.Signer.prototype.finalizeStrictFee = () => {
 			throw new Error("could not balance the transaction");
 		};
 
 		const method = createProcessLiquidConfidentialTransaction(
 			dependencies(log, {
-				loadSmplx: (async () => module) as unknown as LiquidProcessCtDependencies["loadSmplx"],
+				contractTools: smplxContractTools((async () => module) as unknown as typeof loadSmplxWasm),
 			}),
 		);
 
 		await expect(method(payRequest(), context(log))).rejects.toThrow();
 		expect(log.freed).toContain("signer");
 		expect(log.freed).toContain("builder");
+	});
+
+	test("refuses a signed transaction that pays a fee other than the one shown", async () => {
+		const module = smplxSubstitute(journal());
+		const finalize = module.Signer.prototype.finalizeStrictFee;
+
+		module.Signer.prototype.finalizeStrictFee = function (
+			this: InstanceType<typeof module.Signer>,
+		) {
+			return { ...finalize.call(this), feeSats: FEE_SATS + 1n };
+		};
+
+		const { data, log } = await failing(payRequest(), {
+			dependencies: {
+				contractTools: smplxContractTools((async () => module) as unknown as typeof loadSmplxWasm),
+			},
+		});
+
+		expect(data).toMatchObject({ reject: "built-something-else" });
+		expect(log.broadcasts).toEqual([]);
 	});
 
 	test("keeps no handle on the mnemonic once the call that used it has returned", async () => {
@@ -550,18 +712,18 @@ describe("what it holds, and for how long", () => {
 		]);
 	});
 
-	test("asks against the local root when the account was resolved against it", async () => {
+	test("asks against the local root when the account was resolved there", async () => {
 		const { log } = await run(payRequest());
 
 		expect(log.mnemonicRequests).toEqual([{ accountGroupIndex: 3 }]);
 	});
 });
 
-describe("spending a covenant, end to end", () => {
+describe("spending a program, end to end", () => {
 	const receiveTransaction = (outputs: string[]) =>
-		transaction([txIn(COVENANT_TXID, 0), txIn(FUNDING_TXID, 0)], outputs);
+		transaction([txIn(PROGRAM_TXID, 0), txIn(FUNDING_TXID, 0)], outputs);
 
-	test("carries the covenant and the wallet's fee input into the builder", async () => {
+	test("carries the program and the wallet's fee input into the builder it signs", async () => {
 		const log = journal();
 
 		log.finalizedHex = receiveTransaction([
@@ -573,19 +735,18 @@ describe("spending a covenant, end to end", () => {
 		const method = createProcessLiquidConfidentialTransaction(dependencies(log));
 		const result = (await method(receiveRequest(false), context(log))) as LiquidProcessCtResult;
 
-		expect(log.covenantInputs).toEqual([
-			{
-				signatureWitness: "SIGNATURE",
-				source: SOURCE,
-				txOutHex: COVENANT_TXOUT,
-				txid: COVENANT_TXID,
-				vout: 0,
-			},
-		]);
-
-		expect(log.walletInputs).toEqual([
-			{ txOutHex: explicitUtxo.txOut, txid: FUNDING_TXID, vout: 0 },
-		]);
+		expect(log.programInputs.at(-1)).toEqual({
+			signatureWitness: "SIGNATURE",
+			source: SOURCE,
+			txOutHex: PROGRAM_TXOUT,
+			txid: PROGRAM_TXID,
+			vout: 0,
+		});
+		expect(log.walletInputs.at(-1)).toEqual({
+			txOutHex: explicitUtxo.txOut,
+			txid: FUNDING_TXID,
+			vout: 0,
+		});
 
 		expect(result).toMatchObject({
 			broadcast: false,

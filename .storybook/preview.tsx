@@ -10,6 +10,8 @@ import {
 } from "@tanstack/react-router";
 import { type ComponentType, useEffect, useState } from "react";
 
+import { ThemeProviderContext } from "@/contexts/ThemeProvider";
+
 import { configureVaultMock, resetVaultMock, type VaultMockConfig } from "./mocks/vault";
 
 // Routes referenced by the pages. Registering them as stubs lets <Link> build
@@ -96,7 +98,11 @@ const withTheme: Decorator = (Story, context) => {
 		root.style.colorScheme = theme;
 	}, [theme]);
 
-	return <Story />;
+	return (
+		<ThemeProviderContext value={{ theme, systemTheme: theme, setTheme: () => {} }}>
+			<Story />
+		</ThemeProviderContext>
+	);
 };
 
 const withVault: Decorator = (Story, context) => {

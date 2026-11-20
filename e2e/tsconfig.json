@@ -1,0 +1,9 @@
+{
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		"tsBuildInfoFile": "../node_modules/.cache/tsbuildinfo.e2e.json",
+		"types": ["node"],
+		"paths": {}
+	},
+	"include": ["."]
+}

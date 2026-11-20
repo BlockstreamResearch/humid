@@ -14,7 +14,7 @@ export function SignMessageCard({ knownAddress }: { knownAddress: string }) {
 	const { wallet } = useHumidContext();
 	const state = useMethodState("signMessage");
 	const [address, setAddress] = useState("");
-	const [message, setMessage] = useState("Authorize HUMID test dapp");
+	const [message, setMessage] = useState("Authorize Humid test dapp");
 	const [protocol, setProtocol] = useState("ecdsa");
 	const { call, pending, result } = useRpcCall();
 	const effectiveAddress = address || knownAddress;

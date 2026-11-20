@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type ReactNode, useCallback, useState } from "react";
+import { expect, within } from "storybook/test";
 
 import type { PortfolioViewActivityFeed } from "@/core/chains/application/PortfolioView";
 import { QuickActions } from "@/routes/App/pages/Home/components/QuickActions";
@@ -10,6 +11,7 @@ import {
 	confirmedReceived,
 	confirmedSent,
 	feed,
+	issuedUnverifiedToken,
 	issuedVerifiedToken,
 	makeLongItems,
 	mockLiquidChain,
@@ -58,6 +60,20 @@ export const IssuedAsset: Story = {
 	args: {
 		activity: feed([confirmedReceived, confirmedSent]),
 		token: issuedVerifiedToken,
+	},
+};
+
+export const UnknownAsset: Story = {
+	args: {
+		activity: feed([confirmedReceived]),
+		token: issuedUnverifiedToken,
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+
+		await expect(canvas.getByText("1500000 9a8b…3f2c")).toBeVisible();
+		await expect(canvas.getByLabelText("Asset ID")).toHaveTextContent(issuedUnverifiedToken.id);
+		await expect(canvas.getByText(/^Not in the asset registry/)).toBeVisible();
 	},
 };
 

@@ -4,6 +4,7 @@ import type { AccountModelState } from "@/core/accounts/application/account-regi
 import type { DappSessionScope } from "@/core/accounts/application/account-registry/model/dapp-session";
 import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
 import {
+	CAIP25_METHODS,
 	type Caip25CreateSessionParams,
 	type Caip25CreateSessionResult,
 	type Caip25GetSessionResult,
@@ -32,6 +33,7 @@ import {
 	type DappSwitchChainConfirmationData,
 } from "./connectConfirmation";
 import { DappAuthorizationError, dappAuthorizationErrors } from "./errors";
+import { PRE_APPROVABLE_METHODS } from "./methodPolicyPresentation";
 
 const INJECTED_TRANSPORT = "injected" as const;
 
@@ -96,6 +98,8 @@ export type DappAuthorization = {
 	switchChain: (input: { origin: string | null; params: unknown }) => Promise<{ chainId: string }>;
 };
 
+const READS = new Set(PRE_APPROVABLE_METHODS.map(({ id }) => id));
+
 export function createDappAuthorization(
 	dependencies: DappAuthorizationDependencies,
 ): DappAuthorization {
@@ -118,6 +122,21 @@ export function createDappAuthorization(
 		await waitForUnlock();
 
 		return requireUnlocked(getAccountModel());
+	};
+
+	const findSession = (accountModel: AccountModelState, origin: string) =>
+		registry.findDappSession(accountModel, { now: now(), origin, transport: INJECTED_TRANSPORT });
+
+	const requireSession = (accountModel: AccountModelState, origin: string) => {
+		const session = findSession(accountModel, origin);
+
+		if (!session) {
+			throw dappAuthorizationErrors.unauthorized(
+				`No active session. Call "${CAIP25_METHODS.createSession}" first.`,
+			);
+		}
+
+		return session;
 	};
 
 	const runCreateSession = async ({
@@ -150,6 +169,11 @@ export function createDappAuthorization(
 			chains: supported.chains,
 			kind: DAPP_CONNECT_CONFIRMATION_KIND,
 			methods: supported.methods,
+			networks: await Promise.all(
+				supported.chains.map(
+					async (chainId) => (await resolveKnownChain?.(chainId))?.name ?? chainId,
+				),
+			),
 			origin: requestingOrigin,
 		};
 
@@ -215,14 +239,7 @@ export function createDappAuthorization(
 
 	const getSession = ({ origin }: { origin: string | null }): Caip25GetSessionResult => {
 		const accountModel = origin ? getAccountModel() : null;
-		const session =
-			accountModel && origin
-				? registry.findDappSession(accountModel, {
-						now: now(),
-						origin,
-						transport: INJECTED_TRANSPORT,
-					})
-				: null;
+		const session = accountModel && origin ? findSession(accountModel, origin) : null;
 
 		if (!session || !accountModel) return { sessionScopes: {} };
 
@@ -262,19 +279,12 @@ export function createDappAuthorization(
 	}): Promise<unknown> => {
 		const invocation = parseInvokeParams(params);
 		const requestingOrigin = requireOrigin(origin);
-		const accountModel = await unlockedAccountModel();
+		// A dapp may poll its reads; while the wallet is locked they fail rather than prompting.
+		const accountModel = READS.has(invocation.request.method)
+			? requireUnlocked(getAccountModel())
+			: await unlockedAccountModel();
 
-		const session = registry.findDappSession(accountModel, {
-			now: now(),
-			origin: requestingOrigin,
-			transport: INJECTED_TRANSPORT,
-		});
-
-		if (!session) {
-			throw dappAuthorizationErrors.unauthorized(
-				'No active session. Call "wallet_createSession" first.',
-			);
-		}
+		const session = requireSession(accountModel, requestingOrigin);
 
 		if (!session.scope.chains.includes(invocation.scope)) {
 			throw dappAuthorizationErrors.unauthorized(
@@ -375,17 +385,7 @@ export function createDappAuthorization(
 		const chainId = parseSwitchChainParams(params);
 		const accountModel = await unlockedAccountModel();
 
-		const session = registry.findDappSession(accountModel, {
-			now: now(),
-			origin: requestingOrigin,
-			transport: INJECTED_TRANSPORT,
-		});
-
-		if (!session) {
-			throw dappAuthorizationErrors.unauthorized(
-				'No active session. Call "wallet_createSession" first.',
-			);
-		}
+		const session = requireSession(accountModel, requestingOrigin);
 
 		if (session.scope.chains.includes(chainId)) {
 			return { chainId };
@@ -424,14 +424,7 @@ export function createDappAuthorization(
 		await updateAccountModel((model) => {
 			const current = model.dappSessions[session.id];
 
-			if (
-				!current ||
-				registry.findDappSession(model, {
-					now: now(),
-					origin: requestingOrigin,
-					transport: INJECTED_TRANSPORT,
-				})?.id !== session.id
-			) {
+			if (!current || findSession(model, requestingOrigin)?.id !== session.id) {
 				throw dappAuthorizationErrors.unauthorized(
 					"The session ended before the network change was approved.",
 				);

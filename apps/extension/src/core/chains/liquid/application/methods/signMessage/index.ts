@@ -14,6 +14,10 @@ import {
 import { parseLiquidSignMessageParams } from "../../../domain/message/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../../dappAccountScope";
+import {
+	SIGN_MESSAGE_CONFIRMATION_KIND,
+	type SignMessageConfirmationData,
+} from "./SignMessageConfirmation";
 
 export type LiquidSignMessageContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
@@ -33,23 +37,16 @@ export const signLiquidMessage = createWalletMethod<
 	LiquidSignMessageMethodReview,
 	LiquidSignMessageResult
 >({
-	confirmation: ({ params, review }) => ({
+	confirmation: ({ context, params, review }) => ({
 		confirmLabel: "Sign",
 		data: {
-			accountIdentifier: review.message.accountIdentifier,
 			address: review.message.address,
-			chainId: review.message.chainId,
-			kind: "liquid.signMessage",
+			kind: SIGN_MESSAGE_CONFIRMATION_KIND,
 			message: params.message,
+			network: context.chain.name,
 			protocol: review.message.protocol,
-		},
-		message: [
-			"A dapp wants to sign a Liquid message.",
-			`Network: ${review.message.chainId}\nAccount: ${review.message.accountIdentifier}`,
-			`Signing address: ${review.message.address}\nSignature protocol: ${review.message.protocol}`,
-			`Message to sign:\n${params.message}`,
-		].join("\n\n"),
-		title: "Sign Liquid message?",
+		} satisfies SignMessageConfirmationData,
+		title: "Sign a message?",
 	}),
 	execute: ({ context, params, review }) =>
 		context.walletBackend.signMessage(review.account, params),

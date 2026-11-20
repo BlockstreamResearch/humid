@@ -1,6 +1,8 @@
-import type { Caip25CreateSessionResult, Caip25GetSessionResult } from "./types";
-
-export const HUMID_METHOD_POLICY_PROPERTY = "humid_methodPolicy";
+import {
+	type Caip25CreateSessionResult,
+	type Caip25GetSessionResult,
+	HUMID_METHOD_POLICY_PROPERTY,
+} from "@humid/wallet-rpc";
 
 export type MethodPolicy = Record<string, boolean>;
 

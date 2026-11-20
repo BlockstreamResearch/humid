@@ -5,7 +5,7 @@ import { cn } from "@/theme/utils.ts";
 function MnemonicCell({ index, children }: { index: number; children: ReactNode }) {
 	return (
 		<div className="bg-muted flex items-center gap-2 rounded-lg px-3 py-2.5">
-			<span className="text-muted-foreground w-5 shrink-0 text-right font-mono text-sm tabular-nums">
+			<span className="text-muted-foreground w-7 shrink-0 text-right font-mono text-sm tabular-nums">
 				{index + 1}.
 			</span>
 			{children}

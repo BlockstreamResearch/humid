@@ -1,5 +1,7 @@
 import browser from "webextension-polyfill";
 
+import { base64ToBytes, bytesToBase64 } from "@/helpers/base64";
+
 import type {
 	SecureVaultCreateInput,
 	SecureVaultStatus,
@@ -7,8 +9,6 @@ import type {
 	SecureVaultUnlockInput,
 } from "../types";
 import {
-	base64ToBytes,
-	bytesToBase64,
 	deriveVaultWrappingKey,
 	exportVaultDataKey,
 	generateVaultDataKey,
@@ -105,7 +105,7 @@ export async function createSecureVault(input: SecureVaultCreateInput): Promise<
 	const existingRecord = await readSecureVaultMetaRecord();
 
 	if (existingRecord) {
-		throw new Error("Vault already exists. Reset it before creating a new one.");
+		throw new Error("A wallet already exists. Reset it before creating a new one.");
 	}
 
 	const now = Date.now();
@@ -180,20 +180,14 @@ export async function unlockSecureVault(input: SecureVaultUnlockInput): Promise<
 	} catch {
 		failedUnlockAttempts += 1;
 
-		const attemptsRemaining = Math.max(0, MAX_UNLOCK_ATTEMPTS - failedUnlockAttempts);
-
-		if (attemptsRemaining === 0) {
+		if (failedUnlockAttempts >= MAX_UNLOCK_ATTEMPTS) {
 			unlockPausedUntil = Date.now() + UNLOCK_COOLDOWN_MS;
 			throw new Error(
 				`Too many incorrect attempts. Try again in ${formatSeconds(UNLOCK_COOLDOWN_MS)}.`,
 			);
 		}
 
-		throw new Error(
-			`Password did not unlock this vault. ${attemptsRemaining} ${
-				attemptsRemaining === 1 ? "attempt" : "attempts"
-			} remaining.`,
-		);
+		throw new Error("Wrong password. Try again.");
 	}
 }
 
@@ -226,7 +220,7 @@ export async function getSecureVaultStatus(): Promise<SecureVaultStatus> {
 
 export function getUnlockedSecureVaultStorage(): SecureVaultStorage {
 	if (!unlockedStorage) {
-		throw new Error("Vault is locked");
+		throw new Error("Wallet is locked");
 	}
 
 	return unlockedStorage;
@@ -276,7 +270,7 @@ async function requireSecureVaultMetaRecord(): Promise<SecureVaultMetaRecord> {
 	const record = await readSecureVaultMetaRecord();
 
 	if (!record) {
-		throw new Error("Vault was not created");
+		throw new Error("Wallet was not created");
 	}
 
 	return record;
