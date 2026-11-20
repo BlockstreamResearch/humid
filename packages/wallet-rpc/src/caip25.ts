@@ -1,7 +1,19 @@
+export const CAIP25_METHODS = {
+	addChain: "wallet_addChain",
+	createSession: "wallet_createSession",
+	getSession: "wallet_getSession",
+	invokeMethod: "wallet_invokeMethod",
+	revokeSession: "wallet_revokeSession",
+	switchChain: "wallet_switchChain",
+} as const;
+
+/** Per scope, which methods run without a prompt (`true`) and which ask every time (`false`). */
+export const HUMID_METHOD_POLICY_PROPERTY = "humid_methodPolicy";
+
 export type Caip25ScopeString = string;
 
 export type Caip25ScopeObject = {
-	accounts?: string[]; // CAIP-10 account ids
+	accounts?: string[];
 	methods: string[];
 	notifications: string[];
 	references?: string[];

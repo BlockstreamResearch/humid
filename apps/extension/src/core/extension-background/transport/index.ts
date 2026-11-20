@@ -1,3 +1,4 @@
+import { LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT } from "@humid/wallet-rpc";
 import { registerRPCService } from "@webext-pegasus/rpc";
 import {
 	definePegasusEventBus,
@@ -32,7 +33,7 @@ export type WalletProviderEventPayload = { chainId?: string };
 export type PegasusEventProtocolMap = {
 	[EventProtocolListeners.ExtensionEvent]: unknown;
 	accountsChanged: WalletProviderEventPayload;
-	bip122_walletDescriptorChanged: WalletProviderEventPayload;
+	[LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT]: WalletProviderEventPayload;
 	chainChanged: WalletProviderEventPayload;
 	connect: WalletProviderEventPayload;
 	disconnect: WalletProviderEventPayload;

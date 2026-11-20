@@ -1,3 +1,35 @@
+export const LIQUID_NAMESPACE = "bip122";
+
+export const LIQUID_MAINNET_CHAIN_REFERENCE = "1466275836220db2944ca059a3a10ef6";
+export const LIQUID_TESTNET_CHAIN_REFERENCE = "a771da8e52ee6ad581ed1e9a99825e5b";
+export const LIQUID_REGTEST_CHAIN_REFERENCE = "00902a6b70c2ca83b5d9c815d96a0e2f";
+
+export const LIQUID_MAINNET_CHAIN_ID =
+	`${LIQUID_NAMESPACE}:${LIQUID_MAINNET_CHAIN_REFERENCE}` as const;
+export const LIQUID_TESTNET_CHAIN_ID =
+	`${LIQUID_NAMESPACE}:${LIQUID_TESTNET_CHAIN_REFERENCE}` as const;
+export const LIQUID_REGTEST_CHAIN_ID =
+	`${LIQUID_NAMESPACE}:${LIQUID_REGTEST_CHAIN_REFERENCE}` as const;
+
+export const LIQUID_WALLET_RPC_METHODS = {
+	GET_ADDRESS: "getAddress",
+	GET_BALANCE: "getBalance",
+	GET_IDENTITY_PUBLIC_KEY: "getIdentityPublicKey",
+	GET_IDENTITY_SHARED_KEY: "getIdentitySharedKey",
+	GET_UTXOS: "getUTXOs",
+	GET_WALLET_DESCRIPTOR: "getWalletDescriptor",
+	PROCESS_CONFIDENTIAL_TRANSACTION: "processConfidentialTransaction",
+	SEND_TRANSFER: "sendTransfer",
+	SIGN_IDENTITY: "signIdentity",
+	SIGN_MESSAGE: "signMessage",
+	SIGN_PSET: "signPset",
+} as const;
+
+export type LiquidWalletRpcMethod =
+	(typeof LIQUID_WALLET_RPC_METHODS)[keyof typeof LIQUID_WALLET_RPC_METHODS];
+
+export const LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT = "bip122_walletDescriptorChanged";
+
 export type LiquidGetAddressParams = {
 	confidential?: boolean;
 	index?: number;

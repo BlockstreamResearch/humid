@@ -1,19 +1,13 @@
-export type LiquidSignPsetInput = {
-	address: string;
-	index: number;
-	sighashTypes?: number[];
-};
+export type {
+	LiquidSignPsetInput,
+	LiquidSignPsetParams,
+	LiquidSignPsetResult,
+} from "@humid/wallet-rpc";
 
 export type ParsedLiquidSignPsetInput = {
 	address: string;
 	index: number;
 	sighashTypes: number[];
-};
-
-export type LiquidSignPsetParams = {
-	broadcast?: boolean;
-	pset: string;
-	signInputs: LiquidSignPsetInput[];
 };
 
 export type ParsedLiquidSignPsetParams = {
@@ -24,11 +18,6 @@ export type ParsedLiquidSignPsetParams = {
 
 export type ReviewedLiquidSignPsetParams = Omit<ParsedLiquidSignPsetParams, "pset"> & {
 	reviewedPset: string;
-};
-
-export type LiquidSignPsetResult = {
-	pset: string;
-	txid?: string;
 };
 
 export type LiquidSignPsetReview = {

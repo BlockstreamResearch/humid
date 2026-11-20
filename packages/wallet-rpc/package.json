@@ -1,0 +1,11 @@
+{
+	"name": "@humid/wallet-rpc",
+	"version": "1.0.0",
+	"private": true,
+	"description": "The Humid wallet's dapp-facing RPC contract: CAIP-25 session envelope, Liquid chains, method names, params and results. Types and constants only.",
+	"type": "module",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts"
+	}
+}

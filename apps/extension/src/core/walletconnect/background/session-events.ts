@@ -1,3 +1,5 @@
+import { LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT } from "@humid/wallet-rpc";
+
 import { getSecureVaultStatus } from "@/core/secure-vault/background";
 
 import { getRegisteredWalletConnectNamespaces } from "../namespace-registry";
@@ -6,7 +8,7 @@ import { getWalletKitClientState } from "./state";
 const WC_DELIVERABLE_EVENTS = new Set([
 	"accountsChanged",
 	"chainChanged",
-	"bip122_walletDescriptorChanged",
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
 ]);
 
 function chainsForScope(scope: { accounts: string[]; chains?: string[] }): string[] {

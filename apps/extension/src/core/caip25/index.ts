@@ -1,10 +1,5 @@
-export { caip25Rpc } from "./methods";
-export {
-	HUMID_METHOD_POLICY_PROPERTY,
-	mergeRequestedScopes,
-	toCaip25ScopedProperties,
-	toCaip25Scopes,
-} from "./scope";
+export { CAIP25_METHODS, HUMID_METHOD_POLICY_PROPERTY } from "@humid/wallet-rpc";
+export { mergeRequestedScopes, toCaip25ScopedProperties, toCaip25Scopes } from "./scope";
 export type {
 	Caip25CreateSessionParams,
 	Caip25CreateSessionResult,
@@ -15,4 +10,4 @@ export type {
 	Caip25Scopes,
 	Caip25ScopeString,
 	Caip27InvokeMethodParams,
-} from "./types";
+} from "@humid/wallet-rpc";

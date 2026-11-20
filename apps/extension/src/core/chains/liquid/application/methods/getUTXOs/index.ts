@@ -6,7 +6,7 @@ import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import type { ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
 import {
 	LIQUID_WALLET_RPC_METHODS,
-	type LiquidGetUTXOsParams,
+	type ParsedLiquidGetUTXOsParams,
 	type LiquidGetUTXOsResult,
 } from "../../../domain/LiquidRpc";
 import { parseLiquidAssetId, parseLiquidGetUTXOsParams } from "../../../domain/validation";
@@ -26,7 +26,7 @@ type LiquidGetUTXOsReview = {
 };
 
 export const getLiquidUTXOs = createWalletMethod<
-	LiquidGetUTXOsParams,
+	ParsedLiquidGetUTXOsParams,
 	LiquidGetUTXOsContext,
 	LiquidGetUTXOsReview,
 	LiquidGetUTXOsResult

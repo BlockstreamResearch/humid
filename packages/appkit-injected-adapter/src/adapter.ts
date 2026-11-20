@@ -1,3 +1,4 @@
+import type { Caip25Scopes } from "@humid/wallet-rpc";
 import type { CaipAddress, CaipNetwork, ChainNamespace, Hex } from "@reown/appkit-common";
 import {
 	AdapterBlueprint,
@@ -17,12 +18,7 @@ import {
 	revokeSession,
 	switchChain as switchChainRpc,
 } from "./rpc";
-import type {
-	Caip25Scopes,
-	InjectedCaipAdapterOptions,
-	InjectedProvider,
-	RawInjectedProvider,
-} from "./types";
+import type { InjectedCaipAdapterOptions, InjectedProvider, RawInjectedProvider } from "./types";
 
 const DEFAULT_ACCOUNT_TYPE = "payment";
 

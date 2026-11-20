@@ -1,21 +1,33 @@
+import {
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
+	type LiquidSendTransferParams,
+} from "@humid/wallet-rpc";
+
 import type { LiquidAssetId } from "./LiquidAsset";
 import type { LiquidChainId } from "./LiquidChain";
 
-export const LIQUID_WALLET_RPC_METHODS = {
-	GET_ADDRESS: "getAddress",
-	GET_BALANCE: "getBalance",
-	GET_IDENTITY_PUBLIC_KEY: "getIdentityPublicKey",
-	GET_IDENTITY_SHARED_KEY: "getIdentitySharedKey",
-	GET_UTXOS: "getUTXOs",
-	GET_WALLET_DESCRIPTOR: "getWalletDescriptor",
-	PROCESS_CONFIDENTIAL_TRANSACTION: "processConfidentialTransaction",
-	SEND_TRANSFER: "sendTransfer",
-	SIGN_IDENTITY: "signIdentity",
-	SIGN_MESSAGE: "signMessage",
-	SIGN_PSET: "signPset",
-} as const;
-
-export const LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT = "bip122_walletDescriptorChanged";
+export {
+	LIQUID_DESCRIPTOR_FORMATS,
+	LIQUID_DESCRIPTOR_TYPES,
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
+	LIQUID_WALLET_RPC_METHODS,
+} from "@humid/wallet-rpc";
+export type {
+	LiquidDescriptorBranch,
+	LiquidDescriptorBranchDescriptor,
+	LiquidDescriptorFormat,
+	LiquidDescriptorType,
+	LiquidGetAddressResult,
+	LiquidGetBalanceResult,
+	LiquidGetUTXOsResult,
+	LiquidGetWalletDescriptorParams,
+	LiquidGetWalletDescriptorResult,
+	LiquidSendTransferParams,
+	LiquidSendTransferResult,
+	LiquidTxOutCommitments,
+	LiquidUTXO,
+	LiquidWalletDescriptorEntry,
+} from "@humid/wallet-rpc";
 
 export const LIQUID_WALLETCONNECT_EVENTS = [
 	"accountsChanged",
@@ -25,58 +37,22 @@ export const LIQUID_WALLETCONNECT_EVENTS = [
 
 export type LiquidWalletConnectEvent = (typeof LIQUID_WALLETCONNECT_EVENTS)[number];
 
-export type LiquidGetAddressParams = {
+export type ParsedLiquidGetAddressParams = {
 	confidential: boolean;
 	index: number;
 };
 
-export type LiquidGetAddressResult = {
-	accountIdentifier: string;
-	address: string;
-	chainId: LiquidChainId;
-	confidential: boolean;
-	index: number;
-};
-
-export type LiquidGetBalanceParams = {
+export type ParsedLiquidGetBalanceParams = {
 	assetId?: LiquidAssetId;
 };
 
-export type LiquidGetUTXOsParams = {
+export type ParsedLiquidGetUTXOsParams = {
 	assetId?: LiquidAssetId;
 };
 
-export const LIQUID_DESCRIPTOR_TYPES = {
-	PUBLIC_CONFIDENTIAL_DESCRIPTOR: "publicConfidentialDescriptor",
-	PUBLIC_WALLET_DESCRIPTOR: "publicWalletDescriptor",
-} as const;
-
-export const LIQUID_DESCRIPTOR_FORMATS = {
-	BIP380_BIP389_MULTIPATH: "bip380-bip389-multipath",
-	BIP380_SPLIT_BRANCHES: "bip380-split-branches",
-	ELIP150_PUBLIC_CT_BIP389_MULTIPATH: "elip150-public-ct-bip389-multipath",
-	ELIP150_PUBLIC_CT_SPLIT_BRANCHES: "elip150-public-ct-split-branches",
-} as const;
-
-export type LiquidDescriptorType =
-	(typeof LIQUID_DESCRIPTOR_TYPES)[keyof typeof LIQUID_DESCRIPTOR_TYPES];
-
-export type LiquidDescriptorFormat =
-	(typeof LIQUID_DESCRIPTOR_FORMATS)[keyof typeof LIQUID_DESCRIPTOR_FORMATS];
-
-export type LiquidGetWalletDescriptorParams = {
-	descriptorFormat?: Array<{
-		format: LiquidDescriptorFormat | string;
-	}>;
-	descriptorType: LiquidDescriptorType;
-};
-
-export type LiquidSendTransferParams = {
-	account?: string;
-	amount: string;
+export type ParsedLiquidSendTransferParams = Omit<LiquidSendTransferParams, "assetId"> & {
 	assetId?: LiquidAssetId;
-	memo?: string;
-	recipientAddress: string;
+	/** Set only by the wallet's own send screen, never parsed from a dapp. */
 	sendAll?: boolean;
 };
 
@@ -87,70 +63,6 @@ export type LiquidEstimateMaxSendParams = {
 export type LiquidEstimateMaxSendResult = {
 	feeSats: string;
 	maxAmount: string;
-};
-
-export type LiquidGetBalanceResult = {
-	accountIdentifier: string;
-	assetId: LiquidAssetId;
-	balance: string;
-	chainId: LiquidChainId;
-	policyAssetId: LiquidAssetId;
-};
-
-/** The output's fields as serialized in `txOut`: 33-byte commitments when blinded, 0x01-prefixed when explicit, and 0x00 for no nonce. */
-export type LiquidTxOutCommitments = { asset: string; nonce: string; value: string };
-
-export type LiquidUTXO = {
-	address: string;
-	amount: string;
-	assetId: LiquidAssetId;
-	confidential: boolean;
-	commitments: LiquidTxOutCommitments;
-	scriptPubKey: string;
-	spendable: boolean;
-	txid: string;
-	txOut: string;
-	vout: number;
-};
-
-export type LiquidGetUTXOsResult = {
-	accountIdentifier: string;
-	assetId: LiquidAssetId;
-	chainId: LiquidChainId;
-	policyAssetId: LiquidAssetId;
-	utxos: LiquidUTXO[];
-};
-
-export type LiquidDescriptorBranch = {
-	addressIndex: "*";
-	branch: "external" | "internal";
-	change: 0 | 1;
-};
-
-export type LiquidDescriptorBranchDescriptor = {
-	branch: "external" | "internal";
-	change: 0 | 1;
-	descriptor: string;
-};
-
-export type LiquidWalletDescriptorEntry = {
-	branchDescriptors?: LiquidDescriptorBranchDescriptor[];
-	branches?: LiquidDescriptorBranch[];
-	branchLayout: "multipath" | "split";
-	canDeriveConfidentialAddresses: boolean;
-	canDeriveScriptPubKeys: boolean;
-	canUnblindOutputs: false;
-	descriptor?: string;
-	descriptorType: LiquidDescriptorType;
-	format: LiquidDescriptorFormat;
-	standardsUsed: string[];
-};
-
-export type LiquidGetWalletDescriptorResult = {
-	accountIdentifier: string;
-	chainId: LiquidChainId;
-	descriptors: LiquidWalletDescriptorEntry[];
-	policyAssetId: LiquidAssetId;
 };
 
 export type LiquidTransferReview = {
@@ -171,8 +83,4 @@ export type LiquidTransferFee = {
 
 export type LiquidTransferQuote = LiquidTransferFee & {
 	amount: string;
-};
-
-export type LiquidSendTransferResult = {
-	txid: string;
 };

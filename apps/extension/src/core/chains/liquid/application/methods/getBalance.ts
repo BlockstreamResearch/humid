@@ -6,7 +6,7 @@ import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
 import type { ParsedLiquidAssetId } from "../../domain/LiquidAsset";
 import {
 	LIQUID_WALLET_RPC_METHODS,
-	type LiquidGetBalanceParams,
+	type ParsedLiquidGetBalanceParams,
 	type LiquidGetBalanceResult,
 } from "../../domain/LiquidRpc";
 import { parseLiquidAssetId, parseLiquidGetBalanceParams } from "../../domain/validation";
@@ -28,7 +28,7 @@ type LiquidGetBalanceReview = {
 };
 
 export const getLiquidBalance = createWalletMethod<
-	LiquidGetBalanceParams,
+	ParsedLiquidGetBalanceParams,
 	LiquidGetBalanceContext,
 	LiquidGetBalanceReview,
 	LiquidGetBalanceResult

@@ -1,7 +1,7 @@
 import { createEsploraFeeRateReader, type ReadFeeRate } from "@humid/tx-manifest";
 
 import type { LiquidChainRecord } from "../chains/LiquidChainRecord";
-import type { LiquidSendTransferParams, LiquidTransferQuote } from "../domain/LiquidRpc";
+import type { ParsedLiquidSendTransferParams, LiquidTransferQuote } from "../domain/LiquidRpc";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "./backends/LiquidWalletBackend";
 
 export const FEE_TARGET_BLOCKS = [60, 10, 1];
@@ -27,7 +27,7 @@ export function readSpeedRates(
 export function quoteTransferSpeeds(
 	walletBackend: LiquidWalletBackend,
 	account: LiquidWalletAccount,
-	params: LiquidSendTransferParams,
+	params: ParsedLiquidSendTransferParams,
 	rawAssetId: string,
 	rates: SpeedRate[],
 ): Promise<SpeedQuote[]> {

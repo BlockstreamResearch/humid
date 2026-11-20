@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
+import { CAIP25_METHODS, HUMID_METHOD_POLICY_PROPERTY } from "@humid/wallet-rpc";
+
 import { HumidAdapter } from "./humid";
 import { liquidTestnet } from "./liquid";
-import { HUMID_METHOD_POLICY_PROPERTY } from "./policy";
-import { CAIP25_METHODS } from "./rpc";
 import type { InjectedRequestArguments } from "./types";
 
 const SCOPE = liquidTestnet.caipNetworkId;

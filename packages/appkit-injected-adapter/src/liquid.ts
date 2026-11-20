@@ -1,33 +1,16 @@
+import {
+	LIQUID_MAINNET_CHAIN_ID,
+	LIQUID_MAINNET_CHAIN_REFERENCE,
+	LIQUID_NAMESPACE,
+	LIQUID_REGTEST_CHAIN_ID,
+	LIQUID_REGTEST_CHAIN_REFERENCE,
+	LIQUID_TESTNET_CHAIN_ID,
+	LIQUID_TESTNET_CHAIN_REFERENCE,
+	LIQUID_WALLET_RPC_METHODS,
+} from "@humid/wallet-rpc";
 import { defineChain } from "@reown/appkit/networks";
 
-export const LIQUID_NAMESPACE = "bip122";
-
-export const LIQUID_MAINNET_CHAIN_REFERENCE = "1466275836220db2944ca059a3a10ef6";
-export const LIQUID_TESTNET_CHAIN_REFERENCE = "a771da8e52ee6ad581ed1e9a99825e5b";
-export const LIQUID_REGTEST_CHAIN_REFERENCE = "00902a6b70c2ca83b5d9c815d96a0e2f";
-
-export const LIQUID_MAINNET_CHAIN_ID =
-	`${LIQUID_NAMESPACE}:${LIQUID_MAINNET_CHAIN_REFERENCE}` as const;
-export const LIQUID_TESTNET_CHAIN_ID =
-	`${LIQUID_NAMESPACE}:${LIQUID_TESTNET_CHAIN_REFERENCE}` as const;
-export const LIQUID_REGTEST_CHAIN_ID =
-	`${LIQUID_NAMESPACE}:${LIQUID_REGTEST_CHAIN_REFERENCE}` as const;
-
-export const LIQUID_DESCRIPTOR_CHANGED_EVENT = "bip122_walletDescriptorChanged";
-
-export const liquidWalletRpcMethods = [
-	"getAddress",
-	"getBalance",
-	"getUTXOs",
-	"getWalletDescriptor",
-	"getIdentityPublicKey",
-	"getIdentitySharedKey",
-	"processConfidentialTransaction",
-	"sendTransfer",
-	"signIdentity",
-	"signMessage",
-	"signPset",
-] as const;
+export const liquidWalletRpcMethods = Object.values(LIQUID_WALLET_RPC_METHODS);
 
 export const liquid = defineChain({
 	id: LIQUID_MAINNET_CHAIN_REFERENCE,

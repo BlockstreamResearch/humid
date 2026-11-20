@@ -14,6 +14,7 @@
         "@hugeicons/react": "^1.1.6",
         "@humid/smplx-compiler": "workspace:*",
         "@humid/tx-manifest": "workspace:*",
+        "@humid/wallet-rpc": "workspace:*",
         "@noble/curves": "1.9.7",
         "@noble/hashes": "1.8.0",
         "@reactuses/core": "^6.3.3",
@@ -169,6 +170,9 @@
     "packages/appkit-injected-adapter": {
       "name": "@humid/appkit-injected-adapter",
       "version": "1.0.0",
+      "dependencies": {
+        "@humid/wallet-rpc": "workspace:*",
+      },
       "peerDependencies": {
         "@reown/appkit": ">=1.8.0",
         "@reown/appkit-common": ">=1.8.0",
@@ -187,6 +191,10 @@
         "@noble/hashes": "^1.7.1",
         "zod": "^4.4.3",
       },
+    },
+    "packages/wallet-rpc": {
+      "name": "@humid/wallet-rpc",
+      "version": "1.0.0",
     },
   },
   "trustedDependencies": [
@@ -435,6 +443,8 @@
     "@humid/smplx-compiler": ["@humid/smplx-compiler@workspace:packages/smplx-compiler"],
 
     "@humid/tx-manifest": ["@humid/tx-manifest@workspace:packages/tx-manifest"],
+
+    "@humid/wallet-rpc": ["@humid/wallet-rpc@workspace:packages/wallet-rpc"],
 
     "@joshwooding/vite-plugin-react-docgen-typescript": ["@joshwooding/vite-plugin-react-docgen-typescript@0.7.0", "", { "dependencies": { "glob": "^13.0.1", "react-docgen-typescript": "^2.2.2" }, "peerDependencies": { "typescript": ">= 4.3.x", "vite": "^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0" }, "optionalPeers": ["typescript"] }, "sha512-qvsTEwEFefhdirGOPnu9Wp6ChfIwy2dBCRuETU3uE+4cC+PFoxMSiiEhxk4lOluA34eARHA0OxqsEUYDqRMgeQ=="],
 

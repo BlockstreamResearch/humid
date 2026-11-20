@@ -1,6 +1,6 @@
 import {
 	getSession,
-	LIQUID_DESCRIPTOR_CHANGED_EVENT,
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
 	type CaipRpcProvider,
 } from "@humid/appkit-injected-adapter";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -23,14 +23,14 @@ const WALLET_EVENT_NAMES = [
 	"connect",
 	"disconnect",
 	"wallet_sessionChanged",
-	LIQUID_DESCRIPTOR_CHANGED_EVENT,
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
 ];
 
 const ACCOUNT_RELEVANT_EVENTS = new Set([
 	"accountsChanged",
 	"connect",
 	"wallet_sessionChanged",
-	LIQUID_DESCRIPTOR_CHANGED_EVENT,
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
 ]);
 
 function useDebugWalletEvents(): { clear: () => void; log: WalletEventLogEntry[] } {

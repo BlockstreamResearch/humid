@@ -1,3 +1,4 @@
+import type { Caip25GetSessionResult } from "@humid/wallet-rpc";
 import type { CaipNetwork } from "@reown/appkit-common";
 import type { Provider, RequestArguments } from "@reown/appkit-controllers";
 
@@ -22,27 +23,6 @@ export type InjectedProvider = Omit<Provider, "request"> & {
 
 export type CaipRpcProvider = {
 	request: <T>(args: { method: string; params?: unknown }) => Promise<T>;
-};
-
-export type Caip25ScopeObject = {
-	accounts?: string[];
-	methods: string[];
-	notifications: string[];
-};
-
-export type Caip25Scopes = Record<string, Caip25ScopeObject>;
-
-export type Caip25ScopedProperties = Record<string, Record<string, unknown>>;
-
-export type Caip25CreateSessionResult = {
-	scopedProperties?: Caip25ScopedProperties;
-	sessionProperties?: Record<string, unknown>;
-	sessionScopes: Caip25Scopes;
-};
-
-export type Caip25GetSessionResult = {
-	scopedProperties?: Caip25ScopedProperties;
-	sessionScopes: Caip25Scopes;
 };
 
 export type SignMessageContext = {

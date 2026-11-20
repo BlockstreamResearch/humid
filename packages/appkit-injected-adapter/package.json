@@ -8,6 +8,9 @@
 	"exports": {
 		".": "./src/index.ts"
 	},
+	"dependencies": {
+		"@humid/wallet-rpc": "workspace:*"
+	},
 	"peerDependencies": {
 		"@reown/appkit": ">=1.8.0",
 		"@reown/appkit-common": ">=1.8.0",

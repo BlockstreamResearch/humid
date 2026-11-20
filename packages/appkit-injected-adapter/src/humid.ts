@@ -1,11 +1,11 @@
-import { InjectedCaipAdapter } from "./adapter";
 import {
-	LIQUID_DESCRIPTOR_CHANGED_EVENT,
 	LIQUID_NAMESPACE,
-	liquidNetworks,
-	liquidWalletRpcMethods,
-} from "./liquid";
-import type { LiquidGetBalanceResult } from "./liquid-rpc";
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
+	type LiquidGetBalanceResult,
+} from "@humid/wallet-rpc";
+
+import { InjectedCaipAdapter } from "./adapter";
+import { liquidNetworks, liquidWalletRpcMethods } from "./liquid";
 import { readMethodPolicy } from "./policy";
 import type {
 	InjectedCaipAdapterOptions,
@@ -64,7 +64,7 @@ export class HumidAdapter extends InjectedCaipAdapter {
 			connector: HUMID_CONNECTOR,
 			getProvider: () => window.humid,
 			methods: liquidWalletRpcMethods,
-			notifications: [LIQUID_DESCRIPTOR_CHANGED_EVENT],
+			notifications: [LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT],
 			networks: liquidNetworks,
 			readBalance: humidReadBalance,
 			signMessage: humidSignMessage,

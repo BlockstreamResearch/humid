@@ -1,7 +1,7 @@
 import {
 	createSession as createCaipSession,
 	createWalletClient,
-	LIQUID_DESCRIPTOR_CHANGED_EVENT,
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
 	LIQUID_NAMESPACE,
 	LIQUID_TESTNET_CHAIN_ID,
 	liquidNetworks,
@@ -109,7 +109,7 @@ function buildAllScopes(): Caip25Scopes {
 			network.caipNetworkId,
 			{
 				methods: [...liquidWalletRpcMethods],
-				notifications: [LIQUID_DESCRIPTOR_CHANGED_EVENT],
+				notifications: [LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT],
 			},
 		]),
 	);

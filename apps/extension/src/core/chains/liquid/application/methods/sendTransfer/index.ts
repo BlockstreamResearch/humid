@@ -4,7 +4,7 @@ import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import type { ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
 import {
 	LIQUID_WALLET_RPC_METHODS,
-	type LiquidSendTransferParams,
+	type ParsedLiquidSendTransferParams,
 	type LiquidSendTransferResult,
 	type LiquidTransferReview,
 } from "../../../domain/LiquidRpc";
@@ -34,7 +34,7 @@ type LiquidSendTransferMethodReview = {
 };
 
 export const sendLiquidTransfer = createWalletMethod<
-	LiquidSendTransferParams,
+	ParsedLiquidSendTransferParams,
 	LiquidSendTransferContext,
 	LiquidSendTransferMethodReview,
 	LiquidSendTransferResult

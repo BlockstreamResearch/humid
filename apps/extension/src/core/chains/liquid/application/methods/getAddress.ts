@@ -5,7 +5,7 @@ import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 import type { LiquidChainRecord } from "../../chains/LiquidChainRecord";
 import {
 	LIQUID_WALLET_RPC_METHODS,
-	type LiquidGetAddressParams,
+	type ParsedLiquidGetAddressParams,
 	type LiquidGetAddressResult,
 } from "../../domain/LiquidRpc";
 import { parseLiquidGetAddressParams } from "../../domain/validation";
@@ -24,7 +24,7 @@ type LiquidGetAddressReview = {
 };
 
 export const getLiquidAddress = createWalletMethod<
-	LiquidGetAddressParams,
+	ParsedLiquidGetAddressParams,
 	LiquidGetAddressContext,
 	LiquidGetAddressReview,
 	LiquidGetAddressResult

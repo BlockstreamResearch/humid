@@ -11,7 +11,7 @@ import type {
 	LiquidEstimateMaxSendParams,
 	LiquidEstimateMaxSendResult,
 	LiquidGetWalletDescriptorParams,
-	LiquidSendTransferParams,
+	ParsedLiquidSendTransferParams,
 	LiquidSendTransferResult,
 	LiquidTransferFee,
 	LiquidTransferQuote,
@@ -141,7 +141,7 @@ export type LiquidWalletBackend = {
 	getTipHeight: (account: LiquidWalletAccount) => number;
 	inspectTransfer: (
 		account: LiquidWalletAccount,
-		params: LiquidSendTransferParams,
+		params: ParsedLiquidSendTransferParams,
 		rawAssetId: string,
 	) => Promise<LiquidTransferReview>;
 	inspectMessageSigning: (
@@ -151,13 +151,13 @@ export type LiquidWalletBackend = {
 	resolveAccount: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidWalletAccount>;
 	quoteTransfer: (
 		account: LiquidWalletAccount,
-		params: LiquidSendTransferParams,
+		params: ParsedLiquidSendTransferParams,
 		rawAssetId: string,
 		feeRateSatsPerKvb: number,
 	) => Promise<LiquidTransferQuote>;
 	sendTransfer: (
 		account: LiquidWalletAccount,
-		params: LiquidSendTransferParams,
+		params: ParsedLiquidSendTransferParams,
 		rawAssetId: string,
 		fee?: LiquidTransferFee,
 		note?: TransactionNote,

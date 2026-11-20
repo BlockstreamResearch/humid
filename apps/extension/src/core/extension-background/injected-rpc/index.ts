@@ -1,4 +1,4 @@
-import { caip25Rpc } from "@/core/caip25";
+import { CAIP25_METHODS } from "@/core/caip25";
 import type { ExtensionMessage } from "@/helpers/background";
 
 import type { DappAuthorization } from "../dapp-authorization";
@@ -20,26 +20,26 @@ export function createInjectedRpcHandlers({
 		(message as InjectedRpcMessage).params ?? message.data;
 
 	return {
-		[caip25Rpc.methods.createSession]: async (message, sender) =>
+		[CAIP25_METHODS.createSession]: async (message, sender) =>
 			authorization.createSession({
 				origin: await resolveSenderOrigin(sender),
 				params: paramsOf(message),
 			}),
-		[caip25Rpc.methods.getSession]: async (_message, sender) =>
+		[CAIP25_METHODS.getSession]: async (_message, sender) =>
 			authorization.getSession({ origin: await resolveSenderOrigin(sender) }),
-		[caip25Rpc.methods.revokeSession]: async (_message, sender) =>
+		[CAIP25_METHODS.revokeSession]: async (_message, sender) =>
 			authorization.revokeSession({ origin: await resolveSenderOrigin(sender) }),
-		[caip25Rpc.methods.invokeMethod]: async (message, sender) =>
+		[CAIP25_METHODS.invokeMethod]: async (message, sender) =>
 			authorization.invokeMethod({
 				origin: await resolveSenderOrigin(sender),
 				params: paramsOf(message),
 			}),
-		[caip25Rpc.methods.addChain]: async (message, sender) =>
+		[CAIP25_METHODS.addChain]: async (message, sender) =>
 			authorization.addChain({
 				origin: await resolveSenderOrigin(sender),
 				params: paramsOf(message),
 			}),
-		[caip25Rpc.methods.switchChain]: async (message, sender) =>
+		[CAIP25_METHODS.switchChain]: async (message, sender) =>
 			authorization.switchChain({
 				origin: await resolveSenderOrigin(sender),
 				params: paramsOf(message),

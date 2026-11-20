@@ -13,7 +13,7 @@ import { LIQUID_MAINNET_CHAIN_ID } from "../../../../domain/LiquidChain";
 import type {
 	LiquidEstimateMaxSendParams,
 	LiquidEstimateMaxSendResult,
-	LiquidSendTransferParams,
+	ParsedLiquidSendTransferParams,
 	LiquidSendTransferResult,
 	LiquidTransferFee,
 	LiquidTransferQuote,
@@ -27,7 +27,7 @@ import { sentTransactions, TransactionRefusedError } from "../sentTransactions";
 
 export async function inspectTransfer(
 	account: LiquidWalletAccount,
-	params: LiquidSendTransferParams,
+	params: ParsedLiquidSendTransferParams,
 	rawAssetId: string,
 ): Promise<LiquidTransferReview> {
 	if (params.memo) {
@@ -69,7 +69,7 @@ export async function inspectTransfer(
 
 export async function quoteTransfer(
 	account: LiquidWalletAccount,
-	params: LiquidSendTransferParams,
+	params: ParsedLiquidSendTransferParams,
 	rawAssetId: string,
 	feeRateSatsPerKvb: number,
 ): Promise<LiquidTransferQuote> {
@@ -88,7 +88,7 @@ export async function quoteTransfer(
 
 export async function sendTransfer(
 	account: LiquidWalletAccount,
-	params: LiquidSendTransferParams,
+	params: ParsedLiquidSendTransferParams,
 	rawAssetId: string,
 	fee?: LiquidTransferFee,
 	note?: TransactionNote,
@@ -158,7 +158,7 @@ export async function estimateMaxSend(
 function buildTransfer(
 	lwk: LwkWasmModule,
 	account: LiquidWalletAccount,
-	params: LiquidSendTransferParams,
+	params: ParsedLiquidSendTransferParams,
 	rawAssetId: string,
 	feeRateSatsPerKvb: number | undefined,
 ): Pset {
@@ -221,7 +221,7 @@ function feeOf(pset: Pset): bigint {
 
 function isSendAll(
 	account: LiquidWalletAccount,
-	params: LiquidSendTransferParams,
+	params: ParsedLiquidSendTransferParams,
 	rawAssetId: string,
 ): boolean {
 	return params.sendAll === true && rawAssetId === account.rawPolicyAssetId;

@@ -63,7 +63,9 @@ const adapter = new InjectedCaipAdapter({
 - `HumidAdapter` — the Humid-preset adapter (zero config).
 - `InjectedCaipAdapter` — the agnostic core adapter.
 - `liquid` / `liquidTestnet` / `liquidNetworks` — Liquid chains built with AppKit's `defineChain`.
-- `LIQUID_*`, `liquidWalletRpcMethods`, `HUMID_CONNECTOR` — the underlying definitions.
+- Everything from `@humid/wallet-rpc`, the wallet's RPC contract shared with the extension: chain ids,
+  `LIQUID_WALLET_RPC_METHODS`, `CAIP25_METHODS`, and every method's params and result types.
+- `liquidWalletRpcMethods`, `HUMID_CONNECTOR` — the Humid preset's definitions.
 - `createSession` / `getSession` / `invokeMethod` / `revokeSession` / `CAIP25_METHODS` — raw CAIP-25/27
   RPC helpers against any provider with a `request` method.
 - `createInjectedProvider` / `waitForProvider` — the AppKit-compatible provider bridge.
