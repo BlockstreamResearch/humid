@@ -1,6 +1,7 @@
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 
+import { liquidChainLabel } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type {
 	LiquidSignPsetResult,
@@ -39,7 +40,7 @@ export const signLiquidPset = createWalletMethod<
 				assets: await readKnownAssets(context, review.account),
 				broadcast: params.broadcast,
 				kind: SIGN_PSET_CONFIRMATION_KIND,
-				network: context.chain.name,
+				network: liquidChainLabel(context.chain),
 				policyAssetId: review.account.rawPolicyAssetId,
 				signInputs: params.signInputs.map((input) => input.index),
 				transaction,

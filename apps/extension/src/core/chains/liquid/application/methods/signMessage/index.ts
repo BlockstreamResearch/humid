@@ -3,7 +3,7 @@ import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
-import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
+import { type LiquidChainRecord, liquidChainLabel } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import {
 	LIQUID_SIGN_MESSAGE_PROTOCOLS,
@@ -43,7 +43,7 @@ export const signLiquidMessage = createWalletMethod<
 			address: review.message.address,
 			kind: SIGN_MESSAGE_CONFIRMATION_KIND,
 			message: params.message,
-			network: context.chain.name,
+			network: liquidChainLabel(context.chain),
 			protocol: review.message.protocol,
 		} satisfies SignMessageConfirmationData,
 		title: "Sign a message?",

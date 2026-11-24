@@ -5,7 +5,7 @@ import type { KeyManagerState } from "@/core/key-manager/types";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
-import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
+import { type LiquidChainRecord, liquidChainLabel } from "../../../chains/LiquidChainRecord";
 import {
 	type LiquidSignIdentityResult,
 	type ParsedLiquidSignIdentityParams,
@@ -38,7 +38,7 @@ export const signLiquidIdentity = createWalletMethod<
 			identity: params.identity,
 			index: params.index,
 			kind: SIGN_IDENTITY_CONFIRMATION_KIND,
-			network: context.chain.name,
+			network: liquidChainLabel(context.chain),
 			text: readableText(params.challenge),
 		} satisfies SignIdentityConfirmationData,
 		title: "Prove an identity?",

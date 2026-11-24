@@ -36,9 +36,14 @@ export function DappAddChainConfirmation({ data, onConfirm, onDecline }: Props) 
 				<FactRow label="Name" value={data.name} />
 				<FactRow label="Type" value={data.network} />
 				<FactRow label="Backend" value={data.backendUrl} mono />
+				{data.explorerUrl !== undefined && (
+					<FactRow label="Explorer" value={data.explorerUrl} mono />
+				)}
 			</ConfirmationSection>
 			<ConfirmationNote tone="warning">
-				Only add networks you trust. The backend sees every address the wallet looks up.
+				{data.waterfalls
+					? "Only add networks you trust. The backend learns the account's public key, so it sees every address the wallet ever uses."
+					: "Only add networks you trust. The backend sees every address the wallet looks up."}
 			</ConfirmationNote>
 		</ConfirmationLayout>
 	);

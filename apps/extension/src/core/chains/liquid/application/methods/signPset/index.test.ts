@@ -3,6 +3,8 @@ import { expect, test } from "bun:test";
 import { DENY_ALL_AUTHORIZATION } from "@/core/wallet-rpc/types";
 
 import { signLiquidPset } from ".";
+import { resolveLiquidChain } from "../../../chains/resolveLiquidChain";
+import { LIQUID_TESTNET_CHAIN_ID } from "../../../domain/LiquidChain";
 import type { LiquidSignPsetReview } from "../../../domain/pset/types";
 
 const INPUTS: LiquidSignPsetReview["inputs"] = [
@@ -14,7 +16,7 @@ function request(signInputs: { index: number; sighashTypes?: number[] }[]) {
 	let prompted = false;
 	const context = {
 		authorization: DENY_ALL_AUTHORIZATION,
-		chain: { id: "liquid:testnet", name: "Liquid Testnet" },
+		chain: resolveLiquidChain(LIQUID_TESTNET_CHAIN_ID),
 		// Like the real window: it waits for the review, and fails with it when the review refuses.
 		confirm: async (request: Promise<unknown>) => {
 			await request;

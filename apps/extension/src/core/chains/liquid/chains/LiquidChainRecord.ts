@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ChainRecord } from "@/core/chains/application/ChainRecord";
 
 import {
+	isBuiltInLiquidChainId,
 	LIQUID_MAINNET_CHAIN_ID,
 	LIQUID_TESTNET_CHAIN_ID,
 	type LiquidChainId,
@@ -119,4 +120,11 @@ export function parseLiquidChainRecord(value: unknown): LiquidChainRecord {
 			network: resolveLiquidNetworkKind(parsed.data.id, settings.network),
 		},
 	} as LiquidChainRecord;
+}
+
+/** A custom network carries its type, so its name alone never passes for another network. */
+export function liquidChainLabel(chain: LiquidChainRecord): string {
+	return isBuiltInLiquidChainId(chain.id)
+		? chain.name
+		: `${chain.name} · ${chain.settings.network}`;
 }

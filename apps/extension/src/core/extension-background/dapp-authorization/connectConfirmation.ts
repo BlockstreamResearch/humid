@@ -35,10 +35,13 @@ export const DAPP_ADD_CHAIN_CONFIRMATION_KIND = "dappAddChain";
 
 export type DappAddChainConfirmationData = {
 	backendUrl: string;
+	explorerUrl?: string;
 	kind: typeof DAPP_ADD_CHAIN_CONFIRMATION_KIND;
 	name: string;
 	network: string;
 	origin: string;
+	/** The backend learns the account's extended public key, not only the addresses it looks up. */
+	waterfalls: boolean;
 };
 
 export function isDappAddChainConfirmationData(

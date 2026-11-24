@@ -1,6 +1,7 @@
 import { transferChanges } from "@/common/Confirmation/TransactionReceipt";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 
+import { liquidChainLabel } from "../../../chains/LiquidChainRecord";
 import type { ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
 import {
 	LIQUID_WALLET_RPC_METHODS,
@@ -48,7 +49,7 @@ export const sendLiquidTransfer = createWalletMethod<
 			assets: await readKnownAssets(context, review.account),
 			feeAssetId: review.account.rawPolicyAssetId,
 			kind: SEND_TRANSFER_CONFIRMATION_KIND,
-			network: context.chain.name,
+			network: liquidChainLabel(context.chain),
 			review: {
 				quotes: review.quotes,
 				recipientAddress: review.transfer.recipientAddress,

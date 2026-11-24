@@ -105,6 +105,57 @@ test("an approval grants no-prompt use of reads only, and a stored grant to sign
 	expect(dispatched).toEqual([readsOnly]);
 });
 
+test("only a connected dapp may ask to add a network", async () => {
+	const chain = "liquid:testnet";
+	const origin = "https://example.org";
+	const registry = new AccountRegistry();
+	let model = registry.createLocalRootAccountModel().accountModel;
+	const asked: unknown[] = [];
+	let prepared = 0;
+	const authorization = createDappAuthorization({
+		registry,
+		getAccountModel: () => model,
+		confirm: async <T>(request: { data?: unknown }) => {
+			asked.push(request.data);
+
+			return {
+				approved: true,
+				result: {
+					grantedAccountGroupIds: Object.keys(model.accountGroups),
+					grantedMethods: ["getBalance"],
+				} as T,
+			};
+		},
+		dispatch: async () => null,
+		prepareChainAddition: async () => {
+			prepared++;
+
+			return {
+				backendUrl: "https://esplora.example.org",
+				commit: async () => "liquid:custom",
+				name: "Dapp regtest",
+				network: "regtest",
+				waterfalls: false,
+			};
+		},
+		resolveSupportedScope: () => ({ chains: [chain], events: [], methods: ["getBalance"] }),
+		updateAccountModel: async (update) => (model = update(model)),
+		waitForUnlock: async () => {},
+	});
+	const addChain = () => authorization.addChain({ origin, params: {} });
+
+	await expect(addChain()).rejects.toMatchObject({ code: 4100 });
+	expect({ asked: asked.length, prepared }).toEqual({ asked: 0, prepared: 0 });
+
+	await authorization.createSession({
+		origin,
+		params: { requiredScopes: { [chain]: { methods: ["getBalance"], notifications: [] } } },
+	});
+
+	expect(await addChain()).toEqual({ chainId: "liquid:custom" });
+	expect(asked.at(-1)).toMatchObject({ kind: "dappAddChain", name: "Dapp regtest", origin });
+});
+
 function grantingEverything(model: AccountModelState): AccountModelState {
 	return {
 		...model,

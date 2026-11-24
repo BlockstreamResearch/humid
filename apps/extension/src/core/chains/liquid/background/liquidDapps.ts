@@ -6,8 +6,12 @@ import type { DappAuthorizationDependencies } from "@/core/extension-background/
 import { walletVaultBackground } from "@/core/secure-vault/application/wallet-vault/background";
 
 import { buildLiquidDappAccountScope } from "../application/dappAccountScope";
-import { generateCustomLiquidChainId } from "../chains/createBuiltInLiquidChains";
-import { LIQUID_CHAIN_GROUP_ID, parseLiquidChainRecord } from "../chains/LiquidChainRecord";
+import { parseDappChainProposal } from "../chains/dappChainProposal";
+import {
+	type LiquidChainRecord,
+	liquidChainLabel,
+	parseLiquidChainRecord,
+} from "../chains/LiquidChainRecord";
 import { resolveUnlockedLiquidChain } from "../chains/resolveLiquidChain";
 import type { LiquidChainGroup } from "../contract";
 import { LIQUID_WALLETCONNECT_EVENTS } from "../domain/LiquidRpc";
@@ -35,19 +39,22 @@ export function createLiquidDapps({
 > {
 	const { keyManager } = walletVaultBackground;
 
-	const knownChainNames = async (): Promise<Map<string, string>> => {
-		const known = new Map(chainGroup.chains.map((chain) => [chain.id, chain.name]));
+	const knownChains = async (): Promise<LiquidChainRecord[]> => {
+		const known = new Map(chainGroup.chains.map((chain) => [chain.id, chain]));
 
 		try {
-			for (const chain of Object.values((await getUnlockedChainStoreState()).chains)) {
-				if (chain.chainGroupId === chainGroup.id && !known.has(chain.id)) {
-					known.set(chain.id, chain.name);
+			for (const stored of Object.values((await getUnlockedChainStoreState()).chains)) {
+				if (stored.chainGroupId === chainGroup.id && !known.has(stored.id)) {
+					known.set(stored.id, parseLiquidChainRecord(stored));
 				}
 			}
 		} catch {}
 
-		return known;
+		return [...known.values()];
 	};
+
+	const knownChainNames = async (): Promise<Map<string, string>> =>
+		new Map((await knownChains()).map((chain) => [chain.id, liquidChainLabel(chain)]));
 
 	return {
 		async dispatch({ accountGroupIds, chainId, grantedMethods, method, origin, params }) {
@@ -74,20 +81,16 @@ export function createLiquidDapps({
 			);
 		},
 
-		prepareChainAddition(params) {
-			const proposal =
-				params && typeof params === "object" ? (params as Record<string, unknown>) : {};
-			const chain = parseLiquidChainRecord({
-				chainGroupId: LIQUID_CHAIN_GROUP_ID,
-				id: generateCustomLiquidChainId(),
-				name: proposal.name,
-				settings: proposal.settings,
-			});
+		async prepareChainAddition(params) {
+			const chain = parseDappChainProposal(params, await knownChains());
+			const { backend, explorerUrl, network } = chain.settings;
 
 			return {
-				backendUrl: chain.settings.backend.url,
+				backendUrl: backend.url,
+				...(explorerUrl === undefined ? {} : { explorerUrl }),
 				name: chain.name,
-				network: chain.settings.network,
+				network,
+				waterfalls: backend.waterfalls === true,
 				async commit() {
 					await addUnlockedChainRecord(chain, [chainGroup]);
 

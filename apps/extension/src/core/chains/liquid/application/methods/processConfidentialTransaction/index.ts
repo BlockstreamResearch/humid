@@ -20,7 +20,7 @@ import type { KeyManagerState } from "@/core/key-manager/types";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 
-import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
+import { type LiquidChainRecord, liquidChainLabel } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type { LiquidFundingUtxo, LiquidWalletAccount } from "../../backends/LiquidWalletBackend";
 import { accountNameOf, readKnownAssets, transactionReceipt } from "../../confirmationFacts";
@@ -114,7 +114,7 @@ export const createProcessLiquidConfidentialTransaction = (
 				assets: await readKnownAssets(context, await dependencies.resolveAccount(context)),
 				broadcast: params.broadcast,
 				kind: PROCESS_CT_CONFIRMATION_KIND,
-				network: context.chain.name,
+				network: liquidChainLabel(context.chain),
 				speeds: review.map(({ review: atSpeed, targetBlocks }) => ({
 					shown: toShownConfirmation(atSpeed.confirmation),
 					targetBlocks,

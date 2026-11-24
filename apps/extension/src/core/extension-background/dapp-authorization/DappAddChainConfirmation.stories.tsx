@@ -13,6 +13,7 @@ const meta = {
 			name: "Liquid Regtest",
 			network: "regtest",
 			origin: "https://app.example.org",
+			waterfalls: false,
 		},
 		onConfirm: fn(),
 		onDecline: fn(),
@@ -24,6 +25,22 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const Waterfalls: Story = {
+	args: {
+		data: {
+			...meta.args.data,
+			explorerUrl: "https://explorer.example.org",
+			waterfalls: true,
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+
+		await expect(canvas.getByText("https://explorer.example.org")).toBeVisible();
+		await expect(canvas.getByText(/learns the account's public key/)).toBeVisible();
+	},
+};
 
 export const Confirms: Story = {
 	play: async ({ args, canvasElement }) => {

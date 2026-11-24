@@ -45,11 +45,8 @@ export type SupportedDappScope = {
 	methods: string[];
 };
 
-export type PreparedChainAddition = {
-	backendUrl: string;
+export type PreparedChainAddition = Omit<DappAddChainConfirmationData, "kind" | "origin"> & {
 	commit: () => Promise<string>;
-	name: string;
-	network: string;
 };
 
 export type DappRequestDispatch = (request: {
@@ -67,7 +64,7 @@ export type DappAuthorizationDependencies = {
 	) => Promise<ConfirmationDecision<TResult>>;
 	dispatch: DappRequestDispatch;
 	getAccountModel: () => AccountModelState | null;
-	prepareChainAddition?: (params: unknown) => PreparedChainAddition;
+	prepareChainAddition?: (params: unknown) => Promise<PreparedChainAddition>;
 	registry: AccountRegistry;
 	resolveKnownChain?: (chainId: string) => Promise<{ name: string } | null>;
 	resolveSupportedScope: (
@@ -334,7 +331,8 @@ export function createDappAuthorization(
 		params: unknown;
 	}): Promise<{ chainId: string }> => {
 		const requestingOrigin = requireOrigin(origin);
-		await unlockedAccountModel();
+
+		requireSession(await unlockedAccountModel(), requestingOrigin);
 
 		if (!prepareChainAddition) {
 			throw dappAuthorizationErrors.invalidParams("Adding chains is not supported.");
@@ -343,7 +341,7 @@ export function createDappAuthorization(
 		let prepared: PreparedChainAddition;
 
 		try {
-			prepared = prepareChainAddition(params);
+			prepared = await prepareChainAddition(params);
 		} catch (error) {
 			if (error instanceof DappAuthorizationError) throw error;
 
@@ -352,11 +350,10 @@ export function createDappAuthorization(
 			);
 		}
 
+		const { commit, ...shown } = prepared;
 		const data: DappAddChainConfirmationData = {
-			backendUrl: prepared.backendUrl,
+			...shown,
 			kind: DAPP_ADD_CHAIN_CONFIRMATION_KIND,
-			name: prepared.name,
-			network: prepared.network,
 			origin: requestingOrigin,
 		};
 
@@ -368,7 +365,7 @@ export function createDappAuthorization(
 
 		requireUnlocked(getAccountModel());
 
-		return { chainId: await prepared.commit() };
+		return { chainId: await commit() };
 	};
 
 	// wallet_switchChain: a PER-CONNECTION scope expansion (no global wallet-wide effect). Injected

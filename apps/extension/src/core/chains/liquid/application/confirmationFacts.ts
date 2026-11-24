@@ -1,5 +1,6 @@
 import type { TransactionReceiptData } from "@/common/Confirmation/TransactionReceipt";
 
+import { liquidChainLabel } from "../chains/LiquidChainRecord";
 import { LIQUID_NATIVE_ASSET, type LiquidAssetMetadata } from "../domain/LiquidAsset";
 import { liquidExplorerTxUrl } from "../presentation/liquidExplorerTxUrl";
 import type { LiquidWalletAccount } from "./backends/LiquidWalletBackend";
@@ -57,7 +58,7 @@ export async function transactionReceipt(
 		explorerUrl:
 			txid === undefined ? undefined : (liquidExplorerTxUrl(context.chain, txid) ?? undefined),
 		fee: `${feeSats} sats`,
-		network: context.chain.name,
+		network: liquidChainLabel(context.chain),
 		txid,
 	};
 }
