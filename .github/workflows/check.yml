@@ -22,7 +22,7 @@ jobs:
       # outright on `Cannot find module 'smplx-wasm/smplx_wasm_bg.js'` — they drive the
       # real module rather than a substitute, which is the point of them.
       - name: Checkout (with the lwk and smplx submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 

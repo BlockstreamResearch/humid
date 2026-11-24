@@ -4,9 +4,33 @@ description: >-
   up first (see the setup-bun action) and the lwk_wasm/pkg to already be built (see the
   build-lwk-wasm action) — the `lwk_wasm` package is a local `file:` dependency.
 
+inputs:
+  cache:
+    description: >-
+      Set to "false" to skip the cache and install from scratch. Release and deploy jobs
+      do this, so nothing they ship comes from a cache.
+    default: "true"
+
 runs:
   using: composite
   steps:
+    - name: Restore Bun install cache
+      id: bun-cache
+      if: inputs.cache == 'true'
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-bun-
+
     - name: bun install
       shell: bash
       run: bun install --frozen-lockfile
+
+    - name: Save Bun install cache
+      if: inputs.cache == 'true' && steps.bun-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ~/.bun/install/cache
+        key: ${{ steps.bun-cache.outputs.cache-primary-key }}
