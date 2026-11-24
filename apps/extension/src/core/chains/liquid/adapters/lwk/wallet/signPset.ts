@@ -32,7 +32,9 @@ export async function blindAndInspectPset(
 	try {
 		pset.addDetails(wollet);
 		blindedPset = blindPset(lwk, wollet, coins, pset);
-		return inspectPset(lwk, wollet, coins, blindedPset);
+		// An output the dapp sent explicit keeps true values, or the wallet blinded those values itself.
+		const verifiable = PsetMaps.parse(psetBase64).outputs.map((output) => output.isExplicit);
+		return inspectPset(lwk, wollet, coins, blindedPset, verifiable);
 	} finally {
 		if (blindedPset !== pset) blindedPset?.free();
 		pset.free();
@@ -44,6 +46,7 @@ function inspectPset(
 	wollet: Wollet,
 	coins: WalletCoins,
 	pset: Pset,
+	verifiable: boolean[],
 ): LiquidSignPsetReview {
 	const resources: { free(): void }[] = [];
 	const own = <T extends { free(): void }>(value: T): T => {
@@ -59,7 +62,7 @@ function inspectPset(
 		const add = (asset: string, amount: bigint) => {
 			explicitBalances.set(asset, (explicitBalances.get(asset) ?? 0n) + amount);
 		};
-		const review = markOwnership(lwk, wollet, pset);
+		const review = markOwnership(lwk, wollet, pset.toString());
 		const ownedOutputs = review.outputs.map((output) => output.isOwned);
 		const spent = review.inputs.map((input) => {
 			if (!input.isOwned) {
@@ -80,7 +83,10 @@ function inspectPset(
 			add(own(asset).toString(), amount);
 			output.disown();
 		}
-		const balance = own(own(wollet.psetDetails(own(new lwk.Pset(review.toString())))).balance());
+		const details = own(wollet.psetDetails(own(new lwk.Pset(review.toString()))));
+		const balance = own(details.balance());
+		const issuances = details.inputsIssuances();
+		issuances.forEach(own);
 		const fees = own(balance.fees());
 		const netBalances = new Map(own(balance.balances()).entries() as Map<string, bigint>);
 		for (const [asset, amount] of explicitBalances) {
@@ -108,12 +114,29 @@ function inspectPset(
 				asset,
 				amount: amount.toString(),
 			})).filter((entry) => entry.amount !== "0"),
+			issuances: issuances.flatMap((issuance, index) => {
+				const asset = issuance.asset();
+				const token = issuance.token();
+				if (!asset || !(issuance.isIssuance() || issuance.isReissuance())) return [];
+				const issued = review.inputs[index]!.issued;
+				return [
+					{
+						amount: issued.amount?.toString(),
+						asset: own(asset).toString(),
+						index,
+						kind: issuance.isReissuance() ? ("reissuance" as const) : ("issuance" as const),
+						token: token ? own(token).toString() : undefined,
+						tokenAmount: issued.tokens?.toString(),
+					},
+				];
+			}),
 			outputs: outputs.map((output, index) => {
-				const value = output.asset();
+				const verified = verifiable[index] === true;
+				const value = verified ? output.asset() : undefined;
 				const asset = value ? own(value) : undefined;
 				return {
 					address: addresses.get(index),
-					amount: output.amount()?.toString(),
+					amount: verified ? output.amount()?.toString() : undefined,
 					asset: asset?.toString(),
 					index,
 					owned: ownedOutputs[index]!,
@@ -135,9 +158,12 @@ export async function signPset(
 	let pset: Pset | undefined;
 	try {
 		const lwk = await loadLwkWasm();
-		pset = new lwk.Pset(params.reviewedPset);
-		const signaturesBefore = readInputSignatures(pset);
-		const inputCount = signaturesBefore.length;
+		const reviewed = PsetMaps.parse(params.reviewedPset);
+		const inputCount = reviewed.inputs.length;
+
+		if (params.signInputs.length === 0) {
+			throw invalidPset("The dapp listed no inputs to sign.");
+		}
 
 		for (const input of params.signInputs) {
 			if (input.index >= inputCount) {
@@ -152,34 +178,38 @@ export async function signPset(
 			}
 		}
 
-		const requestedIndexes = new Set(params.signInputs.map((requested) => requested.index));
-
-		// sign and finalize consume their input, including when they throw.
-		const signingPset = pset;
-		pset = undefined;
-		// The review shows each input's sighash, so dapp-chosen ones are signed as shown.
+		// The signer sees only the key paths the wallet adds itself, never ones the dapp wrote.
+		const signing = new lwk.Pset(
+			markOwnership(lwk, implementation.wollet, params.reviewedPset).toString(),
+		);
+		// The review refused every sighash the dapp did not declare, so each one left was shown and declared.
 		const options = lwk.SignOptions.dangerousAllowAnySighash();
+		let signed: Pset;
 		try {
-			pset = implementation.signer.signWithOptions(signingPset, options);
+			// sign consumes its input, including when it throws.
+			signed = implementation.signer.signWithOptions(signing, options);
 		} finally {
 			options.free();
 		}
 
-		const overSignedInputIndex = readInputSignatures(pset).findIndex(
-			(signatures, index) =>
-				!requestedIndexes.has(index) &&
-				[...signatures].some(([key, value]) => !signaturesBefore[index].get(key)?.equals(value)),
-		);
-		if (overSignedInputIndex !== -1) {
-			throw new WalletRpcResourceUnavailableError(
-				"The wallet refused to sign an input the dapp did not list.",
-				{
-					overSignedInputIndex,
-					requestedInputIndexes: [...requestedIndexes],
-				},
-				WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST,
-			);
+		const signatures = PsetMaps.parse(signed.toString());
+		signed.free();
+
+		for (const { index } of params.signInputs) {
+			const input = reviewed.inputs[index]!;
+
+			input.adoptSignatures(signatures.inputs[index]!);
+
+			if (input.signatures.size === 0) {
+				throw new WalletRpcResourceUnavailableError(
+					`The wallet cannot sign the input at index ${index}.`,
+					{ requestedIndex: index },
+					WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST,
+				);
+			}
 		}
+
+		pset = new lwk.Pset(reviewed.toString());
 
 		let txid: string | undefined;
 
@@ -219,12 +249,8 @@ export async function signPset(
 	}
 }
 
-function readInputSignatures(pset: Pset) {
-	return PsetMaps.parse(pset.toString()).inputs.map((input) => input.signatures);
-}
-
-function markOwnership(lwk: LwkWasmModule, wollet: Wollet, pset: Pset): PsetMaps {
-	const maps = PsetMaps.parse(pset.toString());
+function markOwnership(lwk: LwkWasmModule, wollet: Wollet, psetBase64: string): PsetMaps {
+	const maps = PsetMaps.parse(psetBase64);
 	for (const entries of [...maps.inputs, ...maps.outputs]) entries.disown();
 	const marked = new lwk.Pset(maps.toString());
 	try {

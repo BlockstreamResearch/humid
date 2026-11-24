@@ -31,6 +31,15 @@ export type LiquidSignPsetReview = {
 		sighashType: number;
 	}[];
 	fees: { asset: string; amount: string }[];
+	/** Amounts are left out when blinded, since the wallet cannot prove them. */
+	issuances: {
+		amount?: string;
+		asset: string;
+		index: number;
+		kind: "issuance" | "reissuance";
+		token?: string;
+		tokenAmount?: string;
+	}[];
 	netEffect: { asset: string; amount: string }[];
 	outputs: {
 		address?: string;

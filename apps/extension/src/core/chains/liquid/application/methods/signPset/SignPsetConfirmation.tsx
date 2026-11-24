@@ -50,7 +50,7 @@ export function SignPsetConfirmation({
 	onConfirm: () => void;
 	onReject: () => void;
 }) {
-	const { inputs, outputs, netEffect, fees } = data.transaction;
+	const { inputs, issuances, outputs, netEffect, fees } = data.transaction;
 	const signs = new Set(data.signInputs);
 	const assetOf = (id: string) => {
 		const known = data.assets[id];
@@ -73,6 +73,23 @@ export function SignPsetConfirmation({
 		.filter((input) => signs.has(input.index))
 		.map((input) => new SignatureScope(input.sighashType, input.index, outputs.length).warning)
 		.filter((warning) => warning !== undefined);
+	const issuanceNotes = issuances.map((issuance) => {
+		const minted =
+			issuance.amount === undefined
+				? "a confidential amount"
+				: assetOf(issuance.asset).amountWithLabel(BigInt(issuance.amount));
+
+		if (issuance.kind === "reissuance") {
+			return `Input ${issuance.index + 1} reissues an asset: ${minted} more come into existence.`;
+		}
+
+		const tokens =
+			issuance.token === undefined || issuance.tokenAmount === undefined
+				? ""
+				: `, with ${assetOf(issuance.token).amountWithLabel(BigInt(issuance.tokenAmount))} reissuance tokens`;
+
+		return `Input ${issuance.index + 1} issues a new asset: ${minted}${tokens}.`;
+	});
 
 	return (
 		<ConfirmationLayout
@@ -112,7 +129,7 @@ export function SignPsetConfirmation({
 			>
 				<p className="text-muted-foreground mb-2 text-xs">Set by the dapp</p>
 			</ConfirmationSection>
-			{warnings.map((warning) => (
+			{[...issuanceNotes, ...warnings].map((warning) => (
 				<ConfirmationNote key={warning} tone="warning">
 					{warning}
 				</ConfirmationNote>

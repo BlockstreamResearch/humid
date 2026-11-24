@@ -1,9 +1,11 @@
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
+import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type {
 	LiquidSignPsetResult,
 	LiquidSignPsetReview,
+	ParsedLiquidSignPsetInput,
 	ParsedLiquidSignPsetParams,
 } from "../../../domain/pset/types";
 import { parseLiquidSignPsetParams } from "../../../domain/pset/validation";
@@ -73,6 +75,33 @@ export const signLiquidPset = createWalletMethod<
 		const account = await resolveDappAccount(context);
 		await context.walletBackend.syncAccount(account);
 		const transaction = await context.walletBackend.blindAndInspectPset(account, params.pset);
+		refuseUnsignable(params.signInputs, transaction.inputs);
 		return { account, transaction };
 	},
 });
+
+/** Refuses instead of asking for approval: the wallet signs only this account's inputs, with a sighash the dapp declared. */
+function refuseUnsignable(
+	signInputs: ParsedLiquidSignPsetInput[],
+	inputs: LiquidSignPsetReview["inputs"],
+): void {
+	for (const { index, sighashTypes } of signInputs) {
+		const input = inputs[index];
+		const refusal =
+			input === undefined
+				? `The transaction has no input at index ${index}.`
+				: !input.owned
+					? `The input at index ${index} is not this account's, so the wallet refuses to sign.`
+					: sighashTypes.includes(input.sighashType)
+						? undefined
+						: `The input at index ${index} uses sighash ${input.sighashType}, which the dapp did not declare for that input.`;
+
+		if (refusal !== undefined) {
+			throw new WalletRpcInvalidParamsError(
+				refusal,
+				{ index },
+				WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST,
+			);
+		}
+	}
+}

@@ -14,6 +14,10 @@ const VALUE_COMMITMENT = `${ELEMENTS}01`;
 const ASSET_COMMITMENT = `${ELEMENTS}03`;
 const BLINDING_PUBKEY = `${ELEMENTS}06`;
 const BLINDER_INDEX = `${ELEMENTS}08`;
+const ISSUANCE_VALUE = `${ELEMENTS}00`;
+const ISSUANCE_VALUE_COMMITMENT = `${ELEMENTS}01`;
+const ISSUANCE_TOKENS = `${ELEMENTS}0a`;
+const ISSUANCE_TOKENS_COMMITMENT = `${ELEMENTS}0b`;
 
 const INPUT_COUNT = "04";
 const OUTPUT_COUNT = "05";
@@ -86,6 +90,25 @@ export class InputEntries extends PsetEntries {
 
 	spend(txOutHex: string): void {
 		this.entries.set(WITNESS_UTXO, Buffer.from(txOutHex, "hex"));
+	}
+
+	/** Explicit issuance amounts; a blinded or missing one is undefined, since nothing proves the amount. */
+	get issued(): { amount?: bigint; tokens?: bigint } {
+		return {
+			amount: this.#explicitAmount(ISSUANCE_VALUE, ISSUANCE_VALUE_COMMITMENT),
+			tokens: this.#explicitAmount(ISSUANCE_TOKENS, ISSUANCE_TOKENS_COMMITMENT),
+		};
+	}
+
+	#explicitAmount(key: string, commitment: string): bigint | undefined {
+		const value = this.entries.get(key);
+		return value?.length === 8 && !this.entries.has(commitment)
+			? value.readBigUInt64LE()
+			: undefined;
+	}
+
+	adoptSignatures(from: InputEntries): void {
+		for (const [key, signature] of from.signatures) this.entries.set(key, signature);
 	}
 }
 

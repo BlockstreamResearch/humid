@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
+import { bytesToHex } from "@noble/hashes/utils.js";
+import { HDKey } from "@scure/bip32";
 import type * as Lwk from "lwk_wasm";
 
 import { WALLET_RPC_ERROR_REASONS } from "@/core/wallet-rpc/errors";
@@ -91,6 +93,26 @@ async function exerciseSigning() {
 			{ amount: String(coin.amount), asset: rawAssetId, index: 0, owned: true, sighashType: 130 },
 		]);
 		expect(params.signInputs[0]!.sighashTypes).toEqual([1]);
+		expect(review.issuances).toEqual([]);
+		// The wallet blinded these outputs itself, so it vouches for their amounts.
+		expect(review.outputs.map((output) => output.amount)).toEqual([
+			String(BigInt(coin.amount) - 1000n),
+			"1000",
+		]);
+		// Sent back already blinded, the same outputs carry amounts nothing proves.
+		expect(
+			(await blindAndInspectPset(account, review.pset)).outputs.map((output) => output.amount),
+		).toEqual([undefined, "1000"]);
+
+		// Builders and an address handed to them are consumed, so only the result is freed here.
+		const issuing = own(
+			new lwk.TxBuilder(network)
+				.issueAsset(5_000n, new lwk.Address(destination), 1n, undefined, undefined)
+				.finish(wollet),
+		);
+		expect((await blindAndInspectPset(account, issuing.toString())).issuances).toMatchObject([
+			{ amount: "5000", index: 0, kind: "issuance", tokenAmount: "1" },
+		]);
 		const reviewed = own(new lwk.Pset(review.pset));
 		expect(signatureCounts(review.pset)).toEqual([0]);
 		const signing = {
@@ -228,6 +250,30 @@ async function exerciseSigning() {
 			data: { reason: WALLET_RPC_ERROR_REASONS.INVALID_PSET_REQUEST },
 		});
 
+		// Issue #69: a key path the dapp writes for the same seed, here another account, is never signed.
+		const otherAccount = HDKey.fromExtendedKey(
+			signer.deriveXpub(own(new lwk.DerivationPath("m/84'/1'/7'"))).split("]")[1]!,
+			{ private: 0x04_35_83_94, public: 0x04_35_87_cf },
+		).derive("m/0/0");
+		const forgedPath = Buffer.alloc(24);
+		Buffer.from(signer.fingerprint(), "hex").copy(forgedPath);
+		for (const [at, step] of [0x80_00_00_54, 0x80_00_00_01, 0x80_00_00_07, 0, 0].entries()) {
+			forgedPath.writeUInt32LE(step, 4 + at * 4);
+		}
+		const forged = PsetMaps.parse(legacyReview.pset);
+		forged.inputs[0]!.entries.set(`06${bytesToHex(otherAccount.publicKey!)}`, forgedPath);
+		await expect(
+			signPset(
+				account,
+				{
+					broadcast: false,
+					reviewedPset: forged.toString(),
+					signInputs: [{ address: coin.address, index: 0, sighashTypes: [1] }],
+				},
+				SIGNED_FOR,
+			),
+		).rejects.toThrow("The wallet cannot sign the input at index 0.");
+
 		await expect(
 			signPset(account, { ...signing, signInputs: [] }, SIGNED_FOR),
 		).rejects.toMatchObject({
@@ -303,7 +349,7 @@ const account = {
 		signer: {
 			signWithOptions: (pset: Lwk.Pset) => {
 				signedSource = pset.toString();
-				return signerTransform ? signerTransform(pset) : pset;
+				return (signerTransform ?? signsEveryInput)(pset);
 			},
 		},
 	},
@@ -422,6 +468,11 @@ function withWitness(pset: Lwk.Pset) {
 	return new lwk.Pset(maps.toString());
 }
 
+// Like LWK's signer: it signs every input it holds a key path for, listed or not.
+function signsEveryInput(pset: Lwk.Pset) {
+	return pset.inputs().reduce((signed, _input, index) => withSignature(signed, index), pset);
+}
+
 function withSignature(pset: Lwk.Pset, inputIndex: number, scalar = 1) {
 	const maps = PsetMaps.parse(pset.toString());
 	maps.inputs[inputIndex]!.entries.set(
@@ -470,30 +521,24 @@ beforeEach(() => {
 });
 
 describe("mixed-input PSET signing", () => {
-	test("rejects an unrequested signature before broadcasting", async () => {
-		signerTransform = (pset) => withSignature(pset, 0);
+	test("keeps only the signature on the listed input, whatever else the signer signs", async () => {
+		const result = await sign(fixture(10_000n, undefined, false));
 
-		await expect(
-			signPset(
-				account,
-				{
-					broadcast: true,
-					reviewedPset: fixture(10_000n, undefined, false).toString(),
-					signInputs: [{ address: "wallet-address", index: 2, sighashTypes: [1] }],
-				},
-				SIGNED_FOR,
-			),
-		).rejects.toMatchObject({
-			message: "The wallet refused to sign an input the dapp did not list.",
-		});
+		expect(signatureCounts(result.pset)).toEqual([0, 0, 1]);
 	});
 
-	test("rejects replacement of an existing unrequested signature", async () => {
+	test("never replaces a signature on an input the dapp did not list", async () => {
 		const prepared = withSignature(fixture(10_000n, undefined, false), 0);
-		signerTransform = (pset) => withSignature(pset, 0, 2);
+		signerTransform = (pset) => withSignature(withSignature(pset, 0, 2), 2);
 
-		await expect(sign(prepared)).rejects.toThrow(
-			"The wallet refused to sign an input the dapp did not list.",
+		expect((await sign(prepared)).pset).toBe(withSignature(prepared, 2).toString());
+	});
+
+	test("refuses a listed input that ends up unsigned", async () => {
+		signerTransform = (pset) => pset;
+
+		await expect(sign(fixture(10_000n, undefined, false))).rejects.toThrow(
+			"The wallet cannot sign the input at index 2.",
 		);
 	});
 
@@ -591,7 +636,7 @@ describe("mixed-input PSET signing", () => {
 		signedSource = "";
 
 		const result = await sign(prepared);
-		expect(result.pset).toBe(prepared.toString());
+		expect(result.pset).toBe(withSignature(prepared, 2).toString());
 		expect(signedSource).toBe(prepared.toString());
 	});
 
@@ -610,7 +655,7 @@ describe("mixed-input PSET signing", () => {
 
 	test("preserves explicit finalized legacy PSETs without attempting blinding", async () => {
 		const prepared = withWitness(withExplicitOutputIndices(fixture(10_000n, undefined, false)));
-		expect((await sign(prepared)).pset).toBe(prepared.toString());
+		expect((await sign(prepared)).pset).toBe(withSignature(prepared, 2).toString());
 	});
 
 	test("rejects blinding after program witnesses are finalized", async () => {

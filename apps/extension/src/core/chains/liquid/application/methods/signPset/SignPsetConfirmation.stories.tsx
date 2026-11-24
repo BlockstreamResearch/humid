@@ -20,6 +20,7 @@ const meta = {
 			signInputs: [1],
 			transaction: {
 				fees: [{ amount: "36", asset: LBTC }],
+				issuances: [],
 				inputs: [
 					{ amount: "250", asset: TOKEN, index: 0, owned: false, sighashType: 1 },
 					{ amount: "100036", asset: LBTC, index: 1, owned: true, sighashType: 0x83 },
@@ -97,5 +98,22 @@ export const SignOnly: Story = {
 		await expect(canvas.queryByText(/covers only that input/)).toBeNull();
 		await expect(canvas.getByText(/hands the result back to the dapp/)).toBeVisible();
 		await expect(canvas.getByRole("button", { name: /^sign$/i })).toBeVisible();
+	},
+};
+
+export const Reissuance: Story = {
+	args: {
+		data: {
+			...meta.args.data,
+			transaction: {
+				...meta.args.data.transaction,
+				issuances: [{ amount: "5000", asset: TOKEN, index: 1, kind: "reissuance" }],
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+
+		await expect(canvas.getByText(/Input 2 reissues an asset: 5000/)).toBeVisible();
 	},
 };
