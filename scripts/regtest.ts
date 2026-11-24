@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 const RPC_URL = "http://127.0.0.1:18443";
 const RPC_AUTH = `Basic ${btoa("humid:humid")}`;
 const POLL_MS = 2_000;
+// Anyone can spend (OP_TRUE), so mining never depends on the node's own wallet.
+const MINER_ADDRESS = "ert1qft5p2uhsdcdc3l2ua4ap5qqfg4pjaqlp250x7us7a8qqhrxrxfsqp24xws";
 
 // Bun lifts the open-file limit to unlimited, which elementsd reads as too few.
 const node = Bun.spawn(["sh", "-c", "ulimit -n 4096 && exec simplex regtest"], {
@@ -30,15 +32,22 @@ async function mineWaitingTransactions(): Promise<void> {
 
 	if (size === 0) return;
 
-	await rpc("generatetoaddress", [1, await rpc<string>("getnewaddress")]);
+	await rpc("generatetoaddress", [1, MINER_ADDRESS]);
 	process.stdout.write(`Mined a block with ${size} waiting transaction${size === 1 ? "" : "s"}.\n`);
 }
+
+let lastFailure = "";
 
 const miner = setInterval(async () => {
 	try {
 		await mineWaitingTransactions();
-	} catch {
-		// The node is still starting.
+		lastFailure = "";
+	} catch (error) {
+		const failure = error instanceof Error ? error.message : String(error);
+
+		// Each new reason once: refused connections while the node starts, then anything real.
+		if (failure !== lastFailure) process.stderr.write(`Not mining yet: ${failure}\n`);
+		lastFailure = failure;
 	}
 }, POLL_MS);
 

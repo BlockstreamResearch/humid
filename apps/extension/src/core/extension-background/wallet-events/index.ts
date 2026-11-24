@@ -1,5 +1,5 @@
+import type { PagePorts } from "@/core/extension-background/page-port";
 import type {
-	BackgroundEventBus,
 	PegasusEventProtocolMap,
 	WalletProviderEventPayload,
 } from "@/core/extension-background/transport";
@@ -15,14 +15,14 @@ export type WalletConnectEventSink = (
 	payload: WalletProviderEventPayload,
 ) => void;
 
-let eventBus: BackgroundEventBus | null = null;
+let pages: PagePorts | null = null;
 let walletConnectSink: WalletConnectEventSink | null = null;
 
 export function initWalletEventBroadcaster(
-	bus: BackgroundEventBus,
+	pagePorts: PagePorts,
 	walletConnectEventSink?: WalletConnectEventSink,
 ): void {
-	eventBus = bus;
+	pages = pagePorts;
 	walletConnectSink = walletConnectEventSink ?? null;
 }
 
@@ -30,6 +30,6 @@ export function emitWalletEvent(
 	event: WalletBroadcastEventName,
 	payload: WalletProviderEventPayload = {},
 ): void {
-	void eventBus?.emitBroadcastEvent(event, payload);
+	pages?.emit(event, payload);
 	walletConnectSink?.(event, payload);
 }

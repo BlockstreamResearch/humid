@@ -33,7 +33,7 @@ import {
 	type DappSwitchChainConfirmationData,
 } from "./connectConfirmation";
 import { DappAuthorizationError, dappAuthorizationErrors } from "./errors";
-import { PRE_APPROVABLE_METHODS } from "./methodPolicyPresentation";
+import { isPreApprovable, preApprovedOnly } from "./methodPolicyPresentation";
 
 const INJECTED_TRANSPORT = "injected" as const;
 
@@ -97,8 +97,6 @@ export type DappAuthorization = {
 	revokeSession: (input: { origin: string | null }) => Promise<Caip25RevokeSessionResult>;
 	switchChain: (input: { origin: string | null; params: unknown }) => Promise<{ chainId: string }>;
 };
-
-const READS = new Set(PRE_APPROVABLE_METHODS.map(({ id }) => id));
 
 export function createDappAuthorization(
 	dependencies: DappAuthorizationDependencies,
@@ -280,7 +278,7 @@ export function createDappAuthorization(
 		const invocation = parseInvokeParams(params);
 		const requestingOrigin = requireOrigin(origin);
 		// A dapp may poll its reads; while the wallet is locked they fail rather than prompting.
-		const accountModel = READS.has(invocation.request.method)
+		const accountModel = isPreApprovable(invocation.request.method)
 			? requireUnlocked(getAccountModel())
 			: await unlockedAccountModel();
 
@@ -301,7 +299,7 @@ export function createDappAuthorization(
 		return dispatch({
 			accountGroupIds: session.scope.accountGroupIds,
 			chainId: invocation.scope,
-			grantedMethods: session.scope.methods,
+			grantedMethods: preApprovedOnly(session.scope.methods),
 			method: invocation.request.method,
 			origin: requestingOrigin,
 			params: invocation.request.params,
@@ -470,7 +468,10 @@ function resolveGrantedMethods(
 	const selected = result?.grantedMethods;
 
 	return Object.fromEntries(
-		supportedMethods.map((method) => [method, selected?.includes(method) ?? false]),
+		supportedMethods.map((method) => [
+			method,
+			(selected?.includes(method) ?? false) && isPreApprovable(method),
+		]),
 	);
 }
 

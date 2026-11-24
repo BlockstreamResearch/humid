@@ -25,6 +25,8 @@ function getMessageBus(): BackgroundMessageBus {
 	const bus = definePegasusMessageBus<PegasusMsgProtocolMap>();
 
 	bus.onMessage(MsgProtocolResponseMethods.RequestResponse, (message) => {
+		if (message.sender.context !== "background") return;
+
 		const response = message.data;
 
 		if (response.id === undefined) return;

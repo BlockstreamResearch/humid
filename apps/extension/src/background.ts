@@ -16,8 +16,9 @@ import {
 	createInternalRpcHandlers,
 	syncWalletVaultAuthStore,
 } from "@/core/extension-background/internal-rpc";
+import { type PageRequestHandler, servePagePorts } from "@/core/extension-background/page-port";
 import {
-	registerBackgroundRpc,
+	registerPopupRpc,
 	type RequestHandlerMap,
 	setupBackgroundTransport,
 } from "@/core/extension-background/transport";
@@ -73,9 +74,11 @@ const PORTFOLIO_REFRESH_ALARM = "portfolio-refresh";
 const PORTFOLIO_REFRESH_PERIOD_MINUTES = 1;
 
 const init = async () => {
-	const { eventBus, messageBus } = setupBackgroundTransport();
+	const { messageBus } = setupBackgroundTransport();
+	let servePages!: (handlers: Record<string, PageRequestHandler>) => void;
+	const pages = servePagePorts(new Promise((resolve) => (servePages = resolve)));
 
-	initWalletEventBroadcaster(eventBus, (event, payload) => {
+	initWalletEventBroadcaster(pages, (event, payload) => {
 		void walletConnect.emitWalletConnectWalletEvent(event, payload).catch(() => undefined);
 	});
 
@@ -115,9 +118,10 @@ const init = async () => {
 		waitForUnlock: confirmations.waitForUnlock,
 	});
 
-	registerBackgroundRpc(messageBus, {
-		injected: createInjectedRpcHandlers({ authorization: dappAuthorization }),
-		popup: withVaultActivityTouch({
+	servePages(createInjectedRpcHandlers(dappAuthorization));
+	registerPopupRpc(
+		messageBus,
+		withVaultActivityTouch({
 			...createInternalRpcHandlers({
 				...liquid.wallet,
 				chainGroups: [liquidChainGroup],
@@ -135,7 +139,7 @@ const init = async () => {
 				updateAccountModel,
 			}),
 		}),
-	});
+	);
 
 	updateBadgeOnStorageChange();
 	initNotificationManagement(() => confirmations.cancelAll());

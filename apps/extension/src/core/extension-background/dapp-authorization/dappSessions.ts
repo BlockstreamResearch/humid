@@ -16,6 +16,7 @@ import type { WalletConnectSessionSummary } from "@/core/walletconnect/types";
 import type { RequestHandlerMap } from "../transport";
 import { emitWalletEvent } from "../wallet-events";
 import { dappAuthorizationErrors } from "./errors";
+import { preApprovedOnly } from "./methodPolicyPresentation";
 
 export type DappSessionsHandlersDependencies = {
 	getAccountModel: () => AccountModelState | null;
@@ -106,7 +107,7 @@ async function applySetPolicy(
 	await deps.updateAccountModel((model) => {
 		const result = deps.registry.setDappSessionMethodPolicy({
 			accountModel: model,
-			methods: input.methods,
+			methods: preApprovedOnly(input.methods),
 			sessionId: input.sessionId as DappSessionId,
 		});
 

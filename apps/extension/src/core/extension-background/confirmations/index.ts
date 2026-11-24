@@ -61,7 +61,7 @@ export function createConfirmationResponder(
 		if (entry.settled) return;
 
 		active = entry;
-		const id = Math.floor(Math.random() * 1_000_000);
+		const id = crypto.randomUUID();
 		let timeout: ReturnType<typeof setTimeout> | undefined;
 		let removeResponseListener: (() => void) | undefined;
 		let showsOutcome = false;
@@ -98,8 +98,8 @@ export function createConfirmationResponder(
 			timeout = setTimeout(() => entry.settle({ approved: false }), CONFIRMATION_TIMEOUT_MS);
 			removeResponseListener = messageBus.onMessage(
 				MsgProtocolResponseMethods.ConfirmResponse,
-				({ data: response }) => {
-					if (response.id !== id) return;
+				({ data: response, sender }) => {
+					if (sender.context !== "popup" || response.id !== id) return;
 					wallet.noteActivity();
 					entry.settle(response.data ?? { approved: false });
 				},

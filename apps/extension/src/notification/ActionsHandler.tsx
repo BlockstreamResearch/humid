@@ -16,11 +16,13 @@ export default function ActionsHandler({ messageBus }: ActionsHandlerProps) {
 	useEffect(() => {
 		const removeRequestConfirmationListener = messageBus.onMessage(
 			MsgProtocolRequestMethods.RequestConfirmation,
-			async ({ data }) => {
+			async ({ data, sender }) => {
+				if (sender.context !== "background") return;
+
 				const decision = data.data ? await confirm(data.data) : { approved: false };
 
 				await messageBus.sendMessage(MsgProtocolResponseMethods.ConfirmResponse, {
-					id: data.id ?? -1,
+					id: data.id,
 					data: decision,
 				});
 			},
@@ -28,7 +30,7 @@ export default function ActionsHandler({ messageBus }: ActionsHandlerProps) {
 
 		const removeShowOutcomeListener = messageBus.onMessage(
 			MsgProtocolRequestMethods.ShowOutcome,
-			({ data }) => showOutcome(data.data),
+			({ data, sender }) => (sender.context === "background" ? showOutcome(data.data) : undefined),
 		);
 
 		return () => {

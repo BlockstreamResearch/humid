@@ -1,4 +1,3 @@
-import type { PegasusRPCMessage } from "@webext-pegasus/rpc";
 import browser from "webextension-polyfill";
 
 import type { TransactionReceiptData } from "@/common/Confirmation/TransactionReceipt";
@@ -145,25 +144,6 @@ export function updateBadgeOnStorageChange(): void {
 	browser.storage.onChanged.addListener(() => {
 		updateBadge();
 	});
-}
-
-export type ISelfIDService = typeof getSelfIDService;
-
-export async function getSelfIDService(message: PegasusRPCMessage): Promise<{
-	tabId: number;
-	frameId?: number;
-}> {
-	let tabId: number | undefined = message.sender.tabId;
-
-	if (message.sender.context === "popup") {
-		tabId = (await browser.tabs.query({ active: true, currentWindow: true }))[0]?.id;
-	}
-
-	if (tabId === undefined) {
-		throw new Error(`Could not get tab ID for message: ${String(message)}`);
-	}
-
-	return { frameId: message.sender.frameId, tabId };
 }
 
 export enum MsgProtocolRequestMethods {

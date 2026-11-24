@@ -1,117 +1,59 @@
-import { getRPCService } from "@webext-pegasus/rpc";
-import { definePegasusEventBus, definePegasusMessageBus } from "@webext-pegasus/transport";
-import { initPegasusTransport } from "@webext-pegasus/transport/window";
+import { FROM_PAGE, FROM_WALLET } from "../core/extension-background/page-port/protocol";
 
-const init = async () => {
-	initPegasusTransport({
-		namespace: "humid",
-	});
+let nextId = 0;
+const pending = new Map();
+const listeners = new Map();
 
-	const eventBus = definePegasusEventBus();
-	const messageBus = definePegasusMessageBus();
+window.addEventListener("message", (event) => {
+	if (event.source !== window || event.data?.source !== FROM_WALLET) return;
 
-	await getRPCService("getSelfID", "background")();
+	const { error, event: name, id, payload, result } = event.data;
 
-	let requestId = 0;
-
-	// ONE shared response dispatcher + a pending-by-id map. `messageBus.onMessage` keeps a SINGLE
-	// handler per message key (its store is a Map keyed by message id, not a list), so registering a
-	// fresh listener inside every request() would let each new request clobber the previous request's
-	// response listener — overlapping requests (e.g. a connect held open for the approval popup while
-	// the dashboard polls getSession) then silently lose their responses. Mirrors the popup client in
-	// core/extension-rpc.
-	const pending = new Map();
-
-	messageBus.onMessage("request_response", (message) => {
-		const response = message.data;
-		const entry = pending.get(response.id);
-
-		if (!entry) return;
-
-		if (response.error) {
-			const error = toError(response.error);
-
-			if (entry.streamController) {
-				entry.streamController.error(error);
-			} else {
-				entry.reject(error);
-			}
-
-			pending.delete(response.id);
-			return;
+	if (name !== undefined) {
+		for (const listener of listeners.get(name) ?? []) {
+			listener({ data: payload, id: name, timestamp: Date.now() });
 		}
 
-		if (response.type === "stream") {
-			if (!entry.streamController) {
-				// eslint-disable-next-line no-undef
-				const stream = new ReadableStream({
-					start(controller) {
-						entry.streamController = controller;
-						handleStreamMessage(response.data, controller, () => pending.delete(response.id));
-					},
-				});
-
-				entry.resolve(stream);
-				return;
-			}
-
-			handleStreamMessage(response.data, entry.streamController, () => pending.delete(response.id));
-			return;
-		}
-
-		entry.resolve(response.data);
-		pending.delete(response.id);
-	});
-
-	const provider = {
-		request: (args) => {
-			const id = args?.id ?? ++requestId;
-
-			return new Promise((resolve, reject) => {
-				pending.set(id, { resolve, reject, streamController: null });
-				messageBus.sendMessage("request", { ...args, id }, "background");
-			});
-		},
-		on: (args) => {
-			if (!args.event) throw new Error("Missing event");
-
-			if (!args.listener) throw new Error("Missing listener");
-
-			return eventBus.onBroadcastEvent(args.event, args.listener);
-		},
-	};
-
-	// eslint-disable-next-line no-undef
-	window.humid = provider;
-};
-
-const handleStreamMessage = (streamMessage, controller, removeRequestListener) => {
-	if (streamMessage.type === "chunk") {
-		controller.enqueue(streamMessage.data);
 		return;
 	}
 
-	if (streamMessage.type === "end") {
-		controller.close();
-		removeRequestListener();
-		return;
-	}
+	const entry = pending.get(id);
 
-	if (streamMessage.type === "error") {
-		controller.error(toError(streamMessage.error));
-		removeRequestListener();
-	}
+	if (!entry) return;
+
+	pending.delete(id);
+
+	if (error !== undefined) entry.reject(toError(error));
+	else entry.resolve(result);
+});
+
+const provider = {
+	request: ({ method, params } = {}) =>
+		new Promise((resolve, reject) => {
+			const id = ++nextId;
+
+			pending.set(id, { reject, resolve });
+			window.postMessage({ id, method, params, source: FROM_PAGE }, "*");
+		}),
+	on: ({ event, listener } = {}) => {
+		if (!event) throw new Error("Missing event");
+
+		if (!listener) throw new Error("Missing listener");
+
+		const set = listeners.get(event) ?? new Set();
+
+		set.add(listener);
+		listeners.set(event, set);
+
+		return () => set.delete(listener);
+	},
 };
 
 /**
- * Rebuild a real Error from the wire payload. The background now serializes structured RPC errors as
- * `{ message, code, data }` (see transport `serializeError`); restore `code`/`data` onto the Error so
- * a dapp can classify the failure — e.g. read `data.reason === "user_rejected"` to avoid retrying a
- * declined confirmation. Falls back gracefully for the legacy string form ("No handler for method").
+ * Rebuilds an Error from the wire payload `{ message, code, data }`, so a dapp can classify the
+ * failure, e.g. read `data.reason === "user_rejected"` to avoid retrying a declined confirmation.
  */
-const toError = (payload) => {
-	if (payload instanceof Error) return payload;
-
+function toError(payload) {
 	if (payload && typeof payload === "object") {
 		const error = new Error(payload.message ?? "Request failed");
 
@@ -122,6 +64,7 @@ const toError = (payload) => {
 	}
 
 	return new Error(typeof payload === "string" ? payload : "Request failed");
-};
+}
 
-void init();
+// eslint-disable-next-line no-undef
+window.humid = provider;
