@@ -15,6 +15,7 @@ const LBTC = "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49";
 const RECEIPT = "3f9a8d6c2b1e4f7a9c0d5e3b8a6f1c2d4e7b9a0c3d5f8e1b2a4c6d9f0e3c21e";
 const FACTORY = "5b7e2c9a4d1f8e3b6a0c7d2e9f4b1a8c5d3e7f0a2b9c6d4e1f8a3b5c7d0e9d913";
 const FACTORY_ADDRESS = "tex1pz4hq7m3y2kxd5r9w8c6n0f4s2a7j3l1g5v9b8t6e4d2q0p8m3d";
+export const PAYEE_ADDRESS = "tex1qnz7rx5dk3y6m8qf2c4v9w0p7l5j3h8g6t4s2xa";
 const CONTRACT_ADDRESS = "tex1pq9w3e5r7t9y1u3i5o7p9a2s4d6f8g0h2j4k6l8z0x2c4v6b7xk2";
 
 export const LENDING_SHOWN: ShownConfirmation = {
@@ -64,6 +65,13 @@ export const LENDING_SHOWN: ShownConfirmation = {
 			sats: computed("1"),
 		},
 		{ asset: computed(RECEIPT), kind: "wallet", sats: computed("1") },
+		{
+			address: fromDapp(PAYEE_ADDRESS),
+			asset: computed(LBTC),
+			kind: "address",
+			name: fromDapp("lender_payout"),
+			sats: computed("1000"),
+		},
 		{
 			asset: computed(LBTC),
 			dataBytes: 50,

@@ -7,7 +7,6 @@ import {
 	count,
 	DetailsGroup,
 	DetailsRow,
-	shortAddress,
 } from "@/common/Confirmation/ConfirmationDetails";
 import {
 	ConfirmationActions,
@@ -278,10 +277,10 @@ function FlowDetailsRow({
 		case "taproot": {
 			return (
 				<DetailsRow
+					address={row.outputKey?.value}
+					addressByDapp
 					index={index}
 					label="Taproot output"
-					note={row.outputKey === undefined ? undefined : shortAddress(row.outputKey.value)}
-					noteByDapp
 					value={amount}
 				/>
 			);
@@ -299,13 +298,28 @@ function FlowDetailsRow({
 			);
 		}
 
+		// The dapp names its outputs, so a payment elsewhere gets a label only the wallet writes.
+		case "address": {
+			return (
+				<DetailsRow
+					address={row.address?.value}
+					addressByDapp={row.address?.origin === "dapp"}
+					index={index}
+					label="Not this account"
+					note={row.name === undefined ? undefined : `dapp: ${readable(row.name.value)}`}
+					noteByDapp
+					value={amount}
+				/>
+			);
+		}
+
 		default: {
 			return (
 				<DetailsRow
+					address={row.address?.value}
+					addressByDapp={row.address?.origin === "dapp"}
 					index={index}
 					label={readable(row.name?.value ?? "")}
-					note={row.address === undefined ? undefined : shortAddress(row.address.value)}
-					noteByDapp={row.address?.origin === "dapp"}
 					value={amount}
 				/>
 			);

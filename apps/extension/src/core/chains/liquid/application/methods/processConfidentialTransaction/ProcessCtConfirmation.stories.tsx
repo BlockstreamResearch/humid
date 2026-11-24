@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 
 import { ProcessCtConfirmation, ProcessCtUnreadable } from "./ProcessCtConfirmation";
-import { LENDING_OFFER } from "./processCtFixtures";
+import { LENDING_OFFER, PAYEE_ADDRESS } from "./processCtFixtures";
 
 const meta = {
 	title: "Dapp/ContractActionConfirmation",
@@ -38,6 +38,9 @@ export const Default: Story = {
 		await expect(canvas.getAllByText("Lending contract")[0]).toBeVisible();
 		await expect(canvas.getByText("This account, change")).toBeVisible();
 		await expect(canvas.getByText("50 bytes")).toBeVisible();
+		await expect(canvas.getByText("Not this account")).toBeVisible();
+		await expect(canvas.getByText("dapp: Lender payout")).toBeVisible();
+		await expect(canvas.getByText(PAYEE_ADDRESS)).toBeVisible();
 
 		await userEvent.click(canvas.getByRole("button", { name: /sign and send/i }));
 		await expect(args.onConfirm).toHaveBeenCalledWith({ targetBlocks: 60 });
@@ -67,6 +70,31 @@ export const Reissuance: Story = {
 		await expect(
 			canvas.getByText(/^Input 2 reissues an asset: 5000 .* will get minted\.$/),
 		).toBeVisible();
+	},
+};
+
+export const SpoofedLabel: Story = {
+	args: {
+		data: {
+			...LENDING_OFFER,
+			speeds: LENDING_OFFER.speeds.map((speed) => ({
+				...speed,
+				shown: {
+					...speed.shown,
+					outputs: speed.shown.outputs.map((row) =>
+						row.kind === "address" && row.name !== undefined
+							? { ...row, name: { ...row.name, value: "this_account" } }
+							: row,
+					),
+				},
+			})),
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+
+		await expect(canvas.getByText("Not this account")).toBeVisible();
+		await expect(canvas.getByText("dapp: This account")).toBeVisible();
 	},
 };
 

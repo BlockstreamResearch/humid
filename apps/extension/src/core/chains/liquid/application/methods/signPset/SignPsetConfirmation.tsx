@@ -4,7 +4,6 @@ import {
 	count,
 	DetailsGroup,
 	DetailsRow,
-	shortAddress,
 } from "@/common/Confirmation/ConfirmationDetails";
 import {
 	ConfirmationActions,
@@ -160,11 +159,7 @@ export function SignPsetConfirmation({
 							key={output.index}
 							index={output.index + 1}
 							label={outputLabel(output)}
-							note={
-								output.owned || output.address === undefined
-									? undefined
-									: shortAddress(output.address)
-							}
+							address={output.owned ? undefined : output.address}
 							value={amountOf(output.amount, output.asset)}
 						/>
 					))}

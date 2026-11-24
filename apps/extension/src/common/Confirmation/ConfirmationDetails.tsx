@@ -44,12 +44,17 @@ export function DetailsGroup({ title, children }: { title?: string; children: Re
 }
 
 export function DetailsRow({
+	address,
+	addressByDapp = false,
 	index,
 	label,
 	note,
 	noteByDapp = false,
 	value,
 }: {
+	/** Shown in full, over as many lines as it takes, so every character can be checked. */
+	address?: string;
+	addressByDapp?: boolean;
 	index?: number;
 	label: string;
 	note?: string;
@@ -67,16 +72,19 @@ export function DetailsRow({
 					) : (
 						<span className="text-muted-foreground truncate font-mono text-xs">{note}</span>
 					))}
+				{address !== undefined && (
+					<span
+						className={`font-mono text-xs break-all ${addressByDapp ? "text-dapp" : "text-muted-foreground"}`}
+					>
+						{address}
+					</span>
+				)}
 			</span>
 			{value !== undefined && (
 				<span className="text-muted-foreground font-mono text-xs tabular-nums">{value}</span>
 			)}
 		</div>
 	);
-}
-
-export function shortAddress(address: string): string {
-	return address.length <= 16 ? address : `${address.slice(0, 8)}…${address.slice(-4)}`;
 }
 
 export function count(amount: number, noun: string): string {
