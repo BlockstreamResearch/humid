@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { deriveFromEntropy, deriveNewIssuance } from "../chain/issuance";
+import { computed } from "../confirmation/provenance";
 import { type ManifestReview, reviewManifestAction } from "../index";
 import type { ActionRequest } from "../request/request";
 import type { SelectableUtxo } from "../transaction/coinSelection";
@@ -622,6 +623,35 @@ describe("reissuance tokens and reissuance", () => {
 		});
 	});
 
+	test("are shown on the confirmation with the asset, at the input that mints them", async () => {
+		const review = asReview(
+			await mintDeclaring({ asset_amount_sat: 21, inflation_amount_sat: 1, kind: "new" }, [
+				{
+					amount_sat: 1,
+					asset: "mint_in.reissuance_token",
+					destination: "wallet",
+					id: "token_out",
+				},
+			]),
+		);
+		const [issuance] = review.issuances;
+		const at = review.inputOrder.findIndex(
+			(planned) => planned.source === "wallet" && planned.utxo.txid === issuance?.outpoint.txid,
+		);
+
+		expect(at).toBeGreaterThanOrEqual(0);
+		expect(review.confirmation.issuances).toEqual([
+			{
+				asset: computed(issuance?.asset ?? ""),
+				index: at,
+				kind: "new",
+				sats: computed(21n),
+				token: computed(issuance?.reissuanceToken ?? ""),
+				tokenSats: computed(1n),
+			},
+		]);
+	});
+
 	test("are refused where the action pays them nowhere", async () => {
 		const refusal = asRefusal(
 			await mintDeclaring({ asset_amount_sat: 21, inflation_amount_sat: 1, kind: "new" }),
@@ -643,6 +673,9 @@ describe("reissuance tokens and reissuance", () => {
 		]);
 		expect(review.outputs.find((output) => output.id === "minted_out")?.asset).toBe(YES_ASSET);
 		expect(review.selected).toContainEqual(blindedToken);
+		expect(review.confirmation.issuances).toMatchObject([
+			{ asset: computed(YES_ASSET), kind: "reissue", sats: computed(50n) },
+		]);
 	});
 
 	test("is refused where the wallet holds its token only in the open, which cannot reissue", async () => {

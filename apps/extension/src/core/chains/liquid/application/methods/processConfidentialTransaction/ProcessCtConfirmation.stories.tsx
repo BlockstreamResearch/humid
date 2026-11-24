@@ -28,6 +28,9 @@ export const Default: Story = {
 		await expect(canvas.getByText("−0.00500052")).toBeVisible();
 		await expect(canvas.getByText("Unknown asset, raw units")).toBeVisible();
 		await expect(canvas.getByText("52 sats")).toBeVisible();
+		await expect(
+			canvas.getByText(/^Input 2 issues a new asset: 1 .* will get minted\.$/),
+		).toBeVisible();
 		await userEvent.click(canvas.getByRole("radio", { name: /slow/i }));
 		await expect(canvas.getByText("−0.00500026")).toBeVisible();
 		await expect(canvas.getByText("Signing with Account 0")).toBeVisible();
@@ -38,6 +41,32 @@ export const Default: Story = {
 
 		await userEvent.click(canvas.getByRole("button", { name: /sign and send/i }));
 		await expect(args.onConfirm).toHaveBeenCalledWith({ targetBlocks: 60 });
+	},
+};
+
+export const Reissuance: Story = {
+	args: {
+		data: {
+			...LENDING_OFFER,
+			speeds: LENDING_OFFER.speeds.map((speed) => ({
+				...speed,
+				shown: {
+					...speed.shown,
+					issuances: speed.shown.issuances.map((issuance) => ({
+						...issuance,
+						kind: "reissue" as const,
+						sats: { ...issuance.sats, value: "5000" },
+					})),
+				},
+			})),
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+
+		await expect(
+			canvas.getByText(/^Input 2 reissues an asset: 5000 .* will get minted\.$/),
+		).toBeVisible();
 	},
 };
 

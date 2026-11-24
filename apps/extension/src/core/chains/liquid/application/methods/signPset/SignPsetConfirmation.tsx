@@ -19,6 +19,7 @@ import {
 import { ShownAsset } from "@/common/Confirmation/ShownAsset";
 
 import type { LiquidSignPsetReview } from "../../../domain/pset/types";
+import { issuanceNote } from "../../../presentation/issuanceNote";
 import type { KnownAsset } from "../../confirmationFacts";
 import { SignatureScope } from "./SignatureScope";
 
@@ -73,23 +74,16 @@ export function SignPsetConfirmation({
 		.filter((input) => signs.has(input.index))
 		.map((input) => new SignatureScope(input.sighashType, input.index, outputs.length).warning)
 		.filter((warning) => warning !== undefined);
-	const issuanceNotes = issuances.map((issuance) => {
-		const minted =
-			issuance.amount === undefined
-				? "a confidential amount"
-				: assetOf(issuance.asset).amountWithLabel(BigInt(issuance.amount));
-
-		if (issuance.kind === "reissuance") {
-			return `Input ${issuance.index + 1} reissues an asset: ${minted} more come into existence.`;
-		}
-
-		const tokens =
-			issuance.token === undefined || issuance.tokenAmount === undefined
-				? ""
-				: `, with ${assetOf(issuance.token).amountWithLabel(BigInt(issuance.tokenAmount))} reissuance tokens`;
-
-		return `Input ${issuance.index + 1} issues a new asset: ${minted}${tokens}.`;
-	});
+	const issuanceNotes = issuances.map((issuance) =>
+		issuanceNote(issuance.index + 1, {
+			minted: issuance.amount === undefined ? undefined : amountOf(issuance.amount, issuance.asset),
+			reissues: issuance.kind === "reissuance",
+			tokens:
+				issuance.tokenAmount === undefined
+					? undefined
+					: amountOf(issuance.tokenAmount, issuance.token),
+		}),
+	);
 
 	return (
 		<ConfirmationLayout

@@ -12,6 +12,8 @@ import type { PlannedIssuance } from "../transaction/issuance";
 import type { StaticWitness } from "../transaction/witness";
 
 export type ProgramFinding = ProgramDerivation & {
+	/** The input that spends the program, or the output that creates one. */
+	id: string;
 	role: "created" | "spent";
 	verified: "matches-chain" | "not-yet-onchain";
 };

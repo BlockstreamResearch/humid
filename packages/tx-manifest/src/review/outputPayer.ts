@@ -31,7 +31,9 @@ export class OutputPayer {
 		this.#context = context;
 		this.#programInputs = programInputs;
 		this.#programScripts = new Map(
-			programs.map((found) => [found.utxoType, found.scriptPubKeyHex]),
+			programs
+				.filter((found) => found.role === "created")
+				.map((found) => [found.id, found.scriptPubKeyHex]),
 		);
 	}
 
@@ -104,7 +106,7 @@ export class OutputPayer {
 
 		const scriptPubKeyHex =
 			target.kind === "program"
-				? this.#programScripts.get(target.utxoType)
+				? this.#programScripts.get(id)
 				: target.kind === "data"
 					? target.hex
 					: this.#context.dependencies.wallet.scriptPubKeyHex;

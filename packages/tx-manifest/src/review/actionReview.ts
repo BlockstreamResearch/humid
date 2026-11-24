@@ -88,7 +88,7 @@ export class ActionReview {
 			// oxlint-disable-next-line no-await-in-loop
 			const derived = await this.#context.derive(output.reference, scope);
 
-			created.push({ ...derived, role: "created", verified: "not-yet-onchain" });
+			created.push({ ...derived, id: output.label, role: "created", verified: "not-yet-onchain" });
 		}
 
 		return created;

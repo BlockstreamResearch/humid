@@ -3,6 +3,7 @@ import { Refusal } from "../refusal";
 import type { ManifestReview } from "../review";
 import type { PlannedInput, ReviewedOutput } from "../review/types";
 import { describeBlinding } from "../transaction/blinding";
+import type { PlannedIssuance } from "../transaction/issuance";
 import type { Scope } from "../values/scope";
 import { computed, fromDapp, map, type Origin, type Provenanced, verified } from "./provenance";
 
@@ -38,9 +39,20 @@ export type ProgramRow = {
 	verified: Provenanced<boolean>;
 };
 
+export type IssuanceRow = {
+	asset: Provenanced<string>;
+	/** The issuing input's position in the transaction. */
+	index: number;
+	kind: PlannedIssuance["kind"];
+	sats: Provenanced<bigint>;
+	token: Provenanced<string>;
+	tokenSats: Provenanced<bigint>;
+};
+
 export type ConfirmationModel = {
 	account: Provenanced<string>;
 	action: Provenanced<string>;
+	issuances: IssuanceRow[];
 	programs: ProgramRow[];
 	feeAsset: Provenanced<string>;
 	feeSats: Provenanced<bigint>;
@@ -66,6 +78,7 @@ export function confirmationModel(
 	return {
 		account: computed(input.accountLabel),
 		action: fromDapp(review.action),
+		issuances: review.issuances.map((issuance) => issuanceRow(review, issuance)),
 		programs: review.programs.map((found) => ({
 			address:
 				found.verified === "matches-chain" ? verified(found.address) : computed(found.address),
@@ -89,6 +102,23 @@ export function confirmationModel(
 	};
 }
 
+function issuanceRow(review: ReviewedPlan, issuance: PlannedIssuance): IssuanceRow {
+	const { txid, vout } = issuance.outpoint;
+
+	return {
+		asset: computed(issuance.asset),
+		index: review.inputOrder.findIndex((planned) => {
+			const spent = planned.source === "wallet" ? planned.utxo : planned.program;
+
+			return spent.txid === txid && spent.vout === vout;
+		}),
+		kind: issuance.kind,
+		sats: computed(issuance.assetAmountSats),
+		token: computed(issuance.reissuanceToken),
+		tokenSats: computed(issuance.inflationAmountSats),
+	};
+}
+
 function inputRow(review: ReviewedPlan, planned: PlannedInput): FlowRow {
 	if (planned.source === "wallet") {
 		return {
@@ -98,8 +128,8 @@ function inputRow(review: ReviewedPlan, planned: PlannedInput): FlowRow {
 		};
 	}
 
-	const { asset, sats, utxoType } = planned.program;
-	const found = review.programs.find((program) => program.utxoType === utxoType);
+	const { asset, id, sats, utxoType } = planned.program;
+	const found = review.programs.find((program) => program.role === "spent" && program.id === id);
 
 	return {
 		...(found === undefined ? {} : { address: verified(found.address) }),
@@ -132,7 +162,7 @@ function outputRow(review: ReviewedPlan, output: ReviewedOutput): FlowRow {
 
 		case "program": {
 			const found = review.programs.find(
-				(program) => program.scriptPubKeyHex === output.scriptPubKeyHex,
+				(program) => program.role === "created" && program.id === output.id,
 			);
 
 			return found === undefined
@@ -199,14 +229,20 @@ function intentOf(action: Action, scope: Scope): string | undefined {
 
 type ShownAmount = { asset: Provenanced<string>; sats: Provenanced<string> };
 
+export type ShownIssuanceRow = Omit<IssuanceRow, "sats" | "tokenSats"> & {
+	sats: Provenanced<string>;
+	tokenSats: Provenanced<string>;
+};
+
 export type ShownFlowRow = Omit<FlowRow, "sats"> & { sats: Provenanced<string> };
 
 export type ShownConfirmation = Omit<
 	ConfirmationModel,
-	"feeSats" | "inputs" | "netEffect" | "outputs"
+	"feeSats" | "inputs" | "issuances" | "netEffect" | "outputs"
 > & {
 	feeSats: Provenanced<string>;
 	inputs: ShownFlowRow[];
+	issuances: ShownIssuanceRow[];
 	netEffect: ShownAmount[];
 	outputs: ShownFlowRow[];
 };
@@ -215,6 +251,11 @@ export function toShownConfirmation(model: ConfirmationModel): ShownConfirmation
 	return {
 		...model,
 		feeSats: map(model.feeSats, (sats) => sats.toString()),
+		issuances: model.issuances.map((issuance) => ({
+			...issuance,
+			sats: map(issuance.sats, (sats) => sats.toString()),
+			tokenSats: map(issuance.tokenSats, (sats) => sats.toString()),
+		})),
 		netEffect: model.netEffect.map((effect) => ({
 			asset: effect.asset,
 			sats: map(effect.sats, (sats) => sats.toString()),

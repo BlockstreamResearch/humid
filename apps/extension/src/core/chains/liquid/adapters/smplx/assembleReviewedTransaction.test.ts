@@ -296,6 +296,7 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 		confirmation: {
 			account: computed("liquid:testnet account 0"),
 			action: fromDapp("Pay"),
+			issuances: [],
 			programs: [],
 			feeAsset: computed(ASSET),
 			feeSats: computed(344n),
@@ -312,6 +313,7 @@ function plan(overrides: Partial<ManifestReview> = {}): ManifestReview {
 			{
 				address: "tex1p_derived",
 				...PROGRAM_BUILD,
+				id: "p2pk_out",
 				role: "created",
 				scriptPubKeyHex: PROGRAM_SCRIPT,
 				utxoType: "p2pk_output",
@@ -516,6 +518,7 @@ describe("assembleReviewedTransaction", () => {
 				{
 					address: "tex1p_derived",
 					...PROGRAM_BUILD,
+					id: "p2pk_in",
 					role: "spent",
 					scriptPubKeyHex: PROGRAM_SCRIPT,
 					utxoType: "p2pk_output",

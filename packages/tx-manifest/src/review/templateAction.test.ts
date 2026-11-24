@@ -152,6 +152,7 @@ describe("a template action against a deployment that exists", () => {
 				argumentsJson: asked?.argumentsJson ?? "",
 				cmr: "cc".repeat(32),
 				extraLeavesJson: asked?.extraLeavesJson ?? "",
+				id: "vault_in",
 				includeDebugSymbols: false,
 				role: "spent",
 				scriptPubKeyHex: DERIVED_SCRIPT,

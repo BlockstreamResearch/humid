@@ -34,6 +34,16 @@ export const LENDING_SHOWN: ShownConfirmation = {
 		{ asset: computed(LBTC), kind: "wallet", sats: computed("1000000") },
 		{ asset: computed(LBTC), kind: "wallet", sats: computed("734619") },
 	],
+	issuances: [
+		{
+			asset: computed(RECEIPT),
+			index: 1,
+			kind: "new",
+			sats: computed("1"),
+			token: computed("7c".repeat(32)),
+			tokenSats: computed("0"),
+		},
+	],
 	netEffect: [
 		{ asset: computed(LBTC), sats: computed("-500052") },
 		{ asset: computed(RECEIPT), sats: computed("1") },

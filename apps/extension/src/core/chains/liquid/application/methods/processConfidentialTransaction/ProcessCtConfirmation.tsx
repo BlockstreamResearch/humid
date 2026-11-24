@@ -22,6 +22,7 @@ import {
 import { DEFAULT_TARGET_BLOCKS, FeeSpeedPicker } from "@/common/Confirmation/FeeSpeedPicker";
 import { ShownAsset } from "@/common/Confirmation/ShownAsset";
 import type { KnownAsset } from "@/core/chains/liquid/application/confirmationFacts";
+import { issuanceNote } from "@/core/chains/liquid/presentation/issuanceNote";
 import { UiButton } from "@/ui/UiButton/base";
 
 export const PROCESS_CT_CONFIRMATION_KIND = "liquid.processConfidentialTransaction";
@@ -99,6 +100,17 @@ function isShown(shown: unknown): boolean {
 			(row) => isRecord(row) && provenancedString(row.asset) && provenancedAmount(row.sats, SIGNED),
 		) &&
 		everyRow(shown.inputs, isFlowRow) &&
+		everyRow(
+			shown.issuances,
+			(row) =>
+				isRecord(row) &&
+				typeof row.index === "number" &&
+				(row.kind === "new" || row.kind === "reissue") &&
+				provenancedString(row.asset) &&
+				provenancedString(row.token) &&
+				provenancedAmount(row.sats, UNSIGNED) &&
+				provenancedAmount(row.tokenSats, UNSIGNED),
+		) &&
 		everyRow(shown.outputs, isFlowRow) &&
 		everyRow(
 			shown.programs,
@@ -155,6 +167,8 @@ export function ProcessCtConfirmation({
 
 		return new ShownAsset(id, known?.ticker, known?.decimals);
 	};
+	const amountOf = ({ value }: { value: string }, asset: { value: string }) =>
+		assetOf(asset.value).amountWithLabel(BigInt(value));
 
 	return (
 		<ConfirmationLayout
@@ -190,6 +204,18 @@ export function ProcessCtConfirmation({
 				}))}
 				onChange={setTargetBlocks}
 			/>
+			{shown.issuances.map((issuance) => (
+				<ConfirmationNote key={issuance.asset.value} tone="warning">
+					{issuanceNote(issuance.index + 1, {
+						minted: amountOf(issuance.sats, issuance.asset),
+						reissues: issuance.kind === "reissue",
+						tokens:
+							issuance.tokenSats.value === "0"
+								? undefined
+								: amountOf(issuance.tokenSats, issuance.token),
+					})}
+				</ConfirmationNote>
+			))}
 			{shown.publishedAmounts[0] !== undefined && (
 				<ConfirmationNote>{sentence(shown.publishedAmounts[0].reason.value)}</ConfirmationNote>
 			)}

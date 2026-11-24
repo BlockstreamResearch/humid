@@ -114,6 +114,8 @@ export const Reissuance: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
 
-		await expect(canvas.getByText(/Input 2 reissues an asset: 5000/)).toBeVisible();
+		await expect(
+			canvas.getByText(/^Input 2 reissues an asset: 5000 .* will get minted\.$/),
+		).toBeVisible();
 	},
 };

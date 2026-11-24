@@ -7,6 +7,7 @@ import {
 	COMPILED,
 	DERIVED,
 	DERIVED_SCRIPT,
+	type Document,
 	ELSEWHERE_SCRIPT,
 	Fixture,
 	POLICY_ASSET,
@@ -31,6 +32,8 @@ const receive = (overrides: Partial<ActionRequest> = {}) =>
 		...overrides,
 	});
 
+const scriptFor = (pubkey: string) => `5120${pubkey}`;
+
 const PUB_KEY_ARGUMENT = JSON.stringify({ PUB_KEY: { type: "Pubkey", value: `0x${PUBKEY}` } });
 
 describe("creating a program", () => {
@@ -45,6 +48,7 @@ describe("creating a program", () => {
 				argumentsJson: PUB_KEY_ARGUMENT,
 				cmr: "cc".repeat(32),
 				extraLeavesJson: "[]",
+				id: "p2pk_out",
 				includeDebugSymbols: false,
 				role: "created",
 				scriptPubKeyHex: DERIVED_SCRIPT,
@@ -84,6 +88,33 @@ describe("creating a program", () => {
 		});
 
 		expect(seen).toEqual([PUB_KEY_ARGUMENT]);
+	});
+
+	test("pays each output the program compiled for that output, when two share a utxo type", async () => {
+		const other = "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5";
+		const twice = p2pk.editedAction("Pay", (action) => {
+			const outputs = action.outputs as Document[];
+
+			(action.params as Document).other = { type: "pubkey" };
+			outputs.splice(1, 0, {
+				...structuredClone(outputs[0]!),
+				destination: { compile_params: { PUB_KEY: "params.other" }, utxo_type: "p2pk_output" },
+				id: "other_out",
+			});
+		});
+		const review = await reviewed(
+			twice.request("Pay", { params: { amount_sat: 1000, other, pubkey: PUBKEY } }),
+			{
+				compile: (input) => ({
+					...COMPILED,
+					scriptPubKeyHex: scriptFor(JSON.parse(input.argumentsJson).PUB_KEY.value.slice(2)),
+				}),
+			},
+		);
+		const paid = (id: string) => review.outputs.find((output) => output.id === id);
+
+		expect(paid("p2pk_out")?.scriptPubKeyHex).toBe(scriptFor(PUBKEY));
+		expect(paid("other_out")?.scriptPubKeyHex).toBe(scriptFor(other));
 	});
 });
 

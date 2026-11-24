@@ -101,7 +101,7 @@ export class ProgramSpends {
 			utxoType,
 			vout: outpoint.vout,
 		});
-		spent.findings.push({ ...derived, role: "spent", verified: "matches-chain" });
+		spent.findings.push({ ...derived, id, role: "spent", verified: "matches-chain" });
 	}
 
 	#blindedHolding(input: ProgramInput & { blinding: Blinding }, scope: Scope): Holding {
