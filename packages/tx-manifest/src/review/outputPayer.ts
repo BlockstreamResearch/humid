@@ -109,7 +109,9 @@ export class OutputPayer {
 				? this.#programScripts.get(id)
 				: target.kind === "data"
 					? target.hex
-					: this.#context.dependencies.wallet.scriptPubKeyHex;
+					: target.kind === "taproot"
+						? `5120${target.key}`
+						: this.#context.dependencies.wallet.scriptPubKeyHex;
 
 		if (!scriptPubKeyHex) {
 			throw new Refusal(
@@ -130,7 +132,10 @@ export class OutputPayer {
 			...chosenFactors(id, factors, blinded),
 			decidedBy: blinding.decidedBy,
 			id,
-			pays: target.kind === "program" || target.kind === "data" ? target.kind : "wallet",
+			pays:
+				target.kind === "program" || target.kind === "data" || target.kind === "taproot"
+					? target.kind
+					: "wallet",
 			sats,
 			scriptPubKeyHex,
 		});

@@ -77,15 +77,18 @@ export function createConfirmationResponder(
 		};
 
 		try {
+			// The clock runs while the review is prepared too, so a review that never returns
+			// cannot hold up the approvals queued after the review.
+			timeout = setTimeout(() => entry.settle({ approved: false }), CONFIRMATION_TIMEOUT_MS);
 			windowId = await openNotification();
 			if (entry.settled) return;
 			await sleep(NOTIFICATION_SETTLE_MS);
 			if (entry.settled) return;
 
-			let request: ConfirmationRequest;
+			let request: ConfirmationRequest | undefined;
 
 			try {
-				request = await entry.request;
+				request = await Promise.race([entry.request, entry.decision.then(() => undefined)]);
 			} catch (error) {
 				entry.fail(error);
 				show({ error: messageOf(error) });
@@ -93,9 +96,8 @@ export function createConfirmationResponder(
 				return;
 			}
 
-			if (entry.settled) return;
+			if (request === undefined || entry.settled) return;
 
-			timeout = setTimeout(() => entry.settle({ approved: false }), CONFIRMATION_TIMEOUT_MS);
 			removeResponseListener = messageBus.onMessage(
 				MsgProtocolResponseMethods.ConfirmResponse,
 				({ data: response, sender }) => {

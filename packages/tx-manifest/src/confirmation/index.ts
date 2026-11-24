@@ -23,6 +23,8 @@ export type FlowRow = {
 	dataBytes?: number;
 	kind: ReviewedOutput["pays"];
 	name?: Provenanced<string>;
+	/** The x-only key a taproot output pays, exactly as the dapp wrote the key. */
+	outputKey?: Provenanced<string>;
 	sats: Provenanced<bigint>;
 };
 
@@ -158,6 +160,10 @@ function outputRow(review: ReviewedPlan, output: ReviewedOutput): FlowRow {
 				dataBytes: Math.max(0, output.scriptPubKeyHex.length / 2 - 2),
 				name: fromDapp(output.id),
 			};
+		}
+
+		case "taproot": {
+			return { ...amount, outputKey: fromDapp(output.scriptPubKeyHex.slice(4)) };
 		}
 
 		case "program": {

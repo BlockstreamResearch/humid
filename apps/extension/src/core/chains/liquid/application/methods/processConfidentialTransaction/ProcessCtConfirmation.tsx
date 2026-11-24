@@ -35,7 +35,7 @@ export type ProcessCtConfirmationData = {
 	speeds: { shown: ShownConfirmation; targetBlocks: number }[];
 };
 
-const ROW_KINDS = new Set(["address", "change", "data", "program", "wallet"]);
+const ROW_KINDS = new Set(["address", "change", "data", "program", "taproot", "wallet"]);
 
 const ORIGINS = new Set(["computed", "dapp", "verified"]);
 
@@ -142,6 +142,7 @@ function isFlowRow(row: unknown): boolean {
 		provenancedAmount(row.sats, UNSIGNED) &&
 		(row.name === undefined || provenancedString(row.name)) &&
 		(row.address === undefined || provenancedString(row.address)) &&
+		(row.outputKey === undefined || provenancedString(row.outputKey)) &&
 		(row.dataBytes === undefined || typeof row.dataBytes === "number")
 	);
 }
@@ -272,6 +273,18 @@ function FlowDetailsRow({
 
 		case "change": {
 			return <DetailsRow index={index} label="This account, change" value={amount} />;
+		}
+
+		case "taproot": {
+			return (
+				<DetailsRow
+					index={index}
+					label="Taproot output"
+					note={row.outputKey === undefined ? undefined : shortAddress(row.outputKey.value)}
+					noteByDapp
+					value={amount}
+				/>
+			);
 		}
 
 		case "data": {

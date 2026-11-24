@@ -18,6 +18,7 @@ export type PlannedOutput = {
 		| { kind: "fee" }
 		| { kind: "program"; utxoType: string }
 		| { kind: "data"; hex: string }
+		| { kind: "taproot"; key: string }
 		| { kind: "wallet" };
 };
 
@@ -47,7 +48,7 @@ export function planAction(
 			...(target.kind === "change" ? { change: true } : {}),
 			...(target.kind === "program" && output.confidential !== true
 				? { unblindable: "program" as const }
-				: target.kind === "data"
+				: target.kind === "data" || target.kind === "taproot"
 					? { unblindable: "data" as const }
 					: {}),
 		});
@@ -120,14 +121,14 @@ function resolveTarget(
 			return { kind: "program", utxoType: destination.reference.utxo_type };
 		}
 
-		case "script_hash": {
-			const hash = textAt(destination.hash, scope);
+		case "taproot_output_key": {
+			const key = textAt(destination.key, scope);
 
-			if (typeof hash !== "string" || !isHash(withoutHexPrefix(hash))) {
-				throw new Refusal("pays a script_hash that is not 32 bytes of hex.");
+			if (typeof key !== "string" || !isHash(withoutHexPrefix(key))) {
+				throw new Refusal("pays a taproot_output_key that is not 32 bytes of hex.");
 			}
 
-			return { hex: `5120${withoutHexPrefix(hash).toLowerCase()}`, kind: "data" };
+			return { key: withoutHexPrefix(key).toLowerCase(), kind: "taproot" };
 		}
 
 		case "burn":

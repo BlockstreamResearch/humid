@@ -65,3 +65,26 @@ test("only the wallet's own window can answer a confirmation, under an id nobody
 	answer("popup", id);
 	expect(await decision).toEqual({ approved: true });
 });
+
+test("a review that never comes back can still be cancelled, and the next approval is asked", async () => {
+	const { answer, asked, bus } = popupBus();
+	const confirmations = createConfirmationResponder(bus as never, {
+		isUnlocked: async () => true,
+		noteActivity: () => {},
+		onUnlocked: () => {},
+	});
+	const stuck = confirmations.confirm(new Promise(() => {}));
+
+	await sleep(300);
+	confirmations.cancelAll();
+
+	expect(await stuck).toEqual({ approved: false });
+
+	const next = confirmations.confirm({ title: "Connect this dapp?" });
+	const id = await Promise.race([asked, sleep(500).then(() => "never asked")]);
+
+	expect(id).not.toBe("never asked");
+
+	answer("popup", id);
+	expect(await next).toEqual({ approved: true });
+});

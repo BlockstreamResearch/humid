@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
+import { logger } from "@/core/logger";
 import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
 import { createWalletMethod } from "./createWalletMethod";
@@ -67,4 +68,32 @@ describe("a request that spends nothing", () => {
 
 		expect(steps).toEqual(["review first", "review second", "execute first", "execute second"]);
 	});
+});
+
+test("a sent transaction is reported as sent even when its receipt cannot be built", async () => {
+	const warned = spyOn(logger, "warn").mockImplementation(() => {});
+	let shown: unknown;
+	const sending = createWalletMethod<string, WalletRpcBaseContext, string, { txid: string }>({
+		confirmation: () => ({ title: "" }),
+		execute: async () => ({ txid: "ab".repeat(32) }),
+		id: "send",
+		parse: String,
+		receipt: () => {
+			throw new Error("The portfolio is unreadable.");
+		},
+		review: () => "",
+	});
+	const asking = {
+		authorization: { isGranted: () => false },
+		confirm: async (_request: unknown, complete: (choice: unknown) => Promise<unknown>) => {
+			shown = await complete(undefined);
+
+			return { approved: true };
+		},
+	} as unknown as WalletRpcBaseContext;
+
+	expect(await sending("", asking)).toEqual({ txid: "ab".repeat(32) });
+	expect(shown).toMatchObject({ changes: [], txid: "ab".repeat(32) });
+	expect(warned).toHaveBeenCalledTimes(1);
+	warned.mockRestore();
 });

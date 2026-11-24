@@ -345,9 +345,10 @@ describe("where an output can pay", () => {
 		expect(refusal.reason).toContain("not blinded");
 	});
 
-	test("a script hash, as the taproot output it names", async () => {
-		expect(await paidOut({ destination: { script_hash: "ab".repeat(32) } })).toMatchObject({
+	test("a taproot output key, as the output it names", async () => {
+		expect(await paidOut({ destination: { taproot_output_key: "ab".repeat(32) } })).toMatchObject({
 			blinded: false,
+			pays: "taproot",
 			scriptPubKeyHex: `5120${"ab".repeat(32)}`,
 		});
 	});

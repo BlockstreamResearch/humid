@@ -95,9 +95,9 @@ const destination = z.union([
 				: { address: text, kind: "address" as const },
 		),
 	programReference.transform((reference) => ({ kind: "program" as const, reference })),
-	z.object({ script_hash: z.string() }).transform(({ script_hash }) => ({
-		hash: script_hash,
-		kind: "script_hash" as const,
+	z.object({ taproot_output_key: z.string() }).transform(({ taproot_output_key }) => ({
+		key: taproot_output_key,
+		kind: "taproot_output_key" as const,
 	})),
 	z
 		.object({ type: z.enum(["burn", "fee", "op_return"]) })

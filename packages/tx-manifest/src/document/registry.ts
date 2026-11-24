@@ -24,7 +24,7 @@ const CONSTRUCTS = {
 		args: READ,
 		compile_params: READ,
 		if: UNIMPLEMENTED,
-		script_hash: READ,
+		taproot_output_key: READ,
 		type: READ,
 		utxo_type: READ,
 	},

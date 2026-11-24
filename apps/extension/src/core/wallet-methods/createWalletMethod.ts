@@ -1,4 +1,5 @@
 import type { TransactionReceiptData } from "@/common/Confirmation/TransactionReceipt";
+import { logger } from "@/core/logger";
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
@@ -86,7 +87,14 @@ export function createWalletMethod<
 
 				executed = await execute(ready);
 
-				return receipt({ ...ready, result: executed });
+				// The transaction is out by now, so a receipt that fails still reports success.
+				try {
+					return await receipt({ ...ready, result: executed });
+				} catch (error) {
+					logger.warn("Could not build the receipt for a completed request", { error });
+
+					return plainReceipt(executed);
+				}
 			});
 		const request = reviewing.then(async (reviewed) => ({
 			...(await confirmation({ context, params: parsedParams, review: reviewed })),
@@ -112,4 +120,17 @@ export function createWalletMethod<
 	};
 
 	return Object.assign(handler, { id });
+}
+
+/** What the outcome screen can still say once the details are out of reach. */
+function plainReceipt(result: unknown): TransactionReceiptData {
+	const txid = (result as { txid?: unknown } | undefined)?.txid;
+
+	return {
+		assets: {},
+		changes: [],
+		fee: "Not available",
+		network: "the network",
+		...(typeof txid === "string" ? { txid } : {}),
+	};
 }

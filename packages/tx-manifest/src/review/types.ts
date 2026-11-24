@@ -45,7 +45,7 @@ export type PlannedInput =
 export type ReviewedOutput = BlindingFactors & {
 	address?: string;
 	asset: string;
-	pays: "address" | "change" | "data" | "program" | "wallet";
+	pays: "address" | "change" | "data" | "program" | "taproot" | "wallet";
 	blinded: boolean;
 	blindingPublicKeyHex?: string;
 	decidedBy: BlindingWord;
