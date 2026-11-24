@@ -11,6 +11,7 @@ import {
 	resetSecureVault,
 	touchVaultActivity,
 	unlockSecureVault,
+	verifySecureVaultPassphrase,
 } from "@/core/secure-vault/background";
 import type { SecureVaultStatus } from "@/core/secure-vault/types";
 
@@ -183,4 +184,5 @@ export const walletVaultBackground = {
 	onUnlocked,
 	reset,
 	unlock,
+	verifyPassphrase: verifySecureVaultPassphrase,
 };

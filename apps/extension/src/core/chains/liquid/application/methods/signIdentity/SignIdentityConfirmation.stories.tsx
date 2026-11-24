@@ -42,7 +42,7 @@ export const TextChallenge: Story = {
 		data: {
 			challenge: "4c6f6720696e20746f204c656e64696e67",
 			fingerprint: "c1d2e3f4a5b6c7d8",
-			identity: "https://app.lending.example",
+			identity: "ssh://lending@app.lending.example",
 			index: 0,
 			kind: SIGN_IDENTITY_CONFIRMATION_KIND,
 			network: "Liquid Testnet",

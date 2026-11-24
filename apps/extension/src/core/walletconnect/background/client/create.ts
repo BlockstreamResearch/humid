@@ -16,6 +16,8 @@ export async function createWalletKitClient(): Promise<WalletKitClient> {
 	const core = new Core({
 		customStoragePrefix: config.walletConnect.storagePrefix,
 		projectId,
+		// Telemetry would send pairing failures, full wc: URIs included, to WalletConnect.
+		telemetryEnabled: false,
 		...(config.walletConnect.relayUrl ? { relayUrl: config.walletConnect.relayUrl } : {}),
 	});
 

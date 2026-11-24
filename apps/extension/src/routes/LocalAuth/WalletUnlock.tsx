@@ -15,18 +15,25 @@ import {
 
 import humidMark from "../../../../../assets/brand/humid-mark.svg";
 
-export type WalletUnlock = ReturnType<typeof useWalletUnlock>;
+export type WalletUnlock = ReturnType<typeof usePasswordEntry>;
 
 export function useWalletUnlock(onUnlocked?: () => void) {
+	return usePasswordEntry(async (passphrase) => {
+		const status = await walletVaultClient.unlock({ passphrase });
+
+		if (!status.isUnlocked) throw new Error("Could not unlock the wallet.");
+
+		onUnlocked?.();
+	});
+}
+
+/** A password field whose value goes to the background to be checked, then cleared once accepted. */
+export function usePasswordEntry(check: (passphrase: string) => Promise<void>) {
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const [passphrase, setPassphrase] = useState("");
 	const mutation = useMutation({
-		mutationFn: walletVaultClient.unlock,
-		onSuccess: (status) => {
-			if (!status.isUnlocked) return;
-			setPassphrase("");
-			onUnlocked?.();
-		},
+		mutationFn: check,
+		onSuccess: () => setPassphrase(""),
 	});
 
 	useEffect(() => {
@@ -38,10 +45,7 @@ export function useWalletUnlock(onUnlocked?: () => void) {
 
 	return {
 		clearError: mutation.reset,
-		error:
-			mutation.isSuccess && !mutation.data.isUnlocked
-				? "Could not unlock the wallet."
-				: mutation.error?.message,
+		error: mutation.error?.message,
 		inputRef,
 		isFilled: passphrase.length > 0,
 		isPending: mutation.isPending,
@@ -52,7 +56,7 @@ export function useWalletUnlock(onUnlocked?: () => void) {
 			if (passphrase.length === 0 || mutation.isPending) return;
 
 			mutation.reset();
-			mutation.mutate({ passphrase });
+			mutation.mutate(passphrase);
 		},
 	};
 }
@@ -93,7 +97,7 @@ export function UnlockScreen({
 	);
 }
 
-function PasswordField({
+export function PasswordField({
 	unlock,
 	disabled,
 	onEdit,

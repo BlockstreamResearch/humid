@@ -53,7 +53,10 @@ export function LocalAuthPage({ onReset, onUnlocked }: LocalAuthPageProps) {
 		const { approved } = await confirm({
 			title: "Reset wallet?",
 			message:
-				"This erases the wallet from this browser. Only the recovery phrase can restore access.",
+				"The funds stay on-chain. Only the recovery phrase can bring the wallet back into this browser.",
+			confirmLabel: "Reset",
+			rejectLabel: "Back",
+			confirmPhrase: "RESET",
 		});
 
 		if (!approved) {

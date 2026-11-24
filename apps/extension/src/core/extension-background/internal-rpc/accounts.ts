@@ -206,8 +206,11 @@ export function createAccountsInternalHandlers(deps: AccountsRuntimeDeps): Reque
 
 			return readAccountsState(next.accountModel);
 		},
-		[accountsRpc.methods.revealRecoveryPhrase]: (message) => {
-			const { accountGroupId } = message.data as RevealRecoveryPhraseInput;
+		[accountsRpc.methods.revealRecoveryPhrase]: async (message) => {
+			const { accountGroupId, passphrase } = message.data as RevealRecoveryPhraseInput;
+
+			await walletVaultBackground.verifyPassphrase(passphrase);
+
 			const state = walletVaultBackground.keyManager.getState();
 			const group = state.accountModel.accountGroups[accountGroupId];
 

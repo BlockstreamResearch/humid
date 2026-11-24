@@ -175,7 +175,11 @@ function buildTransfer(
 		}
 
 		if (isSendAll(account, params, rawAssetId)) {
-			builder = builder.drainLbtcWallet().drainLbtcTo(recipientAddress);
+			const draining = builder.drainLbtcWallet();
+
+			builder = recipientAddress.isBlinded()
+				? draining.drainLbtcTo(recipientAddress)
+				: draining.drainLbtcToExplicit(recipientAddress);
 		} else if (!recipientAddress.isBlinded()) {
 			builder = builder.addExplicitRecipient(
 				recipientAddress,

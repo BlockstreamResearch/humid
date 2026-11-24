@@ -9,8 +9,11 @@ export type ConfirmationRequest = {
 	title: string;
 	message?: string;
 	confirmLabel?: string;
+	/** A word the person types before confirming, for an action with no undo. */
+	confirmPhrase?: string;
 	data?: unknown;
 	method?: string;
+	rejectLabel?: string;
 	requester?: { name?: string; origin: string };
 };
 

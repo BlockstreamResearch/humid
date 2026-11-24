@@ -87,7 +87,7 @@ export const ResetCancelled: Story = {
 		const documentBody = within(canvasElement.ownerDocument.body);
 
 		await userEvent.click(canvas.getByRole("button", { name: /^reset wallet$/i }));
-		await userEvent.click(documentBody.getByRole("button", { name: /^reject$/i }));
+		await userEvent.click(documentBody.getByRole("button", { name: /^back$/i }));
 		await waitFor(() =>
 			expect(
 				canvas.getByText("Reset cancelled. The wallet is still on this device."),

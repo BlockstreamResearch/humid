@@ -35,8 +35,17 @@ function makeBuilder() {
 
 			return builder;
 		},
-		drainLbtcTo() {
+		drainLbtcTo(address: { isBlinded: () => boolean }) {
+			if (!address.isBlinded()) {
+				throw new Error("Address must be confidential");
+			}
+
 			recorded.calls.push("sendAll");
+
+			return builder;
+		},
+		drainLbtcToExplicit() {
+			recorded.calls.push("sendAllExplicit");
 
 			return builder;
 		},
@@ -158,10 +167,10 @@ describe("which builder call a recipient gets", () => {
 		expect(recorded.calls).toEqual(["explicit:5000"]);
 	});
 
-	test("sending all takes the address as it is, either way", async () => {
+	test("sending all drains to an explicit output for an address with no blinding key", async () => {
 		blinded = false;
 		await send({ sendAll: true });
-		expect(recorded.calls).toEqual(["sendAll"]);
+		expect(recorded.calls).toEqual(["sendAllExplicit"]);
 
 		blinded = true;
 		await send({ sendAll: true });

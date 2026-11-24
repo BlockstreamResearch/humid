@@ -5,6 +5,7 @@ import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/client";
+import { MIN_PASSPHRASE_LENGTH } from "@/core/secure-vault/types";
 import { UiButton } from "@/ui/UiButton/base";
 import {
 	UiField,
@@ -22,7 +23,7 @@ const createPasswordFormSchema = z
 		passphrase: z
 			.string()
 			.min(1, "Create a password.")
-			.min(8, "Password must be at least 8 characters."),
+			.min(MIN_PASSPHRASE_LENGTH, `Password must be at least ${MIN_PASSPHRASE_LENGTH} characters.`),
 		confirmPassphrase: z.string().min(1, "Repeat the password."),
 	})
 	.refine(({ confirmPassphrase, passphrase }) => confirmPassphrase === passphrase, {
@@ -120,7 +121,7 @@ export function AuthCreatePasswordPage() {
 										<UiFieldError id={errorId} errors={[fieldState.error]} />
 									) : (
 										<UiFieldDescription id={descriptionId}>
-											At least 8 characters.
+											At least {MIN_PASSPHRASE_LENGTH} characters.
 										</UiFieldDescription>
 									)}
 								</UiField>

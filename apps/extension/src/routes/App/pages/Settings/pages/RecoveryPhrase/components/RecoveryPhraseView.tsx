@@ -1,7 +1,7 @@
 import { Copy01Icon, ViewIcon, ViewOffSlashIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Page } from "@/common/Page";
 import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
@@ -13,18 +13,29 @@ type RecoveryPhraseViewProps = {
 	phrase: string;
 };
 
+const CLIPBOARD_CLEAR_MS = 60_000;
+
 export function RecoveryPhraseView({ accountGroupId, phrase }: RecoveryPhraseViewProps) {
 	const [hidden, setHidden] = useState(true);
 	const [copied, setCopied] = useState(false);
+	const onClipboard = useRef(false);
 	const words = phrase.trim().split(/\s+/u);
+
+	// Leaving the page or a minute passing wipes the phrase from the clipboard, as far as the browser allows.
+	const clearClipboard = () => {
+		if (!onClipboard.current) return;
+
+		onClipboard.current = false;
+		void navigator.clipboard?.writeText("").catch(() => undefined);
+	};
+
+	useEffect(() => clearClipboard, []);
 
 	const handleCopy = () => {
 		setCopied(true);
-
-		if (navigator.clipboard) {
-			void navigator.clipboard.writeText(phrase).catch(() => undefined);
-		}
-
+		onClipboard.current = true;
+		void navigator.clipboard?.writeText(phrase).catch(() => undefined);
+		globalThis.setTimeout(clearClipboard, CLIPBOARD_CLEAR_MS);
 		globalThis.setTimeout(() => setCopied(false), 1500);
 	};
 

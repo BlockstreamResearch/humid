@@ -53,6 +53,11 @@ const liquidGetIdentitySharedKeyParamsSchema = z
 	})
 	.strict();
 
+/** An SSH identity hashes the challenge; any other signs the challenge as the digest itself. */
+export function isSshIdentity(identity: string): boolean {
+	return identity.startsWith("ssh://");
+}
+
 const liquidSignIdentityParamsSchema = z
 	.object({
 		challenge: nonEmptyLowercaseEvenHexSchema,
@@ -60,7 +65,11 @@ const liquidSignIdentityParamsSchema = z
 		identity: identitySchema,
 		index: identityIndexSchema,
 	})
-	.strict();
+	.strict()
+	.refine(({ challenge, identity }) => isSshIdentity(identity) || challenge.length === 64, {
+		message: "A challenge for an identity other than ssh:// must be a 32-byte digest.",
+		path: ["challenge"],
+	});
 
 export function parseLiquidGetIdentityPublicKeyParams(
 	value: unknown,

@@ -34,6 +34,7 @@ export type RemoveWalletInput = {
 
 export type RevealRecoveryPhraseInput = {
 	accountGroupId: AccountGroupId;
+	passphrase: string;
 };
 
 export type RecoveryPhrase = {
