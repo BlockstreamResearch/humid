@@ -3,7 +3,6 @@ import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
-import { sleep } from "@/helpers/promise";
 
 import type { LiquidWalletAccount } from "../../../application/backends/LiquidWalletBackend";
 import type { SignedHold, TransactionNote } from "../../../application/signedHold";
@@ -13,9 +12,6 @@ import { getLwkImplementation } from "./getLwkImplementation";
 
 // Long past an indexer's lag; a transaction never broadcast or dropped stops hiding its coins after this.
 const HELD_MS = 10 * 60_000;
-
-const BUSY_STATUSES = [429, 503];
-const RETRIES = 6;
 
 const SPENT_REASONS = ["bad-txns-inputs-missingorspent", "missing-inputs", "txn-mempool-conflict"];
 
@@ -57,7 +53,7 @@ export class SentTransactions {
 		hex: string,
 		note?: TransactionNote,
 	): Promise<string> {
-		const txid = await post(account.chain.settings.backend, hex);
+		const txid = await send(account, hex);
 
 		this.#hold(account, hex, txid);
 
@@ -160,40 +156,43 @@ async function recordInVault(txid: string, note: TransactionNote): Promise<void>
 	await transactionLabels.record(txid, note);
 }
 
-async function post(backend: LiquidChainBackend, hex: string): Promise<string> {
-	for (let attempt = 0; ; attempt += 1) {
-		// oxlint-disable-next-line no-await-in-loop
-		const response = await request(backend, "/tx", { body: hex, method: "POST" });
+async function send(account: LiquidWalletAccount, hex: string): Promise<string> {
+	const lwk = await loadLwkWasm();
+	const transaction = lwk.Transaction.fromString(hex);
 
-		if (BUSY_STATUSES.includes(response.status) && attempt < RETRIES) {
-			// oxlint-disable-next-line no-await-in-loop
-			await sleep(1000 * 2 ** attempt);
+	try {
+		const txid = await getLwkImplementation(account).blockchainClient.broadcastTx(transaction);
 
-			continue;
+		try {
+			return txid.toString();
+		} finally {
+			txid.free();
 		}
+	} catch (error) {
+		const refused = /returned HTTP (\d+)(?:: (.*))?$/s.exec(
+			error instanceof Error ? error.message : String(error),
+		);
 
-		// oxlint-disable-next-line no-await-in-loop
-		const answer = (await response.text()).trim();
-
-		if (response.ok && /^[0-9a-f]{64}$/i.test(answer)) return answer.toLowerCase();
+		if (refused === null) throw error;
 
 		throw new TransactionRefusedError(
-			reasonOf(answer) || `the backend answered ${response.status}`,
+			reasonOf(refused[2] ?? "") || `the backend answered ${refused[1]}`,
 		);
+	} finally {
+		transaction.free();
 	}
 }
 
 async function isKnown(backend: LiquidChainBackend, txid: string): Promise<boolean> {
 	try {
-		return (await request(backend, `/tx/${txid}`, {})).ok;
+		return (await request(backend, `/tx/${txid}`)).ok;
 	} catch {
 		return false;
 	}
 }
 
-function request(backend: LiquidChainBackend, path: string, init: RequestInit): Promise<Response> {
+function request(backend: LiquidChainBackend, path: string): Promise<Response> {
 	return fetch(`${backend.url.replace(/\/+$/, "")}${path}`, {
-		...init,
 		headers: Object.fromEntries(
 			(backend.headers ?? []).filter(({ name }) => name).map(({ name, value }) => [name, value]),
 		),

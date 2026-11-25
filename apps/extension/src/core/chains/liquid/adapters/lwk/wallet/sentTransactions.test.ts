@@ -16,8 +16,16 @@ const sentTransactions = new SentTransactions(async (txid, note) => {
 const TXID = "ab".repeat(32);
 const realFetch = globalThis.fetch;
 
+let broadcastAnswer: () => string = () => TXID;
+
 function answering(status: number, body: string) {
 	globalThis.fetch = (async () => new Response(body, { status })) as unknown as typeof fetch;
+}
+
+function refusing(body: string) {
+	broadcastAnswer = () => {
+		throw new Error(`http://esplora/tx returned HTTP 400: ${body}`);
+	};
 }
 
 function walletScanning(seen: string[]) {
@@ -28,6 +36,13 @@ function walletScanning(seen: string[]) {
 		chainId: "bip122:regtest",
 		descriptor: crypto.randomUUID(),
 		implementation: {
+			blockchainClient: {
+				broadcastTx: async () => {
+					const txid = broadcastAnswer();
+
+					return { free() {}, toString: () => txid };
+				},
+			},
 			wollet: {
 				applyTransaction: ({ hex }: { hex: string }) => {
 					applied.push(hex);
@@ -44,12 +59,12 @@ function walletScanning(seen: string[]) {
 
 afterEach(() => {
 	globalThis.fetch = realFetch;
+	broadcastAnswer = () => TXID;
 });
 
 describe("a broadcast the network refuses", () => {
 	test("carries the node's reason", async () => {
-		answering(
-			400,
+		refusing(
 			'sendrawtransaction RPC error: {"code":-26,"message":"min relay fee not met, 100 < 120"}',
 		);
 
@@ -59,7 +74,7 @@ describe("a broadcast the network refuses", () => {
 	});
 
 	test("carries the reason when the node words it as plain text", async () => {
-		answering(400, "sendrawtransaction RPC error -27: Transaction already in block chain");
+		refusing("sendrawtransaction RPC error -27: Transaction already in block chain");
 
 		await expect(sentTransactions.broadcast(walletScanning([]).account, "00")).rejects.toThrow(
 			"The network refused the transaction: Transaction already in block chain",
@@ -67,10 +82,20 @@ describe("a broadcast the network refuses", () => {
 	});
 
 	test("says when a coin it spends is already spent", async () => {
-		answering(400, "sendrawtransaction RPC error -25: bad-txns-inputs-missingorspent");
+		refusing("sendrawtransaction RPC error -25: bad-txns-inputs-missingorspent");
 
 		await expect(sentTransactions.broadcast(walletScanning([]).account, "00")).rejects.toThrow(
 			"a coin it spends is already spent",
+		);
+	});
+
+	test("but a backend that cannot be reached is not reported as a refusal", async () => {
+		broadcastAnswer = () => {
+			throw new Error("error sending request");
+		};
+
+		await expect(sentTransactions.broadcast(walletScanning([]).account, "00")).rejects.toThrow(
+			"error sending request",
 		);
 	});
 });
@@ -78,8 +103,6 @@ describe("a broadcast the network refuses", () => {
 describe("a transaction the wallet sent", () => {
 	test("counts against each later scan until a scan shows the transaction", async () => {
 		const wallet = walletScanning([]);
-
-		answering(200, TXID);
 
 		expect(await sentTransactions.broadcast(wallet.account, "beef")).toBe(TXID);
 
@@ -136,7 +159,6 @@ describe("a transaction the wallet sent", () => {
 		const wallet = walletScanning([]);
 		const note = { action: "Pay", origin: "https://dapp.example" };
 
-		answering(200, TXID);
 		await sentTransactions.broadcast(wallet.account, "beef", note);
 		await sentTransactions.broadcast(wallet.account, "feed");
 
