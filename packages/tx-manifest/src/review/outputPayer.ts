@@ -69,6 +69,10 @@ export class OutputPayer {
 			payChange(asset, "change", UNDECLARED_CHANGE);
 		}
 
+		if (!spendsConfidential) {
+			hideLoneBlindedOutput(paid.outputs);
+		}
+
 		return paid;
 	}
 
@@ -182,6 +186,35 @@ export class OutputPayer {
 			scriptPubKeyHex: this.#context.dependencies.wallet.scriptPubKeyHex,
 		});
 	}
+}
+
+function hideLoneBlindedOutput(outputs: ReviewedOutput[]): void {
+	const blinded = outputs.filter((output) => output.blinded);
+
+	if (blinded.length !== 1) {
+		return;
+	}
+
+	const change = outputs.find((output) => output.decidedBy === "spendable-change");
+
+	if (change !== undefined) {
+		Object.assign(change, { blinded: true, decidedBy: "beside-lone-output" });
+
+		return;
+	}
+
+	const lone = blinded[0]!;
+
+	if (lone.decidedBy === "output" || lone.assetBlindingFactor || lone.valueBlindingFactor) {
+		throw new Refusal(
+			`Output ${lone.id} must be blinded, but every input amount is public and no other ` +
+				"output is blinded, so its amount could be worked out from the other amounts.",
+		);
+	}
+
+	const { blindingPublicKeyHex: _, ...open } = lone;
+
+	outputs[outputs.indexOf(lone)] = { ...open, blinded: false, decidedBy: "lone-output" };
 }
 
 function push(paid: PaidOutputs, output: ReviewedOutput): void {

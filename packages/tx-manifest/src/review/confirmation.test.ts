@@ -172,12 +172,18 @@ describe("what a person is told about a blinded amount", () => {
 });
 
 function changeSaying(confidential: boolean | undefined | "absent"): Document {
-	return confidential === "absent"
-		? p2pk.editedAction("Receive", (action) => {
-				(action.outputs as Document[]).pop();
-				action.allow_change = "lbtc_only";
-			}).manifest
-		: confidentialAt(1, confidential);
+	return p2pk.editedAction("Receive", (action) => {
+		const outputs = action.outputs as Document[];
+
+		outputs[0]!.confidential = confidential === true;
+
+		if (confidential === "absent") {
+			outputs.pop();
+			action.allow_change = "lbtc_only";
+		} else if (confidential !== undefined) {
+			outputs[1]!.confidential = confidential;
+		}
+	}).manifest;
 }
 
 describe("what a person is told about an amount this wallet published", () => {
@@ -222,6 +228,16 @@ describe("what a person is told about an amount this wallet published", () => {
 		const model = await shown(changeSaying(undefined));
 
 		expect(model.blindedAmounts.map((row) => row.id.value)).not.toContain("fee_change");
+	});
+
+	test("unless the change is all that keeps a single blinded output from being worked out", async () => {
+		const model = await shown(confidentialAt(1, undefined));
+
+		expect(model.publishedAmounts).toEqual([]);
+		expect(model.blindedAmounts.map((row) => [row.id.value, row.decidedBy.value])).toContainEqual([
+			"fee_change",
+			"every input amount is public, so one blinded output alone could be worked out from the other amounts; blinding the change as well keeps the outputs hidden",
+		]);
 	});
 });
 

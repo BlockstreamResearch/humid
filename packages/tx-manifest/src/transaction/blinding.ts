@@ -1,8 +1,10 @@
 export type Blinding = "blinded" | "open";
 
 export type BlindingWord =
+	| "beside-lone-output"
 	| "chain"
 	| "confidential-input"
+	| "lone-output"
 	| "output"
 	| "spendable-change"
 	| "unblindable";
@@ -57,6 +59,14 @@ function sentenceFor(word: BlindingWord): string {
 	switch (word) {
 		case "confidential-input": {
 			return "this action spends a blinded amount, and the network accepts that only if something it pays out is blinded too";
+		}
+
+		case "beside-lone-output": {
+			return "every input amount is public, so one blinded output alone could be worked out from the other amounts; blinding the change as well keeps the outputs hidden";
+		}
+
+		case "lone-output": {
+			return "every input amount is public and no other output is blinded, so this amount could be worked out from the other amounts anyway";
 		}
 
 		case "output": {

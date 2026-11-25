@@ -392,6 +392,12 @@ describe("the network fee an amount names", () => {
 			}),
 		);
 
+	test("pays the one output in the open, since blinding that output alone would hide nothing", async () => {
+		expect((await swept()).outputs).toEqual([
+			expect.objectContaining({ blinded: false, decidedBy: "lone-output", id: "received_out" }),
+		]);
+	});
+
 	test("is the fee the transaction it settles on costs", async () => {
 		const review = await swept();
 

@@ -200,7 +200,9 @@ function blindedAmounts(review: ReviewedPlan): BlindedAmount[] {
 
 function publishedAmounts(review: ReviewedPlan): PublishedAmount[] {
 	return review.outputs
-		.filter((output) => output.decidedBy === "spendable-change")
+		.filter(
+			(output) => output.decidedBy === "spendable-change" || output.decidedBy === "lone-output",
+		)
 		.map((output) => ({
 			id: fromDapp(output.id),
 			reason: computed(describeBlinding(output.decidedBy)),
