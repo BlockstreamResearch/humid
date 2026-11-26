@@ -1,3 +1,5 @@
+import type { Pset } from "lwk_wasm";
+
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcInvalidParamsError,
@@ -5,23 +7,27 @@ import {
 } from "@/core/wallet-rpc/errors";
 
 import type { LiquidWalletAccount } from "../../../../application/backends/LiquidWalletBackend";
+import { DEFAULT_FEE_RATE_SATS_PER_KVB } from "../../../../application/feeSpeeds";
+import type { TransactionNote } from "../../../../application/signedHold";
 import { LIQUID_MAINNET_CHAIN_ID } from "../../../../domain/LiquidChain";
 import type {
 	LiquidEstimateMaxSendParams,
 	LiquidEstimateMaxSendResult,
-	LiquidSendTransferParams,
+	ParsedLiquidSendTransferParams,
 	LiquidSendTransferResult,
+	LiquidTransferFee,
+	LiquidTransferQuote,
 	LiquidTransferReview,
 } from "../../../../domain/LiquidRpc";
 import { toLiquidAssetId } from "../../../../domain/validation";
-import { loadLwkWasm } from "../../loadLwkWasm";
-import { getSyncWorkerClient } from "../../sync-worker/createSyncWorkerClient";
+import { loadLwkWasm, type LwkWasmModule } from "../../loadLwkWasm";
 import { getLwkImplementation } from "../getLwkImplementation";
 import { readWalletBalanceForAsset } from "../readWalletData";
+import { sentTransactions, TransactionRefusedError } from "../sentTransactions";
 
 export async function inspectTransfer(
 	account: LiquidWalletAccount,
-	params: LiquidSendTransferParams,
+	params: ParsedLiquidSendTransferParams,
 	rawAssetId: string,
 ): Promise<LiquidTransferReview> {
 	if (params.memo) {
@@ -61,58 +67,59 @@ export async function inspectTransfer(
 	}
 }
 
+export async function quoteTransfer(
+	account: LiquidWalletAccount,
+	params: ParsedLiquidSendTransferParams,
+	rawAssetId: string,
+	feeRateSatsPerKvb: number,
+): Promise<LiquidTransferQuote> {
+	const implementation = getLwkImplementation(account);
+	const lwk = await loadLwkWasm();
+	const pset = buildTransfer(lwk, account, params, rawAssetId, feeRateSatsPerKvb);
+	const feeSats = feeOf(pset);
+	const amount = isSendAll(account, params, rawAssetId)
+		? BigInt(
+				readWalletBalanceForAsset(implementation.wollet, account.chainId, account.rawPolicyAssetId),
+			) - feeSats
+		: BigInt(params.amount);
+
+	return { amount: amount.toString(), feeRateSatsPerKvb, feeSats: feeSats.toString() };
+}
+
 export async function sendTransfer(
 	account: LiquidWalletAccount,
-	params: LiquidSendTransferParams,
+	params: ParsedLiquidSendTransferParams,
 	rawAssetId: string,
+	fee?: LiquidTransferFee,
+	note?: TransactionNote,
 ): Promise<LiquidSendTransferResult> {
-	if (params.memo) {
+	const implementation = getLwkImplementation(account);
+	const lwk = await loadLwkWasm();
+	const unsignedPset = buildTransfer(lwk, account, params, rawAssetId, fee?.feeRateSatsPerKvb);
+
+	if (fee !== undefined && feeOf(unsignedPset).toString() !== fee.feeSats) {
 		throw new WalletRpcInvalidParamsError(
-			"Liquid transfer memos are not supported by this wallet backend yet.",
-			{ memo: params.memo },
-			WALLET_RPC_ERROR_REASONS.UNSUPPORTED_MEMO,
+			"The network fee changed. Please review the transfer again.",
+			{ feeSats: fee.feeSats },
+			WALLET_RPC_ERROR_REASONS.INVALID_TRANSFER_REQUEST,
 		);
 	}
 
-	const implementation = getLwkImplementation(account);
-	const lwk = await loadLwkWasm();
-
 	try {
-		const recipientAddress = new lwk.Address(params.recipientAddress);
-		validateRecipientNetwork(account, recipientAddress);
-		const amount = BigInt(params.amount);
-		let builder = new lwk.TxBuilder(implementation.network);
-
-		if (params.sendAll && rawAssetId === account.rawPolicyAssetId) {
-			builder = builder.drainLbtcWallet().drainLbtcTo(recipientAddress);
-		} else if (!recipientAddress.isBlinded()) {
-			builder = builder.addExplicitRecipient(
-				recipientAddress,
-				amount,
-				lwk.AssetId.fromString(rawAssetId),
-			);
-		} else if (rawAssetId === account.rawPolicyAssetId) {
-			builder = builder.addLbtcRecipient(recipientAddress, amount);
-		} else {
-			builder = builder.addRecipient(recipientAddress, amount, lwk.AssetId.fromString(rawAssetId));
-		}
-
-		const unsignedPset = builder.finish(implementation.wollet);
 		const signedPset = implementation.signer.sign(unsignedPset);
 		const finalizedPset = implementation.wollet.finalize(signedPset);
-		const { txid } = await getSyncWorkerClient().broadcast({
-			chain: account.chain,
-			psetBase64: finalizedPset.toString(),
-		});
+		const txid = await sentTransactions.broadcast(
+			account,
+			finalizedPset.extractTx().toString(),
+			note,
+		);
 
 		return { txid };
 	} catch (error) {
-		if (error instanceof WalletRpcInvalidParamsError) {
-			throw error;
-		}
+		if (error instanceof TransactionRefusedError) throw error;
 
 		const failure = new WalletRpcResourceUnavailableError(
-			"Could not build, sign, and broadcast the Liquid transfer.",
+			"Could not sign and broadcast the transfer.",
 			undefined,
 			WALLET_RPC_ERROR_REASONS.WALLET_TRANSFER_FAILED,
 		);
@@ -137,46 +144,91 @@ export async function estimateMaxSend(
 		};
 	}
 
-	const lwk = await loadLwkWasm();
+	const quote = await quoteTransfer(
+		account,
+		{ amount: "0", recipientAddress: params.recipientAddress, sendAll: true },
+		rawAssetId,
+		DEFAULT_FEE_RATE_SATS_PER_KVB,
+	);
+	const maxAmount = BigInt(quote.amount);
+
+	return { feeSats: quote.feeSats, maxAmount: (maxAmount > 0n ? maxAmount : 0n).toString() };
+}
+
+function buildTransfer(
+	lwk: LwkWasmModule,
+	account: LiquidWalletAccount,
+	params: ParsedLiquidSendTransferParams,
+	rawAssetId: string,
+	feeRateSatsPerKvb: number | undefined,
+): Pset {
+	const implementation = getLwkImplementation(account);
 
 	try {
 		const recipientAddress = new lwk.Address(params.recipientAddress);
 		validateRecipientNetwork(account, recipientAddress);
+		const amount = BigInt(params.amount);
+		let builder = new lwk.TxBuilder(implementation.network);
 
-		const pset = new lwk.TxBuilder(implementation.network)
-			.drainLbtcWallet()
-			.drainLbtcTo(recipientAddress)
-			.finish(implementation.wollet);
+		if (feeRateSatsPerKvb !== undefined) {
+			builder = builder.feeRate(feeRateSatsPerKvb);
+		}
 
-		const details = implementation.wollet.psetDetails(pset);
-		const balance = details.balance();
-		const fee = balance.feesIn(lwk.AssetId.fromString(account.rawPolicyAssetId));
+		if (isSendAll(account, params, rawAssetId)) {
+			const draining = builder.drainLbtcWallet();
 
-		balance.free();
-		details.free();
-		pset.free();
+			builder = recipientAddress.isBlinded()
+				? draining.drainLbtcTo(recipientAddress)
+				: draining.drainLbtcToExplicit(recipientAddress);
+		} else if (!recipientAddress.isBlinded()) {
+			builder = builder.addExplicitRecipient(
+				recipientAddress,
+				amount,
+				lwk.AssetId.fromString(rawAssetId),
+			);
+		} else if (rawAssetId === account.rawPolicyAssetId) {
+			builder = builder.addLbtcRecipient(recipientAddress, amount);
+		} else {
+			builder = builder.addRecipient(recipientAddress, amount, lwk.AssetId.fromString(rawAssetId));
+		}
 
-		const lbtcBalance = BigInt(
-			readWalletBalanceForAsset(implementation.wollet, account.chainId, account.rawPolicyAssetId),
-		);
-		const maxAmount = lbtcBalance > fee ? lbtcBalance - fee : 0n;
-
-		return { feeSats: fee.toString(), maxAmount: maxAmount.toString() };
+		return builder.finish(implementation.wollet);
 	} catch (error) {
 		if (error instanceof WalletRpcInvalidParamsError) {
 			throw error;
 		}
 
-		const failure = new WalletRpcResourceUnavailableError(
-			"Could not estimate the maximum sendable Liquid amount.",
-			undefined,
-			WALLET_RPC_ERROR_REASONS.WALLET_TRANSFER_FAILED,
-		);
+		const failure = String(error).includes("InsufficientFunds")
+			? new WalletRpcInvalidParamsError(
+					"Not enough funds to cover the amount and the network fee.",
+					undefined,
+					WALLET_RPC_ERROR_REASONS.INVALID_TRANSFER_REQUEST,
+				)
+			: new WalletRpcResourceUnavailableError(
+					"Could not build the transfer.",
+					undefined,
+					WALLET_RPC_ERROR_REASONS.WALLET_TRANSFER_FAILED,
+				);
 
 		failure.cause = error;
 
 		throw failure;
 	}
+}
+
+function feeOf(pset: Pset): bigint {
+	return pset
+		.outputs()
+		.filter((output) => output.scriptPubkey().bytes().length === 0)
+		.reduce((total, output) => total + (output.amount() ?? 0n), 0n);
+}
+
+function isSendAll(
+	account: LiquidWalletAccount,
+	params: ParsedLiquidSendTransferParams,
+	rawAssetId: string,
+): boolean {
+	return params.sendAll === true && rawAssetId === account.rawPolicyAssetId;
 }
 
 function validateRecipientNetwork(

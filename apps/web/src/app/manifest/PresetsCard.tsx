@@ -1,0 +1,121 @@
+import {
+	LIQUID_REGTEST_CHAIN_ID,
+	type LiquidProcessConfidentialTransactionParams,
+} from "@humid/appkit-injected-adapter";
+import { useCallback, useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useHumidContext } from "@/contexts/Web3Provider/HumidProvider";
+
+import type { Account, SentStep } from "./Preset";
+import { PRESETS } from "./presets";
+import { walletKeyOf } from "./walletKey";
+
+export function PresetsCard({
+	sent,
+	onPick,
+}: {
+	sent: Record<string, SentStep[]>;
+	onPick: (
+		request: LiquidProcessConfidentialTransactionParams,
+		origin: { action: string; preset: string },
+	) => void;
+}) {
+	const { chainId, isConnected, supportedChains, switchNetwork, wallet } = useHumidContext();
+	const network = supportedChains.find((chain) => chain.caipNetworkId === chainId)?.name ?? chainId;
+	const [account, setAccount] = useState<Account | null>(null);
+	const [problem, setProblem] = useState<string | null>(null);
+
+	const readAccount = useCallback(async () => {
+		try {
+			const [{ descriptors }, { address }] = await Promise.all([
+				wallet.getWalletDescriptor({
+					descriptorFormat: [{ format: "bip380-bip389-multipath" }],
+					descriptorType: "publicWalletDescriptor",
+				}),
+				wallet.getAddress({ index: 0 }),
+			]);
+
+			setAccount({
+				address,
+				key: walletKeyOf(descriptors[0]?.descriptor ?? ""),
+			});
+			setProblem(null);
+		} catch (error) {
+			setProblem(error instanceof Error ? error.message : String(error));
+		}
+	}, [wallet]);
+
+	useEffect(() => {
+		if (isConnected) void readAccount();
+	}, [chainId, isConnected, readAccount]);
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle>Presets</CardTitle>
+				<CardDescription>
+					Contract lifecycles from the tx-manifest fixtures, sent for real. Run them on Local
+					regtest, started with bun run regtest. Each step after the first spends what an earlier
+					step sent, so the steps unlock as they go out.
+				</CardDescription>
+			</CardHeader>
+			<CardContent className="flex flex-col gap-4">
+				<div className="flex flex-wrap items-center gap-3 text-sm">
+					<Button variant="outline" size="sm" onClick={readAccount}>
+						{account === null ? "Read the wallet key" : "Read the key again"}
+					</Button>
+					<span className="text-muted-foreground font-mono text-xs break-all">
+						{account?.key ??
+							"Every preset locks funds to this key, read from the wallet's public descriptor."}
+					</span>
+				</div>
+				{chainId !== LIQUID_REGTEST_CHAIN_ID && (
+					<div className="flex flex-wrap items-center gap-3 text-sm text-amber-600 dark:text-amber-500">
+						<span>The dapp is on {network}, so these would go out there.</span>
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => {
+								setAccount(null);
+								switchNetwork(LIQUID_REGTEST_CHAIN_ID);
+							}}
+						>
+							Use Local regtest
+						</Button>
+					</div>
+				)}
+				{problem !== null && <p className="text-destructive text-sm">{problem}</p>}
+
+				{PRESETS.map((preset) => (
+					<fieldset key={preset.name} aria-label={preset.name} className="flex flex-col gap-2">
+						<div>
+							<p className="font-mono text-sm font-semibold">{preset.name}</p>
+							<p className="text-muted-foreground text-xs">{preset.description}</p>
+						</div>
+						<div className="flex flex-wrap gap-2">
+							{preset.steps.map((step) => {
+								const request = account === null ? undefined : preset.request(step, account, sent);
+
+								return (
+									<Button
+										key={step.action}
+										variant="secondary"
+										size="sm"
+										disabled={request === undefined}
+										onClick={() =>
+											request && onPick(request, { action: step.action, preset: preset.name })
+										}
+									>
+										{step.action}
+									</Button>
+								);
+							})}
+						</div>
+					</fieldset>
+				))}
+			</CardContent>
+		</Card>
+	);
+}

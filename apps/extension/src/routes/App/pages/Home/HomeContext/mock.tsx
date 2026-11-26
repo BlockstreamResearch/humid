@@ -9,10 +9,10 @@ import {
 	LIQUID_MAINNET_CHAIN_ID,
 	LIQUID_TESTNET_CHAIN_ID,
 } from "@/core/chains/liquid/domain/LiquidChain";
-import UiPageBackgroundWrp from "@/ui/UiPageBackgroundWrp";
 
 import type { Portfolio } from "./hooks/usePortfolio";
 import { HomeContext } from "./index";
+import { MOCK_LBTC_ID, MOCK_USDT_ID } from "./mockAssets";
 
 const CHAINS: ChainRecord[] = [
 	{ chainGroupId: "liquid", id: LIQUID_MAINNET_CHAIN_ID, name: "Liquid", settings: {} },
@@ -50,16 +50,16 @@ const PORTFOLIO: Portfolio = {
 		{
 			amount: 245_000_000n,
 			decimals: 8,
-			id: "lbtc",
-			metadata: { isNative: true },
+			id: MOCK_LBTC_ID,
+			metadata: { isNative: true, issuerDomain: null, verified: true },
 			name: "Liquid Bitcoin",
 			symbol: "L-BTC",
 		},
 		{
 			amount: 42_210_000_000n,
 			decimals: 8,
-			id: "usdt",
-			metadata: { isNative: false },
+			id: MOCK_USDT_ID,
+			metadata: { isNative: false, issuerDomain: "tether.to", verified: true },
 			name: "Tether USD",
 			symbol: "USDt",
 		},
@@ -115,9 +115,7 @@ export function MockHomeProvider({ children }: PropsWithChildren) {
 
 	return (
 		<QueryClientProvider client={mockQueryClient}>
-			<HomeContext.Provider value={value}>
-				<UiPageBackgroundWrp>{children}</UiPageBackgroundWrp>
-			</HomeContext.Provider>
+			<HomeContext.Provider value={value}>{children}</HomeContext.Provider>
 		</QueryClientProvider>
 	);
 }

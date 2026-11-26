@@ -84,7 +84,7 @@ function HomeLoading() {
 function HomeError() {
 	return (
 		<div className="text-muted-foreground flex size-full items-center justify-center px-6 text-center text-sm">
-			Couldn&apos;t load your wallet. Reopen the extension and try again.
+			Couldn&apos;t load the wallet. Reopen the extension and try again.
 		</div>
 	);
 }

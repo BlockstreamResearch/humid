@@ -39,7 +39,7 @@ export function parseChainStoreState(value: unknown): ChainStoreState {
 	const parsed = chainStoreStateSchema.safeParse(value);
 
 	if (!parsed.success) {
-		throw new Error("Vault item does not match the HUMID chain store model.");
+		throw new Error("Wallet item does not match the Humid chain store model.");
 	}
 
 	return parsed.data as ChainStoreState;

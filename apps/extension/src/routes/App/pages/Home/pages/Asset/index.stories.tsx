@@ -7,8 +7,10 @@ import {
 	RouterProvider,
 } from "@tanstack/react-router";
 import { useState } from "react";
+import { expect, within } from "storybook/test";
 
 import { MockHomeProvider } from "../../HomeContext/mock";
+import { MOCK_LBTC_ID } from "../../HomeContext/mockAssets";
 import { AssetPage } from "./index";
 
 function createAssetStoryRouter() {
@@ -23,7 +25,7 @@ function createAssetStoryRouter() {
 
 	return createRouter({
 		routeTree: rootRoute.addChildren([appRoute.addChildren([homeRoute.addChildren([assetRoute])])]),
-		history: createMemoryHistory({ initialEntries: ["/app/asset/lbtc"] }),
+		history: createMemoryHistory({ initialEntries: [`/app/asset/${MOCK_LBTC_ID}`] }),
 	});
 }
 
@@ -48,4 +50,10 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
 	render: () => <AssetStory />,
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+
+		await expect(await canvas.findByText("+0.2413 L-BTC")).toBeVisible();
+		await expect(canvas.getByText("−0.03 L-BTC")).toBeVisible();
+	},
 };

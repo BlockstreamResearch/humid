@@ -1,4 +1,4 @@
-import { registerRPCService } from "@webext-pegasus/rpc";
+import { LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT } from "@humid/wallet-rpc";
 import {
 	definePegasusEventBus,
 	definePegasusMessageBus,
@@ -8,11 +8,10 @@ import { initPegasusTransport } from "@webext-pegasus/transport/background";
 
 import {
 	ConfirmationDecision,
+	ConfirmationOutcome,
 	ConfirmationRequest,
 	EventProtocolListeners,
 	ExtensionMessage,
-	getSelfIDService,
-	ISelfIDService,
 	MsgProtocolRequestMethods,
 	MsgProtocolResponseMethods,
 } from "@/helpers/background";
@@ -21,8 +20,9 @@ import { sleep } from "@/helpers/promise";
 export type PegasusMsgProtocolMap = {
 	[MsgProtocolRequestMethods.Request]: ExtensionMessage;
 	[MsgProtocolResponseMethods.RequestResponse]: ExtensionMessage<unknown>;
-	[MsgProtocolRequestMethods.RequestConfirmation]: { id: number; data: ConfirmationRequest };
-	[MsgProtocolResponseMethods.ConfirmResponse]: { id: number; data: ConfirmationDecision };
+	[MsgProtocolRequestMethods.RequestConfirmation]: { id: string; data: ConfirmationRequest };
+	[MsgProtocolResponseMethods.ConfirmResponse]: { id: string; data: ConfirmationDecision };
+	[MsgProtocolRequestMethods.ShowOutcome]: { id: string; data: ConfirmationOutcome };
 };
 
 export type WalletProviderEventPayload = { chainId?: string };
@@ -30,7 +30,7 @@ export type WalletProviderEventPayload = { chainId?: string };
 export type PegasusEventProtocolMap = {
 	[EventProtocolListeners.ExtensionEvent]: unknown;
 	accountsChanged: WalletProviderEventPayload;
-	bip122_walletDescriptorChanged: WalletProviderEventPayload;
+	[LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT]: WalletProviderEventPayload;
 	chainChanged: WalletProviderEventPayload;
 	connect: WalletProviderEventPayload;
 	disconnect: WalletProviderEventPayload;
@@ -55,15 +55,8 @@ export type RequestHandler = (
 
 export type RequestHandlerMap = Record<string, RequestHandler>;
 
-export type BackgroundRpcHandlers = {
-	injected: RequestHandlerMap;
-	popup: RequestHandlerMap;
-};
-
 export function setupBackgroundTransport(): BackgroundTransport {
 	initPegasusTransport();
-
-	registerRPCService<ISelfIDService>("getSelfID", getSelfIDService);
 
 	const eventBus = definePegasusEventBus<PegasusEventProtocolMap>();
 	const messageBus = definePegasusMessageBus<PegasusMsgProtocolMap>();
@@ -71,30 +64,22 @@ export function setupBackgroundTransport(): BackgroundTransport {
 	return { eventBus, messageBus };
 }
 
-export function registerBackgroundRpc(
+/** Serves the wallet's own pages. Dapps reach the wallet through the page port instead. */
+export function registerPopupRpc(
 	messageBus: BackgroundMessageBus,
-	handlers: BackgroundRpcHandlers,
+	handlers: RequestHandlerMap,
 ): void {
 	messageBus.onMessage(MsgProtocolRequestMethods.Request, async (message) => {
 		const sender = message.sender;
-		const responseDestination =
-			sender.context === "popup"
-				? "popup"
-				: sender.tabId === null
-					? null
-					: {
-							context: "window" as const,
-							tabId: sender.tabId,
-						};
 
-		if (!responseDestination) return;
+		if (sender.context !== "popup") return;
 
 		const sendResponse = (data: ExtensionMessage<unknown>) => {
-			messageBus.sendMessage(MsgProtocolResponseMethods.RequestResponse, data, responseDestination);
+			messageBus.sendMessage(MsgProtocolResponseMethods.RequestResponse, data, "popup");
 		};
 
 		const { method, id } = message.data;
-		const handler = resolveRequestHandler(sender, method, handlers);
+		const handler = handlers[method];
 
 		if (!handler) {
 			sendResponse({
@@ -158,7 +143,7 @@ export function registerBackgroundRpc(
 	});
 }
 
-function serializeError(error: unknown): unknown {
+export function serializeError(error: unknown): unknown {
 	if (error instanceof Error) {
 		const structured = error as Error & { code?: unknown; data?: unknown };
 
@@ -170,22 +155,6 @@ function serializeError(error: unknown): unknown {
 	}
 
 	return error;
-}
-
-function resolveRequestHandler(
-	sender: Endpoint,
-	method: string,
-	handlers: BackgroundRpcHandlers,
-): RequestHandler | undefined {
-	if (sender.context === "popup") {
-		return handlers.popup[method];
-	}
-
-	if (sender.context === "window") {
-		return handlers.injected[method];
-	}
-
-	return undefined;
 }
 
 function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {

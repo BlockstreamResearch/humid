@@ -11,13 +11,15 @@ import type { LiquidChainRecord } from "./chains/LiquidChainRecord";
 import type {
 	LiquidEstimateMaxSendResult,
 	LiquidSendTransferResult,
+	LiquidTransferFee,
+	LiquidTransferQuote,
 	LiquidTransferReview,
 } from "./domain/LiquidRpc";
 
 export type LiquidReceiveAddress = {
 	address: string;
 	index: number;
-	unconfidential: string;
+	explicit: string;
 };
 
 export type LiquidPortfolio = {
@@ -32,9 +34,14 @@ export type LiquidScanTarget = {
 
 export type LiquidPopupTransferInput = {
 	amount: string;
+	fee?: LiquidTransferFee;
 	rawAssetId?: string;
 	recipientAddress: string;
 	sendAll?: boolean;
+};
+
+export type LiquidPopupTransferReview = LiquidTransferReview & {
+	quotes: (LiquidTransferQuote & { targetBlocks: number })[];
 };
 
 export type LiquidPopupEstimateMaxSendInput = {
@@ -49,14 +56,14 @@ export type LiquidAccountRuntime = {
 	) => Promise<LiquidEstimateMaxSendResult>;
 	getActivity: (
 		input: ResolveLiquidWalletAccountInput,
-		rawAssetId: string,
+		rawAssetId: string | null,
 		cursor: string | null,
 	) => Promise<LiquidActivityPage>;
 	getReceiveAddress: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidReceiveAddress>;
 	inspectTransfer: (
 		input: ResolveLiquidWalletAccountInput,
 		transfer: LiquidPopupTransferInput,
-	) => Promise<LiquidTransferReview>;
+	) => Promise<LiquidPopupTransferReview>;
 	resolveAccountIdentifier: (input: ResolveLiquidWalletAccountInput) => Promise<string>;
 	resolveScanTarget: (input: ResolveLiquidWalletAccountInput) => Promise<LiquidScanTarget>;
 	scanPortfolio: (target: LiquidScanTarget) => Promise<LiquidPortfolio>;

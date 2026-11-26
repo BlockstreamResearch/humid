@@ -2,6 +2,7 @@ import {
 	type BuiltInLiquidChainId,
 	LIQUID_MAINNET_CHAIN_ID,
 	LIQUID_NAMESPACE,
+	LIQUID_REGTEST_CHAIN_ID,
 	LIQUID_TESTNET_CHAIN_ID,
 	type LiquidChainId,
 } from "../domain/LiquidChain";
@@ -20,16 +21,18 @@ const LIQUID_DEFAULT_BACKENDS = {
 		url: "https://waterfalls.liquidwebwallet.org/liquidtestnet/api",
 		waterfalls: true,
 	},
+	[LIQUID_REGTEST_CHAIN_ID]: { url: "http://127.0.0.1:3000" },
 } satisfies Record<BuiltInLiquidChainId, LiquidChainBackend>;
 
 const LIQUID_DEFAULT_EXPLORER_URLS = {
 	[LIQUID_MAINNET_CHAIN_ID]: "https://blockstream.info/liquid/",
 	[LIQUID_TESTNET_CHAIN_ID]: "https://blockstream.info/liquidtestnet/",
-} as const satisfies Record<BuiltInLiquidChainId, string>;
+} as const satisfies Partial<Record<BuiltInLiquidChainId, string>>;
 
 const LIQUID_BUILT_IN_NETWORKS = {
 	[LIQUID_MAINNET_CHAIN_ID]: LIQUID_NETWORK_KINDS.MAINNET,
 	[LIQUID_TESTNET_CHAIN_ID]: LIQUID_NETWORK_KINDS.TESTNET,
+	[LIQUID_REGTEST_CHAIN_ID]: LIQUID_NETWORK_KINDS.REGTEST,
 } as const satisfies Record<BuiltInLiquidChainId, LiquidNetworkKind>;
 
 export function createBuiltInLiquidChains(): readonly LiquidChainRecord[] {
@@ -41,6 +44,10 @@ export function createBuiltInLiquidChains(): readonly LiquidChainRecord[] {
 		createLiquidChainRecord({
 			id: LIQUID_TESTNET_CHAIN_ID,
 			name: "Liquid Testnet",
+		}),
+		createLiquidChainRecord({
+			id: LIQUID_REGTEST_CHAIN_ID,
+			name: "Local regtest",
 		}),
 	];
 }
@@ -54,7 +61,8 @@ export function createLiquidChainRecord(input: {
 	policyAsset?: string;
 }): LiquidChainRecord {
 	const explorerUrl =
-		input.explorerUrl ?? LIQUID_DEFAULT_EXPLORER_URLS[input.id as BuiltInLiquidChainId];
+		input.explorerUrl ??
+		(LIQUID_DEFAULT_EXPLORER_URLS as Partial<Record<string, string>>)[input.id];
 
 	const settings: LiquidChainSettings = {
 		network: input.network ?? createDefaultLiquidNetwork(input.id),
@@ -79,7 +87,7 @@ function createDefaultLiquidChainBackend(chainId: LiquidChainId): LiquidChainBac
 	const backend = LIQUID_DEFAULT_BACKENDS[chainId as BuiltInLiquidChainId];
 
 	if (!backend) {
-		throw new Error("Custom Liquid chains must provide backend settings.");
+		throw new Error("Custom networks need backend settings.");
 	}
 
 	return { ...backend };

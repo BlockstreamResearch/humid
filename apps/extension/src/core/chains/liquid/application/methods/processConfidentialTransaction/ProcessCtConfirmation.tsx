@@ -1,17 +1,42 @@
-import { describeOrigin, type Provenanced, type ShownConfirmation } from "@humid/tx-manifest";
+import type { ShownConfirmation, ShownFlowRow } from "@humid/tx-manifest";
+import { useState } from "react";
 
 import type { ConfirmationRenderer } from "@/common/Confirmation";
+import {
+	ConfirmationDetails,
+	count,
+	DetailsGroup,
+	DetailsRow,
+} from "@/common/Confirmation/ConfirmationDetails";
+import {
+	ConfirmationActions,
+	ConfirmationLayout,
+	signLabel,
+} from "@/common/Confirmation/ConfirmationLayout";
+import {
+	AmountRow,
+	ConfirmationNote,
+	ConfirmationSection,
+} from "@/common/Confirmation/ConfirmationParts";
+import { DEFAULT_TARGET_BLOCKS, FeeSpeedPicker } from "@/common/Confirmation/FeeSpeedPicker";
+import { ShownAsset } from "@/common/Confirmation/ShownAsset";
+import type { KnownAsset } from "@/core/chains/liquid/application/confirmationFacts";
+import { issuanceNote } from "@/core/chains/liquid/presentation/issuanceNote";
 import { UiButton } from "@/ui/UiButton/base";
 
 export const PROCESS_CT_CONFIRMATION_KIND = "liquid.processConfidentialTransaction";
 
 export type ProcessCtConfirmationData = {
+	assets: Record<string, KnownAsset>;
 	broadcast: boolean;
 	kind: typeof PROCESS_CT_CONFIRMATION_KIND;
-	shown: ShownConfirmation;
+	network: string;
+	speeds: { shown: ShownConfirmation; targetBlocks: number }[];
 };
 
-const ORIGINS = new Set(["chain", "computed", "dapp", "verified"]);
+const ROW_KINDS = new Set(["address", "change", "data", "program", "taproot", "wallet"]);
+
+const ORIGINS = new Set(["computed", "dapp", "verified"]);
 
 const UNSIGNED = /^\d+$/;
 const SIGNED = /^-?\d+$/;
@@ -40,17 +65,30 @@ export function isProcessCtConfirmationData(value: unknown): value is ProcessCtC
 		return false;
 	}
 
-	if (typeof value.broadcast !== "boolean") {
-		return false;
-	}
-
-	const shown = value.shown;
-
-	if (!isRecord(shown)) {
+	if (
+		typeof value.broadcast !== "boolean" ||
+		typeof value.network !== "string" ||
+		!isRecord(value.assets) ||
+		!Object.values(value.assets).every(
+			(known) =>
+				isRecord(known) && typeof known.ticker === "string" && typeof known.decimals === "number",
+		)
+	) {
 		return false;
 	}
 
 	return (
+		Array.isArray(value.speeds) &&
+		value.speeds.length > 0 &&
+		value.speeds.every(
+			(speed) => isRecord(speed) && typeof speed.targetBlocks === "number" && isShown(speed.shown),
+		)
+	);
+}
+
+function isShown(shown: unknown): boolean {
+	return (
+		isRecord(shown) &&
 		provenancedString(shown.account) &&
 		provenancedString(shown.action) &&
 		provenancedString(shown.protocol) &&
@@ -60,8 +98,21 @@ export function isProcessCtConfirmationData(value: unknown): value is ProcessCtC
 			shown.netEffect,
 			(row) => isRecord(row) && provenancedString(row.asset) && provenancedAmount(row.sats, SIGNED),
 		) &&
+		everyRow(shown.inputs, isFlowRow) &&
 		everyRow(
-			shown.covenants,
+			shown.issuances,
+			(row) =>
+				isRecord(row) &&
+				typeof row.index === "number" &&
+				(row.kind === "new" || row.kind === "reissue") &&
+				provenancedString(row.asset) &&
+				provenancedString(row.token) &&
+				provenancedAmount(row.sats, UNSIGNED) &&
+				provenancedAmount(row.tokenSats, UNSIGNED),
+		) &&
+		everyRow(shown.outputs, isFlowRow) &&
+		everyRow(
+			shown.programs,
 			(row) =>
 				isRecord(row) &&
 				provenancedString(row.address) &&
@@ -82,197 +133,248 @@ export function isProcessCtConfirmationData(value: unknown): value is ProcessCtC
 	);
 }
 
-function Shown({ label, value }: { label: string; value: Provenanced<string> }) {
+function isFlowRow(row: unknown): boolean {
 	return (
-		<div className="flex flex-col gap-1">
-			<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-				{label}
-			</span>
-			<span className="text-sm font-medium break-all">{value.value}</span>
-			<span className="text-muted-foreground text-xs">{describeOrigin(value.origin)}</span>
-		</div>
-	);
-}
-
-function amount(value: string): string {
-	const sats = BigInt(value);
-
-	return `${sats < 0n ? "−" : "+"}${decimal(sats)} L-BTC`;
-}
-
-export function feeLine(value: string): string {
-	return `${decimal(BigInt(value))} L-BTC`;
-}
-
-function decimal(sats: bigint): string {
-	const whole = (sats < 0n ? -sats : sats).toString().padStart(9, "0");
-
-	return `${whole.slice(0, -8)}.${whole.slice(-8)}`.replace(/\.?0+$/, "") || "0";
-}
-
-export function netEffectLine(
-	effect: { asset: string; sats: string },
-	feeAsset: string,
-): { asset?: string; shown: string } {
-	return effect.asset === feeAsset
-		? { shown: amount(effect.sats) }
-		: { asset: effect.asset, shown: units(effect.sats) };
-}
-
-function units(value: string): string {
-	const sats = BigInt(value);
-
-	return `${sats < 0n ? "−" : "+"}${(sats < 0n ? -sats : sats).toString()}`;
-}
-
-export function ProcessCtUnreadable({ onDecline }: { onDecline: () => void }) {
-	return (
-		<div className="bg-background text-foreground flex size-full flex-col">
-			<header className="p-4 pb-3 text-center">
-				<h2 className="cn-font-heading text-xl font-bold">This cannot be shown to you</h2>
-				<p className="text-muted-foreground mt-1 text-sm">
-					The wallet could not read what it was asked to put on this screen, so it will not ask you
-					to approve it. Nothing has been signed and nothing has been sent.
-				</p>
-			</header>
-
-			<div className="flex items-center gap-3 p-4 pt-3">
-				<UiButton type="button" variant="outline" className="flex-1" onClick={onDecline}>
-					Close
-				</UiButton>
-			</div>
-		</div>
+		isRecord(row) &&
+		ROW_KINDS.has(row.kind as string) &&
+		provenancedString(row.asset) &&
+		provenancedAmount(row.sats, UNSIGNED) &&
+		(row.name === undefined || provenancedString(row.name)) &&
+		(row.address === undefined || provenancedString(row.address)) &&
+		(row.outputKey === undefined || provenancedString(row.outputKey)) &&
+		(row.dataBytes === undefined || typeof row.dataBytes === "number")
 	);
 }
 
 export function ProcessCtConfirmation({
+	busy = false,
 	data,
+	origin,
 	onConfirm,
-	onDecline,
+	onReject,
 }: {
+	busy?: boolean;
 	data: ProcessCtConfirmationData;
-	onConfirm: () => void;
-	onDecline: () => void;
+	origin?: string;
+	onConfirm: (choice: { targetBlocks: number }) => void;
+	onReject: () => void;
 }) {
-	const { shown } = data;
+	const [targetBlocks, setTargetBlocks] = useState(DEFAULT_TARGET_BLOCKS);
+	const { shown } =
+		data.speeds.find((speed) => speed.targetBlocks === targetBlocks) ?? data.speeds.at(-1)!;
+	const assetOf = (id: string) => {
+		const known = data.assets[id];
+
+		return new ShownAsset(id, known?.ticker, known?.decimals);
+	};
+	const amountOf = ({ value }: { value: string }, asset: { value: string }) =>
+		assetOf(asset.value).amountWithLabel(BigInt(value));
 
 	return (
-		<div className="bg-background text-foreground flex size-full flex-col">
-			<header className="p-4 pb-3 text-center">
-				<h2 className="cn-font-heading text-xl font-bold">Perform a contract action?</h2>
-				<p className="text-muted-foreground mt-1 text-sm">
-					{data.broadcast
-						? "Nothing is signed until you agree, and what you agree to is what gets signed and sent."
-						: "Nothing is signed until you agree, and what you agree to is what gets signed. This one is handed back to the dapp rather than sent."}
-				</p>
-			</header>
-
-			<div className="flex-1 space-y-5 overflow-y-auto px-4">
-				{shown.netEffect.map((effect) => {
-					const line = netEffectLine(
-						{ asset: effect.asset.value, sats: effect.sats.value },
-						shown.feeAsset.value,
-					);
-
-					return (
-						<div className="flex flex-col gap-1" key={effect.asset.value}>
-							<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-								This wallet
-							</span>
-							<span className="text-lg font-semibold">{line.shown}</span>
-							{line.asset === undefined ? null : (
-								<span className="text-muted-foreground text-xs break-all">{line.asset}</span>
-							)}
-							<span className="text-muted-foreground text-xs">
-								{describeOrigin(effect.sats.origin)}
-							</span>
-						</div>
-					);
-				})}
-
-				<Shown
-					label="Network fee"
-					value={{ ...shown.feeSats, value: feeLine(shown.feeSats.value) } as Provenanced<string>}
+		<ConfirmationLayout
+			origin={origin}
+			network={data.network}
+			title={readable(shown.action.value)}
+			statement={shown.summary?.value}
+			statementByDapp={shown.summary === undefined ? undefined : "Described by the dapp"}
+			footer={
+				<ConfirmationActions
+					signer={`Signing with ${shown.account.value}`}
+					confirmLabel={signLabel(data.broadcast, busy)}
+					busy={busy}
+					onReject={onReject}
+					onConfirm={() => onConfirm({ targetBlocks })}
 				/>
-				<Shown label="Acting account" value={shown.account} />
-
-				{shown.blindedAmounts.map((blinded) => (
-					<div className="flex flex-col gap-1" key={blinded.id.value}>
-						<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-							Amount blinded onchain
-						</span>
-						<span className="text-sm font-medium break-all">{blinded.id.value}</span>
-						<span className="text-muted-foreground text-xs">
-							{describeOrigin(blinded.id.origin)}
-						</span>
-						<span className="text-sm">{blinded.decidedBy.value}</span>
-						<span className="text-muted-foreground text-xs">
-							{describeOrigin(blinded.decidedBy.origin)}
-						</span>
-					</div>
+			}
+		>
+			<ConfirmationSection title="Balance changes">
+				{shown.netEffect.map((effect) => (
+					<AmountRow
+						key={effect.asset.value}
+						asset={assetOf(effect.asset.value)}
+						units={BigInt(effect.sats.value)}
+					/>
 				))}
-
-				{shown.publishedAmounts.map((published) => (
-					<div className="flex flex-col gap-1" key={published.id.value}>
-						<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-							Amount published onchain
-						</span>
-						<span className="text-sm font-medium break-all">{published.id.value}</span>
-						<span className="text-muted-foreground text-xs">
-							{describeOrigin(published.id.origin)}
-						</span>
-						<span className="text-sm">{published.reason.value}</span>
-						<span className="text-muted-foreground text-xs">
-							{describeOrigin(published.reason.origin)}
-						</span>
-					</div>
-				))}
-
-				{shown.covenants.map((covenant) => (
-					<div className="flex flex-col gap-1" key={covenant.address.value}>
-						<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-							{covenant.verified.value ? "Contract, checked" : "Contract, not yet onchain"}
-						</span>
-						<span className="font-mono text-xs break-all">{covenant.address.value}</span>
-						<span className="text-muted-foreground text-xs">
-							{describeOrigin(covenant.address.origin)}
-						</span>
-						<span className="text-sm">{covenant.utxoType.value}</span>
-						<span className="text-muted-foreground text-xs">
-							{describeOrigin(covenant.utxoType.origin)}
-						</span>
-						{/* The address says where the funds sit and moves with the arguments and the
-						    network. These say what the contract is, so a person who has seen this
-						    contract before has something that does not change to recognise it by. */}
-						<span className="text-muted-foreground text-xs">Contract hash</span>
-						<span className="font-mono text-xs break-all">{covenant.cmr.value}</span>
-						<span className="text-muted-foreground text-xs">Leaf it is spent from</span>
-						<span className="font-mono text-xs break-all">{covenant.tapleafHash.value}</span>
-					</div>
-				))}
-
-				<Shown label="Protocol" value={shown.protocol} />
-				<Shown label="Action" value={shown.action} />
-				{shown.summary === undefined ? null : (
-					<Shown label="What the dapp says this does" value={shown.summary} />
+			</ConfirmationSection>
+			<FeeSpeedPicker
+				value={targetBlocks}
+				fees={data.speeds.map((speed) => ({
+					feeSats: speed.shown.feeSats.value,
+					targetBlocks: speed.targetBlocks,
+				}))}
+				onChange={setTargetBlocks}
+			/>
+			{shown.issuances.map((issuance) => (
+				<ConfirmationNote key={issuance.asset.value} tone="warning">
+					{issuanceNote(issuance.index + 1, {
+						minted: amountOf(issuance.sats, issuance.asset),
+						reissues: issuance.kind === "reissue",
+						tokens:
+							issuance.tokenSats.value === "0"
+								? undefined
+								: amountOf(issuance.tokenSats, issuance.token),
+					})}
+				</ConfirmationNote>
+			))}
+			{shown.publishedAmounts[0] !== undefined && (
+				<ConfirmationNote>{sentence(shown.publishedAmounts[0].reason.value)}</ConfirmationNote>
+			)}
+			{!data.broadcast && (
+				<ConfirmationNote>
+					The wallet signs the transaction and hands the result back to the dapp to send.
+				</ConfirmationNote>
+			)}
+			<ConfirmationDetails
+				summary={`${count(shown.inputs.length, "input")} · ${count(shown.outputs.length, "output")}`}
+			>
+				<DetailsGroup title="Inputs">
+					{shown.inputs.map((row, at) => (
+						<FlowDetailsRow key={at} index={at + 1} row={row} assetOf={assetOf} />
+					))}
+				</DetailsGroup>
+				<DetailsGroup title="Outputs">
+					{shown.outputs.map((row, at) => (
+						<FlowDetailsRow key={at} index={at + 1} row={row} assetOf={assetOf} />
+					))}
+				</DetailsGroup>
+				{shown.programs.length > 0 && (
+					<DetailsGroup title="Contracts">
+						{shown.programs.map((program) => (
+							<DetailsRow
+								key={program.address.value}
+								label={readable(program.utxoType.value)}
+								note={program.cmr.value}
+								value={program.verified.value ? "On-chain" : "New"}
+							/>
+						))}
+					</DetailsGroup>
 				)}
-			</div>
-
-			<div className="flex items-center gap-3 p-4 pt-3">
-				<UiButton type="button" variant="outline" className="flex-1" onClick={onDecline}>
-					Decline
-				</UiButton>
-				<UiButton type="button" className="flex-1" onClick={onConfirm}>
-					{data.broadcast ? "Sign and send" : "Sign"}
-				</UiButton>
-			</div>
-		</div>
+			</ConfirmationDetails>
+		</ConfirmationLayout>
 	);
+}
+
+function FlowDetailsRow({
+	index,
+	row,
+	assetOf,
+}: {
+	index: number;
+	row: ShownFlowRow;
+	assetOf: (id: string) => ShownAsset;
+}) {
+	const amount = assetOf(row.asset.value).amountWithLabel(BigInt(row.sats.value));
+
+	switch (row.kind) {
+		case "wallet": {
+			return <DetailsRow index={index} label="This account" value={amount} />;
+		}
+
+		case "change": {
+			return <DetailsRow index={index} label="This account, change" value={amount} />;
+		}
+
+		case "taproot": {
+			return (
+				<DetailsRow
+					address={row.outputKey?.value}
+					addressByDapp
+					index={index}
+					label="Taproot output"
+					value={amount}
+				/>
+			);
+		}
+
+		case "data": {
+			return (
+				<DetailsRow
+					index={index}
+					label={readable(row.name?.value ?? "Data")}
+					note="Provided by the dapp"
+					noteByDapp
+					value={`${row.dataBytes ?? 0} bytes`}
+				/>
+			);
+		}
+
+		// The dapp names its outputs, so a payment elsewhere gets a label only the wallet writes.
+		case "address": {
+			return (
+				<DetailsRow
+					address={row.address?.value}
+					addressByDapp={row.address?.origin === "dapp"}
+					index={index}
+					label="Not this account"
+					note={row.name === undefined ? undefined : `dapp: ${readable(row.name.value)}`}
+					noteByDapp
+					value={amount}
+				/>
+			);
+		}
+
+		default: {
+			return (
+				<DetailsRow
+					address={row.address?.value}
+					addressByDapp={row.address?.origin === "dapp"}
+					index={index}
+					label={readable(row.name?.value ?? "")}
+					value={amount}
+				/>
+			);
+		}
+	}
+}
+
+export function ProcessCtUnreadable({
+	origin,
+	network,
+	onClose,
+}: {
+	origin?: string;
+	network?: string;
+	onClose: () => void;
+}) {
+	return (
+		<ConfirmationLayout
+			origin={origin}
+			network={network}
+			title="This request can't be shown"
+			statement="The wallet could not read what the dapp asked for, so nothing was signed or sent."
+			footer={
+				<UiButton type="button" variant="outline" className="h-11" onClick={onClose}>
+					Close
+				</UiButton>
+			}
+		/>
+	);
+}
+
+function sentence(clause: string): string {
+	return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.`;
+}
+
+// Terms written as they are, separators included.
+const KEPT_TERM = /(op_return)/i;
+
+export function readable(name: string): string {
+	const words = name
+		.replaceAll(/([a-z0-9])([A-Z])/g, "$1 $2")
+		.split(KEPT_TERM)
+		.map((part) => (KEPT_TERM.test(part) ? part : part.replaceAll(/[_-]+/g, " ")))
+		.join("")
+		.trim()
+		.toLowerCase();
+
+	return KEPT_TERM.test(words.split(" ")[0] ?? "")
+		? words
+		: words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export const processCtConfirmationRenderer: ConfirmationRenderer = {
 	kind: PROCESS_CT_CONFIRMATION_KIND,
-	render: ({ onConfirm, onDecline, request }) => {
+	render: ({ busy, onConfirm, onDecline, request }) => {
 		const data: unknown = request.data;
 
 		if (!isRecord(data) || data.kind !== PROCESS_CT_CONFIRMATION_KIND) {
@@ -280,9 +382,19 @@ export const processCtConfirmationRenderer: ConfirmationRenderer = {
 		}
 
 		return isProcessCtConfirmationData(data) ? (
-			<ProcessCtConfirmation data={data} onConfirm={() => onConfirm()} onDecline={onDecline} />
+			<ProcessCtConfirmation
+				busy={busy}
+				data={data}
+				origin={request.requester?.origin}
+				onConfirm={onConfirm}
+				onReject={onDecline}
+			/>
 		) : (
-			<ProcessCtUnreadable onDecline={onDecline} />
+			<ProcessCtUnreadable
+				origin={request.requester?.origin}
+				network={typeof data.network === "string" ? data.network : undefined}
+				onClose={onDecline}
+			/>
 		);
 	},
 };

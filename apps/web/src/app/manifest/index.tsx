@@ -1,5 +1,8 @@
-import type { LiquidProcessConfidentialTransactionParams } from "@humid/appkit-injected-adapter";
-import { parseLiquidProcessCtParams, type ParsedLiquidProcessCtParams } from "@humid/tx-manifest";
+import type {
+	LiquidProcessConfidentialTransactionParams,
+	LiquidProcessConfidentialTransactionResult,
+} from "@humid/appkit-injected-adapter";
+import { parseActionRequest, type ActionRequest } from "@humid/tx-manifest";
 import { useMemo, useState } from "react";
 
 import { ResultPanel } from "@/app/dashboard/components/ResultPanel";
@@ -11,19 +14,24 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useHumidContext } from "@/contexts/Web3Provider/HumidProvider";
 
+import type { SentStep } from "./Preset";
+import { PresetsCard } from "./PresetsCard";
+
 type ReadRequest =
 	| { kind: "empty" }
 	| { kind: "invalid"; problems: string[] }
 	| {
 			kind: "ready";
 			raw: LiquidProcessConfidentialTransactionParams;
-			request: ParsedLiquidProcessCtParams;
+			request: ActionRequest;
 	  };
 
 export default function ManifestRunner() {
 	const [text, setText] = useState("");
 	const [fileName, setFileName] = useState<string | null>(null);
 	const [revision, setRevision] = useState(0);
+	const [origin, setOrigin] = useState<{ action: string; preset: string } | null>(null);
+	const [sent, setSent] = useState<Record<string, SentStep[]>>({});
 
 	const read = useMemo(() => readRequest(text), [text]);
 	const name = fileName ?? "Pasted request";
@@ -34,15 +42,39 @@ export default function ManifestRunner() {
 		setRevision((count) => count + 1);
 	};
 
+	const record = (result: LiquidProcessConfidentialTransactionResult, request: ActionRequest) => {
+		if (origin === null || !result.broadcast) return;
+
+		const step = {
+			action: origin.action,
+			deployment: result.deployment,
+			issuances: result.issuances,
+			spent: request.state?.utxos?.map(({ txid, vout }) => `${txid}:${vout}`),
+			txid: result.txid,
+		};
+
+		setSent((current) => ({
+			...current,
+			[origin.preset]: [...(current[origin.preset] ?? []), step],
+		}));
+	};
+
 	return (
 		<div className="mx-auto flex min-h-svh w-full max-w-4xl flex-col gap-6 p-4 md:p-6">
+			<PresetsCard
+				sent={sent}
+				onPick={(request, picked) => {
+					replace(JSON.stringify(request, null, "\t"), `${picked.preset} · ${picked.action}`);
+					setOrigin(picked);
+				}}
+			/>
 			<Card>
 				<CardHeader>
 					<CardTitle>Process a confidential transaction</CardTitle>
 					<CardDescription>
 						Select a JSON file or paste JSON holding a processConfidentialTransaction request —
 						action, manifest, contractSources, and optionally params, state, instance and broadcast.
-						It is sent to the HUMID extension as-is, and the wallet asks for confirmation before
+						It is sent to the Humid extension as-is, and the wallet asks for confirmation before
 						anything is signed.
 					</CardDescription>
 				</CardHeader>
@@ -65,6 +97,7 @@ export default function ManifestRunner() {
 								}
 
 								replace(await file.text(), file.name);
+								setOrigin(null);
 							}}
 						/>
 					</div>
@@ -85,7 +118,10 @@ export default function ManifestRunner() {
 						<Button
 							variant="ghost"
 							size="sm"
-							onClick={() => replace("", null)}
+							onClick={() => {
+								replace("", null);
+								setOrigin(null);
+							}}
 							disabled={text === ""}
 						>
 							Clear
@@ -112,7 +148,13 @@ export default function ManifestRunner() {
 
 			{read.kind === "ready" && (
 				// Keyed per change so an edited or new request never shows the previous result.
-				<RequestCard key={revision} name={name} raw={read.raw} request={read.request} />
+				<RequestCard
+					key={revision}
+					name={name}
+					raw={read.raw}
+					request={read.request}
+					onSent={(result) => record(result, read.request)}
+				/>
 			)}
 		</div>
 	);
@@ -122,10 +164,12 @@ function RequestCard({
 	name,
 	raw,
 	request,
+	onSent,
 }: {
 	name: string;
 	raw: LiquidProcessConfidentialTransactionParams;
-	request: ParsedLiquidProcessCtParams;
+	request: ActionRequest;
+	onSent: (result: LiquidProcessConfidentialTransactionResult) => void;
 }) {
 	const { connect, hasProvider, isConnected, wallet } = useHumidContext();
 	const { call, pending, result } = useRpcCall();
@@ -170,13 +214,21 @@ function RequestCard({
 
 				{!hasProvider ? (
 					<p className="text-sm text-amber-600 dark:text-amber-500">
-						window.humid is not present on this page. Load the HUMID extension, then reload this
+						window.humid is not present on this page. Load the Humid extension, then reload this
 						tab.
 					</p>
 				) : (
 					<div className="flex flex-wrap gap-2">
 						<Button
-							onClick={() => call(() => wallet.processConfidentialTransaction(raw))}
+							onClick={() =>
+								call(async () => {
+									const result = await wallet.processConfidentialTransaction(raw);
+
+									onSent(result);
+
+									return result;
+								})
+							}
 							disabled={pending}
 						>
 							{pending ? "Waiting for the wallet…" : "Send to wallet"}
@@ -211,7 +263,7 @@ function readRequest(text: string): ReadRequest {
 		};
 	}
 
-	const parsed = parseLiquidProcessCtParams(value);
+	const parsed = parseActionRequest(value);
 
 	if (!parsed.ok) {
 		const { fieldErrors, formErrors } = parsed.malformed.details;

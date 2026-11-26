@@ -5,7 +5,7 @@ import type { KeyManagerState } from "@/core/key-manager/types";
 import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
-import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
+import { type LiquidChainRecord, liquidChainLabel } from "../../../chains/LiquidChainRecord";
 import {
 	type LiquidSignIdentityResult,
 	type ParsedLiquidSignIdentityParams,
@@ -13,6 +13,10 @@ import {
 import { parseLiquidSignIdentityParams } from "../../../domain/identity/validation";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import type { LiquidIdentityBackend } from "../../backends/LiquidIdentityBackend";
+import {
+	SIGN_IDENTITY_CONFIRMATION_KIND,
+	type SignIdentityConfirmationData,
+} from "./SignIdentityConfirmation";
 
 export type LiquidSignIdentityContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
@@ -29,24 +33,15 @@ export const signLiquidIdentity = createWalletMethod<
 	confirmation: ({ context, params }) => ({
 		confirmLabel: "Sign",
 		data: {
-			chainId: context.chain.id,
 			challenge: params.challenge,
-			challengeFingerprint: fingerprintChallenge(params.challenge),
-			curve: params.curve,
+			fingerprint: bytesToHex(sha256(hexToBytes(params.challenge))).slice(0, 16),
 			identity: params.identity,
 			index: params.index,
-			kind: "liquid.signIdentity",
-		},
-		message: [
-			"A dapp wants to sign an identity challenge to authenticate or prove control of this identity.",
-			`Network: ${context.chain.id}\nIdentity: ${params.identity}\nIdentity index: ${params.index}\nCurve: ${params.curve}`,
-			`Challenge (hex): ${params.challenge}`,
-			readableChallenge(params.challenge),
-			`Challenge fingerprint (SHA-256 prefix): ${fingerprintChallenge(params.challenge)}`,
-		]
-			.filter(Boolean)
-			.join("\n\n"),
-		title: "Sign Liquid identity challenge?",
+			kind: SIGN_IDENTITY_CONFIRMATION_KIND,
+			network: liquidChainLabel(context.chain),
+			text: readableText(params.challenge),
+		} satisfies SignIdentityConfirmationData,
+		title: "Prove an identity?",
 	}),
 	execute: ({ context, params }) =>
 		context.identityBackend.signIdentity({
@@ -58,19 +53,15 @@ export const signLiquidIdentity = createWalletMethod<
 	review: () => null,
 });
 
-function fingerprintChallenge(challengeHex: string): string {
-	return bytesToHex(sha256(hexToBytes(challengeHex))).slice(0, 32);
-}
-
-function readableChallenge(challenge: string): string {
+function readableText(challenge: string): string | undefined {
 	try {
 		const text = new TextDecoder("utf-8", { fatal: true }).decode(hexToBytes(challenge));
 		for (const character of text) {
 			const code = character.charCodeAt(0);
-			if ((code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127) return "";
+			if ((code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127) return undefined;
 		}
-		return `Challenge (UTF-8):\n${text}`;
+		return text;
 	} catch {
-		return "";
+		return undefined;
 	}
 }

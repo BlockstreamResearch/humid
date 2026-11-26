@@ -1,0 +1,345 @@
+{
+	"manifest_version": "0.3.1",
+	"protocol": "multiasset-test",
+	"description": "A two-asset protocol, for exercising per-asset funding, issuance and blinding. Not a published document: it is the smallest thing that states each of those at once.",
+	"chain": "liquid",
+	"requires": [
+		"simplicity"
+	],
+	"utxo_types": {
+		"p2pk_output": {
+			"description": "A Liquid UTXO locked to PUBKEY via the compiled p2pk.simf program.",
+			"script": {
+				"type": "simplicity",
+				"source": "./p2pk.simf"
+			},
+			"asset": "lbtc"
+		}
+	},
+	"actions": {
+		"PayToken": {
+			"description": "Pays a token to a covenant and returns the token's surplus to the wallet.",
+			"params": {
+				"pubkey": {
+					"type": "pubkey",
+					"description": "The spender's x-only key."
+				},
+				"token": {
+					"type": "liquid.asset_id",
+					"description": "The asset being paid."
+				},
+				"amount_sat": {
+					"type": "u64",
+					"description": "How much of that asset."
+				},
+				"fee_sat": {
+					"type": "u64",
+					"description": "What the covenant is paid in money."
+				}
+			},
+			"inputs": [
+				{
+					"id": "token_in",
+					"utxo_source": "wallet",
+					"asset": "params.token"
+				}
+			],
+			"outputs": [
+				{
+					"id": "token_out",
+					"destination": "wallet",
+					"amount_sat": "params.amount_sat",
+					"asset": "params.token",
+					"confidential": false
+				},
+				{
+					"id": "p2pk_out",
+					"destination": {
+						"utxo_type": "p2pk_output",
+						"compile_params": {
+							"PUB_KEY": "params.pubkey"
+						}
+					},
+					"amount_sat": "params.fee_sat",
+					"asset": "lbtc"
+				},
+				{
+					"id": "token_change",
+					"destination": "change",
+					"asset": "params.token"
+				},
+				{
+					"id": "change_out",
+					"destination": "change",
+					"asset": "lbtc"
+				}
+			]
+		},
+		"Mint": {
+			"description": "Creates a new asset and pays every unit of it to the wallet.",
+			"params": {
+				"pubkey": {
+					"type": "pubkey",
+					"description": "The spender's x-only key."
+				},
+				"supply": {
+					"type": "u64",
+					"description": "How many units to create."
+				}
+			},
+			"inputs": [
+				{
+					"id": "mint_in",
+					"utxo_source": "wallet",
+					"asset": "lbtc",
+					"issuance": {
+						"kind": "new",
+						"asset_amount_sat": "params.supply"
+					}
+				}
+			],
+			"outputs": [
+				{
+					"id": "minted_out",
+					"destination": "wallet",
+					"amount_sat": "params.supply",
+					"asset": "mint_in.issued_asset",
+					"confidential": false
+				},
+				{
+					"id": "change_out",
+					"destination": "change",
+					"asset": "lbtc"
+				}
+			]
+		},
+		"MintReissuable": {
+			"description": "Creates a new asset with one reissuance token, keeping the token blinded so it can reissue.",
+			"params": {
+				"supply": {
+					"type": "u64",
+					"description": "How many units to create."
+				}
+			},
+			"inputs": [
+				{
+					"id": "mint_in",
+					"utxo_source": "wallet",
+					"asset": "lbtc",
+					"issuance": {
+						"kind": "new",
+						"asset_amount_sat": "params.supply",
+						"inflation_amount_sat": 1
+					}
+				}
+			],
+			"outputs": [
+				{
+					"id": "minted_out",
+					"destination": "wallet",
+					"amount_sat": "params.supply",
+					"asset": "mint_in.issued_asset",
+					"confidential": false
+				},
+				{
+					"id": "token_out",
+					"destination": "wallet",
+					"amount_sat": 1,
+					"asset": "mint_in.reissuance_token",
+					"confidential": true
+				},
+				{
+					"id": "change_out",
+					"destination": "change",
+					"asset": "lbtc"
+				}
+			]
+		},
+		"Reissue": {
+			"description": "Mints more of an asset by spending its reissuance token, and keeps the token.",
+			"params": {
+				"entropy": {
+					"type": "bytes32",
+					"description": "The issuance entropy the first mint left."
+				},
+				"issued": {
+					"type": "liquid.asset_id",
+					"description": "The asset the entropy derives."
+				},
+				"token": {
+					"type": "liquid.asset_id",
+					"description": "The asset's reissuance token."
+				},
+				"supply": {
+					"type": "u64",
+					"description": "How many more units to create."
+				}
+			},
+			"inputs": [
+				{
+					"id": "token_in",
+					"utxo_source": "wallet",
+					"asset": "params.token",
+					"issuance": {
+						"kind": "reissue",
+						"asset_amount_sat": "params.supply",
+						"entropy": "params.entropy",
+						"issued_asset": "params.issued"
+					}
+				}
+			],
+			"outputs": [
+				{
+					"id": "minted_out",
+					"destination": "wallet",
+					"amount_sat": "params.supply",
+					"asset": "token_in.issued_asset",
+					"confidential": false
+				},
+				{
+					"id": "token_back",
+					"destination": "wallet",
+					"amount_sat": 1,
+					"asset": "params.token",
+					"confidential": true
+				},
+				{
+					"id": "change_out",
+					"destination": "change",
+					"asset": "lbtc"
+				}
+			]
+		},
+		"LockToken": {
+			"description": "Locks a blinded reissuance token in a p2pk program, with blinding factors a later reissuance can state.",
+			"params": {
+				"pubkey": {
+					"type": "pubkey",
+					"description": "The key the program checks."
+				},
+				"token": {
+					"type": "liquid.asset_id",
+					"description": "The reissuance token to lock."
+				}
+			},
+			"inputs": [
+				{
+					"id": "token_in",
+					"utxo_source": "wallet",
+					"asset": "params.token"
+				}
+			],
+			"outputs": [
+				{
+					"id": "locked_out",
+					"destination": {
+						"utxo_type": "p2pk_output",
+						"compile_params": {
+							"PUB_KEY": "params.pubkey"
+						}
+					},
+					"asset": "params.token",
+					"amount_sat": 1,
+					"confidential": true,
+					"blinding": {
+						"asset_bf": "1",
+						"value_bf": "1"
+					}
+				},
+				{
+					"id": "change_out",
+					"destination": "change",
+					"asset": "lbtc"
+				}
+			]
+		},
+		"ReissueFromProgram": {
+			"description": "Mints more of an asset from the reissuance token a p2pk program holds, and locks the token back with advanced factors.",
+			"params": {
+				"pubkey": {
+					"type": "pubkey",
+					"description": "The key the program checks."
+				},
+				"token": {
+					"type": "liquid.asset_id",
+					"description": "The reissuance token the program holds."
+				},
+				"entropy": {
+					"type": "bytes32",
+					"description": "The issuance entropy the first mint left."
+				},
+				"issued": {
+					"type": "liquid.asset_id",
+					"description": "The asset the entropy derives."
+				},
+				"supply": {
+					"type": "u64",
+					"description": "How many more units to create."
+				}
+			},
+			"inputs": [
+				{
+					"id": "token_in",
+					"utxo_source": {
+						"utxo_type": "p2pk_output",
+						"compile_params": {
+							"PUB_KEY": "params.pubkey"
+						}
+					},
+					"asset": "params.token",
+					"amount_sat": 1,
+					"blinding": {
+						"asset_bf": "1",
+						"value_bf": "1"
+					},
+					"issuance": {
+						"kind": "reissue",
+						"asset_amount_sat": "params.supply",
+						"entropy": "params.entropy",
+						"issued_asset": "params.issued"
+					},
+					"witnesses": {
+						"SIGNATURE": {
+							"type": "Signature",
+							"sig_type": "sig_hash_all",
+							"source": {
+								"type": "wallet",
+								"key": "params.pubkey"
+							}
+						}
+					}
+				}
+			],
+			"outputs": [
+				{
+					"id": "minted_out",
+					"destination": "wallet",
+					"asset": "token_in.issued_asset",
+					"amount_sat": "params.supply",
+					"confidential": false
+				},
+				{
+					"id": "token_back",
+					"destination": {
+						"utxo_type": "p2pk_output",
+						"compile_params": {
+							"PUB_KEY": "params.pubkey"
+						}
+					},
+					"asset": "params.token",
+					"amount_sat": 1,
+					"confidential": true,
+					"blinding": {
+						"asset_bf": "2",
+						"value_bf": "2"
+					}
+				},
+				{
+					"id": "change_out",
+					"destination": "change",
+					"asset": "lbtc"
+				}
+			]
+		}
+	}
+}

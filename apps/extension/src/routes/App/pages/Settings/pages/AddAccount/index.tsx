@@ -18,7 +18,10 @@ export function SettingsAddAccountPage() {
 	return (
 		<AddAccountView
 			accountTypeLabel="Liquid"
-			error={errorMessage(createAccount.error ?? importAccount.error)}
+			errors={{
+				create: errorMessage(createAccount.error),
+				import: errorMessage(importAccount.error),
+			}}
 			isSubmitting={createAccount.isPending || importAccount.isPending}
 			onCreate={(input) => createAccount.mutate(input, { onSuccess: goToSettings })}
 			onImport={(input) => importAccount.mutate(input, { onSuccess: goToSettings })}

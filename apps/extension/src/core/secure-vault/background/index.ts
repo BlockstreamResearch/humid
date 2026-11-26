@@ -1,14 +1,15 @@
 import browser from "webextension-polyfill";
 
-import type {
-	SecureVaultCreateInput,
-	SecureVaultStatus,
-	SecureVaultStorage,
-	SecureVaultUnlockInput,
+import { base64ToBytes, bytesToBase64 } from "@/helpers/base64";
+
+import {
+	MIN_PASSPHRASE_LENGTH,
+	type SecureVaultCreateInput,
+	type SecureVaultStatus,
+	type SecureVaultStorage,
+	type SecureVaultUnlockInput,
 } from "../types";
 import {
-	base64ToBytes,
-	bytesToBase64,
 	deriveVaultWrappingKey,
 	exportVaultDataKey,
 	generateVaultDataKey,
@@ -36,10 +37,14 @@ import {
 const MAX_UNLOCK_ATTEMPTS = 5;
 const UNLOCK_COOLDOWN_MS = 30_000;
 
+// Failures outlive the service worker, so restarting the extension never resets the count.
+const UNLOCK_THROTTLE_STORAGE_KEY = "secure-vault:unlock-throttle";
+
+type UnlockThrottle = { failed: number; pausedUntil: number };
+
 let unlockedStorage: SecureVaultStorage | null = null;
 let unlockedMetaRecord: SecureVaultMetaRecord | null = null;
-let failedUnlockAttempts = 0;
-let unlockPausedUntil = 0;
+let passphraseChecks: Promise<unknown> = Promise.resolve();
 
 const SESSION_DATA_KEY_STORAGE_KEY = "secure-vault:session-data-key";
 
@@ -101,11 +106,16 @@ export async function initializeSecureVaultStorage(): Promise<SecureVaultStatus>
 }
 
 export async function createSecureVault(input: SecureVaultCreateInput): Promise<SecureVaultStatus> {
-	const passphrase = requireNonEmpty(input.passphrase, "Missing passphrase");
+	const { passphrase } = input;
+
+	if (passphrase.length < MIN_PASSPHRASE_LENGTH) {
+		throw new Error(`The password must be at least ${MIN_PASSPHRASE_LENGTH} characters.`);
+	}
+
 	const existingRecord = await readSecureVaultMetaRecord();
 
 	if (existingRecord) {
-		throw new Error("Vault already exists. Reset it before creating a new one.");
+		throw new Error("A wallet already exists. Reset it before creating a new one.");
 	}
 
 	const now = Date.now();
@@ -144,57 +154,23 @@ export async function createSecureVault(input: SecureVaultCreateInput): Promise<
 	await writeSecureVaultMetaRecord(record);
 	applyUnlockedSecureVault(record, dataKey);
 	await persistSessionDataKey(await exportVaultDataKey(dataKey));
-	resetUnlockAttempts();
+	await resetUnlockAttempts();
 
 	return toSecureVaultStatus(record);
 }
 
 export async function unlockSecureVault(input: SecureVaultUnlockInput): Promise<SecureVaultStatus> {
-	const passphrase = requireNonEmpty(input.passphrase, "Missing passphrase");
-	const record = await requireSecureVaultMetaRecord();
-	const pausedMs = unlockPausedUntil - Date.now();
+	const { dataKey, rawDataKey, record } = await checkPassphrase(input.passphrase);
 
-	if (pausedMs > 0) {
-		throw new Error(`Too many incorrect attempts. Try again in ${formatSeconds(pausedMs)}.`);
-	}
+	applyUnlockedSecureVault(record, dataKey);
+	await persistSessionDataKey(rawDataKey);
 
-	const wrappingKey = await deriveVaultWrappingKey({
-		iterations: record.kdf.iterations,
-		passphrase,
-		salt: base64ToBytes(record.kdf.salt),
-	});
+	return toSecureVaultStatus(record);
+}
 
-	try {
-		const { dataKey, rawDataKey } = await unwrapVaultDataKey({
-			additionalData: toWrappedDataKeyAdditionalData(),
-			ciphertext: base64ToBytes(record.wrappedDataKey.ciphertext),
-			iv: base64ToBytes(record.wrappedDataKey.iv),
-			wrappingKey,
-		});
-
-		applyUnlockedSecureVault(record, dataKey);
-		await persistSessionDataKey(rawDataKey);
-		resetUnlockAttempts();
-
-		return toSecureVaultStatus(record);
-	} catch {
-		failedUnlockAttempts += 1;
-
-		const attemptsRemaining = Math.max(0, MAX_UNLOCK_ATTEMPTS - failedUnlockAttempts);
-
-		if (attemptsRemaining === 0) {
-			unlockPausedUntil = Date.now() + UNLOCK_COOLDOWN_MS;
-			throw new Error(
-				`Too many incorrect attempts. Try again in ${formatSeconds(UNLOCK_COOLDOWN_MS)}.`,
-			);
-		}
-
-		throw new Error(
-			`Password did not unlock this vault. ${attemptsRemaining} ${
-				attemptsRemaining === 1 ? "attempt" : "attempts"
-			} remaining.`,
-		);
-	}
+/** Proves the password before a sensitive action, counting toward the same throttle as unlocking. */
+export async function verifySecureVaultPassphrase(passphrase: string): Promise<void> {
+	await checkPassphrase(passphrase);
 }
 
 export async function lockSecureVault(): Promise<SecureVaultStatus> {
@@ -205,7 +181,7 @@ export async function lockSecureVault(): Promise<SecureVaultStatus> {
 
 export async function resetSecureVault(): Promise<SecureVaultStatus> {
 	await clearUnlockedSecureVault();
-	resetUnlockAttempts();
+	await resetUnlockAttempts();
 	await removeSecureVaultRecords();
 
 	return getSecureVaultStatus();
@@ -226,7 +202,7 @@ export async function getSecureVaultStatus(): Promise<SecureVaultStatus> {
 
 export function getUnlockedSecureVaultStorage(): SecureVaultStorage {
 	if (!unlockedStorage) {
-		throw new Error("Vault is locked");
+		throw new Error("Wallet is locked");
 	}
 
 	return unlockedStorage;
@@ -276,7 +252,7 @@ async function requireSecureVaultMetaRecord(): Promise<SecureVaultMetaRecord> {
 	const record = await readSecureVaultMetaRecord();
 
 	if (!record) {
-		throw new Error("Vault was not created");
+		throw new Error("Wallet was not created");
 	}
 
 	return record;
@@ -291,17 +267,74 @@ function toSecureVaultStatus(record: SecureVaultMetaRecord): SecureVaultStatus {
 	};
 }
 
-function requireNonEmpty(value: string, message: string): string {
-	if (!value) {
-		throw new Error(message);
-	}
+/** Checks run one at a time, so parallel guesses cannot slip past the throttle. */
+function checkPassphrase(passphrase: string) {
+	const check = passphraseChecks.then(() => unwrapWithPassphrase(passphrase));
 
-	return value;
+	passphraseChecks = check.catch(() => undefined);
+
+	return check;
 }
 
-function resetUnlockAttempts(): void {
-	failedUnlockAttempts = 0;
-	unlockPausedUntil = 0;
+async function unwrapWithPassphrase(passphrase: string) {
+	if (!passphrase) throw new Error("Missing passphrase");
+
+	const record = await requireSecureVaultMetaRecord();
+	const throttle = await readUnlockThrottle();
+	const pausedMs = throttle.pausedUntil - Date.now();
+
+	if (pausedMs > 0) {
+		throw new Error(`Too many incorrect attempts. Try again in ${formatSeconds(pausedMs)}.`);
+	}
+
+	const wrappingKey = await deriveVaultWrappingKey({
+		iterations: record.kdf.iterations,
+		passphrase,
+		salt: base64ToBytes(record.kdf.salt),
+	});
+
+	try {
+		const unwrapped = await unwrapVaultDataKey({
+			additionalData: toWrappedDataKeyAdditionalData(),
+			ciphertext: base64ToBytes(record.wrappedDataKey.ciphertext),
+			iv: base64ToBytes(record.wrappedDataKey.iv),
+			wrappingKey,
+		});
+
+		await resetUnlockAttempts();
+
+		return { ...unwrapped, record };
+	} catch {
+		const failed = throttle.failed + 1;
+		const paused = failed >= MAX_UNLOCK_ATTEMPTS;
+
+		await writeUnlockThrottle({
+			failed,
+			pausedUntil: paused ? Date.now() + UNLOCK_COOLDOWN_MS : 0,
+		});
+
+		throw new Error(
+			paused
+				? `Too many incorrect attempts. Try again in ${formatSeconds(UNLOCK_COOLDOWN_MS)}.`
+				: "Wrong password. Try again.",
+		);
+	}
+}
+
+async function readUnlockThrottle(): Promise<UnlockThrottle> {
+	const stored = (await browser.storage.local.get(UNLOCK_THROTTLE_STORAGE_KEY))[
+		UNLOCK_THROTTLE_STORAGE_KEY
+	] as Partial<UnlockThrottle> | undefined;
+
+	return { failed: stored?.failed ?? 0, pausedUntil: stored?.pausedUntil ?? 0 };
+}
+
+async function writeUnlockThrottle(throttle: UnlockThrottle): Promise<void> {
+	await browser.storage.local.set({ [UNLOCK_THROTTLE_STORAGE_KEY]: throttle });
+}
+
+async function resetUnlockAttempts(): Promise<void> {
+	await browser.storage.local.remove(UNLOCK_THROTTLE_STORAGE_KEY);
 }
 
 function formatSeconds(ms: number): string {

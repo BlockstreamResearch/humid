@@ -1,3 +1,5 @@
+import { logger } from "@/core/logger";
+
 import { readActivity, scanAndRead, scanFresh } from "./liquidScanCore";
 import type { SyncWorkerRequest, SyncWorkerResponse } from "./protocol";
 
@@ -39,7 +41,7 @@ async function handle(request: SyncWorkerRequest): Promise<void> {
 			});
 		}
 	} catch (error) {
-		console.error("[liquid-sync] worker error", { id: request.id }, error);
+		logger.error("[liquid-sync] worker error", error, { id: request.id });
 
 		ctx.postMessage({
 			id: request.id,

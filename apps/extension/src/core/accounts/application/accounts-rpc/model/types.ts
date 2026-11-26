@@ -34,20 +34,40 @@ export type RemoveWalletInput = {
 
 export type RevealRecoveryPhraseInput = {
 	accountGroupId: AccountGroupId;
+	passphrase: string;
 };
 
 export type RecoveryPhrase = {
 	phrase: string;
 };
 
+export type HeldTransaction = {
+	action: string;
+	at: number;
+	holding: { amountSats: string; rawAssetId: string }[];
+	origin: string;
+	txid: string;
+};
+
 export type ReceiveAddress = {
 	address: string;
 	index: number;
-	unconfidential: string;
+	explicit: string;
+};
+
+export type TransferFee = {
+	feeRateSatsPerKvb: number;
+	feeSats: string;
+};
+
+export type TransferQuote = TransferFee & {
+	amount: string;
+	targetBlocks: number;
 };
 
 export type SendTransferInput = {
 	amount: string;
+	fee?: TransferFee;
 	rawAssetId?: string;
 	recipientAddress: string;
 	sendAll?: boolean;
@@ -66,6 +86,7 @@ export type EstimateMaxSendResult = {
 export type TransferReview = {
 	amount: string;
 	assetId: string;
+	quotes: TransferQuote[];
 	recipientAddress: string;
 	recipientConfidential: boolean;
 };
@@ -102,9 +123,10 @@ export type PortfolioData = {
 };
 
 export type ActivityEntry = {
-	amountSats: string;
-	direction: "received" | "sent";
+	/** Signed: what the transaction added to or took from this account, per asset. */
+	changes: { amountSats: string; rawAssetId: string }[];
 	feeSats: string;
+	label?: { action: string; origin: string };
 	timestamp: number | null;
 	txid: string;
 };
@@ -116,7 +138,7 @@ export type ActivityPage = {
 
 export type GetActivityInput = {
 	cursor: string | null;
-	rawAssetId: string;
+	rawAssetId: string | null;
 };
 
 export type PortfolioSnapshot = {

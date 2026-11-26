@@ -1,0 +1,6 @@
+fn main() {
+    match jet::output_script_hash(0) {
+        Some(script_hash: u256) => assert!(jet::eq_256(script_hash, param::DESTINATION_HASH)),
+        None => panic!(),
+    }
+}

@@ -26,6 +26,7 @@ import {
 	type LiquidGetIdentitySharedKeyResult,
 	type LiquidSignIdentityResult,
 } from "../../../domain/identity/types";
+import { isSshIdentity } from "../../../domain/identity/validation";
 import { createLwkMnemonicFromSeedMaterial } from "../createLwkMnemonic";
 import { getLocalRootSeedMaterial } from "../getLocalRootSeedMaterial";
 import { loadLwkWasm } from "../loadLwkWasm";
@@ -218,8 +219,4 @@ function getSharedSecretXCoordinate(sharedPoint: Uint8Array): Uint8Array {
 	}
 
 	return sharedPoint.slice(1, 33);
-}
-
-function isSshIdentity(identity: string): boolean {
-	return identity.startsWith("ssh://");
 }

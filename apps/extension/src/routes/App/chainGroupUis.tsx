@@ -30,7 +30,6 @@ type AssetViewComponent = ComponentType<{
 type AssetAboutComponent = ComponentType<{ chain: ChainRecord; token: PortfolioViewAsset }>;
 
 type BalanceHeadlineComponent = ComponentType<{
-	isSyncing: boolean;
 	native: { amount: bigint; decimals: number; symbol: string };
 }>;
 

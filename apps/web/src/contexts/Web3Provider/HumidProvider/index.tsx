@@ -1,7 +1,7 @@
 import {
 	createSession as createCaipSession,
 	createWalletClient,
-	LIQUID_DESCRIPTOR_CHANGED_EVENT,
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
 	LIQUID_NAMESPACE,
 	LIQUID_TESTNET_CHAIN_ID,
 	liquidNetworks,
@@ -33,7 +33,8 @@ type HumidContextValue = {
 	hasProvider: boolean;
 
 	isConnected: boolean;
-	address: string;
+	/** The wallet's account id, which AppKit names "address"; read a Liquid address with getAddress. */
+	accountId: string;
 	connect: () => Promise<void>;
 	disconnect: () => Promise<void>;
 
@@ -60,13 +61,13 @@ type HumidContextValue = {
 };
 
 const NULL_PROVIDER: CaipRpcProvider = {
-	request: () => Promise.reject(new Error("HUMID wallet provider was not found on the page.")),
+	request: () => Promise.reject(new Error("Humid wallet provider was not found on the page.")),
 };
 
 const humidContext = createContext<HumidContextValue>({
 	hasProvider: false,
 	isConnected: false,
-	address: "",
+	accountId: "",
 	connect: async () => {
 		throw new TypeError("Not implemented");
 	},
@@ -108,7 +109,7 @@ function buildAllScopes(): Caip25Scopes {
 			network.caipNetworkId,
 			{
 				methods: [...liquidWalletRpcMethods],
-				notifications: [LIQUID_DESCRIPTOR_CHANGED_EVENT],
+				notifications: [LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT],
 			},
 		]),
 	);
@@ -143,7 +144,7 @@ function useHumidProvider(): CaipRpcProvider | null {
 export const HumidProvider = ({ children }: PropsWithChildren) => {
 	const { connectAsync } = useWeb3Context();
 	const { disconnect } = useDisconnect();
-	const { address, isConnected } = useAppKitAccount({ namespace: LIQUID_NAMESPACE });
+	const { address: accountId, isConnected } = useAppKitAccount({ namespace: LIQUID_NAMESPACE });
 
 	const provider = useHumidProvider();
 	const [chainId, setChainId] = useState<string>(LIQUID_TESTNET_CHAIN_ID);
@@ -178,7 +179,7 @@ export const HumidProvider = ({ children }: PropsWithChildren) => {
 	const value: HumidContextValue = {
 		hasProvider: provider !== null,
 		isConnected,
-		address: address ?? "",
+		accountId: accountId ?? "",
 		connect: async () => {
 			await connectAsync(LIQUID_NAMESPACE);
 		},
@@ -194,7 +195,7 @@ export const HumidProvider = ({ children }: PropsWithChildren) => {
 		policy,
 		isSilent,
 		createSession: async () => {
-			if (!provider) throw new Error("HUMID wallet provider was not found on the page.");
+			if (!provider) throw new Error("Humid wallet provider was not found on the page.");
 			await createCaipSession(provider, buildAllScopes());
 			refreshSession();
 		},

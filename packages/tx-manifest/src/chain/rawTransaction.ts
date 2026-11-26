@@ -1,14 +1,5 @@
-import {
-	decodeHex,
-	encodeHex,
-	type Reader,
-	readHex,
-	readReversedHex,
-	readUint8,
-	readUint32,
-	readUintBigEndian,
-	skip,
-} from "./bytes";
+import { ByteReader } from "./bytes";
+import { decodeHex, reverseHex } from "./hex";
 import type { Outpoint } from "./outpoint";
 
 const ISSUANCE_FLAG = 0x80_00_00_00;
@@ -20,9 +11,13 @@ const WITNESS_PRESENT = 0x01;
 
 type FieldForm = "commitment" | "explicit" | "null";
 
+/** Each output field as serialized: a commitment, or a 0x01-prefixed explicit value, or 0x00 for no nonce. */
+export type TxOutCommitments = { asset: string; nonce: string; value: string };
+
 type ParsedTxOut = {
 	amountSats?: string;
 	assetForm: FieldForm;
+	commitments: TxOutCommitments;
 	nonceForm: FieldForm;
 	rawAssetId?: string;
 	scriptPubKeyHex: string;
@@ -35,6 +30,19 @@ type ParsedTransaction = { spent: Outpoint[]; txOuts: ParsedTxOut[] };
 type ParseResult = { ok: false; reason: string } | { ok: true; transaction: ParsedTransaction };
 
 type TxOutAt = { ok: false; reason: string } | { ok: true; txOut: ParsedTxOut };
+
+export function parseTxOut(txOutHex: string): ParsedTxOut | undefined {
+	const bytes = decodeHex(txOutHex);
+
+	if (!bytes) {
+		return undefined;
+	}
+
+	const reader = new ByteReader(bytes);
+	const txOut = readOutput(reader);
+
+	return reader.remaining === 0 ? txOut : undefined;
+}
 
 export function txOutAt(transactionHex: string, vout: number): TxOutAt {
 	if (!Number.isInteger(vout) || vout < 0) {
@@ -64,13 +72,13 @@ function parseTransaction(transactionHex: string): ParseResult {
 		return { ok: false, reason: "The signed transaction is not hex." };
 	}
 
-	const reader: Reader = { at: 0, bytes };
+	const reader = new ByteReader(bytes);
 
-	if (!skip(reader, 4)) {
+	if (!reader.skip(4)) {
 		return { ok: false, reason: "The signed transaction ends before its inputs." };
 	}
 
-	const marker = readUint8(reader);
+	const marker = reader.uint8();
 
 	if (marker === undefined) {
 		return { ok: false, reason: "The signed transaction ends before its inputs." };
@@ -119,7 +127,7 @@ function parseTransaction(transactionHex: string): ParseResult {
 		txOuts.push(txOut);
 	}
 
-	if (!skip(reader, 4)) {
+	if (!reader.skip(4)) {
 		return { ok: false, reason: "The signed transaction ends before its locktime." };
 	}
 
@@ -127,30 +135,27 @@ function parseTransaction(transactionHex: string): ParseResult {
 		return {
 			ok: false,
 			reason:
-				"The signed transaction says it carries witness data and does not carry all of it. " +
+				"The signed transaction says it carries witness data and then cuts the data short. " +
 				"Nothing is returned.",
 		};
 	}
 
-	if (reader.at !== bytes.length) {
+	if (reader.remaining > 0) {
 		return {
 			ok: false,
-			reason: `The signed transaction carries ${bytes.length - reader.at} bytes after the end of it.`,
+			reason: `The signed transaction carries ${reader.remaining} bytes past its end.`,
 		};
 	}
 
 	return { ok: true, transaction: { spent, txOuts } };
 }
 
-function readInput(reader: Reader): Outpoint | undefined {
-	const txid = readReversedHex(reader, 32);
-	const index = readUint32(reader);
+function readInput(reader: ByteReader): Outpoint | undefined {
+	const txid = reader.reversedHex(32);
+	const read = reader.uintLittleEndian(4);
+	const index = read === undefined ? undefined : Number(read);
 
-	if (txid === undefined || index === undefined || !skipVector(reader)) {
-		return undefined;
-	}
-
-	if (!skip(reader, 4)) {
+	if (txid === undefined || index === undefined || !skipVector(reader) || !reader.skip(4)) {
 		return undefined;
 	}
 
@@ -163,8 +168,8 @@ function readInput(reader: Reader): Outpoint | undefined {
 	return { txid, vout: index & OUTPOINT_INDEX };
 }
 
-function skipIssuance(reader: Reader): boolean {
-	if (!skip(reader, 64)) {
+function skipIssuance(reader: ByteReader): boolean {
+	if (!reader.skip(64)) {
 		return false;
 	}
 
@@ -178,7 +183,7 @@ function skipIssuance(reader: Reader): boolean {
 	return amount.form !== "null" || inflationKeys.form !== "null";
 }
 
-function skipWitnesses(reader: Reader, inputCount: number, outputCount: number): boolean {
+function skipWitnesses(reader: ByteReader, inputCount: number, outputCount: number): boolean {
 	let carriesAnything = false;
 
 	for (let index = 0; index < inputCount; index += 1) {
@@ -205,7 +210,7 @@ function skipWitnesses(reader: Reader, inputCount: number, outputCount: number):
 	return carriesAnything;
 }
 
-function readStack(reader: Reader): boolean | undefined {
+function readStack(reader: ByteReader): boolean | undefined {
 	const count = readCount(reader);
 
 	if (count === undefined) {
@@ -221,22 +226,22 @@ function readStack(reader: Reader): boolean | undefined {
 	return count > 0;
 }
 
-function readVector(reader: Reader): boolean | undefined {
+function readVector(reader: ByteReader): boolean | undefined {
 	const length = readCount(reader);
 
-	if (length === undefined || !skip(reader, length)) {
+	if (length === undefined || !reader.skip(length)) {
 		return undefined;
 	}
 
 	return length > 0;
 }
 
-function skipVector(reader: Reader): boolean {
+function skipVector(reader: ByteReader): boolean {
 	return readVector(reader) !== undefined;
 }
 
-function readOutput(reader: Reader): ParsedTxOut | undefined {
-	const from = reader.at;
+function readOutput(reader: ByteReader): ParsedTxOut | undefined {
+	const from = reader.offset;
 	const asset = readField(reader, OUTPUT_ASSET);
 	const value = readField(reader, OUTPUT_VALUE);
 	const nonce = readField(reader, OUTPUT_NONCE);
@@ -251,7 +256,7 @@ function readOutput(reader: Reader): ParsedTxOut | undefined {
 		return undefined;
 	}
 
-	const scriptPubKeyHex = readHex(reader, scriptLength);
+	const scriptPubKeyHex = reader.hex(scriptLength);
 
 	if (scriptPubKeyHex === undefined) {
 		return undefined;
@@ -259,16 +264,17 @@ function readOutput(reader: Reader): ParsedTxOut | undefined {
 
 	return {
 		...(asset.form === "explicit" ? { rawAssetId: reverseHex(asset.body) } : {}),
-		...(value.form === "explicit" ? { amountSats: String(bigEndian(value.body)) } : {}),
+		...(value.form === "explicit" ? { amountSats: BigInt(`0x${value.body}`).toString() } : {}),
 		assetForm: asset.form,
+		commitments: { asset: asset.hex, nonce: nonce.hex, value: value.hex },
 		nonceForm: nonce.form,
 		scriptPubKeyHex,
-		txOutHex: encodeHex(reader.bytes.subarray(from, reader.at)),
+		txOutHex: reader.hexSince(from),
 		valueForm: value.form,
 	};
 }
 
-type Field = { body: string; form: FieldForm };
+type Field = { body: string; form: FieldForm; hex: string };
 
 type FieldSpec = {
 	allowsNull: boolean;
@@ -289,33 +295,34 @@ const ISSUANCE_AMOUNT: FieldSpec = {
 	explicitLength: 8,
 };
 
-function readField(reader: Reader, spec: FieldSpec): Field | undefined {
-	const prefix = readUint8(reader);
+function readField(reader: ByteReader, spec: FieldSpec): Field | undefined {
+	const from = reader.offset;
+	const prefix = reader.uint8();
 
 	if (prefix === undefined) {
 		return undefined;
 	}
 
 	if (prefix === 0x00) {
-		return spec.allowsNull ? { body: "", form: "null" } : undefined;
+		return spec.allowsNull ? { body: "", form: "null", hex: reader.hexSince(from) } : undefined;
 	}
 
 	if (prefix === 0x01 && spec.explicitLength !== undefined) {
-		const body = readHex(reader, spec.explicitLength);
+		const body = reader.hex(spec.explicitLength);
 
-		return body === undefined ? undefined : { body, form: "explicit" };
+		return body === undefined ? undefined : { body, form: "explicit", hex: reader.hexSince(from) };
 	}
 
 	if (!spec.commitments.includes(prefix)) {
 		return undefined;
 	}
 
-	const body = readHex(reader, 32);
+	const body = reader.hex(32);
 
-	return body === undefined ? undefined : { body, form: "commitment" };
+	return body === undefined ? undefined : { body, form: "commitment", hex: reader.hexSince(from) };
 }
 
-function readCount(reader: Reader): number | undefined {
+function readCount(reader: ByteReader): number | undefined {
 	const value = readVarint(reader);
 
 	if (value === undefined || value > BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -324,11 +331,11 @@ function readCount(reader: Reader): number | undefined {
 
 	const count = Number(value);
 
-	return count > reader.bytes.length - reader.at ? undefined : count;
+	return count > reader.remaining ? undefined : count;
 }
 
-function readVarint(reader: Reader): bigint | undefined {
-	const first = readUint8(reader);
+function readVarint(reader: ByteReader): bigint | undefined {
+	const first = reader.uint8();
 
 	if (first === undefined) {
 		return undefined;
@@ -345,34 +352,7 @@ function readVarint(reader: Reader): bigint | undefined {
 		return BigInt(first);
 	}
 
-	const value = readUintLittleEndian(reader, form.width);
+	const value = reader.uintLittleEndian(form.width);
 
 	return value === undefined || value < form.least ? undefined : value;
-}
-
-function readUintLittleEndian(reader: Reader, length: number): bigint | undefined {
-	const body = readHex(reader, length);
-	const bytes = body === undefined ? undefined : decodeHex(body);
-
-	if (!bytes) {
-		return undefined;
-	}
-
-	let value = 0n;
-
-	for (let offset = bytes.length - 1; offset >= 0; offset -= 1) {
-		value = value * 256n + BigInt(bytes[offset] ?? 0);
-	}
-
-	return value;
-}
-
-function reverseHex(hex: string): string {
-	return (hex.match(/../g) ?? []).toReversed().join("");
-}
-
-function bigEndian(hex: string): bigint {
-	const bytes = decodeHex(hex) ?? new Uint8Array();
-
-	return readUintBigEndian({ at: 0, bytes }, bytes.length) ?? 0n;
 }

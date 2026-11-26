@@ -88,7 +88,7 @@ function ChainSettingsEditor({
 			{Settings ? (
 				<Settings chain={draft} onChange={setDraft} />
 			) : (
-				<p className="text-muted-foreground text-sm">No settings available for this chain.</p>
+				<p className="text-muted-foreground text-sm">No settings available for this network.</p>
 			)}
 		</ChainItemView>
 	);

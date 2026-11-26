@@ -12,6 +12,7 @@ import { ConfirmProvider } from "@/common/Confirmation";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeProvider";
 import { initGlobalErrorReporting } from "@/core/report";
+import { prepareSurface } from "@/helpers/surface";
 import { router } from "@/routes/router";
 import { authStore } from "@/store/auth";
 
@@ -28,7 +29,7 @@ if (!rootElement) {
 const root = createRoot(rootElement);
 
 async function bootstrapPopup() {
-	await authStore.ready();
+	await Promise.all([authStore.ready(), prepareSurface()]);
 
 	root.render(
 		<React.StrictMode>

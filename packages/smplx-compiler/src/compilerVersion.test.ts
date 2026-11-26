@@ -19,7 +19,7 @@ describe("the compiler version the wallet claims", () => {
 		return pin[1];
 	}
 
-	it("reads the submodule of this repository rather than another copy of it", () => {
+	it("reads the submodule of this repository rather than another copy", () => {
 		const workspace = readFileSync(join(repositoryRoot, "package.json"), "utf8");
 
 		expect(JSON.parse(workspace).name).toBe("humid-workspace");

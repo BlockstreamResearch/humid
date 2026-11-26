@@ -1,4 +1,5 @@
-import { parseReference } from "./references";
+import { isHash } from "../chain/hex";
+import { parseReference } from "../values/references";
 
 export type StatedAsset =
 	| { kind: "deferred"; reference: string }
@@ -7,17 +8,15 @@ export type StatedAsset =
 
 const NETWORK_ASSET = "lbtc";
 
-const ASSET_ID = /^[0-9a-f]{64}$/;
-
 export function statedAsset(declared: string, policyAsset: string): StatedAsset {
 	const text = declared.trim();
 	const lowered = text.toLowerCase();
 
-	if (lowered === NETWORK_ASSET || lowered === policyAsset.trim().toLowerCase()) {
+	if (lowered === NETWORK_ASSET || lowered === policyAsset) {
 		return { kind: "network" };
 	}
 
-	if (ASSET_ID.test(lowered)) {
+	if (isHash(lowered)) {
 		return { id: lowered, kind: "identified" };
 	}
 

@@ -1,3 +1,5 @@
+import { LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT } from "@humid/wallet-rpc";
+
 import { getSecureVaultStatus } from "@/core/secure-vault/background";
 
 import { getRegisteredWalletConnectNamespaces } from "../namespace-registry";
@@ -6,7 +8,7 @@ import { getWalletKitClientState } from "./state";
 const WC_DELIVERABLE_EVENTS = new Set([
 	"accountsChanged",
 	"chainChanged",
-	"bip122_walletDescriptorChanged",
+	LIQUID_WALLET_DESCRIPTOR_CHANGED_EVENT,
 ]);
 
 function chainsForScope(scope: { accounts: string[]; chains?: string[] }): string[] {
@@ -16,10 +18,10 @@ function chainsForScope(scope: { accounts: string[]; chains?: string[] }): strin
 }
 
 /**
- * Emit a wallet provider event to every active WalletConnect session that negotiated it. Unlike the
+ * Emit a wallet provider event to every active WalletConnect session that negotiated the event. Unlike the
  * global injected broadcast bus, WalletConnect is point-to-point, so each session receives its own
  * chain-scoped payload: `chainChanged` carries the new chain id; `accountsChanged` carries the
- * session's authorized accounts for the chain (an empty list while the vault is locked — the wallet
+ * session's authorized accounts for the chain (an empty list while the wallet is locked — the wallet
  * serves nothing then). No-op until the WalletConnect client is up. Best-effort per session; a failed
  * emit is swallowed so one dead session can't block the others (or the state change that triggered it).
  *

@@ -30,7 +30,7 @@ export const Filled: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
 
-		await userEvent.type(canvas.getByPlaceholderText("Enter passphrase"), "super-secret-pass");
+		await userEvent.type(canvas.getByPlaceholderText("Enter password"), "super-secret-pass");
 		await expect(canvas.getByRole("button", { name: /^unlock$/i })).toBeEnabled();
 	},
 };
@@ -40,7 +40,7 @@ export const Unlocking: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
 
-		await userEvent.type(canvas.getByPlaceholderText("Enter passphrase"), "super-secret-pass");
+		await userEvent.type(canvas.getByPlaceholderText("Enter password"), "super-secret-pass");
 		await userEvent.click(canvas.getByRole("button", { name: /^unlock$/i }));
 		await expect(await canvas.findByRole("button", { name: /unlocking/i })).toBeDisabled();
 	},
@@ -51,7 +51,7 @@ export const UnlockError: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
 
-		await userEvent.type(canvas.getByPlaceholderText("Enter passphrase"), "wrong-pass");
+		await userEvent.type(canvas.getByPlaceholderText("Enter password"), "wrong-pass");
 		await userEvent.click(canvas.getByRole("button", { name: /^unlock$/i }));
 		await waitFor(() => expect(canvas.getByText(UNLOCK_ERROR)).toBeInTheDocument());
 		const password = canvas.getByLabelText<HTMLInputElement>("Password");
@@ -87,10 +87,10 @@ export const ResetCancelled: Story = {
 		const documentBody = within(canvasElement.ownerDocument.body);
 
 		await userEvent.click(canvas.getByRole("button", { name: /^reset wallet$/i }));
-		await userEvent.click(documentBody.getByRole("button", { name: /^decline$/i }));
+		await userEvent.click(documentBody.getByRole("button", { name: /^back$/i }));
 		await waitFor(() =>
 			expect(
-				canvas.getByText("Reset cancelled. Your encrypted wallet is still on this device."),
+				canvas.getByText("Reset cancelled. The wallet is still on this device."),
 			).toBeInTheDocument(),
 		);
 	},

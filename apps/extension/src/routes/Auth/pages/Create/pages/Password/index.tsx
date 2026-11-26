@@ -5,6 +5,7 @@ import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { walletVaultClient } from "@/core/secure-vault/application/wallet-vault/client";
+import { MIN_PASSPHRASE_LENGTH } from "@/core/secure-vault/types";
 import { UiButton } from "@/ui/UiButton/base";
 import {
 	UiField,
@@ -22,8 +23,8 @@ const createPasswordFormSchema = z
 		passphrase: z
 			.string()
 			.min(1, "Create a password.")
-			.min(8, "Password must be at least 8 characters."),
-		confirmPassphrase: z.string().min(1, "Repeat your password."),
+			.min(MIN_PASSPHRASE_LENGTH, `Password must be at least ${MIN_PASSPHRASE_LENGTH} characters.`),
+		confirmPassphrase: z.string().min(1, "Repeat the password."),
 	})
 	.refine(({ confirmPassphrase, passphrase }) => confirmPassphrase === passphrase, {
 		message: "Passwords do not match.",
@@ -40,21 +41,14 @@ const DEFAULT_FORM_VALUES: CreatePasswordFormValues = {
 export function AuthCreatePasswordPage() {
 	const navigate = useNavigate();
 	const { seedMaterial } = useAuthCreateContext();
-	const {
-		control,
-		formState: { isValid },
-		handleSubmit,
-		reset,
-		trigger,
-		watch,
-	} = useForm<CreatePasswordFormValues>({
+	const { control, handleSubmit, reset, trigger, watch } = useForm<CreatePasswordFormValues>({
 		defaultValues: DEFAULT_FORM_VALUES,
 		mode: "onChange",
 		reValidateMode: "onChange",
 		resolver: zodResolver(createPasswordFormSchema),
 	});
 
-	const confirmPassphraseValue = watch("confirmPassphrase");
+	const formValues = watch();
 	const createVaultMutation = useMutation({
 		mutationFn: (values: CreatePasswordFormValues) =>
 			walletVaultClient.create({ seedMaterial, passphrase: values.passphrase }),
@@ -63,7 +57,8 @@ export function AuthCreatePasswordPage() {
 			void navigate({ to: "/app" });
 		},
 	});
-	const canSubmit = isValid && !createVaultMutation.isPending;
+	const canSubmit =
+		createPasswordFormSchema.safeParse(formValues).success && !createVaultMutation.isPending;
 
 	const clearFormError = () => {
 		createVaultMutation.reset();
@@ -82,14 +77,14 @@ export function AuthCreatePasswordPage() {
 
 	return (
 		<main className="flex size-full flex-col gap-4 p-5">
-			<form className="flex flex-1 flex-col justify-center gap-4" onSubmit={handleCreateVault}>
+			<form className="flex flex-1 flex-col gap-4" onSubmit={handleCreateVault}>
 				<div className="flex flex-col gap-3">
 					<p className="text-muted-foreground text-xs font-medium tracking-normal uppercase">
 						Create · Step 2 of 2
 					</p>
 					<h1 className="cn-font-heading text-2xl leading-tight font-semibold">Password</h1>
 					<p className="text-muted-foreground text-sm leading-6">
-						Protect your vault with a password. It is required to unlock this device.
+						Set a password to unlock the wallet on this device.
 					</p>
 				</div>
 
@@ -107,9 +102,7 @@ export function AuthCreatePasswordPage() {
 									<UiInput
 										{...field}
 										id="create-vault-passphrase"
-										aria-describedby={
-											fieldState.error ? `${descriptionId} ${errorId}` : descriptionId
-										}
+										aria-describedby={fieldState.error ? errorId : descriptionId}
 										aria-invalid={fieldState.invalid}
 										autoComplete="new-password"
 										disabled={createVaultMutation.isPending}
@@ -119,15 +112,18 @@ export function AuthCreatePasswordPage() {
 											field.onChange(event);
 											clearFormError();
 
-											if (confirmPassphraseValue) {
+											if (formValues.confirmPassphrase) {
 												void trigger("confirmPassphrase");
 											}
 										}}
 									/>
-									<UiFieldDescription id={descriptionId}>
-										Minimum 8 characters. It is required to unlock this device.
-									</UiFieldDescription>
-									<UiFieldError id={errorId} errors={[fieldState.error]} />
+									{fieldState.error ? (
+										<UiFieldError id={errorId} errors={[fieldState.error]} />
+									) : (
+										<UiFieldDescription id={descriptionId}>
+											At least {MIN_PASSPHRASE_LENGTH} characters.
+										</UiFieldDescription>
+									)}
 								</UiField>
 							);
 						}}
@@ -171,7 +167,7 @@ export function AuthCreatePasswordPage() {
 						: String(createVaultMutation.error ?? "")}
 				</UiFieldError>
 
-				<div className="flex flex-col gap-2">
+				<div className="mt-auto flex flex-col gap-2">
 					<UiButton type="submit" size="lg" disabled={!canSubmit}>
 						{createVaultMutation.isPending ? "Creating..." : "Create wallet"}
 					</UiButton>

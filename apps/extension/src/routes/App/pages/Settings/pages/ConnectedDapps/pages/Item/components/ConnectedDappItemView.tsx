@@ -1,7 +1,7 @@
-import { ArrowLeft01Icon, SquareLock01Icon } from "@hugeicons/core-free-icons";
+import { SquareLock01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
 
+import { Page } from "@/common/Page";
 import type { AccountGroupId } from "@/core/accounts/application/account-registry/model/identifiers";
 import type { ConnectedDappView } from "@/core/dapp-sessions/model";
 import { WALLET_METHOD_PRESENTATION } from "@/core/extension-background/dapp-authorization/methodPolicyPresentation";
@@ -9,7 +9,6 @@ import { AccountAvatar } from "@/routes/App/components/AccountAvatar";
 import { DappIdentity } from "@/routes/App/components/ConnectedDapps";
 import { UiBadge } from "@/ui/UiBadge";
 import { UiButton } from "@/ui/UiButton/base";
-import { UiScrollArea } from "@/ui/UiScrollArea";
 import { UiSwitch } from "@/ui/UiSwitch";
 
 type ConnectedDappItemViewProps = {
@@ -32,49 +31,43 @@ export function ConnectedDappItemView({
 	settingMethod,
 }: ConnectedDappItemViewProps) {
 	return (
-		<div className="flex size-full min-h-0 flex-col">
-			<header className="border-border/60 flex shrink-0 items-center gap-2 border-b px-3 py-3">
-				<Link
-					aria-label="Back to connected dapps"
-					className="text-muted-foreground hover:text-foreground shrink-0"
-					params={{ accountGroupId }}
-					to="/app/settings/account/$accountGroupId/connected-dapps"
-				>
-					<HugeiconsIcon icon={ArrowLeft01Icon} size={18} />
-				</Link>
-				<AccountAvatar className="size-5 shrink-0" seed={accountGroupId} />
-				<span className="max-w-24 shrink-0 truncate text-sm font-semibold">{accountName}</span>
-				<span className="text-muted-foreground/50 shrink-0 text-sm">/</span>
-				<span className="text-muted-foreground min-w-0 truncate text-sm">{dapp.label}</span>
-			</header>
-			<UiScrollArea className="min-h-0 flex-1">
-				<div className="flex flex-col gap-6 px-3 py-4">
-					<div className="flex items-center gap-2.5">
-						<DappIdentity className="flex-1" dapp={dapp} secondary={dapp.url} />
-						<UiButton
-							aria-label={`Disconnect ${dapp.label}`}
-							className="shrink-0"
-							disabled={isRevoking}
-							onClick={onRevoke}
-							size="sm"
-							variant="outline"
-						>
-							{isRevoking ? "Disconnecting…" : "Disconnect"}
-						</UiButton>
-					</div>
-
-					{dapp.transport === "walletconnect" ? (
-						<WalletConnectPolicyNote />
-					) : (
-						<MethodPolicy
-							dapp={dapp}
-							onToggleMethod={onToggleMethod}
-							settingMethod={settingMethod}
-						/>
-					)}
+		<Page
+			back={{
+				label: "Back to connected dapps",
+				params: { accountGroupId },
+				to: "/app/settings/account/$accountGroupId/connected-dapps",
+			}}
+			title={
+				<>
+					<AccountAvatar className="size-5 shrink-0" seed={accountGroupId} />
+					<span className="max-w-24 shrink-0 truncate text-sm font-semibold">{accountName}</span>
+					<span className="text-muted-foreground/50 shrink-0 text-sm">/</span>
+					<span className="text-muted-foreground min-w-0 truncate text-sm">{dapp.label}</span>
+				</>
+			}
+		>
+			<div className="flex flex-col gap-6 px-5 py-4">
+				<div className="flex items-center gap-2.5">
+					<DappIdentity className="flex-1" dapp={dapp} secondary={dapp.url} />
+					<UiButton
+						aria-label={`Disconnect ${dapp.label}`}
+						className="shrink-0"
+						disabled={isRevoking}
+						onClick={onRevoke}
+						size="sm"
+						variant="outline"
+					>
+						{isRevoking ? "Disconnecting…" : "Disconnect"}
+					</UiButton>
 				</div>
-			</UiScrollArea>
-		</div>
+
+				{dapp.transport === "walletconnect" ? (
+					<WalletConnectPolicyNote />
+				) : (
+					<MethodPolicy dapp={dapp} onToggleMethod={onToggleMethod} settingMethod={settingMethod} />
+				)}
+			</div>
+		</Page>
 	);
 }
 
@@ -104,7 +97,7 @@ function MethodPolicy({
 							Runs without asking
 						</h3>
 						<p className="text-muted-foreground/80 text-xs">
-							Let this dapp run a read without a prompt. Turn any off to confirm it each time.
+							These reads run without a prompt. Turn one off to approve each call.
 						</p>
 					</div>
 					<ul className="flex flex-col gap-3.5">
@@ -134,7 +127,7 @@ function MethodPolicy({
 							Always asks
 						</h3>
 						<p className="text-muted-foreground/80 text-xs">
-							These need your approval on every call and can’t be pre-approved.
+							These need approval on every call and can’t be pre-approved.
 						</p>
 					</div>
 					<ul className="flex flex-col gap-3.5">

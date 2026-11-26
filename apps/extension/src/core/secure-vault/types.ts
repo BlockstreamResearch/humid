@@ -5,6 +5,8 @@ export type SecureVaultStatus = {
 	updatedAt?: number;
 };
 
+export const MIN_PASSPHRASE_LENGTH = 8;
+
 export type SecureVaultCreateInput = {
 	passphrase: string;
 };

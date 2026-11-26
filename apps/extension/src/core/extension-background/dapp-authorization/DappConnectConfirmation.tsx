@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
 
 import type { ConfirmationRenderer } from "@/common/Confirmation";
+import {
+	ConfirmationActions,
+	ConfirmationLayout,
+	hostOf,
+} from "@/common/Confirmation/ConfirmationLayout";
+import { ConfirmationSection } from "@/common/Confirmation/ConfirmationParts";
 import { requestBackground } from "@/core/extension-rpc";
-import { UiButton } from "@/ui/UiButton/base";
+import { cn } from "@/theme/utils.ts";
 import { UiCheckbox } from "@/ui/UiCheckbox";
 
 import type {
@@ -69,112 +75,105 @@ export function DappConnectConfirmation({ data, onConfirm, onDecline }: Props) {
 	};
 
 	return (
-		<div className="bg-background text-foreground flex size-full flex-col">
-			<header className="p-4 pb-3 text-center">
-				<h2 className="cn-font-heading text-xl font-bold">Connect this dapp?</h2>
-				<p className="text-muted-foreground mt-1 text-sm break-all">{data.origin}</p>
-			</header>
-
-			<div className="flex-1 space-y-5 overflow-y-auto px-4">
-				<section>
-					<h3 className="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
-						Accounts
-					</h3>
-					{(() => {
-						if (loadingAccounts) {
-							return <p className="text-muted-foreground text-sm">Loading accounts…</p>;
-						}
-
-						if (accountsError) {
-							return <p className="text-sm text-red-500">{accountsError}</p>;
-						}
-
-						if (accounts.length === 0) {
-							return <p className="text-muted-foreground text-sm">No accounts available.</p>;
-						}
-
-						return (
-							<ul className="space-y-3">
-								{accounts.map((account) => (
-									<li key={account.id}>
-										<label
-											htmlFor={`connect-account-${account.id}`}
-											className="flex cursor-pointer items-center gap-3"
-										>
-											<UiCheckbox
-												id={`connect-account-${account.id}`}
-												checked={grantedAccounts.has(account.id)}
-												onCheckedChange={(checked) => toggleAccount(account.id, checked === true)}
-											/>
-											<span className="flex flex-1 items-center justify-between gap-2">
-												<span className="text-sm font-medium">{account.name}</span>
-												{account.isCurrent && (
-													<span className="text-muted-foreground text-xs">Current</span>
-												)}
-												{!account.isCurrent && account.isConnected && (
-													<span className="text-muted-foreground text-xs">Connected</span>
-												)}
-											</span>
-										</label>
-									</li>
-								))}
-							</ul>
-						);
-					})()}
-				</section>
-
-				<section>
-					<h3 className="text-muted-foreground mb-1 text-xs font-semibold tracking-wide uppercase">
-						Permissions
-					</h3>
-					<p className="text-muted-foreground mb-3 text-xs">
-						Requested permissions are selected by default. Uncheck any action you want to approve
-						each time. Signing and spending still require your approval.
-					</p>
-					<ul className="space-y-3">
-						{preApprovable.map((method) => (
-							<li key={method.id}>
-								<label
-									htmlFor={`connect-perm-${method.id}`}
-									className="flex cursor-pointer items-start gap-3"
-								>
-									<UiCheckbox
-										id={`connect-perm-${method.id}`}
-										className="mt-0.5"
-										checked={grantedMethods.has(method.id)}
-										onCheckedChange={(checked) => toggleMethod(method.id, checked === true)}
-									/>
-									<span className="flex flex-col">
-										<span className="text-sm font-medium">{method.label}</span>
-										<span className="text-muted-foreground text-xs">{method.description}</span>
-									</span>
-								</label>
-							</li>
-						))}
-					</ul>
-				</section>
-			</div>
-
-			<div className="flex items-center gap-3 p-4 pt-3">
-				<UiButton type="button" variant="outline" className="flex-1" onClick={onDecline}>
-					Decline
-				</UiButton>
-				<UiButton
-					type="button"
-					className="flex-1"
-					disabled={grantedAccounts.size === 0}
-					onClick={() =>
+		<ConfirmationLayout
+			origin={data.origin}
+			network={data.networks.join(", ")}
+			title={`Connect to ${hostOf(data.origin)}`}
+			statement="The dapp sees the accounts you choose. Every payment and signature still needs approval."
+			footer={
+				<ConfirmationActions
+					confirmLabel="Connect"
+					canConfirm={grantedAccounts.size > 0}
+					onReject={onDecline}
+					onConfirm={() =>
 						onConfirm({
 							grantedAccountGroupIds: [...grantedAccounts],
 							grantedMethods: [...grantedMethods],
 						})
 					}
-				>
-					Connect
-				</UiButton>
-			</div>
-		</div>
+				/>
+			}
+		>
+			<ConfirmationSection title="Accounts">
+				{loadingAccounts && <SectionMessage>Loading accounts…</SectionMessage>}
+				{accountsError !== null && (
+					<SectionMessage className="text-destructive">{accountsError}</SectionMessage>
+				)}
+				{!loadingAccounts && accountsError === null && accounts.length === 0 && (
+					<SectionMessage>No accounts available.</SectionMessage>
+				)}
+				{accounts.map((account) => (
+					<CheckRow
+						key={account.id}
+						id={`connect-account-${account.id}`}
+						label={account.name}
+						aside={accountTag(account)}
+						checked={grantedAccounts.has(account.id)}
+						onCheckedChange={(checked) => toggleAccount(account.id, checked)}
+					/>
+				))}
+			</ConfirmationSection>
+			{preApprovable.length > 0 && (
+				<ConfirmationSection title="Allow without asking">
+					{preApprovable.map((method) => (
+						<CheckRow
+							key={method.id}
+							id={`connect-perm-${method.id}`}
+							label={method.label}
+							note={method.description}
+							checked={grantedMethods.has(method.id)}
+							onCheckedChange={(checked) => toggleMethod(method.id, checked)}
+						/>
+					))}
+				</ConfirmationSection>
+			)}
+		</ConfirmationLayout>
 	);
+}
+
+function CheckRow({
+	id,
+	label,
+	note,
+	aside,
+	checked,
+	onCheckedChange,
+}: {
+	id: string;
+	label: string;
+	note?: string;
+	aside?: string;
+	checked: boolean;
+	onCheckedChange: (checked: boolean) => void;
+}) {
+	return (
+		<label
+			htmlFor={id}
+			className="border-border/60 flex cursor-pointer items-start gap-2.5 border-t py-2.5 first-of-type:border-t-0"
+		>
+			<UiCheckbox
+				id={id}
+				className="mt-0.5"
+				checked={checked}
+				onCheckedChange={(next) => onCheckedChange(next === true)}
+			/>
+			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<span className="text-sm font-semibold">{label}</span>
+				{note !== undefined && <span className="text-muted-foreground text-xs">{note}</span>}
+			</span>
+			{aside !== undefined && <span className="text-muted-foreground text-xs">{aside}</span>}
+		</label>
+	);
+}
+
+function SectionMessage({ className, children }: { className?: string; children: string }) {
+	return <p className={cn("text-muted-foreground py-2.5 text-sm", className)}>{children}</p>;
+}
+
+function accountTag(account: DappConnectAccount): string | undefined {
+	if (account.isCurrent) return "Current";
+	if (account.isConnected) return "Connected";
+	return undefined;
 }
 
 export const dappConnectConfirmationRenderer: ConfirmationRenderer = {

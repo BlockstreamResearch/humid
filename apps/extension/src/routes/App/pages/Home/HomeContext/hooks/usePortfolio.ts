@@ -36,7 +36,9 @@ export function usePortfolio(keys: { accountGroupId: string; chainId: string }):
 		queryFn: () => accountsClient.getPortfolio(),
 		queryKey: portfolioQueryKey(keys.accountGroupId, keys.chainId),
 		refetchInterval: (portfolioQuery) =>
-			portfolioQuery.state.data?.isSyncing ? PORTFOLIO_ACTIVE_SYNC_POLL_MS : PORTFOLIO_IDLE_POLL_MS,
+			portfolioQuery.state.data?.isSyncing || portfolioQuery.state.data?.error
+				? PORTFOLIO_ACTIVE_SYNC_POLL_MS
+				: PORTFOLIO_IDLE_POLL_MS,
 	});
 
 	return useMemo(() => toPortfolio(query.data, query.isPending), [query.data, query.isPending]);

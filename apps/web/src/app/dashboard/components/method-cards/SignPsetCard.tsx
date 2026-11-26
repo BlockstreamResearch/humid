@@ -21,7 +21,7 @@ export function SignPsetCard() {
 
 	return (
 		<RpcCard
-			description="Signs the listed PSET inputs. Over-signing is rejected. Prompts for confirmation unless marked silent; decline → 4001."
+			description="Signs the listed PSET inputs. Over-signing is rejected. Prompts for confirmation on every call; decline → 4001."
 			policy={state}
 			title="signPset"
 		>

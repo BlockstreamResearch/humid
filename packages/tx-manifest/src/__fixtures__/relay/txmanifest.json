@@ -1,0 +1,284 @@
+{
+    "manifest_version": "0.3.1",
+    "protocol": "relay",
+    "description": "A keyless covenant that releases its coins to the one destination named when it was funded. The covenant commits to the destination's script hash, which the wallet computes either from an address (script_hash) or from a contract (tapleaf).",
+    "chain": "liquid",
+    "requires": ["simplicity"],
+    "simplicity_hl": { "version": "0.9.0" },
+    "utxo_types": {
+        "relay": {
+            "description": "Coins anyone may release, provided output 0 pays the script whose hash is DESTINATION_HASH.",
+            "script": {
+                "type": "simplicity",
+                "source": "./relay.simf",
+                "source_hash": "sha256:5a1937a0ec0c47a13d5007bf398875414980bc817d1309120ee2dfc076944a22"
+            },
+            "asset": "lbtc"
+        },
+        "vault": {
+            "description": "Coins only PUB_KEY's owner can spend, the contract destination a relay may release to.",
+            "script": {
+                "type": "simplicity",
+                "source": "./vault.simf",
+                "source_hash": "sha256:658bf994eac2f8dcbf5486787910513a1e4a79bd56f6e3c6c2a74dac25c0e2bf"
+            },
+            "asset": "lbtc"
+        }
+    },
+    "actions": {
+        "RelayToAddress": {
+            "description": "Lock coins in a relay that releases them to an address.",
+            "params": {
+                "payee": {
+                    "type": "address",
+                    "description": "The address the relay releases to."
+                },
+                "amount_sat": {
+                    "type": "u64",
+                    "description": "Amount in satoshis to lock in the relay."
+                },
+                "DESTINATION_HASH": {
+                    "type": "bytes32",
+                    "description": "The payee's script hash, which the relay commits to.",
+                    "compute": { "type": "script_hash", "address": "params.payee" }
+                }
+            },
+            "inputs": [
+                {
+                    "id": "funding_input",
+                    "description": "Wallet UTXO providing the funds.",
+                    "utxo_source": "wallet",
+                    "asset": "lbtc",
+                    "amount_sat": { "min_amount": "params.amount_sat" }
+                }
+            ],
+            "outputs": [
+                {
+                    "id": "relay_out",
+                    "description": "The funded relay.",
+                    "destination": {
+                        "utxo_type": "relay",
+                        "compile_params": { "DESTINATION_HASH": "params.DESTINATION_HASH" }
+                    },
+                    "asset": "lbtc",
+                    "amount_sat": "params.amount_sat"
+                },
+                {
+                    "id": "change_out",
+                    "description": "Change returned to the funding wallet.",
+                    "destination": "change",
+                    "asset": "lbtc",
+                    "optional": true
+                }
+            ]
+        },
+        "ReleaseToAddress": {
+            "description": "Release a relay to the address it was funded for. Keyless: the covenant only checks where output 0 pays.",
+            "params": {
+                "payee": {
+                    "type": "address",
+                    "description": "The address the relay was funded for."
+                },
+                "DESTINATION_HASH": {
+                    "type": "bytes32",
+                    "description": "The payee's script hash, which rebuilds the relay.",
+                    "compute": { "type": "script_hash", "address": "params.payee" }
+                }
+            },
+            "inputs": [
+                {
+                    "id": "relay_in",
+                    "description": "The relay to release, located via the state file.",
+                    "utxo_source": {
+                        "utxo_type": "relay",
+                        "compile_params": { "DESTINATION_HASH": "params.DESTINATION_HASH" }
+                    }
+                },
+                {
+                    "id": "fee_input",
+                    "description": "Wallet L-BTC UTXO to pay the network fee.",
+                    "utxo_source": "wallet",
+                    "asset": "lbtc",
+                    "optional": true
+                }
+            ],
+            "outputs": [
+                {
+                    "id": "released_out",
+                    "description": "MUST be output 0, the output the covenant checks. The whole relay, paid to the payee.",
+                    "destination": "params.payee",
+                    "asset": "lbtc",
+                    "amount_sat": "relay_in.amount_sat",
+                    "required_index": 0
+                },
+                {
+                    "id": "fee_change",
+                    "description": "L-BTC change from the fee input.",
+                    "destination": "change",
+                    "asset": "lbtc",
+                    "optional": true
+                }
+            ]
+        },
+        "RelayToVault": {
+            "description": "Lock coins in a relay that releases them to a vault held by the wallet's key.",
+            "params": {
+                "owner": {
+                    "type": "pubkey",
+                    "description": "The vault's key, the wallet's own.",
+                    "compute": { "type": "wallet", "wallet": "key" }
+                },
+                "amount_sat": {
+                    "type": "u64",
+                    "description": "Amount in satoshis to lock in the relay."
+                },
+                "DESTINATION_HASH": {
+                    "type": "bytes32",
+                    "description": "The vault's script hash, which the relay commits to.",
+                    "compute": {
+                        "type": "tapleaf",
+                        "simf": "./vault.simf",
+                        "simf_hash": "sha256:658bf994eac2f8dcbf5486787910513a1e4a79bd56f6e3c6c2a74dac25c0e2bf",
+                        "params": { "PUB_KEY": { "type": "pubkey", "value": "params.owner" } }
+                    }
+                }
+            },
+            "inputs": [
+                {
+                    "id": "funding_input",
+                    "description": "Wallet UTXO providing the funds.",
+                    "utxo_source": "wallet",
+                    "asset": "lbtc",
+                    "amount_sat": { "min_amount": "params.amount_sat" }
+                }
+            ],
+            "outputs": [
+                {
+                    "id": "relay_out",
+                    "description": "The funded relay.",
+                    "destination": {
+                        "utxo_type": "relay",
+                        "compile_params": { "DESTINATION_HASH": "params.DESTINATION_HASH" }
+                    },
+                    "asset": "lbtc",
+                    "amount_sat": "params.amount_sat"
+                },
+                {
+                    "id": "change_out",
+                    "description": "Change returned to the funding wallet.",
+                    "destination": "change",
+                    "asset": "lbtc",
+                    "optional": true
+                }
+            ]
+        },
+        "ReleaseToVault": {
+            "description": "Release a relay into the vault it was funded for.",
+            "params": {
+                "owner": {
+                    "type": "pubkey",
+                    "description": "The vault's key, the wallet's own.",
+                    "compute": { "type": "wallet", "wallet": "key" }
+                },
+                "DESTINATION_HASH": {
+                    "type": "bytes32",
+                    "description": "The vault's script hash, which rebuilds the relay.",
+                    "compute": {
+                        "type": "tapleaf",
+                        "simf": "./vault.simf",
+                        "simf_hash": "sha256:658bf994eac2f8dcbf5486787910513a1e4a79bd56f6e3c6c2a74dac25c0e2bf",
+                        "params": { "PUB_KEY": { "type": "pubkey", "value": "params.owner" } }
+                    }
+                }
+            },
+            "inputs": [
+                {
+                    "id": "relay_in",
+                    "description": "The relay to release, located via the state file.",
+                    "utxo_source": {
+                        "utxo_type": "relay",
+                        "compile_params": { "DESTINATION_HASH": "params.DESTINATION_HASH" }
+                    }
+                },
+                {
+                    "id": "fee_input",
+                    "description": "Wallet L-BTC UTXO to pay the network fee.",
+                    "utxo_source": "wallet",
+                    "asset": "lbtc",
+                    "optional": true
+                }
+            ],
+            "outputs": [
+                {
+                    "id": "vault_out",
+                    "description": "MUST be output 0, the output the covenant checks. The whole relay, locked in the vault.",
+                    "destination": {
+                        "utxo_type": "vault",
+                        "compile_params": { "PUB_KEY": "params.owner" }
+                    },
+                    "asset": "lbtc",
+                    "amount_sat": "relay_in.amount_sat",
+                    "required_index": 0
+                },
+                {
+                    "id": "fee_change",
+                    "description": "L-BTC change from the fee input.",
+                    "destination": "change",
+                    "asset": "lbtc",
+                    "optional": true
+                }
+            ]
+        },
+        "Withdraw": {
+            "description": "Spend the vault back into the wallet with the owner's signature.",
+            "params": {
+                "owner": {
+                    "type": "pubkey",
+                    "description": "The vault's key, the wallet's own.",
+                    "compute": { "type": "wallet", "wallet": "key" }
+                }
+            },
+            "inputs": [
+                {
+                    "id": "vault_in",
+                    "description": "The vault to spend, located via the state file.",
+                    "utxo_source": {
+                        "utxo_type": "vault",
+                        "compile_params": { "PUB_KEY": "params.owner" }
+                    },
+                    "witnesses": {
+                        "SIGNATURE": {
+                            "type": "Signature",
+                            "sig_type": "sig_hash_all",
+                            "source": { "type": "wallet", "key": "params.owner" },
+                            "description": "BIP340 Schnorr signature over the whole transaction, from the owner's key."
+                        }
+                    }
+                },
+                {
+                    "id": "fee_input",
+                    "description": "Wallet L-BTC UTXO to pay the network fee.",
+                    "utxo_source": "wallet",
+                    "asset": "lbtc",
+                    "optional": true
+                }
+            ],
+            "outputs": [
+                {
+                    "id": "withdrawn_out",
+                    "description": "The vault's coins, back in the wallet.",
+                    "destination": "wallet",
+                    "asset": "lbtc",
+                    "amount_sat": "vault_in.amount_sat"
+                },
+                {
+                    "id": "fee_change",
+                    "description": "L-BTC change from the fee input.",
+                    "destination": "change",
+                    "asset": "lbtc",
+                    "optional": true
+                }
+            ]
+        }
+    }
+}

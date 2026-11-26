@@ -1,12 +1,11 @@
-import { ArrowLeft01Icon, ComputerIcon, Moon02Icon, Sun03Icon } from "@hugeicons/core-free-icons";
+import { ComputerIcon, Moon02Icon, Sun03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
 
+import { Page } from "@/common/Page";
 import type { Theme } from "@/contexts/ThemeProvider";
 import { cn } from "@/theme/utils.ts";
 import { UiRadioGroup, UiRadioGroupItem } from "@/ui/UiRadioGroup";
-import { UiScrollArea } from "@/ui/UiScrollArea";
 
 type Icon = ComponentProps<typeof HugeiconsIcon>["icon"];
 
@@ -46,37 +45,25 @@ type ThemeViewProps = {
 
 export function ThemeView({ onThemeChange, systemTheme, theme }: ThemeViewProps) {
 	return (
-		<div className="flex size-full min-h-0 flex-col">
-			<header className="border-border/60 flex shrink-0 items-center gap-2 border-b px-3 py-3">
-				<Link
-					aria-label="Back to settings"
-					className="text-muted-foreground hover:text-foreground shrink-0"
-					to="/app/settings"
+		<Page back={{ label: "Back to settings", to: "/app/settings" }} title="Theme">
+			<div className="px-3 py-4">
+				<UiRadioGroup
+					aria-label="Theme"
+					className="flex flex-col gap-1"
+					onValueChange={(value) => onThemeChange(value as Theme)}
+					value={theme}
 				>
-					<HugeiconsIcon icon={ArrowLeft01Icon} size={18} />
-				</Link>
-				<h1 className="text-base font-semibold">Theme</h1>
-			</header>
-			<UiScrollArea className="min-h-0 flex-1">
-				<div className="px-3 py-4">
-					<UiRadioGroup
-						aria-label="Theme"
-						className="flex flex-col gap-1"
-						onValueChange={(value) => onThemeChange(value as Theme)}
-						value={theme}
-					>
-						{THEME_OPTIONS.map((option) => (
-							<ThemeOptionRow
-								key={option.value}
-								option={option}
-								selected={theme === option.value}
-								systemTheme={systemTheme}
-							/>
-						))}
-					</UiRadioGroup>
-				</div>
-			</UiScrollArea>
-		</div>
+					{THEME_OPTIONS.map((option) => (
+						<ThemeOptionRow
+							key={option.value}
+							option={option}
+							selected={theme === option.value}
+							systemTheme={systemTheme}
+						/>
+					))}
+				</UiRadioGroup>
+			</div>
+		</Page>
 	);
 }
 

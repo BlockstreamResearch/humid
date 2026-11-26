@@ -1,3 +1,5 @@
+import type { ConfirmationCompletion } from "@/helpers/background";
+
 export type WalletRpcConfirmationRequest = {
 	data?: unknown;
 	message?: string;
@@ -5,12 +7,17 @@ export type WalletRpcConfirmationRequest = {
 	method?: string;
 	requester?: { name?: string; origin: string };
 	title: string;
-	timeoutMs?: number;
+};
+
+export type WalletRpcConfirmationDecision = {
+	approved: boolean;
+	result?: unknown;
 };
 
 export type WalletRpcConfirmationHandler = (
-	request: WalletRpcConfirmationRequest,
-) => Promise<boolean>;
+	request: WalletRpcConfirmationRequest | Promise<WalletRpcConfirmationRequest>,
+	complete?: ConfirmationCompletion,
+) => Promise<WalletRpcConfirmationDecision>;
 
 export type WalletRpcAuthorization = {
 	isGranted: (methodId: string) => boolean;

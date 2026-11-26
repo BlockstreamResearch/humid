@@ -1,22 +1,20 @@
 import {
-	ArrowLeft01Icon,
 	CheckmarkCircle02Icon,
 	Copy01Icon,
 	InformationCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Link } from "@tanstack/react-router";
 import QRCode from "react-qr-code";
 
+import { Page } from "@/common/Page";
 import { cn } from "@/theme/utils.ts";
 import { UiButtonVariants } from "@/ui/UiButton/base";
 import { UiCopyButton } from "@/ui/UiCopyButton";
-import { UiScrollArea } from "@/ui/UiScrollArea";
 import { UiTabs, UiTabsContent, UiTabsList, UiTabsTrigger } from "@/ui/UiTabs/base";
 import { UiTooltip, UiTooltipContent, UiTooltipProvider, UiTooltipTrigger } from "@/ui/UiTooltip";
 
 const CONFIDENTIAL_TAB = "confidential";
-const UNCONFIDENTIAL_TAB = "unconfidential";
+const EXPLICIT_TAB = "explicit";
 
 function LabelWithHint({ hint, label }: { hint: string; label: string }) {
 	return (
@@ -67,58 +65,45 @@ export function ReceiveView({
 	address,
 	accountName,
 	chainName,
-	unconfidential,
+	explicit,
 }: {
 	address: string;
 	accountName: string;
 	chainName: string;
-	unconfidential: string;
+	explicit: string;
 }) {
 	return (
 		<UiTooltipProvider>
-			<div className="flex size-full min-h-0 flex-col overflow-hidden">
-				<header className="border-border/60 flex shrink-0 items-center gap-2 border-b px-2 py-2.5">
-					<Link
-						to="/app"
-						aria-label="Back"
-						className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-md p-1.5 transition-colors"
-					>
-						<HugeiconsIcon icon={ArrowLeft01Icon} size={18} />
-					</Link>
-					<p className="text-sm font-semibold">Receive</p>
-				</header>
+			<Page back={{ label: "Back", to: "/app" }} title="Receive">
+				<div className="flex flex-col items-center gap-5 px-5 py-6 text-center">
+					<p className="text-muted-foreground text-sm">
+						{accountName} · {chainName}
+					</p>
 
-				<UiScrollArea className="min-h-0 flex-1">
-					<div className="flex flex-col items-center gap-5 px-5 py-6 text-center">
-						<p className="text-muted-foreground text-sm">
-							{accountName} · {chainName}
-						</p>
+					<UiTabs defaultValue={CONFIDENTIAL_TAB} className="w-full">
+						<UiTabsList className="w-full">
+							<UiTabsTrigger value={CONFIDENTIAL_TAB}>Confidential</UiTabsTrigger>
+							<UiTabsTrigger value={EXPLICIT_TAB}>Explicit</UiTabsTrigger>
+						</UiTabsList>
 
-						<UiTabs defaultValue={CONFIDENTIAL_TAB} className="w-full">
-							<UiTabsList className="w-full">
-								<UiTabsTrigger value={CONFIDENTIAL_TAB}>Confidential</UiTabsTrigger>
-								<UiTabsTrigger value={UNCONFIDENTIAL_TAB}>Unconfidential</UiTabsTrigger>
-							</UiTabsList>
+						<UiTabsContent value={CONFIDENTIAL_TAB} className="mt-5">
+							<AddressPanel
+								address={address}
+								hint="A private address. Only this wallet can see the amounts and assets sent here. Once a payment arrives, the next unused address takes its place."
+								label="Confidential address"
+							/>
+						</UiTabsContent>
 
-							<UiTabsContent value={CONFIDENTIAL_TAB} className="mt-5">
-								<AddressPanel
-									address={address}
-									hint="Blinded, and derived one further along the descriptor each time you look. Amounts and assets paid to it are readable only with this wallet's blinding key."
-									label="Confidential address"
-								/>
-							</UiTabsContent>
-
-							<UiTabsContent value={UNCONFIDENTIAL_TAB} className="mt-5">
-								<AddressPanel
-									address={unconfidential}
-									hint="The same wallet address, unblinded, and fixed at the first index of the external chain. Contract actions are funded from here and return their change here; amounts paid to it are public."
-									label="Unconfidential address"
-								/>
-							</UiTabsContent>
-						</UiTabs>
-					</div>
-				</UiScrollArea>
-			</div>
+						<UiTabsContent value={EXPLICIT_TAB} className="mt-5">
+							<AddressPanel
+								address={explicit}
+								hint="A public address. Anyone can see the amounts and assets sent here. This address never changes."
+								label="Explicit address"
+							/>
+						</UiTabsContent>
+					</UiTabs>
+				</div>
+			</Page>
 		</UiTooltipProvider>
 	);
 }

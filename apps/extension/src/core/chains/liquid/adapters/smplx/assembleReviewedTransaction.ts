@@ -1,54 +1,71 @@
-import type { ManifestReview, RejectToken, StaticWitness } from "@humid/tx-manifest";
+import {
+	type ManifestReview,
+	Refusal,
+	type TypedWitness,
+	type TransactionDraft,
+} from "@humid/tx-manifest";
 
 import type { SmplxWasmModule } from "./loadSmplxWasm";
 
-export type AssembledTransaction = {
-	feeSats: bigint;
-	hex: string;
-	txid: string;
-};
-
 export type AssembledIssuanceReport = {
 	assetId: string;
-	entropy: string;
+	assetEntropy: string;
 	free: () => void;
-	reissuanceTokenId: string;
+	inflationAssetId: string;
 };
 
 export type AssemblingBuilder = Pick<
 	InstanceType<SmplxWasmModule["TransactionBuilder"]>,
-	"addChange" | "addOutput" | "addWalletInput" | "free"
+	"addOutput" | "addInput" | "free"
 > & {
-	addCovenantInput: (
+	addProgramInput: (
 		txid: string,
 		vout: number,
 		txOutHex: string,
 		source: string,
 		argumentsJson?: string,
 		witnessJson?: string,
-		signatureWitness?: string,
+		programSignature?: string,
+		blindingSecretsJson?: string,
 		extraLeavesJson?: string,
 		includeDebugSymbols?: boolean,
 		derivationPath?: string,
 	) => void;
-	addCovenantIssuanceInput: (
+	addProgramIssuanceInput: (
 		txid: string,
 		vout: number,
 		txOutHex: string,
 		source: string,
 		argumentsJson: string | undefined,
 		witnessJson: string | undefined,
-		signatureWitness: string | undefined,
+		programSignature: string | undefined,
 		assetAmountSats: bigint,
 		inflationAmountSats: bigint,
 		issuerContractHex: string | undefined,
+		blindingSecretsJson?: string,
+		extraLeavesJson?: string,
+		includeDebugSymbols?: boolean,
+		derivationPath?: string,
+	) => AssembledIssuanceReport;
+	addProgramReissuanceInput: (
+		txid: string,
+		vout: number,
+		txOutHex: string,
+		source: string,
+		argumentsJson: string | undefined,
+		witnessJson: string | undefined,
+		programSignature: string | undefined,
+		assetAmountSats: bigint,
+		assetEntropy: string,
+		blindingSecretsJson: string,
 		extraLeavesJson?: string,
 		includeDebugSymbols?: boolean,
 		derivationPath?: string,
 	) => AssembledIssuanceReport;
 	setLocktimeHeight: (height: number) => void;
-	setSequence: (sequence: number) => void;
-	addWalletIssuanceInput: (
+	setInputSequence: (inputIndex: number, sequence: number) => void;
+	setUnusedWitnesses: (inputIndex: number, names: string[]) => void;
+	addIssuanceInput: (
 		txid: string,
 		vout: number,
 		txOutHex: string,
@@ -58,183 +75,157 @@ export type AssemblingBuilder = Pick<
 		blindingSecretsJson?: string,
 		derivationPath?: string,
 	) => AssembledIssuanceReport;
+	addReissuanceInput: (
+		txid: string,
+		vout: number,
+		txOutHex: string,
+		assetAmountSats: bigint,
+		assetEntropy: string,
+		blindingSecretsJson: string,
+		derivationPath?: string,
+	) => AssembledIssuanceReport;
 };
 
-export type FinalizeTransaction = (
-	builder: AssemblingBuilder,
-	feeRateSatsPerKvb: number,
-) => AssembledTransaction | Promise<AssembledTransaction>;
-
-export type AssembleResult =
-	| { ok: false; reason: string; reject: RejectToken }
-	| { ok: true; transaction: AssembledTransaction };
-
-export async function assembleReviewedTransaction(
-	review: ManifestReview,
+export function assembleReviewedTransaction<Builder extends AssemblingBuilder, Finished>(
+	draft: TransactionDraft,
 	input: {
-		blindingPublicKeyHex?: string;
-		changeScriptPubKeyHex: string;
-		finalize: FinalizeTransaction;
+		blindingPublicKeyHex: string;
 		signingDerivationPath: string;
-		smplx: { TransactionBuilder: new () => AssemblingBuilder };
+		smplx: { TransactionBuilder: new () => Builder };
 	},
-): Promise<AssembleResult> {
-	if (review.inputOrder.length === 0) {
-		return {
-			ok: false,
-			reason: `"${review.action}" has nothing funding it.`,
-			reject: "shortfall",
-		};
+	finish: (builder: Builder) => Finished,
+): Finished {
+	if (draft.inputOrder.length === 0) {
+		throw new Refusal(`"${draft.action}" has nothing funding it.`, "shortfall");
 	}
 
-	// Policy-asset change is paid by `builder.addChange()` below, not through `outputs`.
-	if (review.outputs.length === 0 && !review.changeDeferred) {
-		return {
-			ok: false,
-			reason: `"${review.action}" pays nothing, so there is nothing to build.`,
-			reject: "document-fault",
-		};
+	if (draft.outputs.length === 0) {
+		throw new Refusal(`"${draft.action}" pays nothing, so there is nothing to build.`);
 	}
 
-	const unblindable = review.outputs.find((output) => output.blinded);
+	const issuing = new Map<string, TransactionDraft["issuances"][number]>();
 
-	if (unblindable && input.blindingPublicKeyHex === undefined) {
-		return {
-			ok: false,
-			reason:
-				`The output ${unblindable.id || "(unnamed)"} must hide what it carries, and no ` +
-				"blinding key was supplied to hide it with.",
-			reject: "unimplemented-construct",
-		};
-	}
-
-	if (review.changeBlinded && input.blindingPublicKeyHex === undefined) {
-		return {
-			ok: false,
-			reason: `"${review.action}" returns change that must hide what it carries, and no blinding key was supplied to hide it with.`,
-			reject: "unimplemented-construct",
-		};
-	}
-
-	const issuing = new Map<string, ManifestReview["issuances"][number]>();
-
-	for (const issuance of review.issuances) {
+	for (const issuance of draft.issuances) {
 		const key = outpointKey(issuance.outpoint);
 
 		if (issuing.has(key)) {
-			return {
-				ok: false,
-				reason:
-					`Input ${issuance.inputId} issues an asset from ${issuance.outpoint.txid}:` +
+			throw new Refusal(
+				`Input ${issuance.inputId} issues an asset from ${issuance.outpoint.txid}:` +
 					`${issuance.outpoint.vout}, which another input of this transaction already ` +
 					"issues from. One output cannot create two assets.",
-				reject: "document-fault",
-			};
+			);
 		}
 
 		issuing.set(key, issuance);
 	}
 
 	const spending = new Set(
-		review.inputOrder.map((planned) =>
-			outpointKey(planned.source === "covenant" ? planned.covenant : planned.utxo),
+		draft.inputOrder.map((planned) =>
+			outpointKey(planned.source === "program" ? planned.program : planned.utxo),
 		),
 	);
-	const stranded = review.issuances.find(
+	const stranded = draft.issuances.find(
 		(issuance) => !spending.has(outpointKey(issuance.outpoint)),
 	);
 
 	if (stranded) {
-		return {
-			ok: false,
-			reason:
-				`Input ${stranded.inputId} issues an asset from an output this transaction does not ` +
+		throw new Refusal(
+			`Input ${stranded.inputId} issues an asset from an output this transaction does not ` +
 				"spend, so the asset would never exist.",
-			reject: "document-fault",
-		};
+		);
 	}
 
-	if (spending.size !== review.inputOrder.length) {
-		return {
-			ok: false,
-			reason: `"${review.action}" spends one of its outputs more than once.`,
-			reject: "document-fault",
-		};
+	if (spending.size !== draft.inputOrder.length) {
+		throw new Refusal(`"${draft.action}" spends one of its outputs more than once.`);
 	}
 
 	const builder = new input.smplx.TransactionBuilder();
 
 	try {
-		if (review.locktimeHeight !== undefined) {
-			builder.setLocktimeHeight(review.locktimeHeight);
-		}
-
-		if (review.sequence !== undefined) {
-			builder.setSequence(review.sequence);
+		if (draft.locktimeHeight !== undefined) {
+			builder.setLocktimeHeight(draft.locktimeHeight);
 		}
 
 		const placed = new Set<string>();
 
-		for (const planned of review.inputOrder) {
+		for (const [index, planned] of draft.inputOrder.entries()) {
 			const key =
-				planned.source === "covenant" ? outpointKey(planned.covenant) : outpointKey(planned.utxo);
+				planned.source === "program" ? outpointKey(planned.program) : outpointKey(planned.utxo);
 			const issuance = issuing.get(key);
 
 			if (issuance) {
 				placed.add(key);
 			}
 
-			if (planned.source === "covenant") {
-				const { covenant } = planned;
-				const witness = witnessValuesJson(covenant.witnessValues);
+			if (planned.source === "program") {
+				const { program } = planned;
+				const witness = witnessValuesJson(program.witnessValues);
 
-				if (!issuance) {
-					builder.addCovenantInput(
-						covenant.txid,
-						covenant.vout,
-						covenant.txOutHex,
-						covenant.source,
-						covenant.argumentsJson,
+				if (issuance?.kind === "reissue") {
+					builder
+						.addProgramReissuanceInput(
+							program.txid,
+							program.vout,
+							program.txOutHex,
+							program.source,
+							program.argumentsJson,
+							witness,
+							program.signatureWitness,
+							issuance.assetAmountSats,
+							simplexEntropy(issuance.entropy),
+							program.blindingSecretsJson ?? "",
+							program.extraLeavesJson,
+							program.includeDebugSymbols,
+							input.signingDerivationPath,
+						)
+						.free();
+				} else if (issuance) {
+					builder
+						.addProgramIssuanceInput(
+							program.txid,
+							program.vout,
+							program.txOutHex,
+							program.source,
+							program.argumentsJson,
+							witness,
+							program.signatureWitness,
+							issuance.assetAmountSats,
+							issuance.inflationAmountSats,
+							undefined,
+							program.blindingSecretsJson,
+							program.extraLeavesJson,
+							program.includeDebugSymbols,
+							input.signingDerivationPath,
+						)
+						.free();
+				} else {
+					builder.addProgramInput(
+						program.txid,
+						program.vout,
+						program.txOutHex,
+						program.source,
+						program.argumentsJson,
 						witness,
-						covenant.signatureWitness,
-						covenant.extraLeavesJson,
-						covenant.includeDebugSymbols,
+						program.signatureWitness,
+						program.blindingSecretsJson,
+						program.extraLeavesJson,
+						program.includeDebugSymbols,
 						input.signingDerivationPath,
 					);
-
-					continue;
 				}
 
-				builder
-					.addCovenantIssuanceInput(
-						covenant.txid,
-						covenant.vout,
-						covenant.txOutHex,
-						covenant.source,
-						covenant.argumentsJson,
-						witness,
-						covenant.signatureWitness,
-						issuance.assetAmountSats,
-						issuance.inflationAmountSats,
-						undefined,
-						covenant.extraLeavesJson,
-						covenant.includeDebugSymbols,
-						input.signingDerivationPath,
-					)
-					.free();
+				if (program.unusedWitnesses) {
+					builder.setUnusedWitnesses(index, program.unusedWitnesses);
+				}
 
 				continue;
 			}
 
 			const { utxo } = planned;
-			const unsignable = refuseUnsignable(utxo);
-
-			if (unsignable) {
-				return unsignable;
-			}
+			refuseUnsignable(utxo);
 
 			if (!issuance) {
-				builder.addWalletInput(
+				builder.addInput(
 					utxo.txid,
 					utxo.vout,
 					utxo.txOut,
@@ -245,96 +236,106 @@ export async function assembleReviewedTransaction(
 				continue;
 			}
 
-			builder
-				.addWalletIssuanceInput(
-					utxo.txid,
-					utxo.vout,
-					utxo.txOut,
-					issuance.assetAmountSats,
-					issuance.inflationAmountSats,
-					undefined,
-					utxo.blindingSecretsJson,
-					utxo.derivationPath,
-				)
-				.free();
+			const issued =
+				issuance.kind === "reissue"
+					? builder.addReissuanceInput(
+							utxo.txid,
+							utxo.vout,
+							utxo.txOut,
+							issuance.assetAmountSats,
+							simplexEntropy(issuance.entropy),
+							utxo.blindingSecretsJson ?? "",
+							utxo.derivationPath,
+						)
+					: builder.addIssuanceInput(
+							utxo.txid,
+							utxo.vout,
+							utxo.txOut,
+							issuance.assetAmountSats,
+							issuance.inflationAmountSats,
+							undefined,
+							utxo.blindingSecretsJson,
+							utxo.derivationPath,
+						);
+
+			issued.free();
 		}
 
-		const missed = review.issuances.find((issuance) => !placed.has(outpointKey(issuance.outpoint)));
+		for (const [index, { sequence }] of draft.inputOrder.entries()) {
+			if (sequence !== undefined) {
+				builder.setInputSequence(index, sequence);
+			}
+		}
+
+		const missed = draft.issuances.find((issuance) => !placed.has(outpointKey(issuance.outpoint)));
 
 		if (missed) {
-			return {
-				ok: false,
-				reason:
-					`Input ${missed.inputId} issues an asset from an output this transaction does not ` +
+			throw new Refusal(
+				`Input ${missed.inputId} issues an asset from an output this transaction does not ` +
 					"spend, so the asset would never exist.",
-				reject: "document-fault",
-			};
+			);
 		}
 
-		for (const output of review.outputs) {
+		for (const output of draft.outputs) {
 			builder.addOutput(
 				output.scriptPubKeyHex,
 				output.sats,
 				output.asset,
-				output.blinded ? input.blindingPublicKeyHex : undefined,
+				output.blinded ? (output.blindingPublicKeyHex ?? input.blindingPublicKeyHex) : undefined,
+				output.assetBlindingFactor,
+				output.valueBlindingFactor,
 			);
 		}
 
-		builder.addChange(
-			input.changeScriptPubKeyHex,
-			review.changeBlinded ? input.blindingPublicKeyHex : undefined,
-		);
-
-		const transaction = await input.finalize(builder, review.feeRateSatsPerKvb);
-
-		return { ok: true, transaction };
+		return finish(builder);
 	} catch (error) {
-		return {
-			ok: false,
-			reason: `This transaction could not be assembled: ${String(error)}`,
-			reject: "built-something-else",
-		};
+		if (error instanceof Refusal) {
+			throw error;
+		}
+
+		throw new Refusal(
+			`This transaction could not be assembled: ${String(error)}`,
+			"built-something-else",
+		);
 	} finally {
 		builder.free();
 	}
 }
 
-function refuseUnsignable(utxo: ManifestReview["selected"][number]): AssembleResult | undefined {
+function refuseUnsignable(utxo: ManifestReview["selected"][number]): void {
 	const at = `${utxo.txid}:${utxo.vout}`;
 
 	if (!utxo.confidential) {
-		return undefined;
+		return;
 	}
 
 	if (utxo.blindingSecretsJson === undefined) {
-		return {
-			ok: false,
-			reason: `This wallet holds ${at} blinded but did not say what it unblinds to, so it cannot be spent.`,
-			reject: "built-something-else",
-		};
+		throw new Refusal(
+			`This wallet holds ${at} blinded but did not say what it unblinds to, so it cannot be spent.`,
+			"built-something-else",
+		);
 	}
 
 	if (utxo.derivationPath === undefined) {
-		return {
-			ok: false,
-			reason: `This wallet did not say which key spends ${at}, so it cannot be signed.`,
-			reject: "built-something-else",
-		};
+		throw new Refusal(
+			`This wallet did not say which key spends ${at}, so it cannot be signed.`,
+			"built-something-else",
+		);
 	}
-
-	return undefined;
 }
 
-function witnessValuesJson(values: StaticWitness[] | undefined): string | undefined {
+function witnessValuesJson(values: TypedWitness[] | undefined): string | undefined {
 	if (!values || values.length === 0) {
 		return undefined;
 	}
 
 	return JSON.stringify(
-		Object.fromEntries(
-			values.map(({ name, simplicityType, value }) => [name, { type: simplicityType, value }]),
-		),
+		Object.fromEntries(values.map(({ name, type, value }) => [name, { type, value }])),
 	);
+}
+
+function simplexEntropy(entropy: string): string {
+	return (entropy.match(/../g) ?? []).toReversed().join("");
 }
 
 function outpointKey(outpoint: { txid: string; vout: number }): string {

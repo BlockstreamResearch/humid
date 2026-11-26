@@ -3,9 +3,8 @@ import type { WalletKitTypes } from "@reown/walletkit";
 import { DENY_ALL_AUTHORIZATION } from "@/core/wallet-rpc/types";
 import type { WalletConnectNamespaceAdapter } from "@/core/walletconnect/types";
 
-import type { LiquidIdentityBackend } from "../../application/backends/LiquidIdentityBackend";
 import type { LiquidWalletBackend } from "../../application/backends/LiquidWalletBackend";
-import { createLiquidRpcRouter } from "../../application/createLiquidRpcRouter";
+import type { LiquidRpcRouter } from "../../application/createLiquidRpcRouter";
 import {
 	buildLiquidDappAccountScope,
 	resolveAccountGroupIdsForIdentifiers,
@@ -16,19 +15,14 @@ import { LIQUID_NAMESPACE } from "../../domain/LiquidChain";
 import { parseLiquidChainId } from "../../domain/validation";
 
 export type CreateLiquidWalletConnectAdapterInput = {
-	identityBackend: LiquidIdentityBackend;
+	dispatcher: LiquidRpcRouter;
 	walletBackend: LiquidWalletBackend;
 };
 
 export function createLiquidWalletConnectAdapter({
-	identityBackend,
+	dispatcher,
 	walletBackend,
 }: CreateLiquidWalletConnectAdapterInput): WalletConnectNamespaceAdapter {
-	const dispatcher = createLiquidRpcRouter({
-		identityBackend,
-		walletBackend,
-	});
-
 	return {
 		getSupportedNamespace: async (proposal: WalletKitTypes.SessionProposal["params"], context) => {
 			const namespace = await resolveLiquidSessionNamespace({

@@ -21,7 +21,7 @@ const initialState: ThemeProviderState = {
 	setTheme: () => null,
 };
 
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
+export const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
 function getSystemTheme(): ResolvedTheme {
 	return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";

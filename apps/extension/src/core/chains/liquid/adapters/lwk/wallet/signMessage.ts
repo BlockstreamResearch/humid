@@ -1,8 +1,13 @@
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, concatBytes, utf8ToBytes } from "@noble/hashes/utils.js";
+import type { DerivationPath, Wollet } from "lwk_wasm";
+
 import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcInvalidParamsError,
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
+import { base64ToBytes } from "@/helpers/base64";
 
 import type { LiquidWalletAccount } from "../../../application/backends/LiquidWalletBackend";
 import {
@@ -50,13 +55,14 @@ export async function signMessage(
 	const implementation = getLwkImplementation(account);
 
 	try {
-		const signedMessage = implementation.signer.signMessageAtPath(params.message, path);
+		const signature = base64ToBytes(implementation.signer.signMessage(params.message, path));
+		const recoveryId = (signature[0]! - 27) & 3;
 
 		return {
 			address,
-			messageHash: signedMessage.messageHash,
+			messageHash: bytesToHex(signedMessageHash(params.message)),
 			protocol: LIQUID_SIGN_MESSAGE_PROTOCOLS.ECDSA,
-			signature: signedMessage.signature,
+			signature: bytesToHex(concatBytes(signature.subarray(1), Uint8Array.of(recoveryId))),
 			signatureEncoding: LIQUID_SIGN_MESSAGE_SIGNATURE_ENCODINGS.HEX_RECOVERABLE_ECDSA_65,
 		};
 	} catch {
@@ -65,24 +71,29 @@ export async function signMessage(
 			undefined,
 			WALLET_RPC_ERROR_REASONS.WALLET_MESSAGE_SIGNING_FAILED,
 		);
+	} finally {
+		path.free();
 	}
 }
 
 async function resolveMessageSigningPath(
 	account: LiquidWalletAccount,
 	params: ParsedLiquidSignMessageParams,
-): Promise<{ address: string; path: Uint32Array }> {
+): Promise<{ address: string; path: DerivationPath }> {
 	const lwk = await loadLwkWasm();
 	const implementation = getLwkImplementation(account);
 
 	try {
-		const address = new lwk.Address(params.address);
-		const path = implementation.wollet.addressFullPathFor(address, SIGN_MESSAGE_ADDRESS_SCAN_LIMIT);
+		const address = lwk.Address.parse(params.address, implementation.network);
 
-		return {
-			address: address.toString(),
-			path,
-		};
+		try {
+			return {
+				address: address.toString(),
+				path: findDerivationPath(implementation.wollet, address.scriptPubkey().toString()),
+			};
+		} finally {
+			address.free();
+		}
 	} catch {
 		throw new WalletRpcInvalidParamsError(
 			"Liquid message signing address is invalid or does not belong to the connected wallet.",
@@ -93,4 +104,50 @@ async function resolveMessageSigningPath(
 			WALLET_RPC_ERROR_REASONS.INVALID_MESSAGE_SIGNING_REQUEST,
 		);
 	}
+}
+
+function findDerivationPath(wollet: Wollet, script: string): DerivationPath {
+	for (const derive of [wollet.address.bind(wollet), wollet.change.bind(wollet)]) {
+		for (let index = 0; index <= SIGN_MESSAGE_ADDRESS_SCAN_LIMIT; index++) {
+			const derived = derive(index);
+			const address = derived.address();
+			const scriptPubkey = address.scriptPubkey();
+
+			try {
+				if (scriptPubkey.toString() === script) {
+					const path = derived.derivationPath();
+
+					if (path) return path;
+				}
+			} finally {
+				scriptPubkey.free();
+				address.free();
+				derived.free();
+			}
+		}
+	}
+
+	throw new Error("The address is not among the scanned wallet addresses.");
+}
+
+function signedMessageHash(message: string): Uint8Array {
+	const body = utf8ToBytes(message);
+
+	return sha256(
+		sha256(
+			concatBytes(utf8ToBytes("\x18Bitcoin Signed Message:\n"), compactSize(body.length), body),
+		),
+	);
+}
+
+function compactSize(length: number): Uint8Array {
+	if (length < 0xfd) return Uint8Array.of(length);
+	if (length <= 0xffff) return Uint8Array.of(0xfd, length & 0xff, length >> 8);
+
+	const bytes = new Uint8Array(5);
+
+	bytes[0] = 0xfe;
+	new DataView(bytes.buffer).setUint32(1, length, true);
+
+	return bytes;
 }

@@ -33,7 +33,7 @@ export const WALLET_METHOD_PRESENTATION: WalletMethodPresentation[] = [
 		preApprovable: true,
 	},
 	{
-		description: "See a public key derived from your identity.",
+		description: "See a public key derived from this account's identity.",
 		id: LIQUID_WALLET_RPC_METHODS.GET_IDENTITY_PUBLIC_KEY,
 		label: "View identity key",
 		preApprovable: true,
@@ -57,21 +57,21 @@ export const WALLET_METHOD_PRESENTATION: WalletMethodPresentation[] = [
 		preApprovable: false,
 	},
 	{
-		description: "Sign identity challenges to prove who you are.",
+		description: "Sign identity challenges with this account's identity key.",
 		id: LIQUID_WALLET_RPC_METHODS.SIGN_IDENTITY,
 		label: "Prove identity",
 		preApprovable: false,
 	},
 	{
-		description: "Derive a shared secret between your identity and another party.",
+		description: "Derive a shared secret between this account's identity and another party.",
 		id: LIQUID_WALLET_RPC_METHODS.GET_IDENTITY_SHARED_KEY,
 		label: "Derive shared secret",
 		preApprovable: false,
 	},
 	{
-		description: "Process confidential transactions via the Liquid wallet ABI.",
+		description: "Sign and send contract actions that spend from this account.",
 		id: LIQUID_WALLET_RPC_METHODS.PROCESS_CONFIDENTIAL_TRANSACTION,
-		label: "Advanced transactions",
+		label: "Contract actions",
 		preApprovable: false,
 	},
 ];
@@ -79,3 +79,14 @@ export const WALLET_METHOD_PRESENTATION: WalletMethodPresentation[] = [
 export const PRE_APPROVABLE_METHODS: WalletMethodPresentation[] = WALLET_METHOD_PRESENTATION.filter(
 	(method) => method.preApprovable,
 );
+
+const PRE_APPROVABLE_IDS = new Set(PRE_APPROVABLE_METHODS.map(({ id }) => id));
+
+export const isPreApprovable = (method: string): boolean => PRE_APPROVABLE_IDS.has(method);
+
+/** Keeps a no-prompt grant only on a read; signing and spending always ask, whatever a session holds. */
+export function preApprovedOnly(methods: Record<string, boolean>): Record<string, boolean> {
+	return Object.fromEntries(
+		Object.entries(methods).map(([method, silent]) => [method, silent && isPreApprovable(method)]),
+	);
+}

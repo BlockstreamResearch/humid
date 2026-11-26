@@ -8,6 +8,7 @@ import type {
 	EstimateMaxSendInput,
 	EstimateMaxSendResult,
 	GetActivityInput,
+	HeldTransaction,
 	ImportAccountInput,
 	PortfolioSnapshot,
 	ReceiveAddress,
@@ -48,6 +49,14 @@ function getPortfolio(): Promise<PortfolioSnapshot> {
 
 function refreshPortfolio(): Promise<PortfolioSnapshot> {
 	return requestBackground<PortfolioSnapshot>(accountsRpc.methods.refreshPortfolio);
+}
+
+function listHeldTransactions(): Promise<HeldTransaction[]> {
+	return requestBackground<HeldTransaction[]>(accountsRpc.methods.listHeldTransactions);
+}
+
+function releaseHeldTransaction(txid: string): Promise<void> {
+	return requestBackground<void>(accountsRpc.methods.releaseHeldTransaction, { txid });
 }
 
 function getActivity(input: GetActivityInput): Promise<ActivityPage> {
@@ -91,7 +100,9 @@ export const accountsClient = {
 	getState,
 	importAccount,
 	inspectTransfer,
+	listHeldTransactions,
 	refreshPortfolio,
+	releaseHeldTransaction,
 	removeAccount,
 	removeWallet,
 	rename,

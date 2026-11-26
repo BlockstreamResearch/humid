@@ -6,12 +6,13 @@ import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
 import type { ParsedLiquidAssetId } from "../../../domain/LiquidAsset";
 import {
 	LIQUID_WALLET_RPC_METHODS,
-	type LiquidGetUTXOsParams,
+	type ParsedLiquidGetUTXOsParams,
 	type LiquidGetUTXOsResult,
 } from "../../../domain/LiquidRpc";
-import { parseLiquidAssetId, parseLiquidGetUTXOsParams } from "../../../domain/validation";
+import { parseLiquidGetUTXOsParams } from "../../../domain/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../../dappAccountScope";
+import { resolveRequestedAsset } from "../../requestedAsset";
 
 export type LiquidGetUTXOsContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
@@ -26,7 +27,7 @@ type LiquidGetUTXOsReview = {
 };
 
 export const getLiquidUTXOs = createWalletMethod<
-	LiquidGetUTXOsParams,
+	ParsedLiquidGetUTXOsParams,
 	LiquidGetUTXOsContext,
 	LiquidGetUTXOsReview,
 	LiquidGetUTXOsResult
@@ -38,8 +39,8 @@ export const getLiquidUTXOs = createWalletMethod<
 			chainId: review.account.chainId,
 			kind: "liquid.getUTXOs",
 		},
-		message: "A dapp wants to read the Liquid UTXOs for this account.",
-		title: "Share Liquid UTXOs?",
+		message: "A dapp wants to read this account's coins (unspent outputs).",
+		title: "Share coins?",
 	}),
 	execute: async ({ context, review }) => {
 		const { account, requestedAsset } = review;
@@ -65,18 +66,3 @@ export const getLiquidUTXOs = createWalletMethod<
 		};
 	},
 });
-
-function resolveRequestedAsset(
-	assetId: string | undefined,
-	account: LiquidWalletAccount,
-): ParsedLiquidAssetId {
-	if (assetId) {
-		return parseLiquidAssetId(assetId, account.chainId);
-	}
-
-	return {
-		assetId: account.policyAssetId,
-		chainId: account.chainId,
-		rawAssetId: account.rawPolicyAssetId,
-	};
-}

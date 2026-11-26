@@ -3,7 +3,7 @@ import { createWalletMethod } from "@/core/wallet-methods/createWalletMethod";
 import { WALLET_RPC_ERROR_REASONS, WalletRpcInvalidParamsError } from "@/core/wallet-rpc/errors";
 import type { WalletRpcBaseContext } from "@/core/wallet-rpc/types";
 
-import type { LiquidChainRecord } from "../../../chains/LiquidChainRecord";
+import { type LiquidChainRecord, liquidChainLabel } from "../../../chains/LiquidChainRecord";
 import { LIQUID_WALLET_RPC_METHODS } from "../../../domain/LiquidRpc";
 import {
 	LIQUID_SIGN_MESSAGE_PROTOCOLS,
@@ -14,6 +14,10 @@ import {
 import { parseLiquidSignMessageParams } from "../../../domain/message/validation";
 import type { LiquidWalletAccount, LiquidWalletBackend } from "../../backends/LiquidWalletBackend";
 import { resolveDappAccount } from "../../dappAccountScope";
+import {
+	SIGN_MESSAGE_CONFIRMATION_KIND,
+	type SignMessageConfirmationData,
+} from "./SignMessageConfirmation";
 
 export type LiquidSignMessageContext = WalletRpcBaseContext & {
 	chain: LiquidChainRecord;
@@ -33,23 +37,16 @@ export const signLiquidMessage = createWalletMethod<
 	LiquidSignMessageMethodReview,
 	LiquidSignMessageResult
 >({
-	confirmation: ({ params, review }) => ({
+	confirmation: ({ context, params, review }) => ({
 		confirmLabel: "Sign",
 		data: {
-			accountIdentifier: review.message.accountIdentifier,
 			address: review.message.address,
-			chainId: review.message.chainId,
-			kind: "liquid.signMessage",
+			kind: SIGN_MESSAGE_CONFIRMATION_KIND,
 			message: params.message,
+			network: liquidChainLabel(context.chain),
 			protocol: review.message.protocol,
-		},
-		message: [
-			"A dapp wants to sign a Liquid message.",
-			`Network: ${review.message.chainId}\nAccount: ${review.message.accountIdentifier}`,
-			`Signing address: ${review.message.address}\nSignature protocol: ${review.message.protocol}`,
-			`Message to sign:\n${params.message}`,
-		].join("\n\n"),
-		title: "Sign Liquid message?",
+		} satisfies SignMessageConfirmationData,
+		title: "Sign a message?",
 	}),
 	execute: ({ context, params, review }) =>
 		context.walletBackend.signMessage(review.account, params),

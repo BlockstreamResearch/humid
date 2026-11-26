@@ -16,7 +16,9 @@ export function LiquidTokenRow({ token }: { token: PortfolioViewAsset }) {
 			</div>
 			<div className="min-w-0 flex-1">
 				<p className="text-sm font-medium">{token.symbol}</p>
-				<p className="text-muted-foreground truncate text-xs">{token.name}</p>
+				<p className="text-muted-foreground truncate text-xs">
+					{metadata.verified || metadata.isNative ? token.name : `${token.name}, raw units`}
+				</p>
 			</div>
 			<p className="text-right font-mono text-sm">{formatUnits(token.amount, token.decimals)}</p>
 		</>

@@ -1,3 +1,5 @@
+import { logger } from "@/core/logger";
+
 import type {
 	LiquidActivityEntry,
 	LiquidAssetBalance,
@@ -12,15 +14,10 @@ export type ScanAndReadResult = {
 	utxos: LiquidUtxoSnapshot[];
 };
 
-export type BroadcastInput = { chain: ScanInput["chain"]; psetBase64: string };
-
-export type BroadcastTxInput = { chain: ScanInput["chain"]; txHex: string };
-export type BroadcastResult = { txid: string };
-
 export type ReadActivityInput = ScanInput & {
 	cursor: string | null;
 	limit: number;
-	rawAssetId: string;
+	rawAssetId: string | null;
 };
 
 export type ActivityPageResult = {
@@ -31,8 +28,6 @@ export type ActivityPageResult = {
 type SuccessResponse = Extract<SyncWorkerResponse, { ok: true }>;
 
 export type SyncWorkerClient = {
-	broadcast: (input: BroadcastInput) => Promise<BroadcastResult>;
-	broadcastTransaction: (input: BroadcastTxInput) => Promise<BroadcastResult>;
 	readActivity: (input: ReadActivityInput) => Promise<ActivityPageResult>;
 	scan: (input: ScanInput) => Promise<ScanResult>;
 	scanAndRead: (input: ScanInput) => Promise<ScanAndReadResult>;
@@ -65,11 +60,10 @@ export function createWorkerScanClient(): SyncWorkerClient {
 	});
 
 	worker.addEventListener("error", (event) => {
-		console.error(
-			"[liquid-sync] sync worker crashed",
-			event.message,
-			`${event.filename}:${event.lineno}`,
-		);
+		logger.error("[liquid-sync] sync worker crashed", event.error, {
+			at: `${event.filename}:${event.lineno}`,
+			message: event.message,
+		});
 
 		const error = new Error(event.message || "Sync worker crashed.");
 
@@ -89,18 +83,6 @@ export function createWorkerScanClient(): SyncWorkerClient {
 	}
 
 	return {
-		broadcastTransaction() {
-			return Promise.reject(
-				new Error("The dedicated worker cannot broadcast; use the offscreen or inline client."),
-			);
-		},
-		broadcast() {
-			return Promise.reject(
-				new Error(
-					"The dedicated sync worker cannot broadcast; use the offscreen or inline client.",
-				),
-			);
-		},
 		async readActivity(input) {
 			const response = await request({ op: "readActivity", ...input });
 

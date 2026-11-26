@@ -27,7 +27,7 @@ export async function handleSessionProposal(
 			supportedNamespaces,
 		});
 		const peer = proposal.params.proposer.metadata;
-		const confirmed = await getBackgroundOptions().confirm?.({
+		const decision = await getBackgroundOptions().confirm?.({
 			data: {
 				approvedNamespaces,
 				proposalId: proposal.id,
@@ -37,7 +37,7 @@ export async function handleSessionProposal(
 			title: "Connect dapp?",
 		});
 
-		if (!confirmed) {
+		if (!decision?.approved) {
 			await walletKit.rejectSession({
 				id: proposal.id,
 				reason: getSdkError("USER_REJECTED"),

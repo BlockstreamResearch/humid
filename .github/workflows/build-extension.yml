@@ -26,31 +26,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (with the lwk and smplx submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      # No caches here: a release builds everything from source, so nothing another run
+      # wrote into a cache can reach what ships.
       - name: Build lwk_wasm
         uses: ./.github/actions/build-lwk-wasm
         with:
+          cache: "false"
           profile: ${{ inputs.profile }}
 
-      # The manifest runtime compiles Simplicity covenants and assembles transactions with
+      # The manifest runtime compiles Simplicity programs and assembles transactions with
       # this module, so the extension does not build without the package either.
       - name: Build smplx_wasm
         uses: ./.github/actions/build-smplx-wasm
+        with:
+          cache: "false"
 
       - name: Install dependencies
         uses: ./.github/actions/install
+        with:
+          cache: "false"
 
       - name: Build extension
         run: bun run build
 
       - name: Upload extension artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: humid-extension-${{ github.ref_name }}
           path: dist
@@ -69,7 +76,7 @@ jobs:
       contents: write
     steps:
       - name: Download the built extension
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: humid-extension-${{ github.ref_name }}
           path: dist
@@ -78,7 +85,7 @@ jobs:
         run: cd dist && zip -r "../humid-extension-${{ github.ref_name }}.zip" .
 
       - name: Publish GitHub Release (draft)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ github.ref_name }}
           name: humid ${{ github.ref_name }}

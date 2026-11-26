@@ -47,10 +47,10 @@ export const issuedVerifiedToken: PortfolioViewAsset = {
 
 export const issuedUnverifiedToken: PortfolioViewAsset = {
 	amount: 1_500_000n,
-	decimals: 2,
+	decimals: 0,
 	id: "9a8b7c6d5e4fa1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f607183f2c",
 	metadata: { isNative: false, issuerDomain: null, verified: false } satisfies LiquidAssetMetadata,
-	name: "9a8b…3f2c",
+	name: "Unknown asset",
 	symbol: "9a8b…3f2c",
 };
 

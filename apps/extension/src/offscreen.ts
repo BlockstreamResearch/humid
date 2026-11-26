@@ -3,10 +3,10 @@ import browser from "webextension-polyfill";
 import { createInlineScanClient } from "@/core/chains/liquid/adapters/lwk/sync-worker/createInlineScanClient";
 import type { SyncWorkerClient } from "@/core/chains/liquid/adapters/lwk/sync-worker/createWorkerScanClient";
 import {
-	bytesToBase64,
 	isOffscreenScanMessage,
 	type OffscreenScanResponse,
 } from "@/core/chains/liquid/adapters/lwk/sync-worker/offscreenProtocol";
+import { bytesToBase64 } from "@/helpers/base64";
 
 let client: SyncWorkerClient | null = null;
 
@@ -35,18 +35,6 @@ browser.runtime.onMessage.addListener((message) => {
 				const page = await getScanClient().readActivity(message.input);
 
 				return { items: page.items, nextCursor: page.nextCursor, ok: true, op: "readActivity" };
-			}
-
-			if (message.op === "broadcast") {
-				const { txid } = await getScanClient().broadcast(message.input);
-
-				return { ok: true, op: "broadcast", txid };
-			}
-
-			if (message.op === "broadcastTransaction") {
-				const { txid } = await getScanClient().broadcastTransaction(message.input);
-
-				return { ok: true, op: "broadcastTransaction", txid };
 			}
 
 			const result = await getScanClient().scanAndRead(message.input);

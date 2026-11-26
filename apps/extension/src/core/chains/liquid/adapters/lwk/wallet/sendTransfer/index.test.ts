@@ -4,6 +4,7 @@ import { describe, expect, mock, test } from "bun:test";
 type Recorded = { calls: string[] };
 
 const recorded: Recorded = { calls: [] };
+const FEE_SATS = 31n;
 
 function makeBuilder() {
 	const builder = {
@@ -34,16 +35,37 @@ function makeBuilder() {
 
 			return builder;
 		},
-		drainLbtcTo() {
+		drainLbtcTo(address: { isBlinded: () => boolean }) {
+			if (!address.isBlinded()) {
+				throw new Error("Address must be confidential");
+			}
+
 			recorded.calls.push("sendAll");
+
+			return builder;
+		},
+		drainLbtcToExplicit() {
+			recorded.calls.push("sendAllExplicit");
 
 			return builder;
 		},
 		drainLbtcWallet() {
 			return builder;
 		},
+		feeRate(rate: number) {
+			recorded.calls.push(`rate:${rate}`);
+
+			return builder;
+		},
 		finish() {
-			return { toString: () => "pset" };
+			return {
+				outputs: () => [
+					{ amount: () => 5000n, scriptPubkey: () => ({ bytes: () => new Uint8Array(22) }) },
+					{ amount: () => FEE_SATS, scriptPubkey: () => ({ bytes: () => new Uint8Array() }) },
+				],
+				extractTx: () => ({ toString: () => "tx" }),
+				toString: () => "pset",
+			};
 		},
 	};
 
@@ -75,11 +97,16 @@ mock.module("../../loadLwkWasm", () => ({
 	}),
 }));
 
-mock.module("../../sync-worker/createSyncWorkerClient", () => ({
-	getSyncWorkerClient: () => ({ broadcast: async () => ({ txid: "sent" }) }),
+mock.module("../sentTransactions", () => ({
+	sentTransactions: { broadcast: async () => "sent" },
+	TransactionRefusedError: class extends Error {},
 }));
 
-const { sendTransfer } = await import("./index");
+mock.module("../readWalletData", () => ({
+	readWalletBalanceForAsset: () => "100000",
+}));
+
+const { quoteTransfer, sendTransfer } = await import("./index");
 
 const account = {
 	accountIdentifier: "acct",
@@ -96,13 +123,18 @@ const account = {
 
 const TOKEN = "b".repeat(64);
 
-async function send(overrides: Record<string, unknown> = {}, rawAssetId = POLICY) {
+async function send(
+	overrides: Record<string, unknown> = {},
+	rawAssetId = POLICY,
+	fee?: { feeRateSatsPerKvb: number; feeSats: string },
+) {
 	recorded.calls = [];
 
 	return sendTransfer(
 		account,
 		{ amount: "5000", recipientAddress: "irrelevant", ...overrides } as never,
 		rawAssetId,
+		fee,
 	);
 }
 
@@ -114,7 +146,7 @@ describe("which builder call a recipient gets", () => {
 		expect(recorded.calls).toEqual(["lbtc:5000"]);
 	});
 
-	test("an unconfidential recipient takes the explicit path", async () => {
+	test("an explicit recipient takes the explicit path", async () => {
 		blinded = false;
 
 		await expect(send()).resolves.toEqual({ txid: "sent" });
@@ -128,20 +160,61 @@ describe("which builder call a recipient gets", () => {
 		expect(recorded.calls).toEqual(["asset:5000"]);
 	});
 
-	test("an unconfidential recipient of an issued asset takes the same explicit path", async () => {
+	test("an explicit recipient of an issued asset takes the same explicit path", async () => {
 		blinded = false;
 
 		await expect(send({}, TOKEN)).resolves.toEqual({ txid: "sent" });
 		expect(recorded.calls).toEqual(["explicit:5000"]);
 	});
 
-	test("sending all takes the address as it is, either way", async () => {
+	test("sending all drains to an explicit output for an address with no blinding key", async () => {
 		blinded = false;
 		await send({ sendAll: true });
-		expect(recorded.calls).toEqual(["sendAll"]);
+		expect(recorded.calls).toEqual(["sendAllExplicit"]);
 
 		blinded = true;
 		await send({ sendAll: true });
 		expect(recorded.calls).toEqual(["sendAll"]);
+	});
+});
+
+describe("the fee shown is the fee paid", () => {
+	test("a quote builds at the given rate and reads the fee output", async () => {
+		blinded = true;
+		recorded.calls = [];
+
+		await expect(
+			quoteTransfer(
+				account,
+				{ amount: "5000", recipientAddress: "irrelevant" } as never,
+				POLICY,
+				250,
+			),
+		).resolves.toEqual({ amount: "5000", feeRateSatsPerKvb: 250, feeSats: "31" });
+		expect(recorded.calls).toEqual(["rate:250", "lbtc:5000"]);
+	});
+
+	test("sending all quotes what is left after the fee", async () => {
+		const quote = await quoteTransfer(
+			account,
+			{ amount: "0", recipientAddress: "irrelevant", sendAll: true } as never,
+			POLICY,
+			100,
+		);
+
+		expect(quote.amount).toBe((100_000n - FEE_SATS).toString());
+	});
+
+	test("a send at the reviewed fee goes through", async () => {
+		await expect(
+			send({}, POLICY, { feeRateSatsPerKvb: 250, feeSats: FEE_SATS.toString() }),
+		).resolves.toEqual({ txid: "sent" });
+		expect(recorded.calls).toEqual(["rate:250", "lbtc:5000"]);
+	});
+
+	test("a send whose fee moved since the review is refused", async () => {
+		await expect(send({}, POLICY, { feeRateSatsPerKvb: 250, feeSats: "30" })).rejects.toThrow(
+			"The network fee changed. Please review the transfer again.",
+		);
 	});
 });

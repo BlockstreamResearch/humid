@@ -1,20 +1,30 @@
-import type { PegasusRPCMessage } from "@webext-pegasus/rpc";
 import browser from "webextension-polyfill";
 
+import type { TransactionReceiptData } from "@/common/Confirmation/TransactionReceipt";
+import { logger } from "@/core/logger";
+import { defaultZoom } from "@/helpers/surface";
+
 export type ConfirmationRequest = {
+	completes?: boolean;
 	title: string;
 	message?: string;
 	confirmLabel?: string;
+	/** A word the person types before confirming, for an action with no undo. */
+	confirmPhrase?: string;
 	data?: unknown;
 	method?: string;
+	rejectLabel?: string;
 	requester?: { name?: string; origin: string };
-	timeoutMs?: number;
 };
 
 export type ConfirmationDecision<TResult = unknown> = {
 	approved: boolean;
 	result?: TResult;
 };
+
+export type ConfirmationOutcome = { error: string } | { receipt: TransactionReceiptData };
+
+export type ConfirmationCompletion = (choice: unknown) => Promise<TransactionReceiptData>;
 
 export interface ExtensionMessage<T = unknown> {
 	method: string;
@@ -43,28 +53,32 @@ export function openNotification(url = ""): Promise<number> {
 }
 
 async function createOrFocusNotification(url: string): Promise<number> {
-	const windowOptions = await getNotificationWindowOptions();
+	const placed = await getNotificationWindowOptions();
+	// Chrome refuses a position mostly off-screen, as next to a browser window wider than the display.
+	const unplaced = { focused: true, height: placed.height, width: placed.width };
 	const notificationWindow = await getNotification();
 
 	if (notificationWindow?.id !== undefined) {
-		await browser.windows.update(notificationWindow.id, { ...windowOptions, focused: true });
-		return notificationWindow.id;
+		const id = notificationWindow.id;
+
+		await browser.windows.update(id, placed).catch(() => browser.windows.update(id, unplaced));
+		return id;
 	}
 
-	const createdWindow = await browser.windows.create({
-		url: getNotificationUrl(url),
-		focused: true,
-		type: "popup",
-		...windowOptions,
-	});
+	const create = (options: browser.Windows.UpdateUpdateInfoType) =>
+		browser.windows.create({ url: getNotificationUrl(url), type: "popup", ...options });
+	const createdWindow = await create(placed).catch(() => create(unplaced));
 
 	notificationWindowId = createdWindow.id;
 	return createdWindow.id ?? -1;
 }
 
 async function getNotificationWindowOptions(): Promise<browser.Windows.UpdateUpdateInfoType> {
-	const width = NOTIFICATION_CONTENT_WIDTH + NOTIFICATION_WINDOW_FRAME_WIDTH_OFFSET;
-	const height = NOTIFICATION_CONTENT_HEIGHT + NOTIFICATION_WINDOW_FRAME_HEIGHT_OFFSET;
+	const zoom = await defaultZoom();
+	const width =
+		Math.round(NOTIFICATION_CONTENT_WIDTH * zoom) + NOTIFICATION_WINDOW_FRAME_WIDTH_OFFSET;
+	const height =
+		Math.round(NOTIFICATION_CONTENT_HEIGHT * zoom) + NOTIFICATION_WINDOW_FRAME_HEIGHT_OFFSET;
 	const anchorWindow = await getNotificationAnchorWindow();
 	const left = Math.round((anchorWindow.left ?? 0) + (anchorWindow.width ?? width) - width);
 
@@ -107,7 +121,7 @@ export function initNotificationManagement(onUnexpectedClose?: () => void): void
 		notificationWindowId = undefined;
 
 		if (!isClosingNotificationByUserAction) {
-			console.warn("Notification closed unexpectedly. Clean up pending operations.");
+			logger.warn("Notification closed unexpectedly. Clean up pending operations.");
 			onUnexpectedClose?.();
 		}
 
@@ -135,28 +149,10 @@ export function updateBadgeOnStorageChange(): void {
 	});
 }
 
-export type ISelfIDService = typeof getSelfIDService;
-
-export async function getSelfIDService(message: PegasusRPCMessage): Promise<{
-	tabId: number;
-	frameId?: number;
-}> {
-	let tabId: number | undefined = message.sender.tabId;
-
-	if (message.sender.context === "popup") {
-		tabId = (await browser.tabs.query({ active: true, currentWindow: true }))[0]?.id;
-	}
-
-	if (tabId === undefined) {
-		throw new Error(`Could not get tab ID for message: ${String(message)}`);
-	}
-
-	return { frameId: message.sender.frameId, tabId };
-}
-
 export enum MsgProtocolRequestMethods {
 	Request = "request",
 	RequestConfirmation = "requestConfirmation",
+	ShowOutcome = "showOutcome",
 }
 
 export enum MsgProtocolResponseMethods {

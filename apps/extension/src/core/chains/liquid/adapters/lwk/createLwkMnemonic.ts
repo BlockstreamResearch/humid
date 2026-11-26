@@ -2,6 +2,7 @@ import {
 	WALLET_RPC_ERROR_REASONS,
 	WalletRpcResourceUnavailableError,
 } from "@/core/wallet-rpc/errors";
+import { base64ToBytes } from "@/helpers/base64";
 
 import type { LwkWasmModule } from "./loadLwkWasm";
 
@@ -48,12 +49,7 @@ function tryDecodeBase64UrlEntropy(value: string): Uint8Array | null {
 	try {
 		const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
 		const paddedBase64 = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
-		const binary = atob(paddedBase64);
-		const bytes = new Uint8Array(binary.length);
-
-		for (let index = 0; index < binary.length; index += 1) {
-			bytes[index] = binary.charCodeAt(index);
-		}
+		const bytes = base64ToBytes(paddedBase64);
 
 		return bytes.length >= 16 ? bytes : null;
 	} catch {
